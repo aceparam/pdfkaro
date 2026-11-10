@@ -1,0 +1,218 @@
+# tool-page Specification
+
+## Purpose
+
+What every tool page contains, the order it comes in, and what the visitor sees in each state, built from the shared `ToolShell`, `FilePicker`, `PageGrid` and `Result` components. Derived from "Tool page anatomy" and "What we are building" in `SPEC.md`, which stays the source of truth if the two ever differ.
+
+## Requirements
+
+### Requirement: Seven parts in a fixed order
+
+Every tool page SHALL be built from the shared `ToolShell` component and SHALL have these parts in this order: heading, one sentence, file picker, working area, one main button, result, and the text below the tool. (SPEC.md: Tool page anatomy)
+
+#### Scenario: Two tool pages are compared
+
+- **WHEN** any two tool pages are opened side by side
+- **THEN** both show the same parts in the same order
+
+### Requirement: Heading and sentence
+
+The heading SHALL state the job in plain words. The sentence under it SHALL say what the tool does and where the file goes. For a browser tool it SHALL say the files stay on the device. For a server tool it SHALL say "Your file is uploaded to convert it and deleted within an hour." (SPEC.md: Tool page anatomy, 1 and 2)
+
+#### Scenario: A browser tool page is opened
+
+- **WHEN** a visitor opens Merge PDF
+- **THEN** the heading reads "Merge PDF files" and the sentence says files stay on the device
+
+#### Scenario: A server tool page is opened
+
+- **WHEN** a visitor opens a server tool
+- **THEN** the sentence says the file is uploaded and deleted within an hour, and it is shown before any file is chosen
+
+### Requirement: File picker
+
+The page SHALL show one large file picker button, named for what it takes, such as "Choose PDF files". The picker SHALL be visible without scrolling on a 360px wide screen. Dropping a file anywhere on the page SHALL work, and so SHALL paste. (SPEC.md: Tool page anatomy, 3; What we are building, rules 1 and 5)
+
+#### Scenario: A page loads on a phone
+
+- **WHEN** a tool page loads at 360px wide
+- **THEN** the file picker button is on screen without scrolling
+
+#### Scenario: A file is dropped
+
+- **WHEN** a visitor drops a PDF anywhere on the page
+- **THEN** the file is taken as if it had been chosen with the button
+
+#### Scenario: A file is pasted
+
+- **WHEN** a visitor pastes a file into the page
+- **THEN** the file is taken as if it had been chosen with the button
+
+#### Scenario: Keyboard only
+
+- **WHEN** a visitor uses only a keyboard
+- **THEN** the picker can be reached with Tab and opened with Enter or Space
+
+### Requirement: Working area
+
+After a file is chosen the page SHALL show the working area: page thumbnails and only the options this tool needs. Defaults SHALL be set so that the main button works without touching any option. (SPEC.md: Tool page anatomy, 4)
+
+#### Scenario: A file is chosen and nothing else is touched
+
+- **WHEN** a visitor chooses a file and presses the main button
+- **THEN** the tool produces a sensible result with its defaults
+
+### Requirement: One main button named after the result
+
+The page SHALL have one main button, named after the result, such as "Merge and download". It MUST NOT be named "Submit" or "Process". (SPEC.md: Tool page anatomy, 5)
+
+#### Scenario: The main button is read
+
+- **WHEN** a screen reader reads the main button of Merge PDF
+- **THEN** it announces "Merge and download"
+
+### Requirement: Result block
+
+When a job is done the page SHALL show the file name, the new size, a Download button and a short list of next steps that carry the file into another tool. Nothing SHALL download on its own. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+
+#### Scenario: A job finishes
+
+- **WHEN** a job finishes
+- **THEN** the result block appears, no download starts, and the file downloads only when the visitor presses Download
+
+#### Scenario: The result is announced
+
+- **WHEN** a job finishes while a screen reader is in use
+- **THEN** the screen reader announces that the result is ready
+
+### Requirement: Text below the tool
+
+Below the tool the page SHALL show three or four how-to steps, a short FAQ and links to related tools. This text SHALL be 250 to 500 words, held as Markdown in `src/content/`, drafted plainly and marked for the owner to review. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; Build phases, 6)
+
+#### Scenario: Draft text is added
+
+- **WHEN** a change adds page text for a tool
+- **THEN** the text is in `src/content/`, is marked for the owner to review, and is not counted as done until the owner has reviewed it
+
+### Requirement: Empty state
+
+Before a file is chosen the tool SHALL show the file picker and nothing else. (SPEC.md: States every tool handles)
+
+#### Scenario: A page loads
+
+- **WHEN** a tool page loads with no file
+- **THEN** the tool widget shows only the file picker
+
+### Requirement: Engine loading state
+
+While the engine loads the page SHALL show "Getting ready" next to the file name. It MUST NOT show a blank screen. (SPEC.md: States every tool handles)
+
+#### Scenario: A file is chosen on a slow connection
+
+- **WHEN** a file is chosen and the engine has not finished loading
+- **THEN** the file name is shown with "Getting ready" beside it
+
+### Requirement: Working state
+
+While a job runs the page SHALL show progress in real units, such as "Page 14 of 120", with a Cancel button. Cancel SHALL stop the job. (SPEC.md: States every tool handles)
+
+#### Scenario: A long job runs
+
+- **WHEN** a 120-page job is running
+- **THEN** the page shows which page of 120 is being worked on and a Cancel button
+
+#### Scenario: Cancel is pressed
+
+- **WHEN** the visitor presses Cancel during a job
+- **THEN** the job stops, no result is shown, and the visitor can start again with the same file
+
+### Requirement: Password needed state
+
+When a file needs a password the page SHALL show a password field with a note that the password stays in the browser. (SPEC.md: States every tool handles)
+
+#### Scenario: A protected file is chosen
+
+- **WHEN** a visitor chooses a password-protected PDF
+- **THEN** a labelled password field appears with the note, and the job continues once the right password is typed
+
+#### Scenario: The password is wrong
+
+- **WHEN** the visitor types a wrong password
+- **THEN** the page says the password is wrong and keeps the field for another try
+
+### Requirement: Damaged file state
+
+When a file is damaged the page SHALL say what is wrong and SHALL show a link that opens the file in Repair PDF. (SPEC.md: States every tool handles)
+
+#### Scenario: A damaged file is chosen
+
+- **WHEN** a visitor chooses a PDF with a broken cross-reference table and the tool cannot read it
+- **THEN** the page says the file is damaged and links to Repair PDF with the file carried over
+
+### Requirement: Too large state
+
+When a file is too large for the tool the page SHALL show the limit, the file's size and what to try. (SPEC.md: States every tool handles)
+
+#### Scenario: A file over the server limit is chosen
+
+- **WHEN** a visitor chooses a 70 MB file in a server tool
+- **THEN** the page shows the 50 MB limit, the file's size and something to try, and no upload starts
+
+### Requirement: Failed state
+
+When a job fails the page SHALL say what happened in one sentence and give one thing to try next. (SPEC.md: States every tool handles)
+
+#### Scenario: A job fails
+
+- **WHEN** an engine reports an error it cannot recover from
+- **THEN** the page shows one sentence on what happened and one next step, with no stack trace or error code alone
+
+### Requirement: Output names
+
+Output names SHALL be built from the input name, so that `report.pdf` becomes `report-merged.pdf`. Several outputs SHALL download as one zip. (SPEC.md: Details that apply everywhere)
+
+#### Scenario: One output
+
+- **WHEN** `report.pdf` is rotated
+- **THEN** the result is named from `report` with a suffix for the job
+
+#### Scenario: Several outputs
+
+- **WHEN** a split produces five files
+- **THEN** Download gives one zip holding the five files
+
+### Requirement: Reordering without drag
+
+Wherever items can be reordered, the page SHALL offer drag and also "move up" and "move down" buttons, so that reordering works with a keyboard and on a small touch screen. (SPEC.md: Details that apply everywhere)
+
+#### Scenario: Keyboard reordering
+
+- **WHEN** a visitor focuses an item and presses its "move down" button
+- **THEN** the item moves one place down, focus stays on it, and the new position is announced to a screen reader
+
+### Requirement: Thumbnails load as they come into view
+
+Page thumbnails SHALL load as they scroll into view. A 500-page file MUST NOT freeze the page. (SPEC.md: Details that apply everywhere)
+
+#### Scenario: A 500-page file is chosen
+
+- **WHEN** a 500-page file is chosen
+- **THEN** only thumbnails near the visible area are rendered, and the page stays responsive while scrolling
+
+### Requirement: Real sizes in plain units
+
+Size figures SHALL be real and in plain units, such as "4.2 MB, was 11.8 MB". (SPEC.md: Details that apply everywhere)
+
+#### Scenario: A file is compressed
+
+- **WHEN** a compression job finishes
+- **THEN** the result shows the true new size and the true old size in KB or MB
+
+### Requirement: Handover between tools
+
+The next steps in the result block SHALL open the chosen tool with the file already loaded, handed over in memory. (SPEC.md: Tool page anatomy, 6; Rules for the code, 5)
+
+#### Scenario: A next step is chosen
+
+- **WHEN** a visitor finishes a merge and chooses "Compress this file"
+- **THEN** Compress PDF opens with the merged file loaded, and the visitor is not asked to choose it again
