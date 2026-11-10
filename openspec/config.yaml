@@ -1,0 +1,70 @@
+schema: spec-driven
+
+# Project context. Shown to agents whenever they write an OpenSpec artifact.
+context: |
+  PDFkaro is a free website with one page per PDF job. Most jobs run in the
+  visitor's browser; a small server handles the rest.
+
+  SPEC.md at the repo root is the source of truth for what to build, how it
+  looks and when a tool counts as done. Read it from top to bottom before
+  writing any artifact. OpenSpec artifacts refine SPEC.md into buildable
+  changes; they never override it. If an artifact would contradict SPEC.md,
+  or SPEC.md is wrong or unclear, stop and ask the owner. Do not edit SPEC.md.
+
+  Hard constraints from SPEC.md that every change must respect:
+  - One tool per change and per pull request: engine, tests, page text and
+    registry entry together. A new shared component gets its own change first.
+  - Tools are built in catalogue order within a phase. No phase starts until
+    the one before it passes its gate. CLAUDE.md says where the project stands.
+  - Engines are pure functions with no DOM access, run in a Web Worker, and
+    load only after a file is picked. src/tools/registry.ts drives pages,
+    navigation, the home page list and the sitemap.
+  - Browser tools never send file contents, file names or passwords anywhere.
+    Server tools say so before upload and delete files within an hour.
+  - Hand-written CSS only. No Tailwind, component kit, icon library or web
+    font. Nothing from "Banned patterns" in SPEC.md appears on any page.
+  - Anything under "Open decisions" in SPEC.md, and anything under "Questions
+    waiting for the owner" in CLAUDE.md, belongs to the owner. Use the assumed
+    default and ask before going beyond it.
+  - Agents never write the About, Changes or Known problems pages and never
+    invent a person, a backstory or a motive for the site.
+  - A new dependency must be maintained, and needs a line in LICENSES.md.
+
+  Seven review agents live in .claude/agents/. The review-panel skill
+  (.claude/skills/review-panel/SKILL.md) says which of them reads a change at
+  each stage.
+
+# Per-artifact rules
+rules:
+  proposal:
+    - Name the SPEC.md sections the change implements, and the phase and catalogue position of the tool.
+    - State what is out of scope. A proposal that covers more than one tool, or a tool plus a new shared component, must be split.
+    - List every Open decision or owner question the change touches, with the assumed default being used. If the change needs more than the default, stop and ask the owner.
+    - Say where the file is processed (browser or server) and whether any network request is added.
+  specs:
+    - Requirements restate or refine SPEC.md; cite the section each one comes from. Do not add product behaviour that SPEC.md does not ask for.
+    - Cover every state in the "States every tool handles" table that applies, with a scenario each.
+    - For a browser tool, include a requirement that no request carries file contents, file names or passwords, with the no-upload test as its scenario.
+    - Include keyboard-only and screen reader scenarios for any interactive part.
+  design:
+    - Follow the repo layout and the six "Rules for the code" in SPEC.md. Justify any departure, or drop it.
+    - For each new dependency give its licence, last release date, and compressed size, and say why existing code cannot do the job.
+    - State the effect on the 100 KB page budget and on when WebAssembly is fetched.
+    - List the threats considered (malicious PDF, oversized file, hostile file name, and for server tools SSRF and macros) and how each is handled.
+  tasks:
+    - Order tasks as registry entry, engine, engine unit tests, worker wiring, page and page text, end-to-end test, no-upload test, screenshots at 360px and 1280px.
+    - Include a task to run the tool against every file in tests/fixtures/ and record the outcome.
+    - Include a task to add LICENSES.md lines for new dependencies.
+    - End with a task to run the review panel (see the review-panel skill) and resolve its findings.
+
+# Per-operation guidance
+operations:
+  apply:
+    guidance:
+      - Implement only what tasks.md lists. If the work needs something else, update the change artifacts first.
+      - Never mark a task done with failing or skipped tests.
+      - Before opening a pull request, run the review panel and put its summary in the pull request description.
+  archive:
+    guidance:
+      - Archive only after the pull request is merged and the tool passes "Definition of done" in SPEC.md.
+      - If archiving passes a phase gate, update "Where the project stands" in CLAUDE.md.
