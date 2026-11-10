@@ -6,6 +6,10 @@ A free website with one page per PDF job. Most jobs run in the visitor's browser
 
 Read `SPEC.md` from top to bottom. It is the source of truth for what to build, how it should look and when a tool counts as done. Do not edit `SPEC.md` unless the owner asks; if the spec is wrong or unclear, say so and ask.
 
+## Design reference
+
+`design/` holds static screens, a reference stylesheet and screenshots that show how pages should look in each state. Read `design/README.md` before building a page or a component. The screens are a guide: `SPEC.md` and `openspec/specs/` win if they differ, and the README lists what in them is only proposed and still waiting for the owner.
+
 ## Where the project stands
 
 The repo holds only the spec. Nothing is built yet. The next piece of work is **Phase 0, the skeleton** (see "Build phases" in `SPEC.md`).
