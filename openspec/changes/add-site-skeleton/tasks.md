@@ -72,4 +72,4 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 8.8 After review: leave non-site links alone in `withBase`; make the base a required argument; refuse a `SITE_BASE` that is not a plain path; lint against bare `/path` links in components; widen `check:base` to form addresses, images and stylesheets
 - [x] 8.9 After review: publish only after the checks pass, and leave a started deploy to finish
 - [x] 8.10 After review: add the `quality-gates` delta for one shared preview, and record which Pages choices were the owner's and which the agent's
-- [ ] 8.7 Confirm on the first deploy that the preview opens, that `/merge-pdf` and a missing page work, and give the owner the address
+- [x] 8.7 Confirm on the first deploy that the preview opens, that `/merge-pdf` and a missing page work, and give the owner the address. Done on 10 Nov 2026 at https://aceparam.github.io/pdfkaro/: home, the filter, Merge PDF, Contact and a missing page (404, with its link home) all work at phone width, with no failed request

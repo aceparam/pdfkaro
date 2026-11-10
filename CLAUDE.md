@@ -18,7 +18,7 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 2. Next: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5.
 3. Then: Merge PDF end to end, with its page text. Step 6.
 
-A preview of the site is set up to publish on GitHub Pages, through `.github/workflows/pages.yml`. It publishes nothing until the owner switches Pages on (see "Questions waiting for the owner").
+A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
 Phase 0, in order:
 
@@ -120,7 +120,7 @@ All but `developer` are read-only.
 - **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
 - **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
-- **GitHub Pages settings.** The preview deploys only after the owner has, in the repo's Settings, set Pages > Source to "GitHub Actions" and allowed `claude/*` branches under Environments > github-pages > Deployment branches. Pages on a private repo needs a paid GitHub plan; if the owner's plan is free, the choice between paying, making the repo public and dropping Pages is the owner's.
+- **Which pushes publish to the preview.** The owner switched Pages on, on 10 Nov 2026. Should every push to `main` or a `claude/` branch publish, as built, or only chosen branches? The branch rule is under Settings > Environments > github-pages.
 - **Pages for previews only, or for launch too?** Hosting on GitHub Pages means GitHub serves every page and logs each visitor's IP address, and the address shows the owner's account name. The Privacy page will have to say so if the site launches there.
 
 ## Commands
