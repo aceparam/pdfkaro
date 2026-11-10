@@ -19,6 +19,11 @@ Every tool page SHALL have a title tag with the job first, then the brand, under
 
 Every tool page SHALL have a meta description under 155 characters that states the job and that files stay on the device, or for server tools that files are deleted within an hour. Every page on the site SHALL have a unique description. (SPEC.md: Every tool page; Definition of done, The site)
 
+#### Scenario: A browser tool description is read
+
+- **WHEN** the description of a browser tool page is read
+- **THEN** it says the files stay on the device
+
 #### Scenario: A server tool description is read
 
 - **WHEN** the description of a server tool page is read
@@ -44,21 +49,26 @@ The heading, sentence, how-to steps, FAQ and related links SHALL be present in t
 
 ### Requirement: Structured data
 
-Every tool page SHALL carry `WebApplication` and `BreadcrumbList` JSON-LD that passes Google's Rich Results Test. (SPEC.md: Every tool page)
+Every tool page SHALL carry `WebApplication` and `BreadcrumbList` JSON-LD, checked with Google's Rich Results Test. (SPEC.md: Every tool page)
 
-#### Scenario: Structured data is checked
+#### Scenario: Structured data is checked in the build
 
 - **WHEN** a tool page's JSON-LD is parsed
 - **THEN** it is valid JSON holding a `WebApplication` and a `BreadcrumbList` that match the page
+
+#### Scenario: The Rich Results Test is run
+
+- **WHEN** a tool page is run through Google's Rich Results Test before launch
+- **THEN** the result is recorded, and anything it asks for that the banned patterns forbid, such as star ratings, goes to the owner
 
 ### Requirement: Social tags
 
 Every tool page SHALL carry an Open Graph title, description and one plain image. (SPEC.md: Every tool page)
 
-#### Scenario: A link is shared
+#### Scenario: A page is parsed
 
-- **WHEN** a tool page URL is read by a link preview
-- **THEN** the preview has the page's title, description and the plain image
+- **WHEN** a tool page's HTML is parsed
+- **THEN** it has `og:title`, `og:description` and `og:image` tags, and the image is plain
 
 ### Requirement: Canonical tag
 
@@ -85,7 +95,12 @@ On a mid-range Android phone, pages SHALL meet: Largest Contentful Paint under 2
 #### Scenario: Lighthouse is run
 
 - **WHEN** Lighthouse runs on the home page and three tool pages with a phone profile
-- **THEN** each scores 90 or more for performance and 95 or more for accessibility
+- **THEN** each scores 90 or more for performance and 95 or more for accessibility, with Largest Contentful Paint under 2.5 s and layout shift under 0.1
+
+#### Scenario: Interaction is measured
+
+- **WHEN** the same pages are used by hand on a mid-range Android phone
+- **THEN** Interaction to Next Paint is under 200 ms, and the figure is recorded, because a lab run cannot measure it
 
 ### Requirement: Page weight
 
@@ -98,7 +113,7 @@ A tool page SHALL ship under 100 KB of compressed HTML, CSS and JavaScript befor
 
 ### Requirement: Specific-search pages are real pages
 
-A specific-search page (a target size, a format pair or a specific job) SHALL be the working tool with that setting already chosen, plus text written for that exact case. A page that is the same text with one word swapped MUST NOT be published. (SPEC.md: Specific-search pages)
+A specific-search page (a target size, a format pair or a specific job) SHALL be the working tool with that setting already chosen, plus text written for that exact case. A page that is the same text with one word swapped MUST NOT be published. Pages for specific jobs that the catalogue does not list ship in phase 3. (SPEC.md: Specific-search pages; Build phases)
 
 #### Scenario: A target-size page is proposed
 

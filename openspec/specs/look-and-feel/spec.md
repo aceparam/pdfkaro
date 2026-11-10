@@ -40,12 +40,17 @@ Pages SHALL use the system font stack and MUST NOT download a web font. Body tex
 
 ### Requirement: Colours
 
-In light mode the background SHALL be `#fbfaf6`, text `#1b1b1b`, secondary text `#5c5c5c` and links `#0b4fa8`. Links SHALL always be underlined. The main button SHALL have a `#1b1b1b` background, white text and 4px corners. Lines and borders SHALL be 1px solid `#d9d6cc` with a corner radius of 4px at most. (SPEC.md: What to build)
+In light mode the background SHALL be `#fbfaf6`, text `#1b1b1b`, secondary text `#5c5c5c` and links `#0b4fa8`. Links SHALL always be underlined. The main button SHALL have a `#1b1b1b` background, white text and 4px corners. Lines and borders SHALL be 1px solid `#d9d6cc` with a corner radius of 4px at most. Dark mode colours SHALL be defined in `src/styles/site.css`. (SPEC.md: What to build)
 
-#### Scenario: Styles are checked
+#### Scenario: Light mode styles are checked
 
 - **WHEN** the stylesheet is reviewed
-- **THEN** every colour on a page is one of the listed values or its dark mode counterpart, and no corner radius exceeds 4px
+- **THEN** every light mode colour on a page is one of the listed values, and no corner radius exceeds 4px
+
+#### Scenario: Dark mode styles are checked
+
+- **WHEN** the dark mode colours are reviewed
+- **THEN** the main button is still clearly set apart from the background, and the owner is shown the palette to review
 
 ### Requirement: Dark mode
 
@@ -113,17 +118,27 @@ Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The
 
 #### Scenario: A banned visual pattern is added
 
-- **WHEN** a page gains a hero section, a row of feature cards, a gradient, a drop shadow, a pill badge, an entrance animation, a testimonial or a pop-up
+- **WHEN** a page gains a hero section, a row of feature cards, a purple or indigo gradient, a drop shadow, a pill badge, an entrance animation, a testimonial or a pop-up
 - **THEN** the page fails the check
+
+#### Scenario: The word unlock is the tool name
+
+- **WHEN** "Unlock PDF" appears as the name, heading or link text of that tool
+- **THEN** it is not counted as a banned word, and "unlock" is still not used anywhere else as a selling word
 
 ### Requirement: Pages only the owner writes
 
-Agents SHALL leave a clearly marked placeholder for the About, Changes and Known problems pages and MUST NOT write them. Agents MUST NOT invent a person, a backstory or a motive for the site. (SPEC.md: Pages only the owner can write)
+Agents SHALL leave a clearly marked placeholder for the About, Changes and Known problems pages and MUST NOT write them. The Contact page SHALL be a marked placeholder with no invented address. Agents MUST NOT invent a person, a backstory or a motive for the site. (SPEC.md: Pages only the owner can write; What to build)
 
 #### Scenario: A placeholder page is built
 
 - **WHEN** the About page is built before the owner has written it
 - **THEN** it says plainly that the owner has yet to write it and holds no made-up content
+
+#### Scenario: The Contact page is built
+
+- **WHEN** the Contact page is built before the owner has given an address
+- **THEN** it says plainly that the owner has yet to add one, and shows no email address
 
 ### Requirement: Plain 404 page
 

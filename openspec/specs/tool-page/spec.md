@@ -73,12 +73,12 @@ The page SHALL have one main button, named after the result, such as "Merge and 
 
 ### Requirement: Result block
 
-When a job is done the page SHALL show the file name, the new size, a Download button and a short list of next steps that carry the file into another tool. Nothing SHALL download on its own. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When a job is done the page SHALL show the file name, the new size, a Download button and a short list of next steps that carry the file into another tool. Nothing SHALL download until the visitor presses a button. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A job finishes
 
 - **WHEN** a job finishes
-- **THEN** the result block appears, no download starts, and the file downloads only when the visitor presses Download
+- **THEN** the result block appears and no download starts on its own
 
 #### Scenario: The result is announced
 
@@ -128,11 +128,11 @@ While a job runs the page SHALL show progress in real units, such as "Page 14 of
 
 ### Requirement: Password needed state
 
-When a file needs a password the page SHALL show a password field with a note that the password stays in the browser. (SPEC.md: States every tool handles)
+When a file needs a password the page SHALL show a password field. In a browser tool the field SHALL carry a note that the password stays in the browser. (SPEC.md: States every tool handles)
 
 #### Scenario: A protected file is chosen
 
-- **WHEN** a visitor chooses a password-protected PDF
+- **WHEN** a visitor chooses a password-protected PDF in a browser tool
 - **THEN** a labelled password field appears with the note, and the job continues once the right password is typed
 
 #### Scenario: The password is wrong
@@ -151,12 +151,12 @@ When a file is damaged the page SHALL say what is wrong and SHALL show a link th
 
 ### Requirement: Too large state
 
-When a file is too large for the tool the page SHALL show the limit, the file's size and what to try. (SPEC.md: States every tool handles)
+When a file is too large for a server tool the page SHALL show the limit, the file's size and what to try. Browser tools have no fixed limit. (SPEC.md: States every tool handles; Privacy, limits and security)
 
 #### Scenario: A file over the server limit is chosen
 
-- **WHEN** a visitor chooses a 70 MB file in a server tool
-- **THEN** the page shows the 50 MB limit, the file's size and something to try, and no upload starts
+- **WHEN** a visitor chooses a file over the limit in a server tool
+- **THEN** the page shows the limit, the file's size and something to try, and no upload starts
 
 ### Requirement: Failed state
 
@@ -166,6 +166,11 @@ When a job fails the page SHALL say what happened in one sentence and give one t
 
 - **WHEN** an engine reports an error it cannot recover from
 - **THEN** the page shows one sentence on what happened and one next step, with no stack trace or error code alone
+
+#### Scenario: A browser tool runs out of memory
+
+- **WHEN** a browser tool runs out of memory on a large file
+- **THEN** the page shows the failed state and suggests a smaller file or a computer with more memory
 
 ### Requirement: Output names
 
@@ -216,3 +221,8 @@ The next steps in the result block SHALL open the chosen tool with the file alre
 
 - **WHEN** a visitor finishes a merge and chooses "Compress this file"
 - **THEN** Compress PDF opens with the merged file loaded, and the visitor is not asked to choose it again
+
+#### Scenario: The handover is looked for afterwards
+
+- **WHEN** a handover has happened and the tab is closed
+- **THEN** the file is in no cookie, no browser storage and no URL, and nothing of it remains

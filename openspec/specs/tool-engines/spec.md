@@ -17,17 +17,17 @@ Each operation SHALL be a function of the form `(files: Uint8Array[], options) =
 
 #### Scenario: An engine reaches for the page
 
-- **WHEN** an engine file refers to `window`, `document` or any DOM type
-- **THEN** the change is rejected in review
+- **WHEN** an engine file uses `window`, `document`, `navigator`, `fetch`, `localStorage` or a DOM type
+- **THEN** lint or the engine's Node unit tests fail
 
 ### Requirement: Engines run in a Web Worker
 
-Every engine SHALL run in a Web Worker. The UI thread MUST NOT parse, render or write a file, and MUST NOT be blocked for more than 100 ms. (SPEC.md: Rules for the code, 3; Definition of done, Each tool)
+Every engine SHALL run in a Web Worker. The UI thread SHALL never process a file. (SPEC.md: Rules for the code, 3)
 
 #### Scenario: A large job runs
 
 - **WHEN** a 500-page file is processed
-- **THEN** no task on the UI thread runs longer than 100 ms and the page still responds to input
+- **THEN** the page still responds to input while the job runs
 
 ### Requirement: Typed worker messages with progress and cancel
 
@@ -45,7 +45,7 @@ The page and the worker SHALL talk through typed messages kept in `src/workers/`
 
 ### Requirement: Engines load late
 
-WebAssembly and engine code SHALL be fetched when the visitor picks a file, not when the page loads. (SPEC.md: Rules for the code, 4)
+WebAssembly and engine code SHALL be fetched when the visitor picks a file, not when the page loads. No page or component SHALL import an engine at load. (SPEC.md: Rules for the code, 4)
 
 #### Scenario: A page loads and no file is chosen
 
@@ -56,6 +56,11 @@ WebAssembly and engine code SHALL be fetched when the visitor picks a file, not 
 
 - **WHEN** the visitor picks a file
 - **THEN** the engine for that tool is fetched and the page shows the engine loading state meanwhile
+
+#### Scenario: A component imports an engine
+
+- **WHEN** a page or component statically imports a file from `src/engines/`
+- **THEN** lint or review rejects the change
 
 ### Requirement: The library for each job
 
@@ -76,14 +81,19 @@ Engines SHALL use the library that the tech stack table in `SPEC.md` names for t
 - **WHEN** a tool shows thumbnails, turns a PDF into images or extracts text
 - **THEN** it uses PDF.js (`pdfjs-dist`)
 
-#### Scenario: Compression or OCR is designed
+#### Scenario: OCR is designed
 
-- **WHEN** a tool compresses a PDF or reads text from a scan
-- **THEN** it uses Ghostscript compiled to WebAssembly for compression and Tesseract.js for OCR
+- **WHEN** a tool reads text from a scan
+- **THEN** it uses Tesseract.js
 
-### Requirement: Ghostscript waits for the licence decision
+#### Scenario: Compression is designed
 
-Ghostscript MUST NOT be added to the repo, and no `LICENSE` file SHALL be added, until the owner confirms the licence decision. (SPEC.md: Open decisions, Licence; CLAUDE.md: Questions waiting for the owner)
+- **WHEN** a tool compresses a PDF
+- **THEN** it uses the library the owner has confirmed, and Ghostscript compiled to WebAssembly is only the assumed default until the licence decision is made
+
+### Requirement: Licence-bound dependencies wait for the owner
+
+Ghostscript, and any other AGPL-licensed dependency, MUST NOT be added to the repo, and no `LICENSE` file SHALL be added, until the owner confirms the licence decision. (SPEC.md: Open decisions, Licence; CLAUDE.md: Questions waiting for the owner)
 
 #### Scenario: Compress PDF is proposed
 
@@ -110,12 +120,12 @@ Before a library is added it SHALL be confirmed as still maintained, and its lic
 
 ### Requirement: Site stack
 
-The site SHALL be built with Astro with static output and TypeScript. Interactive parts SHALL be Preact islands, and only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS: one global stylesheet at `src/styles/site.css` plus scoped component styles. Tailwind, component kits and icon libraries MUST NOT be used. (SPEC.md: Architecture and tech stack)
+The site SHALL be built with Astro with static output and TypeScript. Interactive parts SHALL be Preact islands, and on a tool page only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS: one global stylesheet at `src/styles/site.css` plus scoped component styles. Tailwind, component kits and icon libraries MUST NOT be used. (SPEC.md: Architecture and tech stack)
 
-#### Scenario: A page is built
+#### Scenario: A tool page is built
 
 - **WHEN** a tool page is built
-- **THEN** the output is static HTML with one island for the tool widget and no script for the rest of the page
+- **THEN** the output is static HTML with one island for the tool widget and no other script for the page content
 
 ### Requirement: Repo layout
 
@@ -124,7 +134,7 @@ Code SHALL sit where the repo layout says: `src/tools/registry.ts`, `src/engines
 #### Scenario: An engine is added
 
 - **WHEN** a change adds an engine
-- **THEN** it is one file under `src/engines/` and its worker entry is under `src/workers/`
+- **THEN** it is one file under `src/engines/`, and any worker entry point it needs is under `src/workers/`
 
 ### Requirement: Shared components are reused
 
@@ -134,12 +144,3 @@ Tools SHALL reuse `ToolShell`, `FilePicker`, `PageGrid` and `Result`. A tool tha
 
 - **WHEN** a tool's design calls for a shared component that does not exist
 - **THEN** that component is proposed and merged as its own change before the tool's change
-
-### Requirement: Tests
-
-Engines SHALL have unit tests in Vitest. Each tool SHALL have one end-to-end test in Playwright. (SPEC.md: Architecture and tech stack; Definition of done)
-
-#### Scenario: A tool is finished
-
-- **WHEN** a tool is called done
-- **THEN** its engine unit tests and its one end-to-end test exist and pass, with none skipped

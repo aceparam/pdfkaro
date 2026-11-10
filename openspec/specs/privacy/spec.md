@@ -2,27 +2,32 @@
 
 ## Purpose
 
-The promise the site makes about files and how the code keeps it literally true: browser tools never send the file anywhere, nothing tracks the visitor, and the Privacy page matches the code. Derived from "Privacy, limits and security" in `SPEC.md`, which stays the source of truth if the two ever differ. Rules for the conversion server are in the `conversion-server` capability.
+The promise from `SPEC.md`, which must be literally true: browser tools never send the file anywhere, and server tools delete it within an hour. This capability covers how the code keeps it for browser tools, the site-wide rules on scripts and tracking, and the Privacy page. Derived from "Privacy, limits and security" in `SPEC.md`, which stays the source of truth if the two ever differ. Rules for the conversion server are in the `conversion-server` capability.
 
 ## Requirements
 
 ### Requirement: Browser tools send no file data
 
-For a browser tool, no request that leaves the page SHALL carry file contents, file names or passwords. (SPEC.md: Browser tools)
+For a browser tool, no request that leaves the page or one of its workers SHALL carry file contents, file names or passwords. (SPEC.md: Browser tools)
 
 #### Scenario: A job runs in a browser tool
 
 - **WHEN** a visitor chooses a file and runs a job in a browser tool
-- **THEN** no request made from the page carries any part of the file, its name or a password
+- **THEN** no request made from the page or its workers carries any part of the file, its name or a password
 
 ### Requirement: The no-upload test
 
-Each browser tool SHALL have an automated test that fails the build if the tool makes any upload while processing. (SPEC.md: Browser tools; Definition of done)
+Each browser tool SHALL have an automated test that fails the build if the tool makes any upload while processing. The test SHALL watch every request from the page, its workers and its service worker, from file pick to download. (SPEC.md: Browser tools; Definition of done)
 
 #### Scenario: An upload is added by mistake
 
-- **WHEN** code is added that sends a request with a body while a file is being processed
+- **WHEN** code sends the file, its name or a password in a request body, a query string, an image address or a socket message
 - **THEN** the no-upload test fails and the build fails
+
+#### Scenario: A request goes to another origin
+
+- **WHEN** a request goes to any origin other than the site's own between file pick and download
+- **THEN** the no-upload test fails
 
 #### Scenario: A browser tool is finished
 
@@ -31,12 +36,12 @@ Each browser tool SHALL have an automated test that fails the build if the tool 
 
 ### Requirement: Passwords stay in the browser
 
-Passwords typed into Protect, Unlock or the password-needed state SHALL stay in the browser. They MUST NOT be stored, logged, put in a URL or sent anywhere. (SPEC.md: Browser tools)
+Passwords typed into Protect or Unlock SHALL stay in the browser. They MUST NOT be stored, logged, put in a URL or sent anywhere. (SPEC.md: Browser tools)
 
 #### Scenario: A password is typed
 
 - **WHEN** a visitor types a password and the job finishes
-- **THEN** the password is in no request, no URL, no console message and no browser storage
+- **THEN** the password is in no request from the page, a worker or the service worker, no URL, no console message and no browser storage
 
 ### Requirement: No fixed size limit, with a warning
 
@@ -56,6 +61,11 @@ From phase 2, a service worker SHALL cache tool pages and engines so that browse
 - **WHEN** a visitor who has used a browser tool before opens it with no connection
 - **THEN** the page loads and the job runs
 
+#### Scenario: The cache is inspected
+
+- **WHEN** the service worker's cache is listed after a job
+- **THEN** it holds only the site's own pages and engines, and none of the visitor's files
+
 ### Requirement: Content Security Policy
 
 The site SHALL send a strict Content Security Policy that allows scripts from the site's own origin only, plus what WebAssembly needs. (SPEC.md: Whole site)
@@ -65,14 +75,19 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 - **WHEN** a page tries to load a script from another origin
 - **THEN** the browser blocks it under the policy
 
+#### Scenario: An inline script or eval is tried
+
+- **WHEN** a page runs an inline script or calls `eval`
+- **THEN** the browser blocks it, and only what WebAssembly needs is allowed beyond the site's own scripts
+
 ### Requirement: No advertising or tracking
 
-The site SHALL carry no advertising scripts and no tracking scripts, and SHALL load no third-party script besides cookieless analytics if the owner chooses it. Analytics, if used, MUST set no cookies and MUST NOT record file names or anything about a file. (SPEC.md: Whole site; Architecture and tech stack, Analytics; Open decisions)
+The site SHALL carry no advertising or tracking scripts and SHALL make no request to any origin other than its own, apart from cookieless analytics if used. Analytics MUST set no cookies and MUST NOT record file names or anything about a file. Until the owner decides otherwise, analytics SHALL be cookieless page counts. (SPEC.md: Whole site; Architecture and tech stack, Analytics; Open decisions)
 
 #### Scenario: A page is loaded
 
 - **WHEN** any page is loaded
-- **THEN** no cookie is set and no request goes to an advertising or tracking service
+- **THEN** no cookie is set and no request goes to any origin other than the site's own, apart from cookieless analytics if the owner has chosen it
 
 #### Scenario: More than page counts is proposed
 
@@ -83,9 +98,9 @@ The site SHALL carry no advertising scripts and no tracking scripts, and SHALL l
 
 The site SHALL show no pop-up of any kind, including a cookie banner, newsletter prompt, chat bubble, "rate us" or upgrade prompt. (SPEC.md: Banned patterns; What we are building, rule 3)
 
-#### Scenario: A first visit
+#### Scenario: A first visit and a finished job
 
-- **WHEN** a visitor opens the site for the first time
+- **WHEN** a visitor opens the site for the first time, and again when a job finishes
 - **THEN** nothing appears over the page
 
 ### Requirement: The Privacy page matches the code
@@ -99,7 +114,7 @@ The Privacy page SHALL say in plain words what happens to a file for each kind o
 
 ### Requirement: Money
 
-Until the owner decides otherwise the site SHALL carry at most a donation link. Adverts MUST NOT be added. (SPEC.md: Open decisions, Money)
+Until the owner decides otherwise the site SHALL carry no adverts. A donation link, as a plain text link, is allowed. (SPEC.md: Open decisions, Money)
 
 #### Scenario: Adverts are proposed
 

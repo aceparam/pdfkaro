@@ -8,7 +8,7 @@ The limits on what particular tools do and do not do, so that each tool's own ch
 
 ### Requirement: Browser first
 
-A tool SHALL run in the visitor's browser unless the catalogue marks it "Server". A tool MUST NOT be moved to the server without the owner's word. (SPEC.md: What we are building, rule 2)
+A tool SHALL run in the visitor's browser unless the catalogue marks it "Server". A tool SHALL go to the server only when it cannot run in the browser. (SPEC.md: What we are building, rule 2)
 
 #### Scenario: A browser tool is designed
 
@@ -56,6 +56,11 @@ Redact SHALL remove redacted content from the file and MUST NOT only draw a box 
 - **WHEN** text is extracted from the output of Redact
 - **THEN** none of the redacted text is present anywhere in the file
 
+#### Scenario: The original page is looked for
+
+- **WHEN** the output of Redact is searched for the original content of a redacted page
+- **THEN** no original text or page content of that page remains in the file, including in unreferenced objects
+
 ### Requirement: Sign PDF places a signature image
 
 Sign PDF SHALL place a drawn, typed or uploaded signature image on the page. Certificate signatures SHALL be the separate phase 3 tool. (SPEC.md: Scope notes)
@@ -90,7 +95,7 @@ PDF to Word, PDF to Excel and PDF to PowerPoint SHALL use open-source conversion
 #### Scenario: A PDF to Word page is read
 
 - **WHEN** a visitor opens PDF to Word
-- **THEN** the page says, before a file is chosen, that it works best on simple text documents
+- **THEN** the page says the tool works best on simple text documents
 
 ### Requirement: No AI tools
 
