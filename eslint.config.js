@@ -6,7 +6,7 @@ import astro from 'eslint-plugin-astro';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default defineConfig(
-  { ignores: ['dist/', '.astro/', 'node_modules/', 'design/', 'test-results/', 'playwright-report/'] },
+  { ignores: ['dist/', 'dist-base/', '.astro/', 'node_modules/', 'design/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...astro.configs.recommended,

@@ -13,6 +13,7 @@
   ],
   "exclude": [
     "dist",
+    "dist-base",
     "node_modules",
     "design"
   ]

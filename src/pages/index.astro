@@ -15,5 +15,5 @@ const description =
 <Base title={title} description={description}>
   <h1>{siteName}</h1>
   <p class="lede">{tagline}</p>
-  <ToolDirectory client:idle label="What do you need to do?" groups={groupsWithItems(groups, tools)} />
+  <ToolDirectory client:idle label="What do you need to do?" groups={groupsWithItems(groups, tools, import.meta.env.BASE_URL)} />
 </Base>

@@ -20,6 +20,9 @@ test.describe('every page', () => {
       expect(await page.evaluate(() => getComputedStyle(document.querySelector('header')!).position)).toBe('static');
       await expect(page.locator('footer a')).toHaveCount(5);
 
+      // The real site, at the root of its address, does not ask search engines to stay away.
+      await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+
       // Nothing scrolls sideways.
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

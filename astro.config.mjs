@@ -1,8 +1,13 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 
+// The site normally sits at the root of its address. A preview on GitHub Pages
+// sits under the repo name instead, such as /pdfkaro, and sets SITE_BASE to say so.
+const base = process.env.SITE_BASE || '/';
+
 // Static HTML, one file per page, so /merge-pdf is served with no trailing slash.
 export default defineConfig({
+  base,
   output: 'static',
   trailingSlash: 'never',
   build: {

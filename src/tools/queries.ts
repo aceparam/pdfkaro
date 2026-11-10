@@ -1,6 +1,7 @@
 // Plain functions over the registry. No DOM and no rendering, so they run in
 // Node and could be reused by an app with different views.
 
+import { withBase } from '../site';
 import type { Group, GroupId, Tool, ToolPage } from './registry';
 
 /** What a list of tools shows for one page. */
@@ -21,8 +22,9 @@ export type PageWithTool = {
   page: ToolPage;
 };
 
-export function toListItem(page: ToolPage): ListItem {
-  return { name: page.name, href: `/${page.slug}`, summary: page.summary };
+/** `base` is the site's base path: "/" at the root, or a sub-path for a preview. */
+export function toListItem(page: ToolPage, base = '/'): ListItem {
+  return { name: page.name, href: withBase(base, `/${page.slug}`), summary: page.summary };
 }
 
 /** Every published page, each with the tool that serves it. */
@@ -35,24 +37,24 @@ export function findPage(tools: Tool[], slug: string): PageWithTool | undefined 
 }
 
 /** The groups that have at least one published page, in registry order. */
-export function groupsWithItems(groups: Group[], tools: Tool[]): GroupWithItems[] {
+export function groupsWithItems(groups: Group[], tools: Tool[], base = '/'): GroupWithItems[] {
   return groups
     .map((group) => ({
       id: group.id,
       name: group.name,
       items: tools
         .filter((tool) => tool.group === group.id)
-        .flatMap((tool) => tool.pages.map(toListItem)),
+        .flatMap((tool) => tool.pages.map((page) => toListItem(page, base))),
     }))
     .filter((group) => group.items.length > 0);
 }
 
 /** The related tools of a tool that are published, in the order the tool names them. */
-export function relatedItems(tools: Tool[], tool: Tool): ListItem[] {
+export function relatedItems(tools: Tool[], tool: Tool, base = '/'): ListItem[] {
   const published = new Map(allPages(tools).map(({ page }) => [page.slug, page]));
   return tool.related.flatMap((slug) => {
     const page = published.get(slug);
-    return page ? [toListItem(page)] : [];
+    return page ? [toListItem(page, base)] : [];
   });
 }
 

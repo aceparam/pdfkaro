@@ -1,0 +1,62 @@
+name: Preview on GitHub Pages
+
+# Publishes a preview of the site at https://<owner>.github.io/<repo>/.
+# The preview is public, even when the repo is private.
+# There is one preview: the last push to main or to a claude/ branch is what it shows.
+#
+# The owner has to switch this on once, in the repo's Settings:
+#   Pages > Source: GitHub Actions
+#   Environments > github-pages > Deployment branches: allow claude/**
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ASTRO_TELEMETRY_DISABLED: "1"
+      # A project site on GitHub Pages sits under the repo name.
+      SITE_BASE: /${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build for the preview address
+        run: npm run build
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only this job can publish, and it runs no code from the repo.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

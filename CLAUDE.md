@@ -16,7 +16,9 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 
 1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Built; steps 1, 2, 3, 7, 8 and 9 below.
 2. Next: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5.
-3. Then: Merge PDF end to end, with its page text. Step 6. Preview deploys on Cloudflare Pages are set up here, once the owner has connected the repo there.
+3. Then: Merge PDF end to end, with its page text. Step 6.
+
+A preview of the site is published on GitHub Pages by `.github/workflows/pages.yml`, on each push to `main` or to a `claude/` branch.
 
 Phase 0, in order:
 
@@ -38,6 +40,7 @@ Update this section when a phase gate is passed.
 
 `SPEC.md` is an export of the owner's working doc and is not edited here. Where the owner has decided something since the export, it is listed below and it wins over `SPEC.md` until the export is refreshed.
 
+- **Preview on GitHub Pages (10 Nov 2026).** The owner asked for the pull request's branch to be deployed on GitHub Pages so the site can be tried before sign-off, and was told first that the preview is public. It sits under the repo name, so the build takes its base path from `SITE_BASE` and every link goes through `withBase` in `src/site.ts`. Preview pages carry `noindex`. This replaces the agent's earlier choice of Cloudflare Pages.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
@@ -50,7 +53,7 @@ The five that were asked:
 - **Home page filter.** The count of matching tools is read to screen readers and not shown. The words for no match are shown to everyone.
 - **Dark colours.** `SPEC.md` gives none. The palette in `src/styles/site.css` is the one to use. The owner is shown it in the pull request.
 - **Page budget.** A tool page stays under 100 KB, measured by gzip. React takes about 67 KB of it. If the tool widget cannot fit in the rest, stop and ask the owner: the choice is between a larger budget and swapping React for `preact/compat` on the web, and the second would go against the owner's React decision.
-- **Preview deploys.** Cloudflare Pages. It serves `/merge-pdf` from `merge-pdf.html`, which is how the site is built. The owner has to connect the repo in their Cloudflare account before the Merge PDF change can set them up.
+- **Preview deploys.** The agent chose Cloudflare Pages. The owner has since chosen GitHub Pages; see above.
 
 Three more that the agent decided at the same time without asking, because they go with the ones above:
 
@@ -110,7 +113,7 @@ All but `developer` are read-only.
 - **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
 - **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
-- **Cloudflare Pages.** Ask the owner to connect the repo in their Cloudflare account, so preview deploys can be set up in the Merge PDF change.
+- **GitHub Pages settings.** The preview deploys only after the owner has, in the repo's Settings, set Pages > Source to "GitHub Actions" and allowed `claude/**` under Environments > github-pages > Deployment branches. Pages on a private repo needs a paid GitHub plan.
 
 ## Commands
 
@@ -122,6 +125,7 @@ All but `developer` are read-only.
 - `npm run check` runs the type check.
 - `npm test` runs the unit tests (Vitest).
 - `npm run weigh` adds up the compressed size of each built page and fails over 100 KB. Run it after a build.
+- `npm run check:base` builds the site as a preview under a sub-path and fails if any link, stylesheet or script would break there. Never write a link as a bare `/path`; pass it through `withBase`.
 - `npm run e2e` runs the end-to-end tests (Playwright) against the built site, at 360px and 1280px. Run it after a build, and add `-- --trace off` unless a trace is wanted.
 - Astro sends anonymous usage figures to its makers unless `ASTRO_TELEMETRY_DISABLED=1` is set. CI and agent sessions set it. On your own machine, run `npx astro telemetry disable` once.
 - `npm run spec` runs `openspec validate --all --strict`. `npx openspec list` shows changes in progress and `npx openspec show <name>` prints a change or a spec.

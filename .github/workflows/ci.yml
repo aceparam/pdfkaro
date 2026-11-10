@@ -32,6 +32,8 @@ jobs:
         run: npm run build
       - name: Page weight
         run: npm run weigh
+      - name: Links work under a sub-path
+        run: npm run check:base
       - name: Install the test browser
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests

@@ -17,5 +17,5 @@ const { tool, page } = Astro.props;
 
 <Base title={page.title} description={page.description}>
   {/* The tool itself and the text below it arrive with the tool's own change. */}
-  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool)} />
+  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool, import.meta.env.BASE_URL)} />
 </Base>

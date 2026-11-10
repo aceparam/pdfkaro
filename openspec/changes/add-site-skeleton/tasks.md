@@ -60,3 +60,13 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 7.10 Retake screenshots of all eight pages at 360px and 1280px, in light and dark mode, keep both widths of every page in `screenshots/`, and put the dark ones in the pull request for the owner
 - [x] 7.11 Turn off Astro's usage reporting for agent sessions by adding `ASTRO_TELEMETRY_DISABLED` to `.claude/settings.json`, say how to turn it off on a person's own machine in `CLAUDE.md`, and name the settings change in the pull request
 - [x] 7.12 Add a test that renders `ToolList` and checks that only a hidden item is marked hidden
+
+## 8. Preview on GitHub Pages
+
+- [x] 8.1 Take the site's base path from `SITE_BASE`, and pass every link the site writes through `withBase`
+- [x] 8.2 Add `noindex` to pages built under a sub-path, and check the root build does not carry it
+- [x] 8.3 Add `npm run check:base`, unit tests for `withBase` and the list links, and run the check in CI
+- [x] 8.4 Add `.github/workflows/pages.yml` to publish the preview on pushes to `main` and `claude/**`
+- [x] 8.5 Record the owner's choice of GitHub Pages in `CLAUDE.md`, with the two settings the owner has to change
+- [ ] 8.6 Run the review panel on these changes and resolve its findings
+- [ ] 8.7 Confirm on the first deploy that the preview opens, that `/merge-pdf` and a missing page work, and give the owner the address

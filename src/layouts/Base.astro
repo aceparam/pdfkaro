@@ -5,7 +5,8 @@
 import '../styles/site.css';
 import { SiteHeader } from '../components/SiteHeader/SiteHeader';
 import { SiteFooter } from '../components/SiteFooter/SiteFooter';
-import { siteName, headerLinks, footerLinks } from '../site';
+import { siteName, headerLinks, footerLinks, withBase } from '../site';
+import type { SiteLink } from '../site';
 
 interface Props {
   /** The title tag. Different on every page. */
@@ -15,6 +16,11 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+
+// "/" when the site is at the root of its address; a sub-path for a preview.
+const base = import.meta.env.BASE_URL;
+const atRoot = withBase(base, '/') === '/';
+const based = (links: SiteLink[]) => links.map((link) => ({ ...link, href: withBase(base, link.href) }));
 ---
 
 <!doctype html>
@@ -24,14 +30,16 @@ const { title, description } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {/* A preview under a sub-path is not the real site, so search engines are asked to leave it out. */}
+    {!atRoot && <meta name="robots" content="noindex" />}
   </head>
   <body>
     <div class="page">
-      <SiteHeader siteName={siteName} links={headerLinks} />
+      <SiteHeader siteName={siteName} homeHref={withBase(base, '/')} links={based(headerLinks)} />
       <main>
         <slot />
       </main>
-      <SiteFooter links={footerLinks} />
+      <SiteFooter links={based(footerLinks)} />
     </div>
   </body>
 </html>

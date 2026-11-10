@@ -182,10 +182,23 @@ No engine or WebAssembly exists yet. The rule against importing `src/engines/` f
 - **Content Security Policy:** not set in this change. A page with an island carries two small inline scripts and one inline style from Astro's loader, so the Phase 1 change that sets the policy must allow all three by hash. Pages with no island carry none.
 - **Malicious PDF, oversized file, hostile file name, server risks:** not applicable until files are handled.
 
+### 12. Preview on GitHub Pages
+
+The owner asked for the pull request's branch to be deployed on GitHub Pages.
+
+- **Base path.** A Pages project site sits at `https://<owner>.github.io/<repo>/`, not at the root. `astro.config.mjs` takes `base` from the `SITE_BASE` environment variable and defaults to `/`, so the real site is unchanged. Astro puts the base in front of its own stylesheets and scripts. Links the site writes go through one plain function, `withBase(base, path)` in `src/site.ts`: pages read `import.meta.env.BASE_URL` and pass based links to components, which stay unaware of it. `toListItem`, `groupsWithItems` and `relatedItems` take the base as a last argument that defaults to `/`.
+- **Guard.** `npm run check:base` builds the site under a made-up sub-path and fails if any `href`, `src` or island URL in the built pages is outside it, or if a preview page lacks `noindex`. CI runs it. Unit tests cover `withBase` and the list links.
+- **Not for search engines.** A page built under a sub-path carries `<meta name="robots" content="noindex">`, so the preview address is not indexed in place of the real one. An end-to-end check asserts the root build does not carry it.
+- **Workflow.** `.github/workflows/pages.yml` runs on pushes to `main` and to `claude/**` branches, and on manual start. It does not run on `pull_request`, so code from a fork is never published. The build job has `contents: read` only. The deploy job alone has `pages: write` and `id-token: write`, runs no repo code, and uses the official `actions/upload-pages-artifact` and `actions/deploy-pages`.
+- **One preview.** Pages holds one site per repo, so the last push to `main` or a `claude/` branch is what the preview shows.
+- **Extensionless URLs.** GitHub Pages serves `/merge-pdf` from `merge-pdf.html` and uses `404.html` for missing pages, which matches how the site is built. To be confirmed on the first deploy.
+- **Owner steps.** Settings > Pages > Source: GitHub Actions; Settings > Environments > github-pages: allow `claude/**`. Pages on a private repo needs a paid plan. The preview is public.
+
 ## Risks / Trade-offs
 
 - **React uses most of the page budget.** About 67 KB of 100 KB by gzip on a tool page. If the widget cannot fit in the rest, the owner is asked: a larger budget, or `preact/compat` on the web, which would go against the React decision.
-- **The host must serve `/merge-pdf` from `merge-pdf.html`.** The site is built one file per page so that URLs have no trailing slash. Only the local preview server has been tested. Cloudflare Pages, the chosen host, does this; it has to be checked on the first preview deploy.
+- **The host must serve `/merge-pdf` from `merge-pdf.html`.** The site is built one file per page so that URLs have no trailing slash. Only the local preview server has been tested. GitHub Pages does this; it has to be checked on the first preview deploy.
+- **The preview is public and unfinished.** Anyone with the address can open it, and the Merge PDF page has no tool yet. It carries `noindex`, and the owner chose to publish it knowing this.
 - **Stylesheet order.** Astro links the global stylesheet and component styles in a different order on different pages. `site.css` sits in a cascade layer, so a component rule always wins whatever the order.
 - **React on the home page for one filter box.** A few lines of plain script would be smaller. One way of building interaction was chosen over the smallest page; the home page still serves every tool as HTML.
 - **Control edges depart from `SPEC.md`.** `#5c5c5c` in place of `#d9d6cc`, for inputs and secondary buttons only, because `#d9d6cc` on `#fbfaf6` is 1.39 to 1. Decided on the owner's delegation; one variable to change back.

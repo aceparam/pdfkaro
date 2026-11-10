@@ -27,7 +27,7 @@ Out of scope, and left for the next two Phase 0 changes:
 
 Out of scope, and left for Phase 1: group pages, sitemap and robots file, canonical and social tags, structured data, the Content Security Policy.
 
-Not done because it needs the owner: preview deploys, which the Phase 0 row of "Build phases" lists. They need a static host. The question for the owner is below, and the Merge PDF change, the last of Phase 0, owns setting them up once it is answered.
+Preview deploys, which the Phase 0 row of "Build phases" lists, were first left for a later change because they needed a host from the owner. The owner then asked for GitHub Pages, so they are in this change; see Impact.
 
 Tasks that the project rules ask of a tool change and that do not apply here, because no file is handled: engine unit tests, the no-upload test, and the run against `tests/fixtures/`.
 
@@ -57,7 +57,8 @@ None.
   - The count of matching tools is not shown; it is announced to screen readers only. "No tools match." is shown.
   - The dark colours and the column placed towards the left are built as the designs draw them.
 - **Not built from the designs:** group headings on the home page are plain text, not links, because group pages are not part of this change.
-- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React the owner is asked before anything gives way; preview deploys will use Cloudflare Pages.
-- **Still for the owner:** update the working doc ("Interactive parts" is now React), and connect the repo in a Cloudflare account.
+- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React the owner is asked before anything gives way. The agent also chose Cloudflare Pages for preview deploys; the owner has since chosen GitHub Pages (below).
+- **Preview on GitHub Pages, asked for by the owner on 10 Nov 2026.** On the pull request the owner asked to try the site before signing off, then asked for it to be deployed on GitHub Pages from the pull request's branch, after being told the preview is public even though the repo is private. This change adds the workflow and makes every link work under the repo-name sub-path that a Pages project site uses. Preview pages ask search engines to leave them out. This brings the Phase 0 "preview deploys" item into this change.
+- **Still for the owner:** update the working doc ("Interactive parts" is now React); and in the repo's Settings, set Pages > Source to "GitHub Actions" and allow `claude/**` under Environments > github-pages.
 - **Dependencies:** Astro, the Astro React integration, React and ReactDOM at run time; TypeScript, ESLint and its plugins, Vitest and Playwright for development. All are listed in `design.md` and `LICENSES.md`.
 - **Page weight:** React and ReactDOM are 68.9 KB by gzip, against about 7 KB for Preact with its React layer. Pages with no interaction ship none of it. The home page ships it for the filter. Tool pages will ship it for the widget, which leaves about 30 KB of the 100 KB budget for everything else. A check in CI measures every built page and fails over 100 KB.
