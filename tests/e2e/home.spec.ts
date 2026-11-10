@@ -109,6 +109,12 @@ test.describe('home page', () => {
     expect(outline).toEqual({ style: 'solid', width: '2px' });
   });
 
+  test('draws the edge of the filter box dark enough to see', async ({ page }) => {
+    await page.goto('/');
+    const edge = await page.getByLabel(filterBox).evaluate((element) => getComputedStyle(element).borderTopColor);
+    expect(edge).toBe('rgb(92, 92, 92)');
+  });
+
   test('keeps the registry out of the script it ships', async ({ page, request }) => {
     const scripts: string[] = [];
     page.on('request', (r) => {

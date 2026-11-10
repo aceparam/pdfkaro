@@ -1,4 +1,5 @@
-/* SPEC.md gives solid lines only. The designs propose a dashed border here. The owner decides. */
+/* A solid line, as SPEC.md gives for all borders. The designs drew it dashed;
+   that was turned down on 10 Nov 2026, see CLAUDE.md. */
 .box {
   margin-top: 1rem;
   padding: 1rem;

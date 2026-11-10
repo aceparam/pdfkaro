@@ -40,6 +40,16 @@ Update this section when a phase gate is passed.
 
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
+The decisions below were made by the agent on 10 Nov 2026. The owner was asked each question and replied "answer yourself". The owner can overturn any of them.
+
+- **Control edges.** Inputs and secondary buttons have a `#5c5c5c` edge (`#a8a59c` in dark mode), not the `#d9d6cc` that `SPEC.md` gives for lines and borders, because at `#d9d6cc` the edge of a box cannot be seen. Dividers and boxes keep `#d9d6cc`.
+- **Dark colours.** `SPEC.md` gives none. The palette in `src/styles/site.css` is the one to use.
+- **Column position.** The column sits towards the left of a wide screen.
+- **Home page filter.** The count of matching tools is read to screen readers and not shown. "No tools match." is shown to everyone.
+- **Turned down from the designs:** a white fill for inputs, and a dashed border on placeholder boxes. Both follow `SPEC.md`.
+- **Page budget.** A tool page stays under 100 KB, measured by gzip. React takes 68.9 KB of it. If the tool widget cannot fit in the rest, the budget wins and React gives way on the web: the build swaps in `preact/compat`, with no change to component code. So components must keep to what `preact/compat` supports.
+- **Preview deploys.** Cloudflare Pages. The owner has to connect the repo in their Cloudflare account before the Merge PDF change can set them up.
+
 ## How the code is laid out
 
 - `src/tools/registry.ts` is the one place a tool is declared. `catalogue.ts` beside it is a type only.
@@ -92,10 +102,7 @@ All but `developer` are read-only.
 - **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
 - **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
-- **Page budget.** React takes 68.9 KB of the 100 KB tool page budget by gzip (59.4 KB by brotli). Which compression should the budget be measured with? If the tool widget does not fit in the rest, does the budget or React give way?
-- **Preview deploys.** Phase 0 lists them. Which static host should they use?
-- **Where the designs differ from `SPEC.md`.** The site is built to `SPEC.md`. The designs propose otherwise, and the owner decides each: input and button edges at `#5c5c5c` in place of `#d9d6cc` (at `#d9d6cc` the edge of a box is faint, 1.39 to 1); showing the count of matching tools under the home page filter; a white fill for inputs; a dashed border on placeholder boxes. Each is one line in `src/styles/site.css` or a component.
-- **Dark colours.** `SPEC.md` gives none. The proposed palette in `src/styles/site.css` is built and waits for the owner's approval.
+- **Cloudflare Pages.** Ask the owner to connect the repo in their Cloudflare account, so preview deploys can be set up in the Merge PDF change.
 
 ## Commands
 

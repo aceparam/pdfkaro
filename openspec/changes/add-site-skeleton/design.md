@@ -114,15 +114,12 @@ Recorded now for the next change, not built here: the tool widget is one generic
 
 `src/styles/site.css` holds page, type, links, header and footer, fields and buttons (fields and buttons are shared by several components, so they are global, as `design/README.md` notes). Values come from the "Look and feel" table. Colours are CSS variables; dark mode swaps them under `prefers-color-scheme`, and `color-scheme: light dark` is set so parts the browser draws follow. Every focusable element, including the filter input, shows the `:focus-visible` outline; with a faint edge, the outline is the clear mark of the box. The input sets `background: transparent` and `color: var(--text)`, so the browser's own fill does not show.
 
-Where `design/design.css` differs from `SPEC.md`, this change builds the `SPEC.md` value:
+Design questions were decided on 10 Nov 2026 (see the proposal and `CLAUDE.md`):
 
-- Input and button edges are `1px solid #d9d6cc`, not `#5c5c5c`.
+- Input and button edges are `1px solid #5c5c5c` (`#a8a59c` in dark mode), held in one variable, `--control`. Dividers and boxes keep `#d9d6cc`.
 - The placeholder box has a solid border, not a dashed one.
 - Inputs have no fill.
-
-Each is one variable or one rule, so the owner's answer is a one-line change. The questions are in the proposal.
-
-Where `SPEC.md` is silent, the design is built and marked in the stylesheet as proposed: the dark colours, and the column placed towards the left.
+- The dark colours and the column placed towards the left are built as the designs draw them.
 
 Component styles are CSS Modules beside each component (`ToolList.module.css`). They are hand-written and scoped, which is what "scoped component styles" means when the component is React.
 
@@ -185,8 +182,8 @@ No engine or WebAssembly exists yet. The rule against importing `src/engines/` f
 
 ## Risks / Trade-offs
 
-- **React uses most of the page budget.** 68.9 KB of 100 KB by gzip on a tool page. If the widget cannot fit in the rest, either the budget or React gives way; that is the owner's call. Switching to the `preact/compat` alias stays possible only while components keep to what it supports.
+- **React uses most of the page budget.** 68.9 KB of 100 KB by gzip on a tool page. If the widget cannot fit in the rest, the budget wins and the build swaps in `preact/compat`. That stays possible only while components keep to what it supports.
 - **React on the home page for one filter box.** A few lines of plain script would be smaller. One way of building interaction was chosen over the smallest page; the home page still serves every tool as HTML.
-- **Light control edges.** `#d9d6cc` on `#fbfaf6` is 1.39 to 1, so the edge of the filter box is faint. It follows `SPEC.md`; the UX review recommends `#5c5c5c`.
+- **Control edges depart from `SPEC.md`.** `#5c5c5c` in place of `#d9d6cc`, for inputs and secondary buttons only, because `#d9d6cc` on `#fbfaf6` is 1.39 to 1. Decided on the owner's delegation; one variable to change back.
 - **The Merge PDF page has no picker or text until the next changes.** Acceptable only because nothing is deployed.
 - **New major versions.** Astro 7, ESLint 10 and Vitest 5 are recent. The Playwright version is pinned to the one whose browser is installed in the build environment.

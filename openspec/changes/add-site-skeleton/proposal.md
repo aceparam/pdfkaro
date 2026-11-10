@@ -50,17 +50,13 @@ None.
   - Licence and source code: no `LICENSE` file is added and Ghostscript is not added.
   - Analytics: none is added.
   - Domain: not needed yet; nothing in this change needs the site's address.
-- **Where the designs differ from `SPEC.md`, the `SPEC.md` value is built:** input and button edges are `#d9d6cc`, the placeholder box has a solid border, inputs have no fill, and the count of matching tools is not shown (it is announced to screen readers only; "No tools match." is shown).
-- **Where `SPEC.md` is silent, the design is built and marked as proposed:** the dark colours and the column placed towards the left.
+- **Design questions, decided on 10 Nov 2026.** The owner was asked each of the questions below and replied "answer yourself", so the agent decided them. They are recorded in `CLAUDE.md` and the owner can overturn any of them.
+  - Input and button edges are `#5c5c5c`, as the designs draw them. This departs from the `#d9d6cc` that `SPEC.md` gives for borders, because at `#d9d6cc` the edge of a box cannot be seen (1.39 to 1). Dividers and boxes keep `#d9d6cc`.
+  - The placeholder box has a solid border and inputs have no fill, as `SPEC.md` has it.
+  - The count of matching tools is not shown; it is announced to screen readers only. "No tools match." is shown.
+  - The dark colours and the column placed towards the left are built as the designs draw them.
 - **Not built from the designs:** group headings on the home page are plain text, not links, because group pages are not part of this change.
-- **Questions for the owner:**
-  1. Should input and button edges be `#5c5c5c`, as the designs draw them, in place of `#d9d6cc`? At `#d9d6cc` the edge of the filter box is faint (1.39 to 1 against the background).
-  2. Should the count of matching tools be shown under the filter box?
-  3. Should inputs be filled white?
-  4. Should placeholder boxes have a dashed border?
-  5. Is the proposed dark palette approved? A task shows it in screenshots.
-  6. Which static host should preview deploys use?
-  7. React takes 68.9 KB of the 100 KB tool page budget by gzip (59.4 KB by brotli). Which compression should the budget be measured with, and if the widget does not fit, does the budget or React give way?
-  8. Please update the working doc: "Interactive parts" is now React islands.
+- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React, React gives way on the web through `preact/compat`; preview deploys will use Cloudflare Pages.
+- **Still for the owner:** update the working doc ("Interactive parts" is now React), and connect the repo in a Cloudflare account.
 - **Dependencies:** Astro, the Astro React integration, React and ReactDOM at run time; TypeScript, ESLint and its plugins, Vitest and Playwright for development. All are listed in `design.md` and `LICENSES.md`.
 - **Page weight:** React and ReactDOM are 68.9 KB by gzip, against about 7 KB for Preact with its React layer. Pages with no interaction ship none of it. The home page ships it for the filter. Tool pages will ship it for the widget, which leaves about 30 KB of the 100 KB budget for everything else. A check in CI measures every built page and fails over 100 KB.

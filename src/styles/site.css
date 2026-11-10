@@ -16,17 +16,17 @@
   --button-bg: #1b1b1b;
   --button-text: #fff;
 
-  /* Edge of inputs and secondary buttons. SPEC.md gives #d9d6cc for all borders.
-     The designs propose #5c5c5c, which is easier to see. The owner decides. */
-  --control: var(--line);
-  /* Inside of inputs. SPEC.md names no fill, so there is none.
-     The designs propose #fff. The owner decides. */
+  /* Edge of inputs and secondary buttons. Darker than --line so the edge of a
+     control can be seen (6.4 to 1 against the background; --line is 1.39 to 1).
+     Decided 10 Nov 2026, see CLAUDE.md. Dividers and boxes keep --line. */
+  --control: #5c5c5c;
+  /* Inside of inputs: no fill. Decided 10 Nov 2026, see CLAUDE.md. */
   --field: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Proposed dark palette. SPEC.md gives none. Waiting for the owner. */
+    /* Dark palette. SPEC.md gives none. Decided 10 Nov 2026, see CLAUDE.md. */
     --bg: #171614;
     --text: #ecebe6;
     --muted: #a8a59c;
@@ -34,6 +34,7 @@
     --line: #3a3833;
     --button-bg: #ecebe6;
     --button-text: #171614;
+    --control: #a8a59c;
   }
 }
 
@@ -52,7 +53,7 @@ body {
   box-sizing: content-box;
   max-width: 44rem;
   padding: 0 1rem;
-  /* Proposed: the column sits towards the left on a wide screen. Waiting for the owner. */
+  /* The column sits towards the left on a wide screen. Decided 10 Nov 2026, see CLAUDE.md. */
   margin-left: clamp(0px, calc((100% - 25rem) * 0.1), 4rem);
 }
 
