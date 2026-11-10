@@ -1,0 +1,24 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.list a {
+  display: inline-block;
+  padding: 0.5625rem 0;
+}
+.summary {
+  color: var(--muted);
+}
+
+/* On a phone the description sits under the link, so each link is a full-width row. */
+@media (max-width: 30rem) {
+  .list a {
+    display: block;
+  }
+  .summary {
+    display: block;
+    margin-top: -0.4375rem;
+    padding-bottom: 0.4375rem;
+  }
+}

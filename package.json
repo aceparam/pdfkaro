@@ -1,0 +1,46 @@
+{
+  "name": "pdfkaro",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "weigh": "node scripts/page-weight.mjs",
+    "check:base": "node scripts/check-base.mjs",
+    "e2e": "playwright test",
+    "spec": "openspec validate --all --strict --no-interactive"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.5",
+    "astro": "^7.4.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@eslint/js": "^10.0.1",
+    "@fission-ai/openspec": "^1.17.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-astro": "^3.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "minimatch@^10": "11.0.5"
+  }
+}

@@ -1,0 +1,19 @@
+---
+// Home: the site name, one sentence, the filter box and every tool. Nothing else.
+import Base from '../layouts/Base.astro';
+import { ToolDirectory } from '../components/ToolDirectory/ToolDirectory';
+import { groups, tools } from '../tools/registry';
+import { groupsWithItems } from '../tools/queries';
+import { siteName, tagline } from '../site';
+
+// Draft wording for the owner to review.
+const title = `${siteName}: every PDF job, done in your browser`;
+const description =
+  'A free website with one page per PDF job. Jobs that run in your browser keep the file on your device.';
+---
+
+<Base title={title} description={description}>
+  <h1>{siteName}</h1>
+  <p class="lede">{tagline}</p>
+  <ToolDirectory client:idle label="What do you need to do?" groups={groupsWithItems(groups, tools, import.meta.env.BASE_URL)} />
+</Base>

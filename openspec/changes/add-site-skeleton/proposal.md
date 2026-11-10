@@ -1,0 +1,65 @@
+# Proposal
+
+## Why
+
+The repo holds a spec and designs but no site. Phase 0 ("Build phases" in `SPEC.md`) starts with a skeleton that every later tool is built on: the project, the registry, the stylesheet, the page shell and the checks. Nothing else can be built or tested until it exists.
+
+The owner has also asked for the site to be built with React, written as reusable components, so that a phone app could reuse the work later. `SPEC.md` named Preact. This change moves the stack to React and sets the rule that keeps the components reusable.
+
+## What Changes
+
+This is the first of three Phase 0 changes. It covers steps 1, 2, 3, 7, 8 and 9 of the Phase 0 list in `CLAUDE.md`, the static half of `ToolShell` from step 4, and the Merge PDF registry entry and bare page that step 2 names.
+
+- Scaffold the project: Astro with static output, TypeScript, and React for components. No Tailwind, component kit or icon library.
+- **Stack change, directed by the owner:** interactive parts are React islands, not Preact islands. On 10 Nov 2026 the owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. `SPEC.md` is an export of the owner's working doc, so it is not edited; the decision is recorded in `CLAUDE.md` and the owner is asked to update the doc.
+- Add `src/tools/registry.ts` with the tool and group types and one entry, Merge PDF. Generate `src/pages/[slug].astro` and the home page list from it.
+- Write `src/styles/site.css` from the "Look and feel" table, using `design/design.css` as the guide.
+- Add the first reusable components: site header, site footer, tool list, the home page tool directory with its filter, the static part of the tool page shell, and the owner placeholder box.
+- Add the home page, the Merge PDF page (heading and sentence only, see below), the 404 page, and marked placeholder pages for About, Privacy, Changes, Known problems and Contact.
+- Add lint, type check, Vitest, Playwright and a page weight check, and a CI workflow that runs them with the build.
+- Start `LICENSES.md` with every dependency added.
+- List the commands in `CLAUDE.md`.
+
+Out of scope, and left for the next two Phase 0 changes:
+
+- The Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and the interactive part of `ToolShell`).
+- The Merge PDF engine, worker, page text and working tool, which ship together in the Merge PDF change. Until then the Merge PDF page shows its heading and sentence, with no file picker and no text below. The only place it can be seen is the preview on GitHub Pages, which is unlisted, carries `noindex` and is there for the owner to try the site.
+
+Out of scope, and left for Phase 1: group pages, sitemap and robots file, canonical and social tags, structured data, the Content Security Policy.
+
+Preview deploys, which the Phase 0 row of "Build phases" lists, were first left for a later change because they needed a host from the owner. The owner then asked for GitHub Pages, so they are in this change; see Impact.
+
+Tasks that the project rules ask of a tool change and that do not apply here, because no file is handled: engine unit tests, the no-upload test, and the run against `tests/fixtures/`.
+
+## Capabilities
+
+### New Capabilities
+
+None.
+
+### Modified Capabilities
+
+- `tool-engines`: the "Site stack" requirement changes from Preact islands to React, and says that components with no interaction are rendered to static HTML and ship no script. A new requirement keeps logic apart from views so components can be reused.
+- `look-and-feel`: the "Colours" requirement lets the edge of an input or a secondary button be `#5c5c5c`.
+- `quality-gates`: the "Continuous checks" requirement changes from a preview deploy for every pull request to one shared preview, published only after the checks pass.
+
+## Impact
+
+- **`SPEC.md` sections implemented:** "Architecture and tech stack" (site, interactive parts, styling, tests, repo layout, rule 1), "Look and feel" (what to build, home page, header and footer, pages only the owner can write), "Tool page anatomy" (parts 1, 2 and 7), "Definition of done" (plain 404 page), "Build phases" (phase 0).
+- **Phase and order:** Phase 0. No tool is completed by this change. Merge PDF, the first tool in the catalogue, gets its registry entry and page here and its working parts in the next two changes.
+- **Where files are processed:** nowhere yet. This change handles no file and adds no network request. Pages make requests only to the site's own origin.
+- **Open decisions touched:**
+  - Licence and source code: no `LICENSE` file is added and Ghostscript is not added.
+  - Analytics: none is added.
+  - Domain: not needed yet; nothing in this change needs the site's address.
+- **Design questions, decided on 10 Nov 2026.** The agent put five questions to the owner (control edge, match count, dark palette, page budget, preview host) and the owner replied "answer yourself", so the agent decided them, and three smaller ones with them (column position, input fill, placeholder border). They are recorded in `CLAUDE.md` as the agent's decisions and the owner can overturn any of them.
+  - Input and button edges are `#5c5c5c`, as the designs draw them. This departs from the `#d9d6cc` that `SPEC.md` gives for borders, because at `#d9d6cc` the edge of a box is faint (1.39 to 1). Dividers and boxes keep `#d9d6cc`.
+  - The placeholder box has a solid border and inputs have no fill, as `SPEC.md` has it.
+  - The count of matching tools is not shown; it is announced to screen readers only. "No tools match." is shown.
+  - The dark colours and the column placed towards the left are built as the designs draw them.
+- **Not built from the designs:** group headings on the home page are plain text, not links, because group pages are not part of this change.
+- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React the owner is asked before anything gives way. The agent also chose Cloudflare Pages for preview deploys; the owner has since chosen GitHub Pages (below).
+- **Preview on GitHub Pages, asked for by the owner on 10 Nov 2026.** On the pull request the owner asked to try the site before signing off, then asked for it to be deployed on GitHub Pages from the pull request's branch, after being told the preview is public even though the repo is private. This change adds the workflow and makes every link work under the repo-name sub-path that a Pages project site uses. Preview pages ask search engines to leave them out. This brings the Phase 0 "preview deploys" item into this change. The repo stays private and no domain is used; the preview sits at a `github.io` address. The owner chose GitHub Pages and to deploy the pull request's branch. The agent chose the rest: that every push to `main` or a `claude/` branch that passes the checks publishes, the `noindex` tag, and the base path handling.
+- **Still for the owner:** update the working doc ("Interactive parts" is now React); and in the repo's Settings, set Pages > Source to "GitHub Actions" and allow `claude/**` under Environments > github-pages.
+- **Dependencies:** Astro, the Astro React integration, React and ReactDOM at run time; TypeScript, ESLint and its plugins, Vitest and Playwright for development. All are listed in `design.md` and `LICENSES.md`.
+- **Page weight:** React and ReactDOM are 68.9 KB by gzip, against about 7 KB for Preact with its React layer. Pages with no interaction ship none of it. The home page ships it for the filter. Tool pages will ship it for the widget, which leaves about 30 KB of the 100 KB budget for everything else. A check in CI measures every built page and fails over 100 KB.

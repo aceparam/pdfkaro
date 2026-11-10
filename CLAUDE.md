@@ -12,11 +12,17 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 
 ## Where the project stands
 
-The repo holds only the spec. Nothing is built yet. The next piece of work is **Phase 0, the skeleton** (see "Build phases" in `SPEC.md`).
+**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in three changes:
+
+1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Built; steps 1, 2, 3, 7, 8 and 9 below.
+2. Next: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5.
+3. Then: Merge PDF end to end, with its page text. Step 6.
+
+A preview of the site is set up to publish on GitHub Pages, through `.github/workflows/pages.yml`. It publishes nothing until the owner switches Pages on (see "Questions waiting for the owner").
 
 Phase 0, in order:
 
-1. Scaffold the Astro project with static output, TypeScript and Preact islands. No Tailwind, no component kit, no icon library.
+1. Scaffold the Astro project with static output, TypeScript and React. No Tailwind, no component kit, no icon library.
 2. Add `src/tools/registry.ts` with the tool type and the entry for Merge PDF. Generate `pages/[slug].astro` and the home page list from it.
 3. Write `src/styles/site.css` from the "Look and feel" table. System fonts, one column, 44rem wide.
 4. Build the shared components: `ToolShell`, `FilePicker`, `PageGrid`, `Result`.
@@ -29,6 +35,46 @@ Phase 0, in order:
 Phase 0 is finished when Merge PDF works end to end on a phone-sized screen and the page passes the look-and-feel test. Do not start Phase 1 before that.
 
 Update this section when a phase gate is passed.
+
+## Owner decisions since the last SPEC.md export
+
+`SPEC.md` is an export of the owner's working doc and is not edited here. Where the owner has decided something since the export, it is listed below and it wins over `SPEC.md` until the export is refreshed.
+
+- **Preview on GitHub Pages (10 Nov 2026).** The owner asked to try the site before signing off the pull request, asked for it to be deployed on GitHub Pages, and chose to deploy the pull request's branch, having been told the preview is public even though the repo is private. This replaces the agent's earlier choice of Cloudflare Pages. How it is done is the agent's choice; see the next section.
+- **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
+
+## Decisions the agent made for the owner
+
+These are not the owner's own decisions. On 10 Nov 2026 the agent put five questions to the owner, and the owner replied "answer yourself". The agent decided them as below. The owner can overturn any of them, and each is small to undo.
+
+The five that were asked:
+
+- **Control edges.** Inputs and secondary buttons have a `#5c5c5c` edge (`#a8a59c` in dark mode), not the `#d9d6cc` that `SPEC.md` gives for lines and borders. At `#d9d6cc` the edge of a box is faint (1.39 to 1 against the background). Dividers and boxes keep `#d9d6cc`. The change `add-site-skeleton` carries the spec delta for this.
+- **Home page filter.** The count of matching tools is read to screen readers and not shown. The words for no match are shown to everyone.
+- **Dark colours.** `SPEC.md` gives none. The palette in `src/styles/site.css` is the one to use. The owner is shown it in the pull request.
+- **Page budget.** A tool page stays under 100 KB, measured by gzip. React takes about 67 KB of it. If the tool widget cannot fit in the rest, stop and ask the owner: the choice is between a larger budget and swapping React for `preact/compat` on the web, and the second would go against the owner's React decision.
+- **Preview deploys.** The agent chose Cloudflare Pages. The owner has since chosen GitHub Pages; see above.
+
+Decided by the agent on 10 Nov 2026 while setting up the GitHub Pages preview, without asking:
+
+- **Which pushes publish.** The owner asked for the pull request's branch. The workflow publishes on every push to `main` or to a `claude/` branch that passes the checks, so the preview keeps following the work. Anyone who can push to those branches can change what the public preview shows. The owner may want this narrowed.
+- **Preview pages carry `noindex`,** so the preview address is not indexed in place of the real one.
+- **The base path.** A Pages project site sits under the repo name. The build takes the base from `SITE_BASE`, which must be a plain path, and every link the site writes goes through `withBase` in `src/site.ts`.
+- **The repo stays private and no domain is used.** Making the repo public to get Pages would settle "Source code" in `SPEC.md`, which is the owner's decision; do not suggest it as a fix.
+
+Three more that the agent decided at the same time without asking, because they go with the ones above:
+
+- **Column position.** The column sits towards the left of a wide screen, as the designs draw it.
+- **No white fill for inputs.** The designs proposed one; `SPEC.md` names none.
+- **A solid border on placeholder boxes.** The designs proposed a dashed one; `SPEC.md` gives solid lines only.
+
+## How the code is laid out
+
+- `src/tools/registry.ts` is the one place a tool is declared. `catalogue.ts` beside it is a type only.
+- `src/tools/queries.ts` and `filter.ts` hold rules as plain functions. `src/hooks/` holds hooks. None of them render.
+- `src/components/` holds React components, one folder each, with a CSS Module beside it when it needs styles. Components get what they show through props. From `src/tools/` they may import only `filter` and types; lint enforces this.
+- `src/pages/` and `src/layouts/` hold thin `.astro` files that read the registry and pass props to components. A component with no `client:` directive ships no script.
+- `src/styles/site.css` is the one global stylesheet.
 
 ## How work flows
 
@@ -73,13 +119,23 @@ All but `developer` are read-only.
 
 - **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
 - **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
+- **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
+- **GitHub Pages settings.** The preview deploys only after the owner has, in the repo's Settings, set Pages > Source to "GitHub Actions" and allowed `claude/*` branches under Environments > github-pages > Deployment branches. Pages on a private repo needs a paid GitHub plan; if the owner's plan is free, the choice between paying, making the repo public and dropping Pages is the owner's.
+- **Pages for previews only, or for launch too?** Hosting on GitHub Pages means GitHub serves every page and logs each visitor's IP address, and the address shows the owner's account name. The Privacy page will have to say so if the site launches there.
 
 ## Commands
 
-OpenSpec (version 1.17.0). If `openspec` is not on the path, install it with `npm install -g @fission-ai/openspec@1.17.0`. When Phase 0 adds `package.json`, add it there as a dev dependency with a line in `LICENSES.md` (MIT).
+- `npm ci` installs everything from the lockfile. Do not use `--force` or `--legacy-peer-deps`.
+- `npm run dev` starts the dev server.
+- `npm run build` builds the static site into `dist/`.
+- `npm run preview` serves `dist/`.
+- `npm run lint` runs ESLint.
+- `npm run check` runs the type check.
+- `npm test` runs the unit tests (Vitest).
+- `npm run weigh` adds up the compressed size of each built page and fails over 100 KB. Run it after a build.
+- `npm run check:base` builds the site as a preview under a sub-path and fails if any link, stylesheet or script would break there. Never write a link as a bare `/path`; pass it through `withBase`.
+- `npm run e2e` runs the end-to-end tests (Playwright) against the built site, at 360px and 1280px. Run it after a build, and add `-- --trace off` unless a trace is wanted.
+- Astro sends anonymous usage figures to its makers unless `ASTRO_TELEMETRY_DISABLED=1` is set. CI and agent sessions set it. On your own machine, run `npx astro telemetry disable` once.
+- `npm run spec` runs `openspec validate --all --strict`. `npx openspec list` shows changes in progress and `npx openspec show <name>` prints a change or a spec.
 
-- `openspec list` shows changes in progress.
-- `openspec show <name>` prints a change or a spec.
-- `openspec validate --all --strict` checks every change and spec. CI runs this on each pull request.
-
-Nothing else yet. When the project is scaffolded, list the rest here: install, dev server, build, lint, type check, unit tests, end-to-end tests.
+CI runs all of these on every pull request.

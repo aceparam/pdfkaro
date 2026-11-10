@@ -1,0 +1,14 @@
+/* A solid line, as SPEC.md gives for all borders. The designs drew it dashed;
+   that was turned down on 10 Nov 2026, see CLAUDE.md. */
+.box {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.box p {
+  margin: 0 0 0.5rem;
+}
+.box p:last-child {
+  margin-bottom: 0;
+}
