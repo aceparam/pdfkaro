@@ -125,7 +125,7 @@ Before a library is added it SHALL be confirmed as still maintained, and its lic
 
 ### Requirement: Site stack
 
-The site SHALL be built with Astro with static output and TypeScript. The interface SHALL be written as React components. A component with no interaction SHALL be rendered to static HTML at build time and ship no JavaScript. Interactive parts SHALL be React islands, and on a tool page only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS: one global stylesheet at `src/styles/site.css` plus scoped component styles. Tailwind, component kits and icon libraries MUST NOT be used. (SPEC.md: Architecture and tech stack; React in place of Preact by the owner's decision of 10 Nov 2026, recorded in CLAUDE.md)
+The site SHALL be built with Astro with static output and TypeScript, and the interface SHALL be written as React components. A component with no interaction SHALL be rendered to static HTML at build time and ship no JavaScript. Interactive parts SHALL be React islands, and on a tool page only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS: `src/styles/site.css` plus scoped component styles, with no Tailwind, component kit or icon library. (SPEC.md: Architecture and tech stack; React by the owner's decision in CLAUDE.md)
 
 #### Scenario: A tool page is built
 
