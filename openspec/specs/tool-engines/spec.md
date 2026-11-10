@@ -125,7 +125,12 @@ Before a library is added it SHALL be confirmed as still maintained, and its lic
 
 ### Requirement: Site stack
 
-The site SHALL be built with Astro with static output and TypeScript, and the interface SHALL be written as React components. A component with no interaction SHALL be rendered to static HTML at build time and ship no JavaScript. Interactive parts SHALL be React islands, and on a tool page only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS: `src/styles/site.css` plus scoped component styles, with no Tailwind, component kit or icon library. (SPEC.md: Architecture and tech stack; React by the owner's decision in CLAUDE.md)
+The site SHALL be built with Astro with static output and TypeScript, with the interface written as React components. A component with no interaction SHALL be rendered to static HTML and ship no JavaScript. Interactive parts SHALL be React islands, and on a tool page only the tool widget SHALL ship JavaScript. Styling SHALL be hand-written CSS, with no Tailwind, component kit or icon library. (SPEC.md: Architecture and tech stack; React by the owner's decision in CLAUDE.md)
+
+#### Scenario: A style is added
+
+- **WHEN** a style is added
+- **THEN** it goes in the one global stylesheet, `src/styles/site.css`, if it is shared, or in a scoped style beside its component if it is not
 
 #### Scenario: A tool page is built
 
