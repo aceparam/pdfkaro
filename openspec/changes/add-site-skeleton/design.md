@@ -128,7 +128,7 @@ Component styles are CSS Modules beside each component (`ToolList.module.css`). 
 
 - `npm run lint`: ESLint with the TypeScript, Astro and React hooks plugins. A rule lets files in `src/components/` import from `src/tools/` only `filter` and types.
 - `npm run check`: `astro check`.
-- `npm test`: Vitest, Node environment, for the catalogue (compared with the tables in `SPEC.md`), registry, queries and filter.
+- `npm test`: Vitest, Node environment, for the catalogue (compared with the tables in `SPEC.md`), registry, queries and filter, and one test that renders `ToolList` to HTML to check that an item marked hidden is hidden on the page.
 - `npm run weigh`: a script that adds up the compressed HTML, CSS and JavaScript each built page loads, prints gzip and brotli sizes, and fails if any page is over 100 KB by gzip, the stricter of the two. It fails closed: a script or stylesheet in the build that no page is seen to load is an error unless it is named as loading later, and so is an empty build.
 - `npm run e2e`: Playwright against the built site, at 360px and 1280px, with one further check that dark mode follows the device. The list of pages comes from the registry and the footer links, so a new page is checked without being added by hand:
   - home lists every published tool, and still does with JavaScript off;

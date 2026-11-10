@@ -52,7 +52,7 @@ None.
   - Analytics: none is added.
   - Domain: not needed yet; nothing in this change needs the site's address.
 - **Design questions, decided on 10 Nov 2026.** The agent put five questions to the owner (control edge, match count, dark palette, page budget, preview host) and the owner replied "answer yourself", so the agent decided them, and three smaller ones with them (column position, input fill, placeholder border). They are recorded in `CLAUDE.md` as the agent's decisions and the owner can overturn any of them.
-  - Input and button edges are `#5c5c5c`, as the designs draw them. This departs from the `#d9d6cc` that `SPEC.md` gives for borders, because at `#d9d6cc` the edge of a box cannot be seen (1.39 to 1). Dividers and boxes keep `#d9d6cc`.
+  - Input and button edges are `#5c5c5c`, as the designs draw them. This departs from the `#d9d6cc` that `SPEC.md` gives for borders, because at `#d9d6cc` the edge of a box is faint (1.39 to 1). Dividers and boxes keep `#d9d6cc`.
   - The placeholder box has a solid border and inputs have no fill, as `SPEC.md` has it.
   - The count of matching tools is not shown; it is announced to screen readers only. "No tools match." is shown.
   - The dark colours and the column placed towards the left are built as the designs draw them.

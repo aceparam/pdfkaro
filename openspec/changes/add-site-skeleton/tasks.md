@@ -57,4 +57,6 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 7.7 Make the page weight script fail on an empty build and on files no page is seen to load
 - [x] 7.8 Block `import()` of `src/tools/` from components, scope the `minimatch` override, and fold OpenSpec into the one CI workflow
 - [x] 7.9 Say what to try when no tool matches; size body text in rem; reword the home page description; check that typing in the filter sends and stores nothing
-- [x] 7.10 Retake screenshots of all eight pages at 360px and 1280px, in light and dark mode, and put the dark ones in the pull request for the owner
+- [x] 7.10 Retake screenshots of all eight pages at 360px and 1280px, in light and dark mode, keep both widths of every page in `screenshots/`, and put the dark ones in the pull request for the owner
+- [x] 7.11 Turn off Astro's usage reporting for agent sessions by adding `ASTRO_TELEMETRY_DISABLED` to `.claude/settings.json`, say how to turn it off on a person's own machine in `CLAUDE.md`, and name the settings change in the pull request
+- [x] 7.12 Add a test that renders `ToolList` and checks that only a hidden item is marked hidden

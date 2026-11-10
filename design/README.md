@@ -43,7 +43,7 @@ The state screens leave out the text below the tool. On the real page it stays w
 
 Decided by `SPEC.md` and followed here: one column of 44rem, system fonts, 17px text at 1.55 line height, the light colours, corners of 4px at most, underlined links, no icons, no images apart from page thumbnails, no motion apart from the progress bar, a header and footer of plain links.
 
-Everything below is proposed here. Some of it was decided on 10 Nov 2026; `CLAUDE.md`, under "Owner decisions since the last SPEC.md export", has the list and wins over this file. They were decided by the agent after the owner replied "answer yourself", and the owner can overturn them. In short: the dark colours, the `#5c5c5c` control edge and the column position are used; the white field fill, the dashed borders on placeholder boxes and the visible "2 tools match." line are not, and the screens have not been redrawn for those three. The rest is still waiting for the owner. Do not treat it as settled.
+Everything below is proposed here. Some of it was decided on 10 Nov 2026; `CLAUDE.md`, under "Decisions the agent made for the owner", has the list and wins over this file. They were decided by the agent after the owner replied "answer yourself", and the owner can overturn them. In short: the dark colours, the `#5c5c5c` control edge and the column position are used; the white field fill, the dashed borders on placeholder boxes and the visible "2 tools match." line are not, and the screens have not been redrawn for those three. The rest is still waiting for the owner. Do not treat it as settled.
 
 Colours and lines:
 
