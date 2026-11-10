@@ -84,6 +84,11 @@ Which shared component draws which part. Confirm this in the Phase 0 design befo
 
 `design.css` is split the same way: a "Global" part for the one site stylesheet, and a "Components" part whose blocks name the component they belong to.
 
+Two things the Phase 0 design has to settle, which the table above does not:
+
+- `ToolShell` holds both served text (heading, sentence, text below the tool) and interactive parts (progress, password field). `SPEC.md` lets only the tool widget ship JavaScript, so the design must split the two.
+- Field and button styles are used by three components and by the home page filter, so they belong in the global stylesheet even though `design.css` lists them under "Components".
+
 Things the static screens cannot show:
 
 - **Lists come from the registry.** The home page list, the group page list, related tools and the next steps in the result block are generated from `src/tools/registry.ts`, using registry names. They are written out by hand here only because these are static files. The sentence on a group page ("All of them run in your browser") must also follow the registry, since it is true only for groups with no server tool.
