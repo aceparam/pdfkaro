@@ -40,12 +40,12 @@ Every tool page SHALL have exactly one `h1`, stating the job in plain words. (SP
 
 ### Requirement: Body text is in the served HTML
 
-The heading, sentence, how-to steps, FAQ and related links SHALL be present in the served HTML and MUST NOT be injected by JavaScript. (SPEC.md: Every tool page)
+The heading, sentence, how-to steps, FAQ and related links, where any are published, SHALL be present in the served HTML and MUST NOT be injected by JavaScript. (SPEC.md: Every tool page)
 
 #### Scenario: A page is fetched without running scripts
 
 - **WHEN** a tool page is fetched and no script is run
-- **THEN** the heading, how-to steps, FAQ and related links are in the response
+- **THEN** the heading, how-to steps, FAQ and any published related links are in the response
 
 ### Requirement: Structured data
 
