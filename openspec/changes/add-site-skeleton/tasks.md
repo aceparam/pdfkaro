@@ -44,7 +44,7 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 6.4 Run `npm audit`, apply `npm audit fix`, and record the result. `npm audit fix` could not fix the `minimatch` advisory without downgrading ESLint, so `minimatch` is pinned to the patched 11.0.5 under `overrides`. `npm audit` now finds 0 vulnerabilities and lint still runs
 - [x] 6.5 Take screenshots of each page at 360px and 1280px, in light and dark mode, check each against "Banned patterns", and show the owner the dark palette (first done for five pages before the control edge changed; redone in 7.10)
 - [x] 6.6 Run `openspec validate --all --strict`
-- [ ] 6.7 Run the review panel (see the review-panel skill) and resolve its findings
+- [x] 6.7 Run the review panel (see the review-panel skill) and resolve its findings
 
 ## 7. Decisions and review fixes
 
