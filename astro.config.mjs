@@ -5,6 +5,11 @@ import react from '@astrojs/react';
 // sits under the repo name instead, such as /pdfkaro, and sets SITE_BASE to say so.
 const base = process.env.SITE_BASE || '/';
 
+// The base ends up in every link and script address, so only a plain path is taken.
+if (!/^\/$|^(\/[A-Za-z0-9._-]+)+$/.test(base)) {
+  throw new Error(`SITE_BASE must be "/" or a plain path such as "/pdfkaro", not "${base}".`);
+}
+
 // Static HTML, one file per page, so /merge-pdf is served with no trailing slash.
 export default defineConfig({
   base,

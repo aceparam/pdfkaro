@@ -55,7 +55,7 @@ describe('queries', () => {
   });
 
   it('gives a tool with three URLs three list items, each with its own name and link', () => {
-    const [smaller] = groupsWithItems(groups, tools);
+    const [smaller] = groupsWithItems(groups, tools, '/');
     expect(smaller?.items).toEqual([
       { name: 'Compress PDF', href: '/compress-pdf', summary: 'Compress PDF summary.' },
       { name: 'Compress PDF to 100 KB', href: '/compress-pdf-to-100kb', summary: 'Compress PDF to 100 KB summary.' },
@@ -64,7 +64,7 @@ describe('queries', () => {
   });
 
   it('keeps groups in order and leaves out a group with no tools', () => {
-    expect(groupsWithItems(groups, tools).map((group) => group.name)).toEqual([
+    expect(groupsWithItems(groups, tools, '/').map((group) => group.name)).toEqual([
       'Make smaller and fix',
       'Organise pages',
     ]);
@@ -84,11 +84,11 @@ describe('queries', () => {
 
   it('links only to related tools that are published, in the order named', () => {
     const merge = tools[1]!;
-    expect(relatedItems(tools, merge).map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
+    expect(relatedItems(tools, merge, '/').map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
   });
 
   it('gives no related links when none is published', () => {
     const alone = [tools[1]!];
-    expect(relatedItems(alone, alone[0]!)).toEqual([]);
+    expect(relatedItems(alone, alone[0]!, '/')).toEqual([]);
   });
 });

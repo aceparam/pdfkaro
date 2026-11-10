@@ -41,6 +41,21 @@ export default defineConfig(
           selector: 'ImportExpression[source.value=/tools\\//]',
           message: 'Components may not load src/tools/ with import(). Pass data in through props.',
         },
+        // A link written as "/path" in a component would break on a preview under
+        // a sub-path, and the built-page check cannot see a link that only shows
+        // after the visitor does something. Links come in through props.
+        {
+          selector: 'JSXAttribute[name.name=/^(href|src|action)$/] > Literal[value=/^\\//]',
+          message: 'Do not write a link as "/path" in a component. Take it as a prop; pages build it with withBase.',
+        },
+        {
+          selector: 'JSXAttribute[name.name=/^(href|src|action)$/] > JSXExpressionContainer > Literal[value=/^\\//]',
+          message: 'Do not write a link as "/path" in a component. Take it as a prop; pages build it with withBase.',
+        },
+        {
+          selector: 'JSXAttribute[name.name=/^(href|src|action)$/] > JSXExpressionContainer > TemplateLiteral[quasis.0.value.raw=/^\\//]',
+          message: 'Do not write a link as "/path" in a component. Take it as a prop; pages build it with withBase.',
+        },
       ],
     },
   },

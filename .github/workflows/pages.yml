@@ -2,7 +2,8 @@ name: Preview on GitHub Pages
 
 # Publishes a preview of the site at https://<owner>.github.io/<repo>/.
 # The preview is public, even when the repo is private.
-# There is one preview: the last push to main or to a claude/ branch is what it shows.
+# There is one preview: the last push to main or to a claude/ branch that passes
+# the checks is what it shows. Anyone who can push to those branches can change it.
 #
 # The owner has to switch this on once, in the repo's Settings:
 #   Pages > Source: GitHub Actions
@@ -20,10 +21,16 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # A deploy that has started is left to finish.
+  cancel-in-progress: false
 
 jobs:
+  # Nothing is published unless the same checks that run on a pull request pass.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: checks
     runs-on: ubuntu-latest
     env:
       ASTRO_TELEMETRY_DISABLED: "1"

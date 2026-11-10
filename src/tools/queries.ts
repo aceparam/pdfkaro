@@ -22,8 +22,11 @@ export type PageWithTool = {
   page: ToolPage;
 };
 
-/** `base` is the site's base path: "/" at the root, or a sub-path for a preview. */
-export function toListItem(page: ToolPage, base = '/'): ListItem {
+/**
+ * `base` is the site's base path: "/" at the root, or a sub-path for a preview.
+ * It has no default, here or below, so that a caller cannot forget it.
+ */
+export function toListItem(page: ToolPage, base: string): ListItem {
   return { name: page.name, href: withBase(base, `/${page.slug}`), summary: page.summary };
 }
 
@@ -37,7 +40,7 @@ export function findPage(tools: Tool[], slug: string): PageWithTool | undefined 
 }
 
 /** The groups that have at least one published page, in registry order. */
-export function groupsWithItems(groups: Group[], tools: Tool[], base = '/'): GroupWithItems[] {
+export function groupsWithItems(groups: Group[], tools: Tool[], base: string): GroupWithItems[] {
   return groups
     .map((group) => ({
       id: group.id,
@@ -50,7 +53,7 @@ export function groupsWithItems(groups: Group[], tools: Tool[], base = '/'): Gro
 }
 
 /** The related tools of a tool that are published, in the order the tool names them. */
-export function relatedItems(tools: Tool[], tool: Tool, base = '/'): ListItem[] {
+export function relatedItems(tools: Tool[], tool: Tool, base: string): ListItem[] {
   const published = new Map(allPages(tools).map(({ page }) => [page.slug, page]));
   return tool.related.flatMap((slug) => {
     const page = published.get(slug);

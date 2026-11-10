@@ -23,7 +23,7 @@ This is the first of three Phase 0 changes. It covers steps 1, 2, 3, 7, 8 and 9 
 Out of scope, and left for the next two Phase 0 changes:
 
 - The Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and the interactive part of `ToolShell`).
-- The Merge PDF engine, worker, page text and working tool, which ship together in the Merge PDF change. Until then the Merge PDF page shows its heading and sentence, with no file picker and no text below. The site is not deployed, so no visitor sees it in that state.
+- The Merge PDF engine, worker, page text and working tool, which ship together in the Merge PDF change. Until then the Merge PDF page shows its heading and sentence, with no file picker and no text below. The only place it can be seen is the preview on GitHub Pages, which is unlisted, carries `noindex` and is there for the owner to try the site.
 
 Out of scope, and left for Phase 1: group pages, sitemap and robots file, canonical and social tags, structured data, the Content Security Policy.
 
@@ -41,6 +41,7 @@ None.
 
 - `tool-engines`: the "Site stack" requirement changes from Preact islands to React, and says that components with no interaction are rendered to static HTML and ship no script. A new requirement keeps logic apart from views so components can be reused.
 - `look-and-feel`: the "Colours" requirement lets the edge of an input or a secondary button be `#5c5c5c`.
+- `quality-gates`: the "Continuous checks" requirement changes from a preview deploy for every pull request to one shared preview, published only after the checks pass.
 
 ## Impact
 
@@ -58,7 +59,7 @@ None.
   - The dark colours and the column placed towards the left are built as the designs draw them.
 - **Not built from the designs:** group headings on the home page are plain text, not links, because group pages are not part of this change.
 - **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React the owner is asked before anything gives way. The agent also chose Cloudflare Pages for preview deploys; the owner has since chosen GitHub Pages (below).
-- **Preview on GitHub Pages, asked for by the owner on 10 Nov 2026.** On the pull request the owner asked to try the site before signing off, then asked for it to be deployed on GitHub Pages from the pull request's branch, after being told the preview is public even though the repo is private. This change adds the workflow and makes every link work under the repo-name sub-path that a Pages project site uses. Preview pages ask search engines to leave them out. This brings the Phase 0 "preview deploys" item into this change.
+- **Preview on GitHub Pages, asked for by the owner on 10 Nov 2026.** On the pull request the owner asked to try the site before signing off, then asked for it to be deployed on GitHub Pages from the pull request's branch, after being told the preview is public even though the repo is private. This change adds the workflow and makes every link work under the repo-name sub-path that a Pages project site uses. Preview pages ask search engines to leave them out. This brings the Phase 0 "preview deploys" item into this change. The repo stays private and no domain is used; the preview sits at a `github.io` address. The owner chose GitHub Pages and to deploy the pull request's branch. The agent chose the rest: that every push to `main` or a `claude/` branch that passes the checks publishes, the `noindex` tag, and the base path handling.
 - **Still for the owner:** update the working doc ("Interactive parts" is now React); and in the repo's Settings, set Pages > Source to "GitHub Actions" and allow `claude/**` under Environments > github-pages.
 - **Dependencies:** Astro, the Astro React integration, React and ReactDOM at run time; TypeScript, ESLint and its plugins, Vitest and Playwright for development. All are listed in `design.md` and `LICENSES.md`.
 - **Page weight:** React and ReactDOM are 68.9 KB by gzip, against about 7 KB for Preact with its React layer. Pages with no interaction ship none of it. The home page ships it for the filter. Tool pages will ship it for the widget, which leaves about 30 KB of the 100 KB budget for everything else. A check in CI measures every built page and fails over 100 KB.

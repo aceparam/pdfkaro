@@ -19,6 +19,13 @@ describe('withBase', () => {
     expect(withBase('/pdfkaro', '/')).toBe('/pdfkaro/');
   });
 
+  it('leaves alone anything that is not a path from the site root', () => {
+    for (const other of ['https://example.org/x', '//example.org/x', 'mailto:someone@example.org', '#top', 'about', '']) {
+      expect(withBase('/pdfkaro', other)).toBe(other);
+      expect(withBase('/', other)).toBe(other);
+    }
+  });
+
   it('gives the same answer whether or not the base ends with a slash', () => {
     expect(withBase('/pdfkaro/', '/merge-pdf')).toBe('/pdfkaro/merge-pdf');
     expect(withBase('/pdfkaro/', '/')).toBe('/pdfkaro/');
@@ -41,9 +48,9 @@ describe('list links under a sub-path', () => {
   ] as Tool[];
   const groups = [{ id: 'organise' as const, name: 'Organise pages' }];
 
-  it('are at the root by default', () => {
-    expect(toListItem(tools[0]!.pages[0]!).href).toBe('/merge-pdf');
-    expect(relatedItems(tools, tools[0]!).map((item) => item.href)).toEqual(['/split-pdf']);
+  it('are at the root when the base is "/"', () => {
+    expect(toListItem(tools[0]!.pages[0]!, '/').href).toBe('/merge-pdf');
+    expect(relatedItems(tools, tools[0]!, '/').map((item) => item.href)).toEqual(['/split-pdf']);
   });
 
   it('carry the sub-path in every list', () => {

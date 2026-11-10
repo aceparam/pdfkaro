@@ -68,5 +68,8 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 8.3 Add `npm run check:base`, unit tests for `withBase` and the list links, and run the check in CI
 - [x] 8.4 Add `.github/workflows/pages.yml` to publish the preview on pushes to `main` and `claude/**`
 - [x] 8.5 Record the owner's choice of GitHub Pages in `CLAUDE.md`, with the two settings the owner has to change
-- [ ] 8.6 Run the review panel on these changes and resolve its findings
+- [x] 8.6 Run the review panel on these changes and resolve its findings
+- [x] 8.8 After review: leave non-site links alone in `withBase`; make the base a required argument; refuse a `SITE_BASE` that is not a plain path; lint against bare `/path` links in components; widen `check:base` to form addresses, images and stylesheets
+- [x] 8.9 After review: publish only after the checks pass, and leave a started deploy to finish
+- [x] 8.10 After review: add the `quality-gates` delta for one shared preview, and record which Pages choices were the owner's and which the agent's
 - [ ] 8.7 Confirm on the first deploy that the preview opens, that `/merge-pdf` and a missing page work, and give the owner the address
