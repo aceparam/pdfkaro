@@ -36,3 +36,5 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests
         run: npm run e2e
+      - name: OpenSpec changes and specs
+        run: npm run spec

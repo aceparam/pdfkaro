@@ -1,5 +1,5 @@
 import { useInputValue } from '../../hooks/useInputValue';
-import { matchesPhrase, matchStatus } from '../../tools/filter';
+import { filterGroups, matchStatus } from '../../tools/filter';
 import type { GroupWithItems } from '../../tools/queries';
 import { ToolList } from '../ToolList/ToolList';
 import styles from './ToolDirectory.module.css';
@@ -22,11 +22,7 @@ type Props = {
 export function ToolDirectory({ label, groups, inputId = 'tool-filter' }: Props) {
   const phrase = useInputValue(inputId);
 
-  const filtered = groups.map((group) => {
-    const items = group.items.map((item) => ({ ...item, hidden: !matchesPhrase(item, phrase) }));
-    return { ...group, items, shown: items.filter((item) => !item.hidden).length };
-  });
-  const count = filtered.reduce((sum, group) => sum + group.shown, 0);
+  const { groups: filtered, count } = filterGroups(groups, phrase);
   const status = matchStatus(phrase, count);
 
   return (
@@ -35,7 +31,7 @@ export function ToolDirectory({ label, groups, inputId = 'tool-filter' }: Props)
         <label htmlFor={inputId}>{label}</label>
         <input id={inputId} type="text" autoComplete="off" spellCheck={false} />
       </div>
-      {/* The count is for screen readers. "No tools match." is shown to everyone. */}
+      {/* The count is for screen readers. The words for no match are shown to everyone. */}
       <p role="status" className={count === 0 ? styles.none : 'visually-hidden'}>
         {status}
       </p>

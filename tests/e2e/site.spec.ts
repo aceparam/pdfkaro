@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { allPages, bannedWords, staticPages } from './pages';
+import { allPages, bannedWords, sitePages, staticPages, toolPages } from './pages';
 
 test.describe('every page', () => {
   for (const path of allPages) {
@@ -66,6 +66,18 @@ test.describe('pages with nothing to interact with', () => {
       expect(scripts).toEqual([]);
     });
   }
+});
+
+test.describe('the lists of pages', () => {
+  test('cover every tool in the registry and every footer link', async ({ page }) => {
+    expect(toolPages.length).toBeGreaterThan(0);
+    await page.goto('/');
+    const footer = await page.locator('footer a').evaluateAll((links) => links.map((link) => link.getAttribute('href')));
+    expect(footer).toEqual(sitePages);
+    for (const path of [...toolPages, ...sitePages]) {
+      expect((await page.request.get(path)).status(), path).toBe(200);
+    }
+  });
 });
 
 test.describe('tool page', () => {

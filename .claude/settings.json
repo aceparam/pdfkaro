@@ -1,5 +1,6 @@
 {
   "env": {
-    "OPENSPEC_TELEMETRY": "0"
+    "OPENSPEC_TELEMETRY": "0",
+    "ASTRO_TELEMETRY_DISABLED": "1"
   }
 }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { registryDescriptions, toolPages } from './pages';
 
 const filterBox = 'What do you need to do?';
 
@@ -57,7 +58,7 @@ test.describe('home page', () => {
     await box.fill('zzz');
 
     const status = page.getByRole('status');
-    await expect(status).toHaveText('No tools match.');
+    await expect(status).toHaveText('No tools match. Try a shorter word.');
     await expect(status).toBeVisible();
     expect((await status.boundingBox())?.height).toBeGreaterThan(10);
 
@@ -95,8 +96,24 @@ test.describe('home page', () => {
 
     holding = false;
     await Promise.all(held.map((release) => release()));
-    await expect(page.getByRole('status')).toHaveText('No tools match.');
+    await expect(page.getByRole('status')).toHaveText('No tools match. Try a shorter word.');
     await expect(page.locator('a[href="/merge-pdf"]')).toBeHidden();
+  });
+
+  test('keeps what is typed on the page: no request, cookie or storage', async ({ page, context }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+
+    await page.getByLabel(filterBox).fill('merge my payslip');
+    await expect(page.getByRole('status')).toHaveText('No tools match. Try a shorter word.');
+
+    expect(requests).toEqual([]);
+    expect(page.url()).not.toContain('payslip');
+    expect(await context.cookies()).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
   });
 
   test('shows a focus outline on the filter box', async ({ page }) => {
@@ -123,10 +140,12 @@ test.describe('home page', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     expect(scripts.length).toBeGreaterThan(0);
+    // Meta descriptions live only in the registry. None may be in any script.
+    expect(registryDescriptions.length).toBe(toolPages.length);
+    expect(registryDescriptions.length).toBeGreaterThan(0);
     for (const url of scripts) {
       const source = await (await request.get(url)).text();
-      // The meta description lives only in the registry. It must not be in any script.
-      expect(source, url).not.toContain('in the order you choose');
+      for (const description of registryDescriptions) expect(source, url).not.toContain(description);
     }
   });
 });

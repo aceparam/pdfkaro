@@ -40,6 +40,7 @@ None.
 ### Modified Capabilities
 
 - `tool-engines`: the "Site stack" requirement changes from Preact islands to React, and says that components with no interaction are rendered to static HTML and ship no script. A new requirement keeps logic apart from views so components can be reused.
+- `look-and-feel`: the "Colours" requirement lets the edge of an input or a secondary button be `#5c5c5c`.
 
 ## Impact
 
@@ -50,13 +51,13 @@ None.
   - Licence and source code: no `LICENSE` file is added and Ghostscript is not added.
   - Analytics: none is added.
   - Domain: not needed yet; nothing in this change needs the site's address.
-- **Design questions, decided on 10 Nov 2026.** The owner was asked each of the questions below and replied "answer yourself", so the agent decided them. They are recorded in `CLAUDE.md` and the owner can overturn any of them.
+- **Design questions, decided on 10 Nov 2026.** The agent put five questions to the owner (control edge, match count, dark palette, page budget, preview host) and the owner replied "answer yourself", so the agent decided them, and three smaller ones with them (column position, input fill, placeholder border). They are recorded in `CLAUDE.md` as the agent's decisions and the owner can overturn any of them.
   - Input and button edges are `#5c5c5c`, as the designs draw them. This departs from the `#d9d6cc` that `SPEC.md` gives for borders, because at `#d9d6cc` the edge of a box cannot be seen (1.39 to 1). Dividers and boxes keep `#d9d6cc`.
   - The placeholder box has a solid border and inputs have no fill, as `SPEC.md` has it.
   - The count of matching tools is not shown; it is announced to screen readers only. "No tools match." is shown.
   - The dark colours and the column placed towards the left are built as the designs draw them.
 - **Not built from the designs:** group headings on the home page are plain text, not links, because group pages are not part of this change.
-- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React, React gives way on the web through `preact/compat`; preview deploys will use Cloudflare Pages.
+- **Also decided the same way:** the tool page budget stays at 100 KB by gzip, and if the widget cannot fit beside React the owner is asked before anything gives way; preview deploys will use Cloudflare Pages.
 - **Still for the owner:** update the working doc ("Interactive parts" is now React), and connect the repo in a Cloudflare account.
 - **Dependencies:** Astro, the Astro React integration, React and ReactDOM at run time; TypeScript, ESLint and its plugins, Vitest and Playwright for development. All are listed in `design.md` and `LICENSES.md`.
 - **Page weight:** React and ReactDOM are 68.9 KB by gzip, against about 7 KB for Preact with its React layer. Pages with no interaction ship none of it. The home page ships it for the filter. Tool pages will ship it for the widget, which leaves about 30 KB of the 100 KB budget for everything else. A check in CI measures every built page and fails over 100 KB.

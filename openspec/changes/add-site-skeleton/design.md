@@ -107,7 +107,8 @@ Recorded now for the next change, not built here: the tool widget is one generic
 - It matches the typed phrase against each item's name and summary, case-insensitive, with spaces trimmed at the ends. The phrase is compared as plain text; no regular expression is built from it, and it never goes into the URL.
 - Items that do not match get the `hidden` attribute, so they leave the tab order and the accessibility tree. A group whose items are all hidden is hidden with its heading.
 - Every item is in the served HTML, so the list works with JavaScript off; the input then does nothing.
-- A `role="status"` element is in the served HTML, empty. After each change it is set to "3 tools match.", "1 tool matches." or "No tools match.". The counts are for screen readers and are visually hidden by clipping (not `display: none` or `hidden`, which would stop them being announced), because `SPEC.md` says the home page holds nothing else. "No tools match." is shown to everyone, since an empty list with no words would look broken.
+- A `role="status"` element is in the served HTML, empty. After each change it is set to "3 tools match.", "1 tool matches." or "No tools match. Try a shorter word.". The counts are for screen readers and are visually hidden by clipping (not `display: none` or `hidden`, which would stop them being announced), because `SPEC.md` says the home page holds nothing else. The words for no match are shown to everyone, since an empty list with no words would look broken, and they say what to try.
+- The marking of items and the count are worked out by a plain function, `filterGroups` in `src/tools/filter.ts`, so they are unit tested with several tools in several groups even while the registry holds one.
 - Enter in the input does nothing. Text typed before React loads is applied when it loads.
 
 ### 7. Styles
@@ -127,9 +128,9 @@ Component styles are CSS Modules beside each component (`ToolList.module.css`). 
 
 - `npm run lint`: ESLint with the TypeScript, Astro and React hooks plugins. A rule lets files in `src/components/` import from `src/tools/` only `filter` and types.
 - `npm run check`: `astro check`.
-- `npm test`: Vitest, Node environment, for the catalogue, registry, queries and filter.
-- `npm run weigh`: a script that adds up the compressed HTML, CSS and JavaScript each built page loads, prints gzip and brotli sizes, and fails if any page is over 100 KB by gzip, the stricter of the two.
-- `npm run e2e`: Playwright against the built site, at 360px and 1280px, in light and dark mode:
+- `npm test`: Vitest, Node environment, for the catalogue (compared with the tables in `SPEC.md`), registry, queries and filter.
+- `npm run weigh`: a script that adds up the compressed HTML, CSS and JavaScript each built page loads, prints gzip and brotli sizes, and fails if any page is over 100 KB by gzip, the stricter of the two. It fails closed: a script or stylesheet in the build that no page is seen to load is an error unless it is named as loading later, and so is an empty build.
+- `npm run e2e`: Playwright against the built site, at 360px and 1280px, with one further check that dark mode follows the device. The list of pages comes from the registry and the footer links, so a new page is checked without being added by hand:
   - home lists every published tool, and still does with JavaScript off;
   - the filter narrows the list by name and by summary, hides empty groups, sets the status text for many, one and no matches, takes hidden links out of the tab order, and ignores Enter;
   - text typed before the script loads is applied when it loads;
@@ -137,13 +138,14 @@ Component styles are CSS Modules beside each component (`ToolList.module.css`). 
   - the tool page has one `h1` and its sentence is in the served HTML;
   - pages with no interaction load no script;
   - no request goes to another origin, and no font or image is requested;
+  - typing in the filter makes no request and leaves no cookie or stored data;
   - body text is 17px, the header scrolls away, the footer has five links;
   - every page has a different title;
   - nothing overflows sideways at 360px;
   - the 404 page links to the list;
   - no page holds a banned word or an exclamation mark;
   - the home page script does not contain any tool's meta description (the registry stays out of the island).
-- CI: one workflow, on `pull_request` and on pushes to `main`, with `contents: read` and no secrets. It runs `npm ci`, lint, type check, unit tests, build, the weight check, the end-to-end tests and `openspec validate --all --strict`. `--force` and `legacy-peer-deps` are not used.
+- CI: one workflow, on `pull_request` and on pushes to `main`, with `contents: read` and no secrets. It runs `npm ci`, lint, type check, unit tests, build, the weight check, the end-to-end tests and `openspec validate --all --strict`. The earlier OpenSpec-only workflow is folded into it. `--force` and `legacy-peer-deps` are not used.
 
 ### 9. Dependencies
 
@@ -177,12 +179,14 @@ No engine or WebAssembly exists yet. The rule against importing `src/engines/` f
 
 - **Supply chain:** packages are the official ones (publisher and repo checked), pinned by `package-lock.json`. `npm audit` is run; the one known advisory (a denial of service in `minimatch`, reached only through lint tools, nothing shipped) is fixed with `npm audit fix` and the result recorded.
 - **Hostile input:** this change takes no file. The only input is the filter text, which is compared with names and summaries as plain text and never rendered as HTML.
-- **Content Security Policy:** not set in this change. Astro's island loader uses a small inline script, so the Phase 1 change that sets the policy must use hashes for it.
+- **Content Security Policy:** not set in this change. A page with an island carries two small inline scripts and one inline style from Astro's loader, so the Phase 1 change that sets the policy must allow all three by hash. Pages with no island carry none.
 - **Malicious PDF, oversized file, hostile file name, server risks:** not applicable until files are handled.
 
 ## Risks / Trade-offs
 
-- **React uses most of the page budget.** 68.9 KB of 100 KB by gzip on a tool page. If the widget cannot fit in the rest, the budget wins and the build swaps in `preact/compat`. That stays possible only while components keep to what it supports.
+- **React uses most of the page budget.** About 67 KB of 100 KB by gzip on a tool page. If the widget cannot fit in the rest, the owner is asked: a larger budget, or `preact/compat` on the web, which would go against the React decision.
+- **The host must serve `/merge-pdf` from `merge-pdf.html`.** The site is built one file per page so that URLs have no trailing slash. Only the local preview server has been tested. Cloudflare Pages, the chosen host, does this; it has to be checked on the first preview deploy.
+- **Stylesheet order.** Astro links the global stylesheet and component styles in a different order on different pages. `site.css` sits in a cascade layer, so a component rule always wins whatever the order.
 - **React on the home page for one filter box.** A few lines of plain script would be smaller. One way of building interaction was chosen over the smallest page; the home page still serves every tool as HTML.
 - **Control edges depart from `SPEC.md`.** `#5c5c5c` in place of `#d9d6cc`, for inputs and secondary buttons only, because `#d9d6cc` on `#fbfaf6` is 1.39 to 1. Decided on the owner's delegation; one variable to change back.
 - **The Merge PDF page has no picker or text until the next changes.** Acceptable only because nothing is deployed.

@@ -1,9 +1,14 @@
 /*
-  The one global stylesheet. Values come from "Look and feel" in SPEC.md.
-  design/design.css is the guide; where it differs from SPEC.md, the SPEC.md
-  value is used here and the difference is noted.
-  Component styles live beside each component as CSS Modules.
+  The one global stylesheet. Values come from "Look and feel" in SPEC.md, with
+  design/design.css as the guide. Where a value departs from SPEC.md or fills a
+  gap in it, a comment says so and CLAUDE.md records who decided.
+
+  Everything here sits in the "site" layer. Component styles live beside each
+  component as CSS Modules and are not layered, so a component rule always wins
+  over a rule here, whatever order a page links the files in.
 */
+
+@layer site {
 
 :root {
   color-scheme: light dark;
@@ -44,7 +49,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 17px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* 17px at the usual browser setting, and it grows if the visitor has set a larger size. */
+  font: 1.0625rem/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* A long file name must wrap, never push the page sideways. */
   overflow-wrap: anywhere;
 }
@@ -176,3 +182,5 @@ a.tap {
   color: var(--text);
   border: 1px solid var(--control);
 }
+
+} /* end of the site layer */

@@ -30,6 +30,6 @@ The project's own licence is not set yet. It waits on the owner's decision under
 | `@playwright/test` | Apache-2.0 | End-to-end tests. Pinned to an exact version so it matches the installed browser |
 | `@fission-ai/openspec` | MIT | Checks OpenSpec changes and specs |
 
-`minimatch` (BlueOak-1.0.0) is not used directly. It is pinned to a patched version in `package.json` under `overrides`, because the version the lint tools ask for has a known advisory.
+`minimatch` (BlueOak-1.0.0) is not used directly. It is pinned to a patched version in `package.json` under `overrides`, because the version the lint tools ask for (`^10`) has a known advisory, GHSA-g3hv-75wg-m249. Remove the override once ESLint and `typescript-eslint` ask for version 11 themselves.
 
 In CI, Playwright downloads a Chromium build from Microsoft's servers. That download is outside `package-lock.json`.

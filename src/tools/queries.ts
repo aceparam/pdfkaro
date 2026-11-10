@@ -49,7 +49,7 @@ export function groupsWithItems(groups: Group[], tools: Tool[]): GroupWithItems[
 
 /** The related tools of a tool that are published, in the order the tool names them. */
 export function relatedItems(tools: Tool[], tool: Tool): ListItem[] {
-  const published = new Map(allPages(tools).map(({ page }) => [page.slug as string, page]));
+  const published = new Map(allPages(tools).map(({ page }) => [page.slug, page]));
   return tool.related.flatMap((slug) => {
     const page = published.get(slug);
     return page ? [toListItem(page)] : [];

@@ -34,6 +34,14 @@ export default defineConfig(
           ],
         },
       ],
+      // The same rule for import() calls, which the rule above does not see.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression[source.value=/tools\\//]',
+          message: 'Components may not load src/tools/ with import(). Pass data in through props.',
+        },
+      ],
     },
   },
 );

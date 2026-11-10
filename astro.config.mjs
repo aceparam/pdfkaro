@@ -7,7 +7,10 @@ export default defineConfig({
   trailingSlash: 'never',
   build: {
     format: 'file',
-    // Stylesheets stay in files so a strict Content Security Policy needs no inline styles.
+    // Stylesheets stay in files. Pages with no interactive part then carry no
+    // inline style or script at all. A page with an island still carries one
+    // inline style and two inline scripts from Astro's loader, which the
+    // Content Security Policy (Phase 1) has to allow by hash.
     inlineStylesheets: 'never',
   },
   devToolbar: { enabled: false },

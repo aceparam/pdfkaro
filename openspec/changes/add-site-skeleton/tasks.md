@@ -42,6 +42,19 @@ This change handles no file, so the engine, no-upload and fixtures tasks that a 
 - [x] 6.2 List the commands in `CLAUDE.md` and add `@fission-ai/openspec` as a dev dependency
 - [x] 6.3 Run the page weight script and record the numbers for the home page, the Merge PDF page and a placeholder page. By gzip: home 72.2 KB, Merge PDF 1.7 KB, About 1.6 KB. By brotli: 62.3, 1.3, 1.3
 - [x] 6.4 Run `npm audit`, apply `npm audit fix`, and record the result. `npm audit fix` could not fix the `minimatch` advisory without downgrading ESLint, so `minimatch` is pinned to the patched 11.0.5 under `overrides`. `npm audit` now finds 0 vulnerabilities and lint still runs
-- [x] 6.5 Take screenshots of each page at 360px and 1280px, in light and dark mode, check each against "Banned patterns", and show the owner the dark palette
+- [x] 6.5 Take screenshots of each page at 360px and 1280px, in light and dark mode, check each against "Banned patterns", and show the owner the dark palette (first done for five pages before the control edge changed; redone in 7.10)
 - [x] 6.6 Run `openspec validate --all --strict`
 - [ ] 6.7 Run the review panel (see the review-panel skill) and resolve its findings
+
+## 7. Decisions and review fixes
+
+- [x] 7.1 Apply the decisions of 10 Nov 2026: control edges at `#5c5c5c`, and record all eight decisions in `CLAUDE.md` as the agent's, not the owner's
+- [x] 7.2 Add the `look-and-feel` spec delta for the control edge
+- [x] 7.3 Move the marking and counting of filtered tools into `filterGroups` and unit test it with several tools and groups
+- [x] 7.4 Add the catalogue test that compares `catalogue.ts` with the tables in `SPEC.md`
+- [x] 7.5 Build the end-to-end page lists from the registry and the footer links
+- [x] 7.6 Put `site.css` in a cascade layer so stylesheet order cannot change the result
+- [x] 7.7 Make the page weight script fail on an empty build and on files no page is seen to load
+- [x] 7.8 Block `import()` of `src/tools/` from components, scope the `minimatch` override, and fold OpenSpec into the one CI workflow
+- [x] 7.9 Say what to try when no tool matches; size body text in rem; reword the home page description; check that typing in the filter sends and stores nothing
+- [x] 7.10 Retake screenshots of all eight pages at 360px and 1280px, in light and dark mode, and put the dark ones in the pull request for the owner
