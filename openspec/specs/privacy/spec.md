@@ -19,15 +19,20 @@ For a browser tool, no request that leaves the page or one of its workers SHALL 
 
 Each browser tool SHALL have an automated test that fails the build if the tool makes any upload while processing. The test SHALL watch every request from the page, its workers and its service worker, from file pick to download. (SPEC.md: Browser tools; Definition of done)
 
-#### Scenario: An upload is added by mistake
+#### Scenario: A request carries a body
 
-- **WHEN** code sends the file, its name or a password in a request body, a query string, an image address or a socket message
+- **WHEN** a request with a body is made between file pick and download, even if the body is encoded or compressed
+- **THEN** the no-upload test fails and the build fails
+
+#### Scenario: File data is put in an address
+
+- **WHEN** code sends the file, text or metadata taken from it, its name or a password in a query string, an image address or a socket message
 - **THEN** the no-upload test fails and the build fails
 
 #### Scenario: A request goes to another origin
 
 - **WHEN** a request goes to any origin other than the site's own between file pick and download
-- **THEN** the no-upload test fails
+- **THEN** the no-upload test fails, unless the change names that origin and the owner has approved it
 
 #### Scenario: A browser tool is finished
 
@@ -82,12 +87,12 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 
 ### Requirement: No advertising or tracking
 
-The site SHALL carry no advertising or tracking scripts and SHALL make no request to any origin other than its own, apart from cookieless analytics if used. Analytics MUST set no cookies and MUST NOT record file names or anything about a file. Until the owner decides otherwise, analytics SHALL be cookieless page counts. (SPEC.md: Whole site; Architecture and tech stack, Analytics; Open decisions)
+The site SHALL carry no advertising or tracking scripts. It SHALL make no request to any origin other than its own, apart from the conversion server for a server tool, cookieless analytics if used, and any origin the owner has approved. Analytics MUST set no cookies and MUST NOT record file names or anything about a file, and until the owner decides otherwise SHALL be cookieless page counts. (SPEC.md: Whole site; Architecture and tech stack, Analytics; Open decisions)
 
 #### Scenario: A page is loaded
 
 - **WHEN** any page is loaded
-- **THEN** no cookie is set and no request goes to any origin other than the site's own, apart from cookieless analytics if the owner has chosen it
+- **THEN** no cookie is set and no request goes to an origin other than the site's own, the conversion server, cookieless analytics if the owner has chosen it, or an origin the owner has approved
 
 #### Scenario: More than page counts is proposed
 
@@ -114,7 +119,7 @@ The Privacy page SHALL say in plain words what happens to a file for each kind o
 
 ### Requirement: Money
 
-Until the owner decides otherwise the site SHALL carry no adverts. A donation link, as a plain text link, is allowed. (SPEC.md: Open decisions, Money)
+Until the owner decides otherwise the site SHALL carry no adverts. A donation link, as a plain text link, is allowed, and where it sits is the owner's call. (SPEC.md: Open decisions, Money)
 
 #### Scenario: Adverts are proposed
 

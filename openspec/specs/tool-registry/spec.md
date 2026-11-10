@@ -8,7 +8,7 @@ The single registry file that declares every tool, and everything generated from
 
 ### Requirement: One registry declares every tool
 
-The site SHALL declare each tool exactly once, in `src/tools/registry.ts`. Each entry MUST carry the slug, name, page title, description, group, where it runs (browser or server), phase, accepted file types and related tools. A catalogue row with several URLs is declared once, and each URL it serves gets its own page, title and description. (SPEC.md: Rules for the code, 1; SEO, Specific-search pages)
+The site SHALL declare each tool exactly once, in `src/tools/registry.ts`. Each entry MUST carry the slug or slugs it serves, a name, a page title and description for each URL, group, where it runs (browser or server), phase, accepted file types and related tools. A catalogue row with several URLs is declared once, and each URL it serves gets its own page, title and description. (SPEC.md: Rules for the code, 1; SEO, Specific-search pages)
 
 #### Scenario: A tool is added
 

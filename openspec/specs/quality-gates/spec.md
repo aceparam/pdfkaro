@@ -77,7 +77,7 @@ A tool SHALL work in current Chrome, Firefox, Safari and Edge, and on Android Ch
 
 ### Requirement: Keyboard and screen reader use
 
-A tool SHALL be usable with a keyboard alone and with a screen reader. (SPEC.md: Each tool)
+A tool SHALL be usable with a keyboard alone and with a screen reader, and its text SHALL meet the contrast rule of the `look-and-feel` capability. (SPEC.md: Each tool)
 
 #### Scenario: A job is done with the keyboard only
 
@@ -109,7 +109,7 @@ A tool SHALL have page text reviewed by the owner, with nothing from the banned 
 
 ### Requirement: Site checks
 
-The site SHALL meet these checks: the speed and Lighthouse targets of the `seo` capability on the home page and three tool pages; a unique title and description on every page, with every page in the sitemap; the plain 404 page of the `look-and-feel` capability; and a full pass over every page at 360px and 1280px that finds nothing from the banned patterns list. (SPEC.md: The site)
+The site SHALL meet these checks: the speed and Lighthouse targets of the `seo` capability on the home page and three tool pages; a unique title and description on every page, with every page except the 404 page in the sitemap; the plain 404 page of the `look-and-feel` capability; and a full pass over every page at 360px and 1280px that finds nothing from the banned patterns list. (SPEC.md: The site)
 
 #### Scenario: The site is checked before launch
 
@@ -155,4 +155,4 @@ Anything listed under "Open decisions" in `SPEC.md` SHALL be treated as the owne
 #### Scenario: The defaults are looked up
 
 - **WHEN** an agent needs the assumed default
-- **THEN** it uses the one in `SPEC.md`: licence AGPL-3.0 and public source, open-source PDF to Office conversion, a donation link only, no AI tools, cookieless page counts, domain not bought, and the smallest container plan for the server
+- **THEN** it uses the one in the "Open decisions" table of `SPEC.md`, except that Ghostscript and a `LICENSE` file still wait for the owner to confirm the licence

@@ -104,7 +104,7 @@ Page text SHALL use short sentences and plain verbs, say what the tool does and 
 
 ### Requirement: Banned patterns
 
-Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The list in `SPEC.md` is the one to check against; it is not copied here so that the two cannot drift apart. (SPEC.md: Banned patterns)
+Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The list in `SPEC.md` is the one to check against; it is not copied here so that the two cannot drift apart. The list bans the word "unlock" while the catalogue names a tool Unlock PDF; that conflict is the owner's to settle and is not settled here. (SPEC.md: Banned patterns; Tool catalogue)
 
 #### Scenario: A page is checked before it is called done
 
@@ -121,10 +121,10 @@ Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The
 - **WHEN** a page gains a hero section, a row of feature cards, a purple or indigo gradient, a drop shadow, a pill badge, an entrance animation, a testimonial or a pop-up
 - **THEN** the page fails the check
 
-#### Scenario: The word unlock is the tool name
+#### Scenario: Unlock PDF is built
 
-- **WHEN** "Unlock PDF" appears as the name, heading or link text of that tool
-- **THEN** it is not counted as a banned word, and "unlock" is still not used anywhere else as a selling word
+- **WHEN** a change builds the Unlock PDF tool
+- **THEN** the change asks the owner how the banned word is to be treated before the page text is written
 
 ### Requirement: Pages only the owner writes
 

@@ -87,7 +87,7 @@ When a job is done the page SHALL show the file name, the new size, a Download b
 
 ### Requirement: Text below the tool
 
-Below the tool the page SHALL show three or four how-to steps, a short FAQ and links to related tools. This text SHALL be 250 to 500 words, held as Markdown in `src/content/`, drafted plainly and marked for the owner to review. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; Build phases, 6)
+Below the tool the page SHALL show three or four how-to steps, a short FAQ and links to related tools that are published. This text SHALL be 250 to 500 words, held as Markdown in `src/content/`, drafted plainly and marked for the owner to review. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; Build phases, 6)
 
 #### Scenario: Draft text is added
 
@@ -224,5 +224,5 @@ The next steps in the result block SHALL open the chosen tool with the file alre
 
 #### Scenario: The handover is looked for afterwards
 
-- **WHEN** a handover has happened and the tab is closed
-- **THEN** the file is in no cookie, no browser storage and no URL, and nothing of it remains
+- **WHEN** a handover has just happened and the next tool is still open
+- **THEN** cookies, local storage, session storage, IndexedDB, `window.name` and the URL hold no part of the file, and after the tab is closed nothing of it remains

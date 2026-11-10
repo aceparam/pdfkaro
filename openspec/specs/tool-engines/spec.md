@@ -17,7 +17,7 @@ Each operation SHALL be a function of the form `(files: Uint8Array[], options) =
 
 #### Scenario: An engine reaches for the page
 
-- **WHEN** an engine file uses `window`, `document`, `navigator`, `fetch`, `localStorage` or a DOM type
+- **WHEN** an engine file uses `window`, `document`, `navigator`, `localStorage` or a DOM type
 - **THEN** lint or the engine's Node unit tests fail
 
 ### Requirement: Engines run in a Web Worker
@@ -93,12 +93,17 @@ Engines SHALL use the library that the tech stack table in `SPEC.md` names for t
 
 ### Requirement: Licence-bound dependencies wait for the owner
 
-Ghostscript, and any other AGPL-licensed dependency, MUST NOT be added to the repo, and no `LICENSE` file SHALL be added, until the owner confirms the licence decision. (SPEC.md: Open decisions, Licence; CLAUDE.md: Questions waiting for the owner)
+Ghostscript MUST NOT be added to the repo, and no `LICENSE` file SHALL be added, until the owner confirms the licence decision. Any other dependency under the AGPL SHALL be pointed out to the owner in the change that adds it. (SPEC.md: Open decisions, Licence; CLAUDE.md: Questions waiting for the owner)
 
 #### Scenario: Compress PDF is proposed
 
 - **WHEN** a change needs Ghostscript and the owner has not confirmed the licence
 - **THEN** the change is blocked and the owner is asked
+
+#### Scenario: Another AGPL dependency is proposed
+
+- **WHEN** a change adds a dependency under the AGPL other than Ghostscript
+- **THEN** the change says so and the owner is told
 
 ### Requirement: OCR language data loads on choice
 

@@ -45,16 +45,16 @@ The server SHALL be a small Node service in `server/` in front of Gotenberg runn
 
 ### Requirement: HTTPS only
 
-The server SHALL serve HTTPS only, for uploads, job status and downloads. It SHALL refuse a plain HTTP request without reading its body. (SPEC.md: Server tools)
+Server tools SHALL be reached over HTTPS only. A plain HTTP request SHALL be refused without accepting any file data. (SPEC.md: Server tools)
 
 #### Scenario: A plain HTTP upload is tried
 
 - **WHEN** a client sends an upload over plain HTTP
-- **THEN** the request is refused before any file data is accepted, and it is not redirected
+- **THEN** the request is refused before any file data is accepted
 
 ### Requirement: Upload limit
 
-The server SHALL refuse uploads over 50 MB, and SHALL enforce the limit while reading the upload. (SPEC.md: Server tools)
+The server SHALL refuse uploads over 50 MB, a starting value the owner may tune, and SHALL enforce the limit while reading the upload. (SPEC.md: Server tools)
 
 #### Scenario: A 60 MB file is sent
 
@@ -128,11 +128,11 @@ The server SHALL check the type of an upload by its contents, not by its extensi
 
 ### Requirement: Isolation
 
-Conversions of uploaded documents SHALL run in a container with no outbound network access and with document macros disabled. (SPEC.md: Server tools)
+Conversions SHALL run in a container with no outbound network access and with document macros disabled. (SPEC.md: Server tools)
 
 #### Scenario: A document with a macro is converted
 
-- **WHEN** a Word file holding a macro is converted
+- **WHEN** a Word, Excel or PowerPoint file holding a macro is converted
 - **THEN** the macro does not run
 
 #### Scenario: A document refers to a remote resource
@@ -173,9 +173,14 @@ Until the owner decides otherwise, a file sent to the server MUST NOT be passed 
 - **WHEN** a change proposes sending files to a paid conversion API
 - **THEN** the change is stopped and the owner is asked
 
+#### Scenario: Another outside service is proposed
+
+- **WHEN** a change adds an error reporter, log shipper, cloud virus scanner or object store that would see an uploaded file or its name
+- **THEN** the change is stopped and the owner is asked
+
 ### Requirement: Web page to PDF network access waits for the owner
 
-Web page to PDF has to fetch public pages, which the isolation rule forbids for conversions. Web page to PDF SHALL NOT be built until the owner says how it is given network access. (SPEC.md: Server tools, Isolation and Web page to PDF)
+`SPEC.md` requires conversions to run with no outbound network, and also requires Web page to PDF to fetch public pages. The two conflict. Web page to PDF SHALL NOT be built until the owner decides how it is given network access. (SPEC.md: Server tools, Isolation and Web page to PDF)
 
 #### Scenario: Web page to PDF is proposed
 
