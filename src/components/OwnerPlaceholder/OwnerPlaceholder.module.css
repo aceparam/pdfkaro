@@ -1,0 +1,13 @@
+/* SPEC.md gives solid lines only. The designs propose a dashed border here. The owner decides. */
+.box {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.box p {
+  margin: 0 0 0.5rem;
+}
+.box p:last-child {
+  margin-bottom: 0;
+}

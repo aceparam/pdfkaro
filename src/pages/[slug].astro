@@ -1,0 +1,21 @@
+---
+// One page for every URL in the registry.
+import Base from '../layouts/Base.astro';
+import { ToolShell } from '../components/ToolShell/ToolShell';
+import { tools } from '../tools/registry';
+import { allPages, relatedItems } from '../tools/queries';
+import type { PageWithTool } from '../tools/queries';
+
+export function getStaticPaths() {
+  return allPages(tools).map((entry) => ({ params: { slug: entry.page.slug }, props: entry }));
+}
+
+type Props = PageWithTool;
+
+const { tool, page } = Astro.props;
+---
+
+<Base title={page.title} description={page.description}>
+  {/* The tool itself and the text below it arrive with the tool's own change. */}
+  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool)} />
+</Base>

@@ -1,0 +1,13 @@
+.below {
+  margin-top: 4.5rem;
+}
+.below ol {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+.below li {
+  margin-bottom: 0.375rem;
+}
+.below p {
+  margin: 0;
+}

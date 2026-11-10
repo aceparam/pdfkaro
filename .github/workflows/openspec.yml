@@ -18,5 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
       - name: Validate changes and specs
-        run: npx -y @fission-ai/openspec@1.17.0 validate --all --strict --no-interactive
+        run: npm run spec

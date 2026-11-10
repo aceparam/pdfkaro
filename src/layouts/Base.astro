@@ -1,0 +1,37 @@
+---
+// The frame every page shares. It has to be an .astro file because it owns
+// <html> and the stylesheet. Everything visible inside it is a React component
+// rendered to plain HTML at build time.
+import '../styles/site.css';
+import { SiteHeader } from '../components/SiteHeader/SiteHeader';
+import { SiteFooter } from '../components/SiteFooter/SiteFooter';
+import { siteName, headerLinks, footerLinks } from '../site';
+
+interface Props {
+  /** The title tag. Different on every page. */
+  title: string;
+  /** The meta description. */
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+  </head>
+  <body>
+    <div class="page">
+      <SiteHeader siteName={siteName} links={headerLinks} />
+      <main>
+        <slot />
+      </main>
+      <SiteFooter links={footerLinks} />
+    </div>
+  </body>
+</html>

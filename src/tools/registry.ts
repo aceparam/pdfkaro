@@ -1,0 +1,84 @@
+// The one place a tool is declared. Pages, the home page list and related
+// links are all generated from this file. Data and types only: no logic here.
+
+import type { CatalogueSlug } from './catalogue';
+
+export type GroupId = 'organise' | 'smaller' | 'to-pdf' | 'from-pdf' | 'edit' | 'protect' | 'read';
+
+export type Group = {
+  id: GroupId;
+  name: string;
+};
+
+/** One URL that a tool serves. Most tools have one; some have several. */
+export type ToolPage = {
+  /** The URL, at the site root. A published slug never changes. */
+  slug: CatalogueSlug;
+  /** Link text in lists. */
+  name: string;
+  /** One line for lists. */
+  summary: string;
+  /** Title tag: the job first, then the brand, under 60 characters. */
+  title: string;
+  /** Meta description, under 155 characters. */
+  description: string;
+  /** The one h1 on the page. */
+  heading: string;
+  /** What the tool does and where the file goes. */
+  sentence: string;
+  /** File types this URL accepts, when they differ from the tool's own list. */
+  accepts?: string[];
+  /** Options already chosen when this URL opens, such as a target size. */
+  preset?: Record<string, string | number | boolean>;
+};
+
+export type Tool = {
+  id: string;
+  group: GroupId;
+  /** Where the file is processed. */
+  runsIn: 'browser' | 'server';
+  /** The build phase in which the tool ships. */
+  phase: 1 | 2 | 3;
+  /** File types the tool accepts, as MIME types. */
+  accepts: string[];
+  /** Four to six related tools, by slug. A page links only to those that are published. */
+  related: CatalogueSlug[];
+  /** Every URL the tool serves. */
+  pages: ToolPage[];
+};
+
+/** The seven groups, in the order the home page shows them. */
+export const groups: Group[] = [
+  { id: 'organise', name: 'Organise pages' },
+  { id: 'smaller', name: 'Make smaller and fix' },
+  { id: 'to-pdf', name: 'Convert to PDF' },
+  { id: 'from-pdf', name: 'Convert from PDF' },
+  { id: 'edit', name: 'Edit and sign' },
+  { id: 'protect', name: 'Protect' },
+  { id: 'read', name: 'Read and check' },
+];
+
+// A tool is published when it has an entry here. An entry is added in the
+// tool's first change. Wording below is a draft for the owner to review.
+export const tools: Tool[] = [
+  {
+    id: 'merge-pdf',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['split-pdf', 'rearrange-pdf-pages', 'rotate-pdf', 'compress-pdf', 'jpg-to-pdf'],
+    pages: [
+      {
+        slug: 'merge-pdf',
+        name: 'Merge PDF',
+        summary: 'Combine several PDFs into one.',
+        title: 'Merge PDF files in your browser - PDFkaro',
+        description:
+          'Combine several PDF files into one, in the order you choose. The files stay on your device and are not uploaded.',
+        heading: 'Merge PDF files',
+        sentence: 'Combine several PDFs into one. Files stay on your device.',
+      },
+    ],
+  },
+];
