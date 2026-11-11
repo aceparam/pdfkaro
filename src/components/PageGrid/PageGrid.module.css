@@ -19,13 +19,30 @@
 .title {
   font-weight: 700;
 }
-.thumb {
+/* The thumbnail slot is always 52 by 68, so the list never moves when a picture arrives. */
+.slot {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 52px;
   height: 68px;
-  object-fit: contain;
+}
+/* A page is drawn on white paper in light and dark mode alike, at its own shape. */
+.thumb,
+.blank {
+  box-sizing: border-box;
   background: #fff;
   border: 1px solid var(--line);
+}
+.thumb {
+  display: block;
+  max-width: 52px;
+  max-height: 68px;
+}
+.blank {
+  width: 52px;
+  height: 68px;
 }
 .moves {
   display: flex;

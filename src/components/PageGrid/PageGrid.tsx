@@ -7,7 +7,7 @@ export type GridItem = {
   title: string;
   /** "64 pages, 6.1 MB", or "Getting ready". */
   detail: string;
-  /** A picture of the item, when a tool has one. None does yet. */
+  /** The address of a picture of the item's page, once drawn. Until then a blank paper box shows. */
   thumbnail?: string;
 };
 
@@ -17,6 +17,8 @@ type Props = {
   onRemove(id: string): void;
   /** Called after a move with the item's title and new place, for the status region. */
   onMoved?(title: string, place: number, of: number): void;
+  /** Called once for each item, when it comes on screen or near it, so its thumbnail can be drawn. */
+  onVisible?(id: string): void;
 };
 
 type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
@@ -26,8 +28,34 @@ type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
  * which work with the keyboard and on a touch screen, and by mouse drag.
  * A button that cannot be used stays focusable and is marked unavailable.
  */
-export function PageGrid({ items, onMove, onRemove, onMoved }: Props) {
+export function PageGrid({ items, onMove, onRemove, onMoved, onVisible }: Props) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const rows = useRef(new Map<string, HTMLLIElement>());
+  const reported = useRef(new Set<string>());
+  const visibleRef = useRef(onVisible);
+  useEffect(() => {
+    visibleRef.current = onVisible;
+  }, [onVisible]);
+
+  // Report each item once when it comes on screen or within 300px of it, so
+  // thumbnails are drawn only for what the visitor can see or is about to.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.id;
+          if (!entry.isIntersecting || !id || reported.current.has(id)) continue;
+          reported.current.add(id);
+          observer.unobserve(entry.target);
+          visibleRef.current?.(id);
+        }
+      },
+      { rootMargin: '300px 0px' },
+    );
+    for (const [id, row] of rows.current) if (!reported.current.has(id)) observer.observe(row);
+    return () => observer.disconnect();
+  }, [items]);
   const focusNext = useRef<FocusTarget | null>(null);
   const dragging = useRef<string | null>(null);
 
@@ -73,6 +101,11 @@ export function PageGrid({ items, onMove, onRemove, onMoved }: Props) {
         return (
           <li
             key={item.id}
+            ref={(element) => {
+              if (element) rows.current.set(item.id, element);
+              else rows.current.delete(item.id);
+            }}
+            data-id={item.id}
             className={styles.item}
             draggable={items.length > 1}
             onDragStart={(event) => {
@@ -96,7 +129,14 @@ export function PageGrid({ items, onMove, onRemove, onMoved }: Props) {
               dragging.current = null;
             }}
           >
-            {item.thumbnail && <img className={styles.thumb} src={item.thumbnail} alt="" />}
+            {/* A picture of the page, decorative: the name beside it says what it is. Until it is drawn, blank paper. */}
+            <div className={styles.slot} aria-hidden="true">
+              {item.thumbnail ? (
+                <img className={styles.thumb} src={item.thumbnail} alt="" draggable={false} />
+              ) : (
+                <div className={styles.blank} />
+              )}
+            </div>
             <div className={styles.about}>
               <div className={styles.title}>{item.title}</div>
               <div className="muted">{item.detail}</div>

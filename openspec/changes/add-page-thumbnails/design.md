@@ -203,6 +203,15 @@ PDF.js and its data are fetched when the first thumbnail is asked for, after the
 - It accepts `blob:` addresses of the site's own origin only.
 - The control test gains a fetch from a worker inside a worker.
 
+## Found while building
+
+- **The colour decoder (`qcms_bg.wasm`) is not shipped.** With `useWorkerFetch: false`, PDF.js never asks for it and converts colours in JavaScript, so it would be dead weight. The fixed data is the fonts and the JPEG 2000 and JBIG2 decoders: 760 KB by gzip.
+- **PDF.js's modern build needs `Promise.try`.** That means Chrome 128, Firefox 134 and Safari 18.2 or later; older browsers show blank boxes and the tool works. Node 22 lacks it too, so the unit tests use PDF.js's legacy build, the same version.
+- **Vite needed `.pfb` and `.wasm` in `assetsInclude`** to bundle them with `?inline`, in `astro.config.mjs` and `vitest.config.ts`.
+- **PDF.js repairs `damaged-xref.pdf`,** which qpdf cannot read. The page asks for thumbnails only of files qpdf has read, so this never shows.
+- **The PDF.js loader is its own module,** `src/workers/pdfjs-loader.ts`, so that starting PDF.js's worker once and stopping every drawing when it fails are unit tested.
+- **Without the standard fonts, PDF.js still drew text** in Node, with a fallback font, so the font tests check that PDF.js asked for the font rather than counting ink.
+
 ## Risks / Trade-offs
 
 - **A malicious PDF** might exploit PDF.js.

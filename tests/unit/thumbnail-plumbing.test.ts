@@ -141,6 +141,18 @@ describe('the client asking for a thumbnail', () => {
     }
   });
 
+  it('lets a read that follows a stopped thumbnail finish on a fresh worker, so no file is left reading', async () => {
+    const { tool, workers } = client();
+    const asked = tool.thumbnail(file, undefined, 1, box);
+    // What the page does when a file is about to be read while a thumbnail is drawn.
+    tool.end();
+    await expect(asked).resolves.toBeNull();
+    const read = tool.inspect(file);
+    expect(workers).toHaveLength(2);
+    workers[1]!.reply({ type: 'inspected', requestId: workers[1]!.sent[0]!.requestId, outcome: { kind: 'ready', pages: 1 } });
+    await expect(read).resolves.toEqual({ kind: 'ready', pages: 1 });
+  });
+
   it('leaves a pending read alone when a thumbnail fails', async () => {
     const { tool, workers } = client();
     const read = tool.inspect(file);

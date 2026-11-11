@@ -72,7 +72,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   );
 
   const run = useToolRun({ toolId, accepts, words, createWorker, onProgress: announceProgress });
-  const { state, result } = run;
+  const { state, result, thumbnails } = run;
 
   const summaryRef = useRef<HTMLParagraphElement | null>(null);
   const mainRef = useRef<HTMLButtonElement | null>(null);
@@ -174,8 +174,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
   const items: GridItem[] = useMemo(
-    () => state.files.map((file) => ({ id: file.id, title: file.name, detail: detailFor(file) })),
-    [state.files],
+    () => state.files.map((file) => ({ id: file.id, title: file.name, detail: detailFor(file), thumbnail: thumbnails[file.id] })),
+    [state.files, thumbnails],
   );
 
   const others = state.files.length - 1;
@@ -247,6 +247,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             onMove={run.moveFile}
             onRemove={run.removeFile}
             onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
+            onVisible={run.showThumbnail}
           />
 
           {askingPassword && problem ? (

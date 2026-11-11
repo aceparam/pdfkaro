@@ -4,6 +4,7 @@ import type { ToolWidgetWords } from '../tools/registry';
 import { looksAccepted, sniffLength } from '../widget/accept';
 import { outputName } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
+import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
 
 export type ToolRunResult = { url: string; name: string };
@@ -11,6 +12,10 @@ export type ToolRunResult = { url: string; name: string };
 export type ToolRun = {
   state: State;
   result: ToolRunResult | null;
+  /** Thumbnail addresses (`blob:`) by file id, for the files that have one. */
+  thumbnails: Readonly<Record<string, string>>;
+  /** A listed file has come into view, so its thumbnail may be drawn. */
+  showThumbnail(id: string): void;
   /** Adds files. Gives back how many were added and the names of any turned away for being of the wrong type. */
   addFiles(files: File[]): Promise<{ added: number; refused: string[] }>;
   submitPassword(id: string, password: string): Promise<void>;
@@ -22,6 +27,9 @@ export type ToolRun = {
   /** Forgets every file, password and result, and ends the worker. */
   clear(): void;
 };
+
+/** The thumbnail box, twice the 52 by 68 CSS slot so the picture is sharp on a phone. */
+const thumbnailBox = { width: 104, height: 136 };
 
 type Options = {
   toolId: string;
@@ -61,11 +69,88 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     setResult(null);
   }, []);
 
+  // Thumbnails: their addresses, which item comes next, and the one being drawn.
+  const [thumbnails, setThumbnails] = useState<Readonly<Record<string, string>>>({});
+  const thumbnailUrls = useRef(new Map<string, string>());
+  const queue = useRef(emptyQueue);
+  const drawing = useRef<{ id: string; stopped: boolean } | null>(null);
+  const pumpRef = useRef<() => void>(() => {});
+
+  const publishThumbnails = useCallback(() => setThumbnails(Object.fromEntries(thumbnailUrls.current)), []);
+
+  const forgetThumbnail = useCallback(
+    (id: string) => {
+      const url = thumbnailUrls.current.get(id);
+      if (url) URL.revokeObjectURL(url);
+      thumbnailUrls.current.delete(id);
+      queue.current = forget(queue.current, id);
+      publishThumbnails();
+    },
+    [publishThumbnails],
+  );
+
+  // The job and reading come first: a thumbnail being drawn is stopped by
+  // ending the worker, and is asked for again later. Every file has been read
+  // before the job can start, and a file about to be read has not started, so
+  // nothing else is lost; and no read is ever pending when a thumbnail's time
+  // limit ends a worker.
+  const stopThumbnail = useCallback(() => {
+    if (!drawing.current) return;
+    drawing.current.stopped = true;
+    drawing.current = null;
+    queue.current = stop(queue.current);
+    client.current?.end();
+  }, []);
+
+  const pump = useCallback(() => {
+    const id = next(queue.current, stateRef.current);
+    const file = id === undefined ? undefined : files.current.get(id);
+    if (id === undefined || !file) return;
+    queue.current = started(queue.current, id);
+    const token = { id, stopped: false };
+    drawing.current = token;
+    void getClient()
+      .thumbnail(file, passwords.current.get(id), 1, thumbnailBox)
+      .then((image) => {
+        if (token.stopped) return;
+        if (drawing.current === token) drawing.current = null;
+        // A file removed while its picture was drawn: the picture is thrown away before any address is made.
+        if (!files.current.has(id)) {
+          pumpRef.current();
+          return;
+        }
+        if (image) {
+          thumbnailUrls.current.set(id, URL.createObjectURL(new Blob([image as BlobPart], { type: 'image/png' })));
+          publishThumbnails();
+        }
+        queue.current = finished(queue.current, id, image ? 'drawn' : 'failed');
+        pumpRef.current();
+      });
+  }, [getClient, publishThumbnails]);
+
+  useEffect(() => {
+    pumpRef.current = pump;
+  }, [pump]);
+
+  // Each change of step or of the list may let the next thumbnail be drawn.
+  useEffect(() => {
+    pump();
+  }, [state, pump]);
+
+  const showThumbnail = useCallback(
+    (id: string) => {
+      queue.current = want(queue.current, id);
+      pumpRef.current();
+    },
+    [],
+  );
+
   const inspect = useCallback(
     async (id: string) => {
       const file = files.current.get(id);
       if (!file) return;
       const password = passwords.current.get(id);
+      stopThumbnail();
       try {
         const outcome = await getClient().inspect(file, password);
         const shown = outcome.kind === 'needs-password' && password !== undefined ? { kind: 'wrong-password' as const } : outcome;
@@ -75,7 +160,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
         if (files.current.has(id)) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
       }
     },
-    [getClient],
+    [getClient, stopThumbnail],
   );
 
   const addFiles = useCallback(
@@ -109,11 +194,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     [inspect],
   );
 
-  const removeFile = useCallback((id: string) => {
-    files.current.delete(id);
-    passwords.current.delete(id);
-    dispatch({ type: 'removed', id });
-  }, []);
+  const removeFile = useCallback(
+    (id: string) => {
+      files.current.delete(id);
+      passwords.current.delete(id);
+      forgetThumbnail(id);
+      dispatch({ type: 'removed', id });
+    },
+    [forgetThumbnail],
+  );
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);
 
@@ -121,6 +210,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     const listed = stateRef.current.files;
     const inputs = listed.map((entry) => files.current.get(entry.id)).filter((file): file is File => file !== undefined);
     if (inputs.length !== listed.length || inputs.length === 0) return;
+    stopThumbnail();
     releaseResult();
     dispatch({ type: 'started' });
     try {
@@ -147,7 +237,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, words.outputSuffix, words.resultPagesAreSum]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.resultPagesAreSum]);
 
   const cancel = useCallback(() => {
     client.current?.end();
@@ -165,13 +255,19 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
   }, [inspect]);
 
   const clear = useCallback(() => {
+    if (drawing.current) drawing.current.stopped = true;
+    drawing.current = null;
     client.current?.end();
     client.current = null;
     files.current.clear();
     passwords.current.clear();
+    for (const url of thumbnailUrls.current.values()) URL.revokeObjectURL(url);
+    thumbnailUrls.current.clear();
+    queue.current = emptyQueue;
+    publishThumbnails();
     releaseResult();
     dispatch({ type: 'reset' });
-  }, [releaseResult]);
+  }, [publishThumbnails, releaseResult]);
 
   // Leaving the page, including into the back-forward cache, drops everything.
   useEffect(() => {
@@ -182,5 +278,5 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     };
   }, [clear]);
 
-  return { state, result, addFiles, submitPassword, removeFile, moveFile, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, start, cancel, backToFiles, clear };
 }

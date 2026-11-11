@@ -253,7 +253,7 @@ test.describe('problems', () => {
 function filesAfterPick(): string[] {
   const names = readdirSync(join(here, '../../dist/_astro'));
   const allowed = names.filter((name) =>
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|merge-pdf-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm))$/.test(name),
+    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|merge-pdf-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js)$/.test(name),
   );
   return allowed.map((name) => `/_astro/${name}`);
 }
@@ -275,6 +275,12 @@ function violations(seen: Seen[], siteOrigin: string, secrets: string[]): string
   const allowed = new Set(filesAfterPick());
   const problems: string[] = [];
   for (const request of seen) {
+    // A thumbnail is shown through a blob: address, which never leaves the browser. Only those of the site's own origin pass.
+    if (request.url.startsWith('blob:')) {
+      if (new URL(request.url.slice('blob:'.length)).origin !== siteOrigin) problems.push(`a blob: address of another origin: ${request.url}`);
+      if (request.method !== 'GET' || request.body) problems.push(`a blob: address used to send: ${request.url}`);
+      continue;
+    }
     const url = new URL(request.url, siteOrigin);
     const where = decodeURIComponent(request.url);
     if (request.origin !== siteOrigin) problems.push(`another origin: ${request.url}`);
@@ -294,16 +300,21 @@ test.describe('nothing is uploaded', () => {
     await open(page);
     const seen = watch(context, page);
 
-    await picker(page).setInputFiles([fixture('text.pdf'), fixture('password.pdf'), fixture('rich.pdf')]);
+    // images.pdf and text.pdf need PDF.js's decoders and fonts for their thumbnails.
+    await picker(page).setInputFiles([fixture('text.pdf'), fixture('password.pdf'), fixture('rich.pdf'), fixture('images.pdf')]);
     await page.getByLabel('Password for password.pdf').fill(password);
     await page.keyboard.press('Enter');
     await expect(mainButton(page)).toBeFocused();
+    await expect(page.locator('astro-island ol img')).toHaveCount(4, { timeout: 20000 });
     await mergeAndDownload(page);
 
-    const secrets = ['text.pdf', 'password.pdf', 'rich.pdf', password];
+    const secrets = ['text.pdf', 'password.pdf', 'rich.pdf', 'images.pdf', password];
     expect(violations(seen, new URL(baseURL!).origin, secrets)).toEqual([]);
-    // The worker's own requests are watched too: the WebAssembly file is fetched from the worker.
+    // The workers' own requests are watched too: qpdf's WebAssembly is fetched from the tool worker, and
+    // PDF.js's own worker and its helper data from it, after the thumbnails were asked for.
     expect(seen.some((request) => request.url.endsWith('.wasm'))).toBe(true);
+    expect(seen.some((request) => /\/pdf\.worker\.min-[^/]+\.mjs$/.test(request.url))).toBe(true);
+    expect(seen.some((request) => /\/pdfjs-data-[^/]+\.js$/.test(request.url))).toBe(true);
 
     // Nothing of the files is kept anywhere the browser stores things.
     expect(await context.cookies()).toEqual([]);
@@ -364,8 +375,35 @@ test.describe('nothing is uploaded', () => {
             origin,
           ),
       ],
+      [
+        'a fetch from a worker inside a worker',
+        '/planted-nested',
+        (p) =>
+          p.evaluate(
+            (site) =>
+              new Promise<void>((done) => {
+                // As PDF.js's own worker is started by the tool worker, this worker starts one of its own, which fetches.
+                const inner = `fetch(${JSON.stringify(`${site}/planted-nested`)}).catch(() => {}).finally(() => postMessage('done'))`;
+                const outer = `const nested = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(inner)}], { type: 'text/javascript' }))); nested.onmessage = () => postMessage('done');`;
+                const worker = new Worker(URL.createObjectURL(new Blob([outer], { type: 'text/javascript' })));
+                worker.onmessage = () => done();
+              }),
+            origin,
+          ),
+      ],
+      [
+        'a blob: address of another origin',
+        '/planted-blob',
+        // A made-up record: a page cannot make a blob: address of another origin, so the watcher is handed one.
+        async () => undefined,
+      ],
     ];
     for (const [what, path, plant] of plants) {
+      if (path === '/planted-blob') {
+        const forged = [{ url: 'blob:https://example.org/planted-blob', method: 'GET', body: null, origin: 'https://example.org' }];
+        expect(violations(forged, origin, []).length, what).toBeGreaterThan(0);
+        continue;
+      }
       const seen = watch(context, page);
       await plant(page);
       await expect.poll(() => seen.some((request) => new URL(request.url).pathname === path), { message: `${what} was seen` }).toBe(true);
