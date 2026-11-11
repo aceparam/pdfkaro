@@ -39,8 +39,6 @@ describe('the thumbnail queue', () => {
     expect(next(queue, listing(file('a')))).toBeUndefined();
     queue = stop(started(want(emptyQueue, 'a'), 'a'));
     expect(next(queue, listing(file('a')))).toBe('a');
-    queue = finished(started(want(emptyQueue, 'a'), 'a'), 'a', 'stopped');
-    expect(next(queue, listing(file('a')))).toBe('a');
   });
 
   it('forgets a removed file everywhere, even while it is drawn', () => {

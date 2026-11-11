@@ -41,12 +41,11 @@ export function started(queue: ThumbnailQueue, id: string): ThumbnailQueue {
   return { ...queue, drawing: id };
 }
 
-/** Drawing ended: with a picture, without one, or stopped on purpose, in which case it is asked for again later. */
-export function finished(queue: ThumbnailQueue, id: string, outcome: 'drawn' | 'failed' | 'stopped'): ThumbnailQueue {
+/** Drawing ended, with a picture or without one. A drawing stopped on purpose goes through `stop` instead. */
+export function finished(queue: ThumbnailQueue, id: string, outcome: 'drawn' | 'failed'): ThumbnailQueue {
   const drawing = queue.drawing === id ? null : queue.drawing;
   if (outcome === 'drawn') return { ...queue, drawing, drawn: withAdded(queue.drawn, id) };
-  if (outcome === 'failed') return { ...queue, drawing, failed: withAdded(queue.failed, id) };
-  return { ...queue, drawing };
+  return { ...queue, drawing, failed: withAdded(queue.failed, id) };
 }
 
 /** A file was removed: it is forgotten everywhere. */

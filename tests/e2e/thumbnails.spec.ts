@@ -238,9 +238,14 @@ test.describe('thumbnails are forgotten with their files', () => {
     await page.context().route(/\/_astro\/pdfjs-data-[^/]+\.js$/, (route) => {
       held.push(route);
     });
+    const toolWorkers: string[] = [];
+    page.on('worker', (worker) => {
+      if (worker.url().includes('tool.worker')) toolWorkers.push(worker.url());
+    });
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf']);
     await expect.poll(() => held.length).toBeGreaterThan(0);
+    const before = toolWorkers.length;
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
     // Removing it stops that drawing on a fresh worker; from here on, let the data through.
     await page.context().unroute(/\/_astro\/pdfjs-data-[^/]+\.js$/);
@@ -249,6 +254,9 @@ test.describe('thumbnails are forgotten with their files', () => {
     await expect(items(page).filter({ hasText: 'mixed.pdf' }).locator('img')).toHaveCount(1);
     // One address only: mixed.pdf's. text.pdf's picture was dropped before an address was made.
     expect(await page.evaluate(() => (window as unknown as { made: string[] }).made.length)).toBe(1);
+    // Removing the file being drawn ended that worker, so the next picture was drawn on a fresh one and
+    // two were never drawn at once.
+    expect(toolWorkers.length).toBe(before + 1);
   });
 
   test('Start again and leaving the page revoke every picture', async ({ page }) => {

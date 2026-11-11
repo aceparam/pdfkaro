@@ -141,6 +141,23 @@ describe('the client asking for a thumbnail', () => {
     }
   });
 
+  it('cancels its time limit once the picture arrives, so a later read is never ended by it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { tool, workers } = client(50);
+      const asked = tool.thumbnail(file, undefined, 1, box);
+      workers[0]!.reply({ type: 'thumbnail', requestId: workers[0]!.sent[0]!.requestId, image: new Uint8Array([1]) });
+      await expect(asked).resolves.toEqual(new Uint8Array([1]));
+      const read = tool.inspect(file);
+      vi.advanceTimersByTime(200);
+      expect(workers[0]!.ended).toBe(false);
+      workers[0]!.reply({ type: 'inspected', requestId: workers[0]!.sent[1]!.requestId, outcome: { kind: 'ready', pages: 1 } });
+      await expect(read).resolves.toEqual({ kind: 'ready', pages: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lets a read that follows a stopped thumbnail finish on a fresh worker, so no file is left reading', async () => {
     const { tool, workers } = client();
     const asked = tool.thumbnail(file, undefined, 1, box);

@@ -49,9 +49,10 @@ Thumbnails are drawn in the visitor's browser, in workers. No request carries fi
 
 New requests, all to the site itself, all after a file is picked, and the same whatever the file:
 - PDF.js's two scripts;
-- the one script holding its fonts and decoders.
+- the one script holding its fonts and decoders;
+- our own small script that draws a thumbnail.
 
-The no-upload test's list of allowed files grows by exactly these three, by name.
+The no-upload test's list of allowed files grows by exactly these four, by name.
 
 Thumbnails are shown through `blob:` addresses. They exist only inside the browser. The no-upload test accepts `blob:` addresses of the site's own origin and nothing else.
 
@@ -101,7 +102,7 @@ None.
 - **Checks:**
   - `scripts/page-weight.mjs` names the new late-loading files.
   - `scripts/check-worker.mjs` also checks that PDF.js stays out of the worker file, and that the built PDF.js has no `eval` or `new Function`.
-  - The no-upload test allows the three new files by name and `blob:` addresses of the site's own origin.
+  - The no-upload test allows the four new files by name and `blob:` addresses of the site's own origin.
 - **Dependencies:**
   - `pdfjs-dist`, pinned to an exact version.
   - `@napi-rs/canvas`, already installed as PDF.js's optional dependency, pinned as a test-only dependency so unit tests can draw pages in Node.

@@ -211,6 +211,7 @@ PDF.js and its data are fetched when the first thumbnail is asked for, after the
 - **`form.pdf` was made again** with the other fixtures when `images.pdf` was added. The committed copy predated a change to `make.mjs` in `add-merge-pdf`, which gives the form field a neutral sample value. The fields and page are the same, and the Merge PDF engine tests pass on it.
 - **PDF.js repairs `damaged-xref.pdf`,** which qpdf cannot read. The page asks for thumbnails only of files qpdf has read, so this never shows.
 - **The PDF.js loader is its own module,** `src/workers/pdfjs-loader.ts`, so that starting PDF.js's worker once and stopping every drawing when it fails are unit tested.
+- **A flaky test from `add-merge-pdf` was fixed.** "The picker opens with Enter and with Space" failed about one run in ten under load: Playwright starts catching file choosers only once a listener is attached, which takes a round trip that a key press could beat. The test now listens before the page loads, and passed 50 runs in a row.
 - **Without the standard fonts, PDF.js still drew text** in Node, with a fallback font, so the font tests check that PDF.js asked for the font rather than counting ink.
 
 ## Risks / Trade-offs

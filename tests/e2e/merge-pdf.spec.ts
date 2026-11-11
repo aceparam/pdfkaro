@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test';
+import { expect, test, type BrowserContext, type FileChooser, type Page, type Request } from '@playwright/test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -32,6 +32,8 @@ const noSidewaysScroll = async (page: Page) =>
 async function open(page: Page) {
   await page.goto('/merge-pdf');
   await page.waitForLoadState('networkidle');
+  // Astro drops `ssr` from the island once the widget has started; wait for it, so nothing races its start.
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
 }
 
 /** Picks files and waits until every one has been read. */
@@ -70,11 +72,23 @@ test.describe('before a file is picked', () => {
   });
 
   test('the picker opens with Enter and with Space', async ({ page }) => {
+    // Listen before the page loads: Playwright starts catching file choosers only once a listener is
+    // attached, and that takes a round trip to the browser, which a key press could otherwise beat.
+    const choosers: FileChooser[] = [];
+    page.on('filechooser', (chooser) => choosers.push(chooser));
     await open(page);
     for (const key of ['Enter', ' ']) {
-      await picker(page).focus();
-      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press(key)]);
-      expect(chooser.isMultiple()).toBe(true);
+      await test.step(`key ${JSON.stringify(key)}`, async () => {
+        const before = choosers.length;
+        await picker(page).focus();
+        await expect(picker(page)).toBeFocused();
+        await page.keyboard.press(key);
+        await expect.poll(() => choosers.length).toBe(before + 1);
+        const chooser = choosers.at(-1)!;
+        expect(chooser.isMultiple()).toBe(true);
+        // Close it, as a visitor pressing Cancel would.
+        await chooser.setFiles([]);
+      });
     }
   });
 });
