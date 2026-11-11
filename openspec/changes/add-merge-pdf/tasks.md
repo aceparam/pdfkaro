@@ -16,6 +16,7 @@ Depends on `add-tool-widget` being merged.
 - [ ] 3.1 Add `src/engines/qpdf.ts`, add qpdf to `EngineTools` in the worker, and add `src/engines/inspect.ts` and `src/engines/tools/merge-pdf.ts`
 - [ ] 3.2 Unit test both against every fixture; check every result with qpdf's `--check`, its page count and its page order, and that a result with a protected first file is not encrypted
 - [ ] 3.3 Record the outcome for each fixture in the README
+- [ ] 3.4 Add the unit test that every browser tool in the registry has exactly one engine file, and every engine file a registry tool
 
 ## 4. Page
 

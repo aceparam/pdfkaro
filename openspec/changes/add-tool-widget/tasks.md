@@ -7,7 +7,7 @@ This change has no engine and mounts nothing on a page, so the engine, fixtures,
 - [ ] 1.1 Add `src/engines/types.ts`, with no library named
 - [ ] 1.2 Add `src/workers/messages.ts`, `tool.worker.ts` and `client.ts`; build workers as ES modules
 - [ ] 1.3 Add the lint rules: engines use no DOM or network; components and pages do not import engines or workers
-- [ ] 1.4 Add a unit test that registry tools and engine files match both ways, and a build check that no engine lands in the worker file
+- [ ] 1.4 Add a build check that no engine's code lands in the worker file
 
 ## 2. Widget logic
 

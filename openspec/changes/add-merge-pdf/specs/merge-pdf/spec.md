@@ -218,7 +218,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks files, types a password, merges and downloads, while watching every request from the page and its worker
-- **THEN** no request has a body, none goes to another origin, none carries a file name or the password in its address, and the test fails the build if any does
+- **THEN** after the pick only an exact list of the site's own files is requested (the worker, the workspace chunk, the engine and the WebAssembly), no request has a body, none goes to another origin, none carries a file name or the password in its address, and the test fails the build if any does
 
 #### Scenario: Storage and traces are looked at after a job
 
