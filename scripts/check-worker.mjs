@@ -47,5 +47,28 @@ for (const id of engineIds) {
   }
 }
 
+// PDF.js and its helper data load late, from files of their own, never inside the worker file.
+const pdfjsDisplay = files.filter((name) => /^pdf-[A-Za-z0-9_-]{8}\.js$/.test(name));
+const pdfjsWorker = files.filter((name) => /^pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs$/.test(name));
+const pdfjsData = files.filter((name) => /^pdfjs-data-[A-Za-z0-9_-]{8}\.js$/.test(name));
+for (const [what, found] of [['PDF.js', pdfjsDisplay], ["PDF.js's worker", pdfjsWorker], ["PDF.js's helper data", pdfjsData]]) {
+  if (found.length !== 1) problems.push(`Expected ${what} as one file of its own in ${assets}, found ${found.length}.`);
+}
+if (worker.includes('Invalid factory url') || worker.includes('pdfjsVersion')) problems.push('The worker file holds code from PDF.js.');
+if (worker.includes('data:application/octet-stream;base64') || worker.includes('data:font/')) problems.push("The worker file holds PDF.js's helper data.");
+
+// The native canvas package used by tests in Node must never be shipped. PDF.js names it,
+// for Node only, in its own script; nothing else may.
+for (const name of files.filter((each) => /\.m?js$/.test(each) && !pdfjsDisplay.includes(each))) {
+  if (readFileSync(join(assets, name), 'utf8').includes('@napi-rs')) problems.push(`${name} names @napi-rs, a package that is never shipped.`);
+}
+
+// PDF.js must run no generated code: the version is what protects against
+// CVE-2024-4367, and this keeps a later version from bringing such code back.
+for (const name of [...pdfjsDisplay, ...pdfjsWorker]) {
+  const source = readFileSync(join(assets, name), 'utf8');
+  if (/\beval\(|new Function\(/.test(source)) problems.push(`${name} holds eval( or new Function(.`);
+}
+
 if (problems.length > 0) fail(problems.join('\n'));
-console.log(`${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}.`);
+console.log(`${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js and its helper data in files of their own.`);

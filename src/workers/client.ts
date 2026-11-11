@@ -4,7 +4,7 @@
 
 import type { InspectOutcome, Progress } from '../engines/types';
 import type { FailureKind } from '../widget/state';
-import { isFromWorker, type ToWorker } from './messages';
+import { isFromWorker, type ThumbnailBox, type ToWorker } from './messages';
 
 /** The parts of a Worker the client uses, so tests can pass a made-up one. */
 export type WorkerLike = {
@@ -35,11 +35,38 @@ export class ToolClient {
   constructor(
     private readonly toolId: string,
     private readonly createWorker: () => WorkerLike,
+    /** How long a thumbnail may take before its worker is ended. Tests make it short. */
+    private readonly thumbnailLimitMs = 10_000,
   ) {}
 
   /** Reads one file, with a password if one was typed. */
   inspect(file: Blob, password?: string): Promise<InspectOutcome> {
     return this.send<InspectOutcome>({ type: 'inspect', requestId: 0, toolId: this.toolId, file, password });
+  }
+
+  /**
+   * Draws one page of a file to fit inside `box`, as PNG bytes. Gives null
+   * when the page cannot be drawn, and never fails the tool. If drawing takes
+   * longer than the limit, the worker is ended, which stops PDF.js too; the
+   * page asks for thumbnails only when nothing else is waiting on the worker.
+   */
+  async thumbnail(file: Blob, password: string | undefined, page: number, box: ThumbnailBox): Promise<Uint8Array | null> {
+    const reply = this.send<Uint8Array | null>({ type: 'thumbnail', requestId: 0, toolId: this.toolId, file, password, page, box });
+    reply.catch(() => {});
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        this.end();
+        resolve(null);
+      }, this.thumbnailLimitMs);
+    });
+    try {
+      return await Promise.race([reply, limit]);
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Runs the tool on the files in order. The worker is ended when the job ends, whatever the outcome. */
@@ -106,6 +133,10 @@ export class ToolClient {
       case 'done':
         this.pending.delete(data.requestId);
         request.resolve(data.outputs);
+        return;
+      case 'thumbnail':
+        this.pending.delete(data.requestId);
+        request.resolve(data.image);
         return;
       case 'failed':
         this.pending.delete(data.requestId);

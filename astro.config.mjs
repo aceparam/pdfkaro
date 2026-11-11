@@ -28,6 +28,8 @@ export default defineConfig({
     // Workers are ES modules, so each tool's engine stays its own file and is
     // fetched only when that tool runs.
     worker: { format: 'es' },
+    // PDF.js's Type 1 fonts and decoders, bundled as data for thumbnails (src/workers/pdfjs-data.ts).
+    assetsInclude: ['**/*.pfb', '**/*.wasm'],
   },
   integrations: [react()],
 });

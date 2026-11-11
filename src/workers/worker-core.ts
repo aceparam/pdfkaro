@@ -3,13 +3,15 @@
 
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FailureKind } from '../widget/state';
-import { isToWorker, type FromWorker } from './messages';
+import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
 
 export type WorkerDeps = {
   /** Loads a tool's engine by its id, or gives undefined when there is none. */
   loadEngine(toolId: string): Promise<EngineModule | undefined>;
   tools: EngineTools;
   post(message: FromWorker, transfer?: Transferable[]): void;
+  /** Draws one page as PNG bytes. Loaded late by the worker, so its code and PDF.js stay out of the worker file. */
+  renderPage?(file: Uint8Array, page: number, box: ThumbnailBox, password: string | undefined, tools: EngineTools): Promise<Uint8Array>;
 };
 
 class EngineLoadError extends Error {}
@@ -64,6 +66,22 @@ export function createHandler(deps: WorkerDeps) {
   return async function handle(data: unknown): Promise<void> {
     if (!isToWorker(data)) return;
     const { requestId } = data;
+    if (data.type === 'thumbnail') {
+      // A thumbnail never fails the tool: any problem gives no picture.
+      let image: Uint8Array | null = null;
+      try {
+        if (deps.renderPage) image = await deps.renderPage(await bytesOf(data.file), data.page, data.box, data.password, deps.tools);
+      } catch {
+        image = null;
+      }
+      if (!image) {
+        deps.post({ type: 'thumbnail', requestId, image: null });
+        return;
+      }
+      const moved = ownBuffers([image]);
+      deps.post({ type: 'thumbnail', requestId, image: moved.outputs[0]! }, moved.transfer);
+      return;
+    }
     try {
       const engine = await engineFor(data.toolId);
       if (data.type === 'inspect') {

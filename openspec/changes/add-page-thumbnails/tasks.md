@@ -4,23 +4,23 @@ No registry entry changes: thumbnails are a shared part, and Merge PDF needs no 
 
 ## 1. Dependencies and the fixed helper data
 
-- [ ] 1.1 Add `pdfjs-dist` at an exact version (6.5.438, or the newest release when building), after checking it is maintained and has no open advisory; pin `@napi-rs/canvas` exactly as a test-only dependency
-- [ ] 1.2 Add `src/workers/pdfjs-data.ts`: the standard fonts and the three decoders as data inside one script, with their licence files, by file name. Check in the first build that `?inline` handles `.pfb`, `.ttf` and `.wasm`; if not, write the module with a small build script instead
+- [x] 1.1 Add `pdfjs-dist` at an exact version (6.5.438, or the newest release when building), after checking it is maintained and has no open advisory; pin `@napi-rs/canvas` exactly as a test-only dependency
+- [x] 1.2 Add `src/workers/pdfjs-data.ts`: the standard fonts and the three decoders as data inside one script, with their licence files, by file name. Check in the first build that `?inline` handles `.pfb`, `.ttf` and `.wasm`; if not, write the module with a small build script instead
 - [ ] 1.3 Add `LICENSES.md` lines for `pdfjs-dist`, the Foxit and Liberation fonts (Liberation is GPL v2 with a font exception, shipped by the owner's decision), the decoders, and `@napi-rs/canvas` as test only
 - [ ] 1.4 Record the owner's two decisions of 11 Nov 2026 under "Owner decisions" in `CLAUDE.md`: one fixed set of helper data with no character maps, and shipping the Liberation fonts. Record the measured size of the data chunk (about 810 KB by gzip, against the 670 KB the owner was quoted) and point out the difference in the pull request
 
 ## 2. Thumbnail function
 
-- [ ] 2.1 Add `src/engines/thumbnail.ts`: `renderPage` with our `CanvasFactory` over `tools.canvas`, the no-op `FilterFactory`, a `BinaryDataFactory` over the fixed data that refuses character maps, the safe `getDocument` options (including `maxImageSize` and `verbosity: 0`), fitting inside the box, and closing the document every time
-- [ ] 2.2 Add `images.pdf` to the test set: a page with a JPEG 2000 image (bytes made once with Pillow and kept in `make.mjs`) and text and shapes in CMYK colour, so the decoders and colour handling are exercised; JBIG2 cannot be made on the build machine, which the README says
-- [ ] 2.3 Unit test it in Node through `@napi-rs/canvas` against every file in `tests/fixtures/`: the picture fits the box and is not blank, `mixed.pdf` page 2 is wide, the damaged files reject, `password.pdf` needs its password, `images.pdf` draws its image, and the real `getDocument` accepts the options, which leave every address unset except `wasmUrl: 'data:,/'`; record the outcomes in `tests/fixtures/README.md`
+- [x] 2.1 Add `src/engines/thumbnail.ts`: `renderPage` with our `CanvasFactory` over `tools.canvas`, the no-op `FilterFactory`, a `BinaryDataFactory` over the fixed data that refuses character maps, the safe `getDocument` options (including `maxImageSize` and `verbosity: 0`), fitting inside the box, and closing the document every time
+- [x] 2.2 Add `images.pdf` to the test set: a page with a JPEG 2000 image (bytes made once with Pillow and kept in `make.mjs`) and text and shapes in CMYK colour, so the decoders and colour handling are exercised; JBIG2 cannot be made on the build machine, which the README says
+- [x] 2.3 Unit test it in Node through `@napi-rs/canvas` against every file in `tests/fixtures/`: the picture fits the box and is not blank, `mixed.pdf` page 2 is wide, the damaged files reject, `password.pdf` needs its password, `images.pdf` draws its image, and the real `getDocument` accepts the options, which leave every address unset except `wasmUrl: 'data:,/'`; record the outcomes in `tests/fixtures/README.md`
 
 ## 3. Worker wiring
 
-- [ ] 3.1 Add `pdfjs`, `canvas` and `pdfjsData` to `tools` in `src/workers/tool.worker.ts`: load `pdf.min.mjs` and `pdfjs-data.ts` with `import()`, never statically; start `pdf.worker.min.mjs` (address from `?url`) once per tool worker as a nested module worker whose errors are kept inside it, and after which PDF.js is marked unavailable for that worker; make canvases with `OffscreenCanvas`
-- [ ] 3.2 Add the `thumbnail` request and reply to `src/workers/messages.ts`, with checks on page and box; handle it in `worker-core.ts` so that any drawing error becomes `image: null`; add `ToolClient.thumbnail()` with a 10-second limit that ends the worker, and that never calls `failAll`
-- [ ] 3.3 Unit test the message checks, the handler with a made-up `renderPage` that throws, the client's time limit, that a thumbnail failure leaves a pending `inspect` alone, and that an unavailable PDF.js answers `null` at once
-- [ ] 3.4 Extend `scripts/check-worker.mjs`: fail if PDF.js's code or the helper data is in the tool worker file, if `@napi-rs` appears in a built file other than PDF.js's own script, or if the built PDF.js has `eval(` or `new Function(`
+- [x] 3.1 Add `pdfjs`, `canvas` and `pdfjsData` to `tools` in `src/workers/tool.worker.ts`: load `pdf.min.mjs` and `pdfjs-data.ts` with `import()`, never statically; start `pdf.worker.min.mjs` (address from `?url`) once per tool worker as a nested module worker whose errors are kept inside it, and after which PDF.js is marked unavailable for that worker; make canvases with `OffscreenCanvas`
+- [x] 3.2 Add the `thumbnail` request and reply to `src/workers/messages.ts`, with checks on page and box; handle it in `worker-core.ts` so that any drawing error becomes `image: null`; add `ToolClient.thumbnail()` with a 10-second limit that ends the worker, and that never calls `failAll`
+- [x] 3.3 Unit test the message checks, the handler with a made-up `renderPage` that throws, the client's time limit, that a thumbnail failure leaves a pending `inspect` alone, and that an unavailable PDF.js answers `null` at once
+- [x] 3.4 Extend `scripts/check-worker.mjs`: fail if PDF.js's code or the helper data is in the tool worker file, if `@napi-rs` appears in a built file other than PDF.js's own script, or if the built PDF.js has `eval(` or `new Function(`
 
 ## 4. Page side
 
