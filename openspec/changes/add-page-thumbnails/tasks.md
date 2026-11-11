@@ -51,4 +51,4 @@ No registry entry changes: thumbnails are a shared part, and Merge PDF needs no 
 - [x] 8.1 Take screenshots of the files, loading, password, damaged and done states at 360px and 1280px, light and dark, with real thumbnails, and check each against "Banned patterns"
 - [x] 8.2 Update `design/README.md` where it calls thumbnails stand-ins, and "Where the project stands" in `CLAUDE.md`; say what remains for the Phase 0 gate, without claiming it
 - [x] 8.3 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
-- [ ] 8.4 Run the review panel (see the review-panel skill) and resolve its findings
+- [x] 8.4 Run the review panel (see the review-panel skill) and resolve its findings
