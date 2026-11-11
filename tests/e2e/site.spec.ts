@@ -48,6 +48,8 @@ test.describe('every page', () => {
       await page.goto(path);
       const small = await page.evaluate(() =>
         [...document.querySelectorAll('a, button, input')]
+          // A file input is hidden inside its label, which is what a finger presses.
+          .map((element) => (element.matches('input[type=file]') ? (element.closest('label') ?? element) : element))
           .filter((element) => element.getBoundingClientRect().height < 44 && !element.closest('[hidden]'))
           .map((element) => element.textContent || element.id),
       );

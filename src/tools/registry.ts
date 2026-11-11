@@ -119,5 +119,26 @@ export const tools: Tool[] = [
         sentence: 'Combine several PDFs into one. Files stay on your device.',
       },
     ],
+    widget: {
+      pickerLabel: 'Choose PDF files',
+      addLabel: 'Add more files',
+      dropHint: 'You can also drop files anywhere on this page, or paste them.',
+      acceptsName: 'a PDF',
+      listNote: 'They will be joined in this order.',
+      actionLabel: 'Merge and download',
+      writingLabel: 'Writing the merged file',
+      doneHeading: 'Your merged file is ready',
+      failedHeading: 'The merge did not finish.',
+      tooFewFiles: 'Add at least one more file to merge.',
+      outputSuffix: 'merged',
+      minFiles: 2,
+      multiple: true,
+      resultPagesAreSum: true,
+      // Both by the owner's decisions of 11 Nov 2026.
+      resultNotes: [
+        'Bookmarks and attachments come from the first file only.',
+        'The merged file has no password and no restrictions, even if a file you chose had them.',
+      ],
+    },
   },
 ];

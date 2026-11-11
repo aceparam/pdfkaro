@@ -34,6 +34,8 @@ jobs:
         run: npm run build
       - name: Page weight
         run: npm run weigh
+      - name: Engines stay out of the worker file
+        run: npm run check:worker
       - name: Links work under a sub-path
         run: npm run check:base
       - name: Install the test browser

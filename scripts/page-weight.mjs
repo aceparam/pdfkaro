@@ -15,9 +15,16 @@ import { brotliCompressSync, gzipSync, constants } from 'node:zlib';
 const dist = 'dist';
 const budgetBytes = 100 * 1024;
 
-// Files that load only after the visitor picks a file, as patterns on the path
-// inside dist/. Each needs a reason. Empty until the first engine arrives.
-const loadedLater = [];
+// Files that load only after the visitor picks a file. Each is named by the
+// base name the bundler gives it, followed only by its content hash, so a
+// new file cannot slip in under a broad pattern. Each has a reason.
+const loadedLater = [
+  { name: 'ToolWorkspace', type: 'js', why: 'the tool widget after a pick: the list, problems, progress and the result' },
+  { name: 'FilePicker', type: 'css', why: "a copy of the picker's styles, which the workspace chunk links; the page already has them" },
+  { name: 'tool.worker', type: 'js', why: 'the one tool worker, started after a pick' },
+  { name: 'merge-pdf', type: 'js', why: 'the Merge PDF engine, which the worker loads' },
+  { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
+].map((entry) => ({ ...entry, pattern: new RegExp(`^_astro/${entry.name.replace('.', '\\.')}[.-][A-Za-z0-9_-]{8}\\.${entry.type}$`) }));
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -102,7 +109,17 @@ for (const htmlFile of pages) {
 
 const uncounted = everyFile
   .filter((file) => /\.(?:css|m?js)$/.test(file) && !reached.has(file))
-  .filter((file) => !loadedLater.some((pattern) => pattern.test(relative(dist, file).split(sep).join('/'))));
+  .filter((file) => !loadedLater.some((entry) => entry.pattern.test(relative(dist, file).split(sep).join('/'))));
+
+// For information: what a visitor fetches once they pick a file, with the WebAssembly.
+const later = everyFile.filter(
+  (file) => !reached.has(file) && (file.endsWith('.wasm') || loadedLater.some((entry) => entry.pattern.test(relative(dist, file).split(sep).join('/')))),
+);
+if (later.length > 0) {
+  const gzip = later.reduce((sum, file) => sum + gzipSync(readFileSync(file), { level: 9 }).length, 0);
+  console.log(`\nAfter a pick, at most this more is fetched (${later.length} files, with the WebAssembly):`);
+  console.log(`${kb(gzip)}  gzip`);
+}
 
 if (uncounted.length > 0) {
   console.error('\nThese files are in the build but no page was seen to load them, so they were not counted:');

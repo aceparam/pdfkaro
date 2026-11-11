@@ -14,10 +14,15 @@ export const registryDescriptions = registryPages(tools).map(({ page }) => page.
 /** The site pages linked from the footer. */
 export const sitePages = footerLinks.map((link) => link.href);
 
-/** Pages with nothing to interact with yet. Tool pages leave this list when the tool widget arrives. */
-export const staticPages = [...toolPages, ...sitePages, '/no-such-page'];
+/** Tool URLs whose tool has its widget, and so ships the one island. */
+export const widgetPages = registryPages(tools)
+  .filter(({ tool }) => tool.widget)
+  .map(({ page }) => `/${page.slug}`);
 
-export const allPages = ['/', ...staticPages];
+/** Pages with nothing to interact with yet. Tool pages leave this list when the tool widget arrives. */
+export const staticPages = [...toolPages.filter((path) => !widgetPages.includes(path)), ...sitePages, '/no-such-page'];
+
+export const allPages = ['/', ...toolPages, ...sitePages, '/no-such-page'];
 
 // Words that SPEC.md bans from every page.
 export const bannedWords = [

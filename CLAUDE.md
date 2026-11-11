@@ -15,9 +15,9 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 **Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in these changes:
 
 1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
-2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Built; not yet mounted on any page.
-3. `add-merge-pdf`: Merge PDF end to end, with its page text. Step 6. Proposed; depends on 2.
-4. Then: page thumbnails, which Merge PDF needs to pass "Tool page anatomy" in full.
+2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Built and reviewed.
+3. `add-merge-pdf`: Merge PDF end to end, with its page text, on the same pull request as 2. Step 6. Built. Its page text waits for the owner's review.
+4. Then: page thumbnails, which Merge PDF needs to pass "Tool page anatomy" in full. This is the remaining Phase 0 work, with the multilingual test file, opening the output by hand in Chrome, Firefox, Adobe Reader and macOS Preview, and checks in Firefox, Safari and phone browsers. The Phase 0 gate is not passed yet.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -77,7 +77,9 @@ Three more that the agent decided at the same time without asking, because they 
 - `src/tools/queries.ts` and `filter.ts` hold rules as plain functions. `src/hooks/` holds hooks. None of them render.
 - `src/components/` holds React components, one folder each, with a CSS Module beside it when it needs styles. Components get what they show through props. From `src/tools/` they may import only `filter` and types, and they never import an engine or a worker; lint enforces this.
 - `src/widget/` holds the tool widget's rules as plain functions: the steps a tool goes through (`state.ts`), shared words and numbers (`format.ts`), and the accepted-type check (`accept.ts`).
-- `src/engines/` holds engines: pure functions from bytes to bytes, one file per tool under `src/engines/tools/`, named by the tool's id. They use no page and no network; lint enforces this. `types.ts` is the contract.
+- `src/engines/` holds engines: pure functions from bytes to bytes, one file per tool under `src/engines/tools/`, named by the tool's id. They use no page and no network; lint enforces this. `types.ts` is the contract. `qpdf.ts` wraps qpdf compiled to WebAssembly, and `inspect.ts` reads one PDF before a job; libraries reach an engine through `tools`, which the worker or a test fills in.
+- `src/content/tools/` holds the text below each tool, one Markdown file per page slug, rendered to plain HTML at build time.
+- `tests/fixtures/` holds the shared test PDFs, made by `make.mjs`; its README says what each engine does with each file.
 - `src/workers/` holds the one tool worker, its typed messages, the logic it runs (`worker-core.ts`, tested in Node) and the page's client. The worker is ended after every job.
 - `src/pages/` and `src/layouts/` hold thin `.astro` files that read the registry and pass props to components. A component with no `client:` directive ships no script.
 - `src/styles/site.css` is the one global stylesheet.
@@ -139,6 +141,7 @@ All but `developer` are read-only.
 - `npm run check` runs the type check.
 - `npm test` runs the unit tests (Vitest).
 - `npm run weigh` adds up the compressed size of each built page and fails over 100 KB. Run it after a build.
+- `npm run check:worker` checks the built site: each engine is its own file, loaded late by the worker. Run it after a build.
 - `npm run check:base` builds the site as a preview under a sub-path and fails if any link, stylesheet or script would break there. Never write a link as a bare `/path`; pass it through `withBase`.
 - `npm run e2e` runs the end-to-end tests (Playwright) against the built site, at 360px and 1280px. Run it after a build, and add `-- --trace off` unless a trace is wanted.
 - Astro sends anonymous usage figures to its makers unless `ASTRO_TELEMETRY_DISABLED=1` is set. CI and agent sessions set it. On your own machine, run `npx astro telemetry disable` once.

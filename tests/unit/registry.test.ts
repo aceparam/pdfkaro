@@ -72,4 +72,24 @@ describe('registry', () => {
       expect(Object.values(page).join(' ')).not.toContain('!');
     }
   });
+
+  it('gives Merge PDF its widget words: at least two files, several at once, named after the first file', () => {
+    const words = tools.find((tool) => tool.id === 'merge-pdf')?.widget;
+    expect(words).toBeDefined();
+    expect(words).toMatchObject({ actionLabel: 'Merge and download', outputSuffix: 'merged', minFiles: 2, multiple: true, resultPagesAreSum: true });
+    // The owner's decisions of 11 Nov 2026 are said with the result.
+    expect(words!.resultNotes.join(' ')).toMatch(/first file only/);
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+  });
+
+  it('keeps widget words plain: no exclamation marks, and nothing empty', () => {
+    for (const tool of tools) {
+      if (!tool.widget) continue;
+      const text = Object.values(tool.widget).flat().filter((value) => typeof value === 'string') as string[];
+      for (const value of text) {
+        expect(value.trim().length).toBeGreaterThan(0);
+        expect(value).not.toContain('!');
+      }
+    }
+  });
 });

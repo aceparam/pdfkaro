@@ -2,6 +2,7 @@
 // One page for every URL in the registry.
 import Base from '../layouts/Base.astro';
 import { ToolShell } from '../components/ToolShell/ToolShell';
+import { ToolWidget } from '../components/ToolWidget/ToolWidget';
 import { tools } from '../tools/registry';
 import { allPages, relatedItems } from '../tools/queries';
 import type { PageWithTool } from '../tools/queries';
@@ -13,9 +14,15 @@ export function getStaticPaths() {
 type Props = PageWithTool;
 
 const { tool, page } = Astro.props;
+
+// The text below each tool, written in Markdown and rendered to plain HTML at build time.
+const texts = import.meta.glob<{ Content: unknown }>('../content/tools/*.md', { eager: true });
+const Below = texts[`../content/tools/${page.slug}.md`]?.Content as ((props: object) => unknown) | undefined;
 ---
 
 <Base title={page.title} description={page.description}>
-  {/* The tool itself and the text below it arrive with the tool's own change. */}
-  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool, import.meta.env.BASE_URL)} />
+  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool, import.meta.env.BASE_URL)}>
+    {tool.widget && <ToolWidget client:load toolId={tool.id} accepts={page.accepts ?? tool.accepts} words={tool.widget} />}
+    {Below && <Fragment slot="below"><Below /></Fragment>}
+  </ToolShell>
 </Base>

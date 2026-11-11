@@ -15,17 +15,20 @@
     "test": "vitest run",
     "weigh": "node scripts/page-weight.mjs",
     "check:base": "node scripts/check-base.mjs",
+    "check:worker": "node scripts/check-worker.mjs",
     "e2e": "playwright test",
     "spec": "openspec validate --all --strict --no-interactive"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.5",
+    "@neslinesli93/qpdf-wasm": "0.3.1",
     "astro": "^7.4.8",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@cantoo/pdf-lib": "2.11.1",
     "@eslint/js": "^10.0.1",
     "@fission-ai/openspec": "^1.17.0",
     "@playwright/test": "1.63.0",

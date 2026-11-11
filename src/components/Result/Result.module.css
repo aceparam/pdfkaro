@@ -15,8 +15,12 @@
   font-weight: 700;
 }
 .download {
+  /* A link drawn as the main button: the same size and centring as a button element. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   text-decoration: none;
-  text-align: center;
 }
 .note {
   margin: 0;
