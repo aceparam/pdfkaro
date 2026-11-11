@@ -11,7 +11,7 @@ Phase 0 steps 4 and 5 in `CLAUDE.md`.
 - **Worker plumbing.** Typed messages, progress, cancel, and late loading: a worker and engine are fetched only after a file is picked. One worker entry serves every tool; a tool adds one engine file.
 - **Widget logic, apart from views.** The steps a tool goes through (empty, getting ready, files listed, working, done, failed) as a plain reducer, plus file sizes, counts, output names and reordering, all tested in Node.
 - **Shared components.** `ToolWidget` (the one island), `FilePicker`, `ToolWorkspace` (loaded after a pick), `PageGrid`, `Result`, and small parts: `ProgressBar`, `Notice`, `PasswordField`.
-- **A check that a file is a PDF** before any engine loads, by its first bytes.
+- **A check that a file is of a type the tool accepts** before any engine loads, from the registry's list; for PDFs, by its first bytes.
 - **Tests** in Node for the reducer, the formatting, the PDF check, the worker messages and the client (against a fake worker), and for the components rendered to HTML.
 
 Not in this change:
@@ -38,3 +38,5 @@ None.
 - **Open decisions touched:** none.
 - **Dependencies:** none.
 - **Page weight:** `ToolWidget` and `FilePicker` will be the only script on a tool page before a pick, beside React. Measured in `add-merge-pdf`, when they are first mounted.
+- **Build setting:** workers are built as ES modules, so each engine stays its own file.
+- **Question for the owner:** `SPEC.md` says a damaged file shows a link to Repair PDF. Repair PDF is a phase 2 tool, so until then the link would lead nowhere. This change shows the link only once Repair PDF is published, and offers to carry on without the file meanwhile. The owner may want it otherwise.

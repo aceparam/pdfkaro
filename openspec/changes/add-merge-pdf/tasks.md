@@ -13,8 +13,8 @@ Depends on `add-tool-widget` being merged.
 
 ## 3. Engine
 
-- [ ] 3.1 Add `src/engines/inspect.ts` and `src/engines/tools/merge-pdf.ts`
-- [ ] 3.2 Unit test both against every fixture; check every result with qpdf's `--check`, its page count and its page order
+- [ ] 3.1 Add `src/engines/qpdf.ts`, add qpdf to `EngineTools` in the worker, and add `src/engines/inspect.ts` and `src/engines/tools/merge-pdf.ts`
+- [ ] 3.2 Unit test both against every fixture; check every result with qpdf's `--check`, its page count and its page order, and that a result with a protected first file is not encrypted
 - [ ] 3.3 Record the outcome for each fixture in the README
 
 ## 4. Page
@@ -25,7 +25,8 @@ Depends on `add-tool-widget` being merged.
 ## 5. End-to-end tests
 
 - [ ] 5.1 Every path listed in design decision 4, at 360px and 1280px
-- [ ] 5.2 The no-upload test
+- [ ] 5.2 The no-upload test, its control test, and the storage and traces check
+- [ ] 5.4 Start again and leaving the page leave no file, name or download link behind
 - [ ] 5.3 The responsiveness test with the 500-page file
 
 ## 6. Checks and housekeeping

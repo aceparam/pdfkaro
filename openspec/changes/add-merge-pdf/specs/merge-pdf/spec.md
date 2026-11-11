@@ -154,6 +154,11 @@ When a file needs a password the page SHALL ask for it in a labelled field that 
 - **WHEN** the visitor presses "Leave this file out"
 - **THEN** the file leaves the list and the rest can be merged
 
+#### Scenario: The first file was protected
+
+- **WHEN** the first file had a password or restrictions and the merge finishes
+- **THEN** the merged file has no password and no restrictions
+
 #### Scenario: A file has restrictions but no password
 
 - **WHEN** a visitor chooses a file with print and edit restrictions and no password to open it
@@ -167,6 +172,11 @@ When a file cannot be read as a PDF the page SHALL say that the file is damaged,
 
 - **WHEN** a visitor chooses two good files and one that is cut off part way
 - **THEN** the page says "part-3.pdf is damaged and cannot be read.", lists the two good files, and offers "Merge the other 2 files"
+
+#### Scenario: A damaged file is chosen on its own
+
+- **WHEN** a visitor chooses only one file and it is damaged
+- **THEN** the page says it is damaged and cannot be read, offers no "Merge the other" button, and returns to the file picker
 
 #### Scenario: Only one good file is left
 
@@ -210,10 +220,20 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 - **WHEN** the end-to-end test picks files, types a password, merges and downloads, while watching every request from the page and its worker
 - **THEN** no request has a body, none goes to another origin, none carries a file name or the password in its address, and the test fails the build if any does
 
-#### Scenario: Storage is looked at after a job
+#### Scenario: Storage and traces are looked at after a job
 
 - **WHEN** a job has finished
-- **THEN** cookies, local storage, session storage and IndexedDB are empty, and the address of the page has not changed
+- **THEN** cookies, local storage, session storage, IndexedDB, the Cache API and the private file system hold nothing of the files, and no file name or password is in the page title, the page address or the console
+
+#### Scenario: The watcher is shown to work
+
+- **WHEN** a control test plants a POST, a `sendBeacon`, an image address holding a file name, and a fetch from the worker
+- **THEN** the no-upload watcher fails on each one
+
+#### Scenario: The visitor starts again or leaves
+
+- **WHEN** the visitor presses "Start again", or leaves the page and comes back with Back
+- **THEN** the files, any password and the download link are gone, and the worker that held them has been ended
 
 ### Requirement: The words on the page
 
