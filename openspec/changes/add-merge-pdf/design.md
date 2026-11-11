@@ -61,5 +61,6 @@
 
 - **Later files lose bookmarks and attachments,** by the owner's decision; the page says so.
 - **Progress is by file and percentage, not by page;** qpdf reports no pages.
+- **This qpdf build repairs less than desktop qpdf.** A cross-reference table whose offsets are a few bytes out, which desktop qpdf rebuilds, makes this build stop with an error, so `damaged-xref.pdf` shows as damaged. For Merge PDF that is the right state to show; for Repair PDF, later, it matters. Recorded for the owner in `CLAUDE.md`.
 - **A merge holds about four copies of the files at its peak:** the worker's copy of the inputs, qpdf's copy of them, and the result inside qpdf and once read out. The 100 MB warning covers large jobs. Letting an engine drop the worker's copy once qpdf has it would save one.
 - **qpdf's WebAssembly is compiled for each call,** because a fresh qpdf is made each time. Measured in Chromium with the processor slowed four times, reading eight files took 394 ms in all, as Chrome keeps the compiled code. Firefox and Safari are not measured; if they are slow, the worker can keep the compiled module and still make a fresh instance per call.

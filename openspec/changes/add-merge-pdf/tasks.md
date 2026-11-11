@@ -40,4 +40,13 @@ Depends on `add-tool-widget` being merged.
 - [x] 6.5 Update "Where the project stands" in `CLAUDE.md`; do not claim the Phase 0 gate; name thumbnails as the remaining Phase 0 work
 - [x] 6.6 Take screenshots of each state at 360px and 1280px, light and dark, and check each against "Banned patterns"
 - [x] 6.7 Run `npm audit` and `openspec validate --all --strict`
-- [ ] 6.8 Run the review panel (see the review-panel skill) and resolve its findings
+- [x] 6.8 Run the review panel (see the review-panel skill) and resolve its findings (section 7)
+
+## 7. Found by the review panel, stage 2
+
+- [x] 7.1 A readable file that makes qpdf warn (exit 3) was called damaged, because the page count was read from the last line of all output. qpdf's answer and its warnings are now kept apart, and `warning.pdf` joins the test set
+- [x] 7.2 The Back test could not fail: Playwright's Chromium never keeps a page for Back. The test now sends `pagehide` and looks at the page straight after, and was shown failing with the handler removed
+- [x] 7.3 The control test now plants each request at its own address and checks that exact request was seen; the main no-upload test checks that the worker's WebAssembly request was seen
+- [x] 7.4 No test is skipped: tests that need a mouse or run once are tagged `@desktop` and left out of the phone project in the Playwright config
+- [x] 7.5 Old messages leave the status line when the problem goes; the order note is shown only with two files or more; the design screens no longer use `role="alert"`
+- [x] 7.6 The sub-path check reads built scripts too; Emscripten's own notices no longer reach the console; the design records the cost of compiling qpdf per call, the peak memory, and that this qpdf build repairs less than desktop qpdf

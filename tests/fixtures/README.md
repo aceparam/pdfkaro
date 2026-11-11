@@ -17,6 +17,7 @@ The encrypted files come out different on each run, because encryption uses rand
 | `scanned.pdf` | A scanned document: each page is one image, with no text layer | 2 |
 | `password.pdf` | Needs a password to open. The password is `open-sesame` | 3 |
 | `restricted.pdf` | Print and edit restrictions, but no password to open it | 3 |
+| `warning.pdf` | A small fault: the page tree names its page count twice. qpdf reads it and warns | 3 |
 | `damaged-xref.pdf` | A cross-reference table that points to the wrong places | |
 | `damaged-cut.pdf` | Cut off part way | |
 | `not-a-pdf.pdf` | A text file with a `.pdf` name | |
@@ -43,6 +44,7 @@ node tests/fixtures/make-large.mjs
 | `scanned.pdf` | Ready, 2 pages |
 | `password.pdf` | Needs a password. A wrong one gives "wrong password". `open-sesame` gives ready, 3 pages |
 | `restricted.pdf` | Ready, 3 pages; no password asked for |
+| `warning.pdf` | Ready, 3 pages. qpdf finishes with a warning (exit 3), which is not damage |
 | `damaged-xref.pdf` | Damaged: qpdf cannot read it |
 | `damaged-cut.pdf` | Damaged: qpdf cannot read it |
 | `not-a-pdf.pdf` | Damaged. On the page it is turned away before this, because it does not start like a PDF |
@@ -61,6 +63,7 @@ Each readable file was merged both before and after `text.pdf`. Each result pass
 | `scanned.pdf` | Merged |
 | `password.pdf` | Merged when its password is given; the result has no password. Without the password the merge fails |
 | `restricted.pdf` | Merged; the result has no restrictions, even when this file is first |
+| `warning.pdf` | Merged; qpdf's warning does not stop the job |
 | `damaged-xref.pdf` | Not merged: the job fails and hands back nothing |
 | `damaged-cut.pdf` | Not merged: the job fails and hands back nothing |
 | `not-a-pdf.pdf` | Not merged: the job fails and hands back nothing |

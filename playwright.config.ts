@@ -11,7 +11,8 @@ export default defineConfig({
     trace: 'off',
   },
   projects: [
-    { name: 'phone', use: { viewport: { width: 360, height: 740 } } },
+    // Tests tagged @desktop need a mouse or need to run only once.
+    { name: 'phone', use: { viewport: { width: 360, height: 740 } }, grepInvert: /@desktop/ },
     { name: 'desktop', use: { viewport: { width: 1280, height: 800 } } },
   ],
   webServer: {

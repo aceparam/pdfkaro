@@ -42,6 +42,8 @@ describe('reading a file before the job', () => {
     ['password.pdf', 'not-it', { kind: 'wrong-password' }],
     ['password.pdf', 'open-sesame', { kind: 'ready', pages: 3 }],
     ['restricted.pdf', undefined, { kind: 'ready', pages: 3 }],
+    // qpdf reads it with a warning and exits with 3: still a good file.
+    ['warning.pdf', undefined, { kind: 'ready', pages: 3 }],
     ['damaged-xref.pdf', undefined, { kind: 'damaged' }],
     ['damaged-cut.pdf', undefined, { kind: 'damaged' }],
     ['not-a-pdf.pdf', undefined, { kind: 'damaged' }],
@@ -83,6 +85,7 @@ describe('merging', () => {
     ['form.pdf', undefined, 1],
     ['mixed.pdf', undefined, 4],
     ['rich.pdf', undefined, 2],
+    ['warning.pdf', undefined, 3],
   ];
   it.each(readable)('merges %s before and after the ordinary file', async (name, password, pages) => {
     for (const order of [[name, 'text.pdf'], ['text.pdf', name]]) {

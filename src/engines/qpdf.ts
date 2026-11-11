@@ -25,8 +25,12 @@ export type Qpdf = {
   /** Writes a file into qpdf's memory. Paths are made up by the engine, never taken from a file name. */
   write(path: string, data: Uint8Array): void;
   read(path: string): Uint8Array;
-  /** Runs qpdf with these arguments and gives its exit code and what it printed. */
-  call(args: string[]): { code: number; printed: string };
+  /**
+   * Runs qpdf with these arguments. Gives its exit code, what it wrote as its
+   * answer (`out`, standard output) and everything it printed (`printed`,
+   * standard output and its warnings and errors together).
+   */
+  call(args: string[]): { code: number; out: string; printed: string };
   /** Called with each line qpdf prints while it runs, such as write progress. */
   onLine: ((line: string) => void) | null;
 };
@@ -43,7 +47,9 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
   const loaded = (await load()) as { default?: QpdfFactory } | QpdfFactory;
   const factory = (typeof loaded === 'function' ? loaded : loaded.default) as QpdfFactory;
 
-  let line = '';
+  // One line in progress for each stream, so a warning never runs into an answer.
+  const lines = { out: '', err: '' };
+  let out = '';
   let printed = '';
   const qpdf: Qpdf = {
     onLine: null,
@@ -51,8 +57,10 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
     write: (path, data) => module.FS.writeFile(path, data),
     read: (path) => module.FS.readFile(path),
     call(args) {
+      out = '';
       printed = '';
-      line = '';
+      lines.out = '';
+      lines.err = '';
       let code: number;
       try {
         code = module.callMain(args);
@@ -62,20 +70,23 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
         if (typeof status !== 'number') throw error;
         code = status;
       }
-      if (line) take();
-      return { code, printed };
+      if (lines.out) take('out');
+      if (lines.err) take('err');
+      return { code, out, printed };
     },
   };
 
-  function take() {
+  function take(stream: 'out' | 'err') {
+    const line = lines[stream];
+    lines[stream] = '';
+    if (stream === 'out') out += `${line}\n`;
     printed += `${line}\n`;
     qpdf.onLine?.(line);
-    line = '';
   }
-  const capture = (code: number | null) => {
+  const capture = (stream: 'out' | 'err') => (code: number | null) => {
     if (code === null) return;
-    if (code === 10) take();
-    else line += String.fromCharCode(code);
+    if (code === 10) take(stream);
+    else lines[stream] += String.fromCharCode(code);
   };
 
   const module = await factory({
@@ -84,7 +95,7 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
     // Emscripten's own notices, such as an abort, go nowhere rather than to the console.
     print: () => {},
     printErr: () => {},
-    preRun: [(m: QpdfModule) => m.FS.init(null, capture, capture)],
+    preRun: [(m: QpdfModule) => m.FS.init(null, capture('out'), capture('err'))],
   });
   return qpdf;
 }

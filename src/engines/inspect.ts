@@ -9,9 +9,11 @@ export const inspectPdf: Inspector = async (file, password, tools) => {
   qpdf.write('/in.pdf', file);
   // A password goes only inside --password=, where qpdf takes it as it is.
   const args = password === undefined ? [] : [`--password=${password}`];
-  const { code, printed } = qpdf.call([...args, '--show-npages', '/in.pdf']);
+  const { code, out, printed } = qpdf.call([...args, '--show-npages', '/in.pdf']);
   if (finished(code)) {
-    const pages = Number.parseInt(printed.trim().split('\n').pop() ?? '', 10);
+    // The answer is the one line of digits qpdf writes to standard output; warnings go elsewhere.
+    const answer = out.split('\n').find((line) => /^\d+$/.test(line.trim()));
+    const pages = answer === undefined ? Number.NaN : Number(answer.trim());
     return Number.isInteger(pages) && pages > 0 ? { kind: 'ready', pages } : { kind: 'damaged' };
   }
   if (saidInvalidPassword(printed)) return password === undefined ? { kind: 'needs-password' } : { kind: 'wrong-password' };

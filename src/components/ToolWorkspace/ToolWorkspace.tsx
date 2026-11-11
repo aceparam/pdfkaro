@@ -143,6 +143,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     const [beforeId, beforeStatus] = before.split(':');
     const opened = beforeStatus?.endsWith('password') === true && state.files.some((file) => file.id === beforeId && file.status === 'ready');
     if (!problem) {
+      // The problem has gone, so its words leave the status line too.
+      if (before) setAnnouncementText('');
       if (opened) mainRef.current?.focus();
       return;
     }
@@ -231,7 +233,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
             {fileCount(count.files)}
             {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
-            {words.listNote && anyReady ? ` ${words.listNote}` : ''}
+            {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
           </p>
 
           {state.refused.length > 0 && (

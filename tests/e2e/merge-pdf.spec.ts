@@ -102,8 +102,8 @@ test.describe('merging', () => {
     await noSidewaysScroll(page);
   });
 
-  test('reorders with a mouse drag on a wide screen', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === 'phone', 'Touch reordering uses the buttons; drag is for a mouse.');
+  // Touch reordering uses the buttons; drag is for a mouse. The phone project leaves out @desktop tests.
+  test('reorders with a mouse drag on a wide screen @desktop', async ({ page }) => {
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf', 'scanned.pdf']);
     await items(page).nth(2).dragTo(items(page).nth(0));
@@ -302,7 +302,8 @@ test.describe('nothing is uploaded', () => {
 
     const secrets = ['text.pdf', 'password.pdf', 'rich.pdf', password];
     expect(violations(seen, new URL(baseURL!).origin, secrets)).toEqual([]);
-    expect(seen.length).toBeGreaterThan(0);
+    // The worker's own requests are watched too: the WebAssembly file is fetched from the worker.
+    expect(seen.some((request) => request.url.endsWith('.wasm'))).toBe(true);
 
     // Nothing of the files is kept anywhere the browser stores things.
     expect(await context.cookies()).toEqual([]);
@@ -331,11 +332,13 @@ test.describe('nothing is uploaded', () => {
   test('the watcher catches a POST, a beacon, an image address with a file name, and a fetch from a worker', async ({ page, context, baseURL }) => {
     const origin = new URL(baseURL!).origin;
     await open(page);
-    const plants: [string, (page: Page) => Promise<unknown>][] = [
-      ['a POST', (p) => p.evaluate(() => fetch('/merge-pdf', { method: 'POST', body: 'x' }).catch(() => {}))],
-      ['a beacon', (p) => p.evaluate(() => navigator.sendBeacon('/merge-pdf', 'text.pdf'))],
+    // Each plant goes to its own address, and the test checks that very request was seen and judged wrong.
+    const plants: [string, string, (page: Page) => Promise<unknown>][] = [
+      ['a POST', '/planted-post', (p) => p.evaluate(() => fetch('/planted-post', { method: 'POST', body: 'x' }).catch(() => {}))],
+      ['a beacon', '/planted-beacon', (p) => p.evaluate(() => navigator.sendBeacon('/planted-beacon', 'text.pdf'))],
       [
         'an image address',
+        '/text.pdf.png',
         (p) =>
           p.evaluate(
             () =>
@@ -348,42 +351,69 @@ test.describe('nothing is uploaded', () => {
       ],
       [
         'a fetch from a worker',
+        '/planted-worker',
         (p) =>
           p.evaluate(
-            () =>
+            (site) =>
               new Promise<void>((done) => {
-                const source = "fetch('/merge-pdf').finally(() => postMessage('done'))";
+                // A worker made from a blob has no address of its own to resolve "/planted-worker" against, so the full address is given.
+                const source = `fetch(${JSON.stringify(`${site}/planted-worker`)}).catch(() => {}).finally(() => postMessage('done'))`;
                 const worker = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
                 worker.onmessage = () => done();
               }),
+            origin,
           ),
       ],
     ];
-    for (const [what, plant] of plants) {
+    for (const [what, path, plant] of plants) {
       const seen = watch(context, page);
       await plant(page);
-      await page.waitForTimeout(300);
-      expect(violations(seen, origin, ['text.pdf']).length, what).toBeGreaterThan(0);
+      await expect.poll(() => seen.some((request) => new URL(request.url).pathname === path), { message: `${what} was seen` }).toBe(true);
+      const planted = seen.filter((request) => new URL(request.url).pathname === path);
+      expect(violations(planted, origin, ['text.pdf']).length, what).toBeGreaterThan(0);
     }
   });
+});
 
-  test('Start again, and leaving and coming back with Back, leave no file, name or download link', async ({ page }) => {
+test.describe('leaving the page', () => {
+  // A browser may keep a page it leaves, to show it again on Back. Playwright's
+  // Chromium never does, so Back would load the page afresh and prove nothing.
+  // Instead the test sends the event the browser sends on leaving, as it would
+  // for a page it keeps, and looks at the page straight after.
+  test('leaving the page forgets the files, names and download link at once', async ({ page }) => {
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf']);
-    await mergeAndDownload(page);
+    await mainButton(page).click();
+    await expect(page.getByRole('link', { name: 'Download' })).toBeVisible();
+    const left = await page.evaluate(() => {
+      dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      const widget = document.querySelector('astro-island')!;
+      return {
+        text: widget.textContent ?? '',
+        links: widget.querySelectorAll('a[href^="blob:"]').length,
+        files: (widget.querySelector('input[type=file]') as HTMLInputElement | null)?.files?.length ?? 0,
+      };
+    });
+    expect(left.text).not.toContain('text.pdf');
+    expect(left.text).not.toContain('mixed.pdf');
+    expect(left.links).toBe(0);
+    expect(left.files).toBe(0);
+  });
+
+  test('coming back with Back shows the picker alone', async ({ page }) => {
+    await open(page);
+    await pick(page, ['text.pdf', 'mixed.pdf']);
     await page.goto('/');
     await page.goBack();
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('label', { hasText: 'Choose PDF files' })).toBeVisible();
     await expect(page.locator('main')).not.toContainText('text.pdf');
-    await expect(page.locator('main')).not.toContainText('mixed.pdf');
-    await expect(page.getByRole('link', { name: 'Download' })).toHaveCount(0);
     expect(await picker(page).evaluate((input: HTMLInputElement) => input.files?.length ?? 0)).toBe(0);
   });
 });
 
 test.describe('the page stays responsive', () => {
-  test('merging the 500-page file twice over blocks the page for no more than 100 ms at a time', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === 'phone', 'Run once; the width does not change the work.');
+  // Run once, at the desktop width; the width does not change the work.
+  test('merging the 500-page file twice over blocks the page for no more than 100 ms at a time @desktop', async ({ page }) => {
     await open(page);
     await pick(page, ['pages-500.pdf', 'pages-500.pdf']);
     await page.evaluate(() => {

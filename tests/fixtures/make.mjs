@@ -125,6 +125,12 @@ const brokenTable = source.replace(/\n(\d{10}) 00000 n/g, (_, offset) => `\n${St
 if (brokenTable === source) throw new Error('The cross-reference table was not found.');
 save('damaged-xref.pdf', Buffer.from(brokenTable, 'latin1'));
 
+// 6b. A readable file with a small fault: its page tree has /Count twice.
+// qpdf reads it, says so in a warning, and exits with 3 ("done with warnings").
+const warned = source.replace('/Type /Pages\n', '/Count 3    \n');
+if (warned === source || warned.length !== source.length) throw new Error('The page tree was not found.');
+save('warning.pdf', Buffer.from(warned, 'latin1'));
+
 // 7. A damaged file that is cut off part way. qpdf cannot read it.
 const whole = await long.save();
 save('damaged-cut.pdf', whole.subarray(0, Math.floor(whole.length * 0.4)));
