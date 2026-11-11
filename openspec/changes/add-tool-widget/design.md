@@ -92,3 +92,4 @@ Shared: not an accepted type, "notes.txt is not a PDF, so it was not added."; da
 - **The widget is not on any page until `add-merge-pdf`.** Its end-to-end tests land there. This change is tested in Node only.
 - **Ending the worker after every job** costs a worker start on the next job; the engine comes from the cache.
 - **The damaged state links to Repair PDF only once it is published,** which differs from `SPEC.md`; see the proposal.
+- **The workspace's stylesheet loads before a pick.** Astro links the CSS of everything an island can import, lazy parts included, so a tool page carries the workspace's styles (about 2 KB) from the start. No script, worker, engine or WebAssembly loads before a pick; a trial in a scratch copy, with the widget mounted and a made-up engine, confirmed the worker, the workspace script and the engine were each fetched only after the pick, and that the page weighed 75.0 KB by gzip before it.
