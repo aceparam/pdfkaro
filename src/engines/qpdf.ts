@@ -81,6 +81,9 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
   const module = await factory({
     locateFile: () => wasm,
     noInitialRun: true,
+    // Emscripten's own notices, such as an abort, go nowhere rather than to the console.
+    print: () => {},
+    printErr: () => {},
     preRun: [(m: QpdfModule) => m.FS.init(null, capture, capture)],
   });
   return qpdf;

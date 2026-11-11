@@ -9,6 +9,11 @@ import { createHandler } from './worker-core';
 // Lazy: each engine stays its own file and is fetched only when its tool runs.
 const engines = import.meta.glob<EngineModule>('../engines/tools/*.ts');
 
+// Note: the bundler may put a helper that the qpdf script imports into this
+// file, so that script imports this file back. A module worker keeps one copy
+// of each module per address, so nothing runs twice. That holds only while the
+// worker is started at its plain address: never add a query string to it.
+
 // The libraries engines ask for. Each is fetched only when first asked for;
 // qpdf is made afresh for each call, so one file's crash or memory never
 // carries over to the next.
