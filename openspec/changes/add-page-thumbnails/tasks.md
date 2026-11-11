@@ -13,7 +13,7 @@ No registry entry changes: thumbnails are a shared part, and Merge PDF needs no 
 
 - [ ] 2.1 Add `src/engines/thumbnail.ts`: `renderPage` with our `CanvasFactory` over `tools.canvas`, the no-op `FilterFactory`, a `BinaryDataFactory` over the fixed data that refuses character maps, the safe `getDocument` options (including `maxImageSize` and `verbosity: 0`), fitting inside the box, and closing the document every time
 - [ ] 2.2 Add `images.pdf` to the test set: a page with a JPEG 2000 image (bytes made once with Pillow and kept in `make.mjs`) and text and shapes in CMYK colour, so the decoders and colour handling are exercised; JBIG2 cannot be made on the build machine, which the README says
-- [ ] 2.3 Unit test it in Node through `@napi-rs/canvas` against every file in `tests/fixtures/`: the picture fits the box and is not blank, `mixed.pdf` page 2 is wide, the damaged files reject, `password.pdf` needs its password, `images.pdf` draws its image, and the `getDocument` options leave every address unset except `wasmUrl: 'data:,'`; record the outcomes in `tests/fixtures/README.md`
+- [ ] 2.3 Unit test it in Node through `@napi-rs/canvas` against every file in `tests/fixtures/`: the picture fits the box and is not blank, `mixed.pdf` page 2 is wide, the damaged files reject, `password.pdf` needs its password, `images.pdf` draws its image, and the real `getDocument` accepts the options, which leave every address unset except `wasmUrl: 'data:,/'`; record the outcomes in `tests/fixtures/README.md`
 
 ## 3. Worker wiring
 
@@ -39,8 +39,8 @@ No registry entry changes: thumbnails are a shared part, and Merge PDF needs no 
 - [ ] 6.2 With 30 files listed, only items near the screen have thumbnails until scrolled, and no long task over 100 ms
 - [ ] 6.3 Thumbnails are not focusable, are hidden from the accessibility tree and are not draggable; dragging an item by its thumbnail moves the item
 - [ ] 6.4 With PDF.js held back by the test, pressing the main button merges at once; with PDF.js failing to load, blank boxes stay and the merge works
-- [ ] 6.6 Over 100 MB: with a file from `make-large.mjs`, written outside the repo by the test, and PDF.js held back, the large-file warning shows, the main button can be used, and the merge finishes while thumbnails are not yet drawn
 - [ ] 6.5 After remove, "Start again" and `pagehide`, no `blob:` image is on the page and fetching each saved thumbnail address fails; nothing of PDF.js loads before a pick
+- [ ] 6.6 Over 100 MB: with a file from `make-large.mjs`, written outside the repo by the test, and PDF.js held back, the large-file warning shows, the main button can be used, and the merge finishes while thumbnails are not yet drawn
 
 ## 7. No-upload test
 

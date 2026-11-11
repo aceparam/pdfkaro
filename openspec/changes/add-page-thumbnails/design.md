@@ -23,7 +23,8 @@
   - **`maxImageSize`.**
   - **`verbosity`.**
   - **`isEvalSupported` no longer exists.** PDF.js has no generated code left, so the current version is the mitigation for CVE-2024-4367.
-  - **Colour profiles (`iccs/`)** are fetched by PDF.js from their own address, outside the factory. Without them, PDF.js converts CMYK colours in JavaScript, which is enough for a thumbnail.
+  - **Colour profiles (`iccs/`)** would be fetched by PDF.js from `iccUrl`, outside the factory. `iccUrl` is left unset (decision 4), so none is ever fetched. PDF.js then converts CMYK colours in JavaScript, which is enough for a thumbnail.
+  - **PDF.js refuses a helper address that does not end in `/`** ("Invalid factory url"). Any address we set must end in `/`.
 
 ## Goals / Non-Goals
 
@@ -87,9 +88,9 @@ The tool worker loads it with `import()`, at the same time as PDF.js, when the f
 - `useWorkerFetch: false`, with our `BinaryDataFactory`;
 - **no address to fetch from.**
   - `cMapUrl`, `standardFontDataUrl` and `iccUrl` are left unset, so PDF.js has nowhere to fetch character maps, fonts or colour profiles from, and requests none. Fonts reach it through the factory.
-  - `wasmUrl` is set to `data:,`, an address that is not on the network. Our factory ignores it and serves the decoders from memory.
-  - PDF.js also loads a JavaScript fallback for a decoder, from `wasmUrl` and outside the factory, if WebAssembly cannot start in the worker. With `data:,` that load fails inside the browser instead of reaching the site, so it can never reveal that a file holds such an image. Such an image is then simply left out of the thumbnail.
-  - A unit test checks these options;
+  - `wasmUrl` is set to `data:,/`, an address that is not on the network, and that ends in `/` as PDF.js requires. Our factory ignores it and serves the decoders from memory.
+  - PDF.js also loads a JavaScript fallback for a decoder, from `wasmUrl` and outside the factory, if WebAssembly cannot start in the worker. With `data:,/` that load fails inside the browser, since the address is plain text and not a script, instead of reaching the site, so it can never reveal that a file holds such an image. Such an image is then simply left out of the thumbnail.
+  - A unit test opens a fixture with the real `getDocument` and these exact options, so a value PDF.js refuses is caught;
 - `maxImageSize: 16777216` (16 million pixels): a larger image inside the PDF is not decoded;
 - `verbosity: 0`, so no warning that names a font from the file reaches the console.
 
@@ -179,7 +180,8 @@ PDF.js and its data are fetched when the first thumbnail is asked for, after the
   - every readable file gives a PNG that fits the box, with dark pixels where text or an image is;
   - `mixed.pdf` gives a wide picture for its landscape page when asked for page 2;
   - damaged files reject;
-  - `password.pdf` rejects without its password and draws with it.
+  - `password.pdf` rejects without its password and draws with it;
+  - `images.pdf`, a new fixture with a JPEG 2000 image and CMYK colour, draws its image, so the decoders and colour handling are exercised (JBIG2 cannot be made on the build machine, and the fixtures README says so).
 - The message checks.
 - `worker-core` turning a drawing error into `image: null`.
 - The client's time limit, and that a thumbnail failure never ends a pending `inspect`.

@@ -97,6 +97,7 @@ None.
   - `useToolRun`, with a thumbnail queue in `src/widget/`.
   - `PageGrid` gains a thumbnail and a watcher that notices when items come into view.
   - `ToolWorkspace` passes them through.
+- **Test set:** a new `images.pdf`, with a JPEG 2000 image and CMYK colour, so the decoders and colour handling are tested.
 - **Checks:**
   - `scripts/page-weight.mjs` names the new late-loading files.
   - `scripts/check-worker.mjs` also checks that PDF.js stays out of the worker file, and that the built PDF.js has no `eval` or `new Function`.
