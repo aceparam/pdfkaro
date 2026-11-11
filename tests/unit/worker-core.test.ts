@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EngineModule } from '../../src/engines/types';
 import type { FromWorker } from '../../src/workers/messages';
-import { createHandler, failureKind } from '../../src/workers/worker-core';
+import { createHandler, failureKind, ownBuffers } from '../../src/workers/worker-core';
 
 const blob = (text: string) => new Blob([text]);
 
@@ -80,6 +80,37 @@ describe('failureKind', () => {
     expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
     expect(failureKind(new Error('Aborted(OOM)'))).toBe('memory');
     expect(failureKind(new Error('Cannot enlarge memory arrays'))).toBe('memory');
+    expect(failureKind(new RangeError('Maximum call stack size exceeded'))).toBe('engine');
+    expect(failureKind(new RangeError('Offset is outside the bounds of the DataView'))).toBe('engine');
     expect(failureKind(new Error('qpdf exited with 2'))).toBe('engine');
+  });
+});
+
+describe('ownBuffers', () => {
+  it('moves a result that fills its own buffer without copying it', () => {
+    const whole = new Uint8Array([1, 2, 3]);
+    const { outputs, transfer } = ownBuffers([whole]);
+    expect(outputs[0]).toBe(whole);
+    expect(transfer).toEqual([whole.buffer]);
+  });
+
+  it('copies a result that is part of a larger buffer', () => {
+    const big = new Uint8Array([9, 1, 2, 3, 9]);
+    const part = big.subarray(1, 4);
+    const { outputs, transfer } = ownBuffers([part]);
+    expect(Array.from(outputs[0]!)).toEqual([1, 2, 3]);
+    expect(outputs[0]!.buffer).not.toBe(big.buffer);
+    expect(transfer[0]!.byteLength).toBe(3);
+  });
+
+  it('copies the second of two results that share a buffer, so no buffer is listed twice', () => {
+    const one = new Uint8Array([1, 2]);
+    const again = new Uint8Array(one.buffer);
+    const { outputs, transfer } = ownBuffers([one, again]);
+    expect(outputs[0]).toBe(one);
+    expect(outputs[1]).not.toBe(again);
+    expect(new Set(transfer).size).toBe(2);
+    // The list can really be moved: structuredClone refuses a buffer listed twice.
+    expect(() => structuredClone(outputs, { transfer })).not.toThrow();
   });
 });

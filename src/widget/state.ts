@@ -13,6 +13,8 @@ export type FileEntry = {
   size: number;
   status: FileStatus;
   pages?: number;
+  /** A typed password is being tried. The file keeps its status meanwhile, so it stays the problem on screen. */
+  checking?: boolean;
 };
 
 export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
@@ -81,6 +83,7 @@ export function reducer(state: State, action: Action): State {
             ? {
                 ...file,
                 status: statusFor[action.outcome.kind],
+                checking: false,
                 pages: action.outcome.kind === 'ready' ? action.outcome.pages : file.pages,
               }
             : file,
@@ -89,7 +92,7 @@ export function reducer(state: State, action: Action): State {
     case 'reading-again':
       return {
         ...state,
-        files: state.files.map((file) => (file.id === action.id ? { ...file, status: 'reading' } : file)),
+        files: state.files.map((file) => (file.id === action.id ? { ...file, checking: true } : file)),
       };
     case 'moved': {
       const from = state.files.findIndex((file) => file.id === action.id);
@@ -139,9 +142,14 @@ export function canRun(state: State, minFiles: number): boolean {
   );
 }
 
-/** Whether some file is still being read. */
+/** Whether some file is still being read, or a password for it tried. */
 export function isReading(state: State): boolean {
-  return state.files.some((file) => file.status === 'reading');
+  return state.files.some((file) => file.status === 'reading' || file.checking === true);
+}
+
+/** Whether every listed file has been read and opened, so their pages can be counted. */
+export function allReady(state: State): boolean {
+  return state.files.length > 0 && state.files.every((file) => file.status === 'ready');
 }
 
 export function totals(state: State): { files: number; pages: number; size: number } {

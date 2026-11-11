@@ -92,4 +92,22 @@ describe('the tool client', () => {
     workers[0]!.reply({ type: 'inspected', requestId, outcome: { kind: 'damaged' } });
     await expect(asked).resolves.toEqual({ kind: 'damaged' });
   });
+
+  it('ends a worker whose engine could not be fetched, so the next try starts afresh', async () => {
+    const { client, workers } = setup();
+    const first = client.inspect(file);
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine-load' });
+    await expect(first).rejects.toEqual(new ToolError('engine-load'));
+    expect(workers[0]!.ended).toBe(true);
+    void client.inspect(file);
+    expect(workers).toHaveLength(2);
+  });
+
+  it('keeps the worker after an engine failure on one file, which says nothing about the next', async () => {
+    const { client, workers } = setup();
+    const first = client.inspect(file);
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine' });
+    await expect(first).rejects.toEqual(new ToolError('engine'));
+    expect(workers[0]!.ended).toBe(false);
+  });
 });

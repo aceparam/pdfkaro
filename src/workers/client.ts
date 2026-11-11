@@ -110,6 +110,10 @@ export class ToolClient {
       case 'failed':
         this.pending.delete(data.requestId);
         request.reject(new ToolError(data.kind));
+        // A worker whose engine could not be fetched keeps that failure (the
+        // browser remembers a failed module), and one that ran out of memory
+        // keeps its memory. End it, so that the next try starts a fresh one.
+        if (data.kind !== 'engine') this.failAll(data.kind);
         return;
     }
   }

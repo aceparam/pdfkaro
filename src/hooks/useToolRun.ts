@@ -11,8 +11,8 @@ export type ToolRunResult = { url: string; name: string };
 export type ToolRun = {
   state: State;
   result: ToolRunResult | null;
-  /** Adds files, and gives back the names of any turned away for being of the wrong type. */
-  addFiles(files: File[]): Promise<string[]>;
+  /** Adds files. Gives back how many were added and the names of any turned away for being of the wrong type. */
+  addFiles(files: File[]): Promise<{ added: number; refused: string[] }>;
   submitPassword(id: string, password: string): Promise<void>;
   removeFile(id: string): void;
   moveFile(id: string, to: number): void;
@@ -52,11 +52,13 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     return client.current;
   }, [toolId, createWorker]);
 
+  // The download address is kept in a ref as well as in state, so that it is
+  // released even when the widget is unmounting and state updates no longer run.
+  const resultUrl = useRef<string | null>(null);
   const releaseResult = useCallback(() => {
-    setResult((current) => {
-      if (current) URL.revokeObjectURL(current.url);
-      return null;
-    });
+    if (resultUrl.current) URL.revokeObjectURL(resultUrl.current);
+    resultUrl.current = null;
+    setResult(null);
   }, []);
 
   const inspect = useCallback(
@@ -93,7 +95,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (accepted.length > 0) dispatch({ type: 'added', files: accepted });
       if (refused.length > 0) dispatch({ type: 'refused', names: refused });
       for (const { id } of accepted) await inspect(id);
-      return refused;
+      return { added: accepted.length, refused };
     },
     [accepts, inspect],
   );
@@ -135,7 +137,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (!output) throw new ToolError('engine');
       const blob = new Blob([output as BlobPart], { type: 'application/pdf' });
       const name = outputName(inputs[0]!.name, words.outputSuffix);
-      setResult({ url: URL.createObjectURL(blob), name });
+      resultUrl.current = URL.createObjectURL(blob);
+      setResult({ url: resultUrl.current, name });
       dispatch({
         type: 'finished',
         result: { name, size: blob.size, pages: words.resultPagesAreSum ? totals(stateRef.current).pages : undefined },
@@ -151,7 +154,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     dispatch({ type: 'back-to-files' });
   }, []);
 
-  const backToFiles = useCallback(() => dispatch({ type: 'back-to-files' }), []);
+  // Going back after a failure reads again any file the failure left unread,
+  // such as when the engine could not be fetched while files were being read.
+  const backToFiles = useCallback(() => {
+    const unread = stateRef.current.files.filter((file) => file.status === 'reading' || file.checking).map((file) => file.id);
+    dispatch({ type: 'back-to-files' });
+    void (async () => {
+      for (const id of unread) await inspect(id);
+    })();
+  }, [inspect]);
 
   const clear = useCallback(() => {
     client.current?.end();

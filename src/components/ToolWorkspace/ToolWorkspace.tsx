@@ -4,7 +4,7 @@ import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
-import { canRun, currentProblem, isLarge, isReading, totals, type FileEntry } from '../../widget/state';
+import { allReady, canRun, currentProblem, isLarge, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -19,8 +19,11 @@ type Props = {
   accepts: string[];
   words: ToolWidgetWords;
   firstFiles: File[];
-  /** Called when no file is left, so the widget shows the picker alone again. */
-  onEmpty(): void;
+  /**
+   * Called when no file is left, so the widget shows the picker alone again.
+   * `message` is shown under the picker, such as why a file was turned away.
+   */
+  onEmpty(message?: string): void;
 };
 
 const createWorker = (): WorkerLike =>
@@ -33,6 +36,7 @@ const failureText = {
 } as const;
 
 function detailFor(file: FileEntry): string {
+  if (file.checking) return 'Trying the password';
   switch (file.status) {
     case 'reading':
       return 'Getting ready';
@@ -48,7 +52,12 @@ function detailFor(file: FileEntry): string {
 
 /** Everything after the first pick: the list, problems, progress, the result. */
 export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEmpty }: Props) {
-  const [announcement, setAnnouncement] = useState('Getting ready');
+  const [announcement, setAnnouncementText] = useState('Getting ready');
+  // The same words twice in a row would not change the page, so a screen
+  // reader would not say them again; a no-break space tells the two apart.
+  const setAnnouncement = useCallback((text: string) => {
+    setAnnouncementText((current) => (current === text ? `${text}\u00a0` : text));
+  }, []);
   const lastProgressAnnounced = useRef(0);
 
   const announceProgress = useCallback(
@@ -56,7 +65,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       const now = Date.now();
       if (now - lastProgressAnnounced.current < 1000) return;
       lastProgressAnnounced.current = now;
-      setAnnouncement(progressLine(progress, words.writingLabel));
+      // Progress that has not moved on is not said again.
+      setAnnouncementText(progressLine(progress, words.writingLabel));
     },
     [words.writingLabel],
   );
@@ -69,6 +79,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const resultRef = useRef<HTMLHeadingElement | null>(null);
   const failedRef = useRef<HTMLHeadingElement | null>(null);
+  const damagedRef = useRef<HTMLHeadingElement | null>(null);
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const addRef = useRef<HTMLInputElement | null>(null);
 
@@ -77,13 +88,20 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     (names: string[]) => names.map((name) => `${name} is not ${words.acceptsName}, so it was not added.`).join(' '),
     [words.acceptsName],
   );
+  // Tell the widget when the last file has gone. Not before the first files have
+  // arrived: on the first render the list is still empty.
+  const hadFiles = useRef(false);
+
   const add = useCallback(
     (files: File[]) => {
-      void run.addFiles(files).then((refused) => {
-        if (refused.length > 0) setAnnouncement(refusedText(refused));
+      void run.addFiles(files).then(({ added, refused }) => {
+        if (refused.length === 0) return;
+        // Nothing was added and nothing was listed before: back to the picker, which says why.
+        if (added === 0 && !hadFiles.current) onEmpty(refusedText(refused));
+        else setAnnouncement(refusedText(refused));
       });
     },
-    [run, refusedText],
+    [run, refusedText, onEmpty, setAnnouncement],
   );
 
   const started = useRef(false);
@@ -95,9 +113,6 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
   useFileDrop(add, state.step === 'listing');
 
-  // Tell the widget when the last file has gone. Not before the first files have
-  // arrived: on the first render the list is still empty.
-  const hadFiles = useRef(false);
   useEffect(() => {
     if (state.step !== 'empty') hadFiles.current = true;
     else if (hadFiles.current) onEmpty();
@@ -115,32 +130,41 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     if (state.step === 'listing' && (from === 'working' || from === 'failed')) mainRef.current?.focus();
   }, [state.step]);
 
-  // Problems, one at a time in list order.
+  // Problems, one at a time in list order. A file whose password is being tried
+  // stays the problem until the answer comes back.
   const problem = currentProblem(state);
-  const problemKey = problem ? `${problem.id}:${problem.status}` : '';
+  const problemKey = problem ? `${problem.id}:${problem.status}${problem.checking ? ':checking' : ''}` : '';
   const previousProblem = useRef('');
   useEffect(() => {
     const before = previousProblem.current;
     previousProblem.current = problemKey;
-    if (!problem || problemKey === before) {
-      // The password was right: the problem is gone, so the main button comes back.
-      if (!problem && before.endsWith(':wrong-password')) mainRef.current?.focus();
+    if (problemKey === before || problem?.checking) return;
+    // A password was right: the field goes away, so focus moves on to what comes next.
+    const [beforeId, beforeStatus] = before.split(':');
+    const opened = beforeStatus?.endsWith('password') === true && state.files.some((file) => file.id === beforeId && file.status === 'ready');
+    if (!problem) {
+      if (opened) mainRef.current?.focus();
       return;
     }
     if (problem.status === 'wrong-password') {
       passwordRef.current?.focus();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the field may already have focus, so focus alone would say nothing
+      setAnnouncement(`That password did not open ${problem.name}.`);
       return;
     }
     // Where focus is decides how the visitor hears about it, so this has to run after the page has drawn.
     if (problem.status === 'needs-password') {
       const onSummary = document.activeElement === summaryRef.current || document.activeElement === document.body;
-      if (onSummary) passwordRef.current?.focus();
+      if (onSummary || opened) passwordRef.current?.focus();
       else setAnnouncement(`${problem.name} needs a password.`);
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the message depends on where focus is, known only after render
+    if (opened) {
+      damagedRef.current?.focus();
+      return;
+    }
     setAnnouncement(`${problem.name} is damaged and cannot be read.`);
-  }, [problem, problemKey]);
+  }, [problem, problemKey, state.files, setAnnouncement]);
 
   const count = totals(state);
   const ready = canRun(state, words.minFiles);
@@ -153,7 +177,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   );
 
   const others = state.files.length - 1;
-  const carryOn = others === 1 ? words.carryOnOne : words.carryOnMany.replace('{count}', String(others));
+  const everyReady = allReady(state);
+  const anyReady = state.files.some((file) => file.status === 'ready');
 
   if (state.step === 'done' && state.result && result) {
     const detail = [formatSize(state.result.size), state.result.pages ? pageCount(state.result.pages) : null].filter(Boolean).join(', ');
@@ -205,8 +230,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
         <>
           <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
             {fileCount(count.files)}
-            {isReading(state) ? '' : `, ${pageCount(count.pages)}`}, {formatSize(count.size)}.
-            {words.listNote ? ` ${words.listNote}` : ''}
+            {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
+            {words.listNote && anyReady ? ` ${words.listNote}` : ''}
           </p>
 
           {state.refused.length > 0 && (
@@ -237,7 +262,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ) : null}
 
           {problem?.status === 'damaged' ? (
-            <Notice heading={`${problem.name} is damaged and cannot be read.`}>
+            <Notice heading={`${problem.name} is damaged and cannot be read.`} headingRef={damagedRef}>
               <div>
                 <button
                   type="button"
@@ -247,7 +272,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                     summaryRef.current?.focus();
                   }}
                 >
-                  {others > 0 ? carryOn : 'Choose another file'}
+                  {others > 0 ? 'Leave this file out' : 'Choose another file'}
                 </button>
               </div>
             </Notice>

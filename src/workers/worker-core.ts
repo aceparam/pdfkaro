@@ -18,10 +18,31 @@ class EngineLoadError extends Error {}
 export function failureKind(error: unknown): FailureKind {
   if (error instanceof EngineLoadError) return 'engine-load';
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
-  if (error instanceof RangeError || /out of memory|\boom\b|cannot enlarge memory|allocation failed/i.test(text)) {
+  // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
+  if (/out of memory|\boom\b|cannot enlarge memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
     return 'memory';
   }
   return 'engine';
+}
+
+/**
+ * Makes each result own its whole buffer, once, so that it can be moved to the
+ * page. A result that is a view into a larger buffer, or that shares a buffer
+ * with another result, is copied first; moving it as it is would fail.
+ */
+export function ownBuffers(outputs: Uint8Array[]): { outputs: Uint8Array[]; transfer: ArrayBuffer[] } {
+  const seen = new Set<ArrayBufferLike>();
+  const owned = outputs.map((output) => {
+    const whole = output.byteOffset === 0 && output.byteLength === output.buffer.byteLength;
+    if (whole && !seen.has(output.buffer) && output.buffer instanceof ArrayBuffer) {
+      seen.add(output.buffer);
+      return output;
+    }
+    const copy = output.slice();
+    seen.add(copy.buffer);
+    return copy;
+  });
+  return { outputs: owned, transfer: owned.map((output) => output.buffer as ArrayBuffer) };
 }
 
 async function bytesOf(blob: Blob): Promise<Uint8Array> {
@@ -64,7 +85,8 @@ export function createHandler(deps: WorkerDeps) {
       );
       // The worker's copies of the inputs are dropped here; only the results go back, moved, not copied.
       files.length = 0;
-      deps.post({ type: 'done', requestId, outputs }, outputs.map((output) => output.buffer as ArrayBuffer));
+      const moved = ownBuffers(outputs);
+      deps.post({ type: 'done', requestId, outputs: moved.outputs }, moved.transfer);
     } catch (error) {
       deps.post({ type: 'failed', requestId, kind: failureKind(error) });
     }

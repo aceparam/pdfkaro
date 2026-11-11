@@ -94,7 +94,7 @@ While the job runs the page SHALL show progress in real units, with a Cancel but
 #### Scenario: A job is running
 
 - **WHEN** three files are being merged
-- **THEN** the page shows "Reading file 2 of 3", then "Writing the merged file, 40%", a bar that never goes back, and a Cancel button
+- **THEN** the page shows "Reading file 2 of 3", then "Writing the merged file", a bar that never goes back, and a Cancel button
 
 #### Scenario: Cancel is pressed
 
@@ -171,12 +171,12 @@ When a file cannot be read as a PDF the page SHALL say that the file is damaged,
 #### Scenario: A damaged file is chosen with others
 
 - **WHEN** a visitor chooses two good files and one that is cut off part way
-- **THEN** the page says "part-3.pdf is damaged and cannot be read.", lists the two good files, and offers "Merge the other 2 files"
+- **THEN** the page says "part-3.pdf is damaged and cannot be read.", lists the two good files, and offers "Leave this file out"
 
 #### Scenario: A damaged file is chosen on its own
 
 - **WHEN** a visitor chooses only one file and it is damaged
-- **THEN** the page says it is damaged and cannot be read, offers no "Merge the other" button, and returns to the file picker
+- **THEN** the page says it is damaged and cannot be read, offers no "Leave this file out" button, and returns to the file picker
 
 #### Scenario: Only one good file is left
 

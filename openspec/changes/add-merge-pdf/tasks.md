@@ -32,6 +32,7 @@ Depends on `add-tool-widget` being merged.
 
 ## 6. Checks and housekeeping
 
+- [ ] 6.1a Add a build check that no engine's code lands in the worker file, and show it failing when an engine is imported eagerly (moved from `add-tool-widget` task 1.4)
 - [ ] 6.1 Name the late-loading files in `scripts/page-weight.mjs`; measure and record the tool page before a pick
 - [ ] 6.2 Run the file over 100 MB by hand and record the outcome
 - [ ] 6.3 Add the two dependencies to `LICENSES.md`

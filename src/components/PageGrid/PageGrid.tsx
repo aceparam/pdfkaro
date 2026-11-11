@@ -17,10 +17,6 @@ type Props = {
   onRemove(id: string): void;
   /** Called after a move with the item's title and new place, for the status region. */
   onMoved?(title: string, place: number, of: number): void;
-  /** Called when the last item is removed, so the parent can move focus. */
-  onEmptied?(): void;
-  /** Turns the buttons off while a job runs. */
-  locked?: boolean;
 };
 
 type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
@@ -30,7 +26,7 @@ type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
  * which work with the keyboard and on a touch screen, and by mouse drag.
  * A button that cannot be used stays focusable and is marked unavailable.
  */
-export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked = false }: Props) {
+export function PageGrid({ items, onMove, onRemove, onMoved }: Props) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const focusNext = useRef<FocusTarget | null>(null);
   const dragging = useRef<string | null>(null);
@@ -52,7 +48,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
   const move = (index: number, by: -1 | 1, button: 'up' | 'down') => {
     const item = items[index];
     const to = index + by;
-    if (!item || locked || to < 0 || to >= items.length) return;
+    if (!item || to < 0 || to >= items.length) return;
     onMove(item.id, to);
     onMoved?.(item.title, to + 1, items.length);
     // Keep focus on the same button, unless it can no longer be used; then the other one.
@@ -62,11 +58,11 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
 
   const remove = (index: number) => {
     const item = items[index];
-    if (!item || locked) return;
+    if (!item) return;
     const neighbour = items[index + 1] ?? items[index - 1];
     onRemove(item.id);
+    // With no neighbour the list is gone, and the widget puts focus on the picker.
     if (neighbour) focusNext.current = { id: neighbour.id, button: 'remove' };
-    else onEmptied?.();
   };
 
   return (
@@ -78,7 +74,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
           <li
             key={item.id}
             className={styles.item}
-            draggable={!locked && items.length > 1}
+            draggable={items.length > 1}
             onDragStart={(event) => {
               dragging.current = item.id;
               event.dataTransfer.effectAllowed = 'move';
@@ -111,7 +107,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
                 type="button"
                 className={styles.small}
                 aria-label={`Move ${item.title} up`}
-                aria-disabled={first || locked ? true : undefined}
+                aria-disabled={first ? true : undefined}
                 onClick={() => move(index, -1, 'up')}
               >
                 Move up
@@ -121,7 +117,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
                 type="button"
                 className={styles.small}
                 aria-label={`Move ${item.title} down`}
-                aria-disabled={last || locked ? true : undefined}
+                aria-disabled={last ? true : undefined}
                 onClick={() => move(index, 1, 'down')}
               >
                 Move down
@@ -131,7 +127,6 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onEmptied, locked =
                 type="button"
                 className={styles.small}
                 aria-label={`Remove ${item.title}`}
-                aria-disabled={locked ? true : undefined}
                 onClick={() => remove(index)}
               >
                 Remove

@@ -19,9 +19,14 @@ export function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-/** The line shown above the progress bar. `writingLabel` comes from the tool, such as "Writing the merged file". */
+/**
+ * The line shown above the progress bar. `writingLabel` comes from the tool,
+ * such as "Writing the merged file". Writing has no unit a visitor can count,
+ * so its line gives no number; the bar shows how far the whole job has come,
+ * and a second percentage beside it would not agree with the bar.
+ */
 export function progressLine(progress: Progress, writingLabel: string): string {
-  if (progress.stage === 'writing') return `${writingLabel}, ${Math.round(progress.percent)}%`;
+  if (progress.stage === 'writing') return writingLabel;
   if (progress.unit === 'file') {
     return progress.stage === 'reading'
       ? `Reading file ${progress.done} of ${progress.total}`

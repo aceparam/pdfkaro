@@ -22,8 +22,36 @@ export default defineConfig(
     rules: {
       'no-restricted-globals': [
         'error',
-        ...['window', 'document', 'navigator', 'localStorage', 'sessionStorage', 'indexedDB', 'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource'].map(
-          (name) => ({ name, message: 'Engines use no page and no network. What they need comes in through `tools`.' }),
+        ...[
+          'window',
+          'self',
+          'globalThis',
+          'document',
+          'navigator',
+          'localStorage',
+          'sessionStorage',
+          'indexedDB',
+          'caches',
+          'fetch',
+          'XMLHttpRequest',
+          'WebSocket',
+          'EventSource',
+          'importScripts',
+          'postMessage',
+        ].map((name) => ({ name, message: 'Engines use no page and no network. What they need comes in through `tools`.' })),
+      ],
+    },
+  },
+  {
+    // The worker and its client fetch nothing either: engines and WebAssembly
+    // come in through the bundler's own imports, never through a request the
+    // code writes itself.
+    files: ['src/workers/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        ...['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'localStorage', 'sessionStorage', 'indexedDB', 'caches'].map(
+          (name) => ({ name, message: 'The worker sends nothing anywhere and stores nothing.' }),
         ),
       ],
     },
@@ -43,15 +71,25 @@ export default defineConfig(
               allowTypeImports: true,
               message: 'Components may import only the filter rule and types from src/tools/. Pass data in through props.',
             },
+            {
+              // Hooks are part of the island, so an engine imported here would load with the page.
+              group: ['**/engines/*'],
+              allowTypeImports: true,
+              message: 'Components and hooks do not import engines. Only the worker loads them.',
+            },
           ],
         },
       ],
-      // The same rule for import() calls, which the rule above does not see.
+      // The same rules for import() calls, which the rule above does not see.
       'no-restricted-syntax': [
         'error',
         {
           selector: 'ImportExpression[source.value=/tools\\//]',
           message: 'Components may not load src/tools/ with import(). Pass data in through props.',
+        },
+        {
+          selector: 'ImportExpression[source.value=/engines\\//]',
+          message: 'Components and hooks may not load an engine with import(). Only the worker loads them.',
         },
         // A link written as "/path" in a component would break on a preview under
         // a sub-path, and the built-page check cannot see a link that only shows

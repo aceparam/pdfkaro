@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canRun, currentProblem, initialState, isLarge, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
+import { allReady, canRun, currentProblem, initialState, isReading, isLarge, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
 
 const play = (...actions: Action[]): State => actions.reduce(reducer, initialState);
 const add = (...names: string[]): Action => ({ type: 'added', files: names.map((name, index) => ({ id: name, name: `${name}.pdf`, size: 1000 * (index + 1) })) });
@@ -27,10 +27,37 @@ describe('the steps of a tool', () => {
     expect(currentProblem(reducer(state, { type: 'removed', id: 'b' }))?.id).toBe('c');
   });
 
+  it('keeps a file as the problem while its password is tried', () => {
+    const asked = play(
+      add('a', 'b', 'c'),
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 1 } },
+      { type: 'inspected', id: 'b', outcome: { kind: 'needs-password' } },
+      { type: 'inspected', id: 'c', outcome: { kind: 'damaged' } },
+    );
+    const trying = reducer(asked, { type: 'reading-again', id: 'b' });
+    expect(currentProblem(trying)?.id).toBe('b');
+    expect(currentProblem(trying)?.checking).toBe(true);
+    expect(isReading(trying)).toBe(true);
+    const wrong = reducer(trying, { type: 'inspected', id: 'b', outcome: { kind: 'wrong-password' } });
+    expect(currentProblem(wrong)).toMatchObject({ id: 'b', status: 'wrong-password', checking: false });
+    const opened = reducer(reducer(wrong, { type: 'reading-again', id: 'b' }), { type: 'inspected', id: 'b', outcome: { kind: 'ready', pages: 2 } });
+    expect(currentProblem(opened)?.id).toBe('c');
+  });
+
+  it('counts pages only once every file is open', () => {
+    const some = play(add('a', 'b'), { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 1 } }, { type: 'inspected', id: 'b', outcome: { kind: 'damaged' } });
+    expect(allReady(some)).toBe(false);
+    expect(allReady(reducer(some, { type: 'removed', id: 'b' }))).toBe(true);
+    expect(allReady(initialState)).toBe(false);
+  });
+
   it('moves a file and keeps the others in order', () => {
     const moved = play(add('a', 'b', 'c'), { type: 'moved', id: 'a', to: 2 });
     expect(moved.files.map((file) => file.id)).toEqual(['b', 'c', 'a']);
     expect(reducer(moved, { type: 'moved', id: 'a', to: 99 }).files.map((file) => file.id)).toEqual(['b', 'c', 'a']);
+    // A place past either end is held at that end, so nothing changes at all.
+    expect(reducer(moved, { type: 'moved', id: 'a', to: 99 })).toBe(moved);
+    expect(reducer(moved, { type: 'moved', id: 'b', to: -3 })).toBe(moved);
     expect(reducer(moved, { type: 'moved', id: 'nope', to: 0 })).toBe(moved);
   });
 

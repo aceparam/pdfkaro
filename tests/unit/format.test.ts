@@ -21,7 +21,7 @@ describe('progress', () => {
   it('says what is happening in real units', () => {
     expect(progressLine({ stage: 'reading', unit: 'file', done: 2, total: 3 }, 'Writing the merged file')).toBe('Reading file 2 of 3');
     expect(progressLine({ stage: 'working', unit: 'page', done: 14, total: 120 }, 'x')).toBe('Page 14 of 120');
-    expect(progressLine({ stage: 'writing', percent: 40.4 }, 'Writing the merged file')).toBe('Writing the merged file, 40%');
+    expect(progressLine({ stage: 'writing', percent: 40.4 }, 'Writing the merged file')).toBe('Writing the merged file');
   });
 
   it('fills reading into the first fifth and the rest after', () => {

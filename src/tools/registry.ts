@@ -57,10 +57,6 @@ export type ToolWidgetWords = {
   failedHeading: string;
   /** Tied to the main button while too few files are listed: "Add at least one more file to merge." */
   tooFewFiles: string;
-  /** Carry on without a damaged file, when one other file is left: "Merge the other file". */
-  carryOnOne: string;
-  /** The same with more left; "{count}" is replaced: "Merge the other {count} files". */
-  carryOnMany: string;
   /** Put after the first input's name to name the result: "merged". */
   outputSuffix: string;
   /** How many files the tool needs before it can run. */

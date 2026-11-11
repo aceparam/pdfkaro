@@ -5,3 +5,7 @@
   margin: 0.625rem 0 0;
   color: var(--muted);
 }
+.message {
+  margin: 0.625rem 0 0;
+  font-weight: 700;
+}

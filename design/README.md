@@ -60,7 +60,7 @@ Layout and behaviour:
 - **The link to Repair PDF** on the damaged-file screen. Repair PDF is a phase 2 tool, so the link has nowhere to go at launch.
 - **Group headings on the home page are links** to the group pages. `SPEC.md` does not say how a visitor reaches a group page.
 - **Two lines the specs do not ask for:** "2 tools match." under the filter box, and "You can also drop files anywhere on this page, or paste them." under the file picker. The specs say the home page and the empty state hold nothing else.
-- **Controls the specs do not name:** Add more files, Remove, Leave this file out, Merge the other 2 files, Go back to your files.
+- **Controls the specs do not name:** Add more files, Remove, Leave this file out (for a password or a damaged file), Go back to your files.
 - **The merged file's name** is built from the first file's name. `SPEC.md` gives the rule for one input only.
 - **The 100 MB warning** is shown when the files together pass 100 MB, not when one file does.
 - **The wrong-password message** is bold text above the field. The specs say only that the page says the password is wrong.
