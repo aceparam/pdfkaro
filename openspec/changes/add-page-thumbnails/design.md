@@ -44,6 +44,7 @@
 The tool worker loads PDF.js's display code (`pdf.min.mjs`) the first time a thumbnail is asked for. At the same time it starts PDF.js's own worker (`pdf.worker.min.mjs`) as a nested module worker, and passes it to PDF.js as `workerPort`.
 - **One per tool worker.** The nested worker is started once for each tool worker, not once per call. It is ended with the tool worker, after every job, on Cancel, on "Start again" and on `pagehide`.
 - **Its errors stay inside.** `nested.onerror` calls `preventDefault()`, so an error in it never reaches the page as a worker error, and rejects the thumbnail being drawn.
+- **Once it fails, it stays failed.** After the nested worker errors, that tool worker marks PDF.js unavailable and answers every later thumbnail with `null` at once. That way the visitor never waits out the time limit for each item. The next tool worker tries again.
 
 Alternatives considered:
 - **PDF.js's worker code in the same thread.** It attaches to our channel. Rejected.
@@ -68,7 +69,9 @@ PDF.js does not export its base classes, so ours carry the same methods. The Nod
 
 ### 3. The fixed helper data, in one script
 
-`src/workers/pdfjs-data.ts` imports each standard font file and the three decoders with Vite's `?inline`, which turns each into data inside the script, and exports a map from file name to bytes. That gives one hashed chunk of about 810 KB by gzip, the same for every file, loaded with PDF.js after a pick. The licence files of the fonts and decoders are kept beside them in the chunk.
+`src/workers/pdfjs-data.ts` imports each standard font file and the three decoders with Vite's `?inline`, which turns each into data inside the script, and exports a map from file name to bytes. That gives one hashed chunk of about 810 KB by gzip, the same for every file.
+
+The tool worker loads it with `import()`, at the same time as PDF.js, when the first thumbnail is asked for. It is never imported statically, so a read or a merge with no thumbnail never fetches it. `check-worker.mjs` fails if the data is found inside the tool worker file. The licence files of the fonts and decoders are kept beside them in the chunk.
 - **Left out:** character maps, by the owner's decision; `iccs/` (decision context); `quickjs-eval.*`.
 - **Why not separate files?** Fetching a fixed list of separate files would save about 140 KB, but needs a `fetch` in our own worker code, which lint bans there.
 - **If `?inline` does not handle `.pfb`, `.ttf` or `.wasm`,** a small build script writes the same module from the package's files instead. The first build task checks this.
@@ -82,6 +85,11 @@ PDF.js does not export its base classes, so ours carry the same methods. The Nod
 - `disableFontFace: true`: glyphs are drawn as shapes, and no font is installed in the browser;
 - `useSystemFonts: false`;
 - `useWorkerFetch: false`, with our `BinaryDataFactory`;
+- **no address to fetch from.**
+  - `cMapUrl`, `standardFontDataUrl` and `iccUrl` are left unset, so PDF.js has nowhere to fetch character maps, fonts or colour profiles from, and requests none. Fonts reach it through the factory.
+  - `wasmUrl` is set to `data:,`, an address that is not on the network. Our factory ignores it and serves the decoders from memory.
+  - PDF.js also loads a JavaScript fallback for a decoder, from `wasmUrl` and outside the factory, if WebAssembly cannot start in the worker. With `data:,` that load fails inside the browser instead of reaching the site, so it can never reveal that a file holds such an image. Such an image is then simply left out of the thumbnail.
+  - A unit test checks these options;
 - `maxImageSize: 16777216` (16 million pixels): a larger image inside the PDF is not decoded;
 - `verbosity: 0`, so no warning that names a font from the file reaches the console.
 
@@ -127,7 +135,10 @@ New messages in `src/workers/messages.ts`:
 `useToolRun` runs it:
 - **The picture.** It turns the image bytes into a `Blob` of type `image/png` and an object URL, after checking that the file is still listed. A late reply for a removed file is thrown away before any URL is made.
 - **Its addresses.** The URLs are kept in a ref, mirrored to state.
-- **When the main button is pressed:** if a thumbnail is in flight, it ends the client before starting the job, so the job gets a fresh worker at once. Every file has been read by then, so nothing else is lost.
+- **When the main button is pressed, or a file is about to be read:** if a thumbnail is in flight, it ends the client first. The job or the read then gets a fresh worker at once. A file is read when files are added or a password is typed.
+  - Every file has been read before the main button can be pressed, so nothing is lost there.
+  - A file about to be read has not started, so nothing is lost there either.
+  - Ending the client this way means an `inspect` is never pending when the time limit ends a worker, so no file can be left on "Getting ready".
 - **When the list comes back** after Cancel or a failure, wanted items that are not drawn are asked for again.
 - **Revoking.** On remove, "Start again", `pagehide` and unmount, it revokes the URLs, drops the queue and ends the client as now.
 
