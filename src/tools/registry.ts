@@ -32,6 +32,43 @@ export type ToolPage = {
   preset?: Record<string, string | number | boolean>;
 };
 
+/**
+ * The words and rules a tool's widget uses. Everything here is plain text or
+ * numbers, because it is passed from the page to the widget island.
+ */
+export type ToolWidgetWords = {
+  /** The picker button: "Choose PDF files". */
+  pickerLabel: string;
+  /** The picker once files are listed: "Add more files". */
+  addLabel: string;
+  /** Under the picker: "You can also drop files anywhere on this page, or paste them." */
+  dropHint: string;
+  /** What a refused file is not: "a PDF", as in "notes.txt is not a PDF, so it was not added." */
+  acceptsName: string;
+  /** Under the summary of listed files, if the order matters: "They will be joined in this order." */
+  listNote?: string;
+  /** The main button, named after the result: "Merge and download". */
+  actionLabel: string;
+  /** While the result is written: "Writing the merged file". */
+  writingLabel: string;
+  /** Above the result: "Your merged file is ready". */
+  doneHeading: string;
+  /** When a job fails: "The merge did not finish." */
+  failedHeading: string;
+  /** Tied to the main button while too few files are listed: "Add at least one more file to merge." */
+  tooFewFiles: string;
+  /** Put after the first input's name to name the result: "merged". */
+  outputSuffix: string;
+  /** How many files the tool needs before it can run. */
+  minFiles: number;
+  /** Whether the picker takes several files at once. */
+  multiple: boolean;
+  /** Whether the result has as many pages as the inputs together, so the page can say how many. */
+  resultPagesAreSum: boolean;
+  /** Plain notes shown with the result, such as what was not carried over. */
+  resultNotes: string[];
+};
+
 export type Tool = {
   id: string;
   group: GroupId;
@@ -45,6 +82,8 @@ export type Tool = {
   related: CatalogueSlug[];
   /** Every URL the tool serves. */
   pages: ToolPage[];
+  /** The widget's words. A tool without them has no working widget yet. */
+  widget?: ToolWidgetWords;
 };
 
 /** The seven groups, in the order the home page shows them. */
@@ -80,5 +119,26 @@ export const tools: Tool[] = [
         sentence: 'Combine several PDFs into one. Files stay on your device.',
       },
     ],
+    widget: {
+      pickerLabel: 'Choose PDF files',
+      addLabel: 'Add more files',
+      dropHint: 'You can also drop files anywhere on this page, or paste them.',
+      acceptsName: 'a PDF',
+      listNote: 'They will be joined in this order.',
+      actionLabel: 'Merge and download',
+      writingLabel: 'Writing the merged file',
+      doneHeading: 'Your merged file is ready',
+      failedHeading: 'The merge did not finish.',
+      tooFewFiles: 'Add at least one more file to merge.',
+      outputSuffix: 'merged',
+      minFiles: 2,
+      multiple: true,
+      resultPagesAreSum: true,
+      // Both by the owner's decisions of 11 Nov 2026.
+      resultNotes: [
+        'Bookmarks and attachments come from the first file only.',
+        'The merged file has no password and no restrictions, even if a file you chose had them.',
+      ],
+    },
   },
 ];

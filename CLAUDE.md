@@ -12,13 +12,14 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 
 ## Where the project stands
 
-**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in three changes:
+**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in these changes:
 
-1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Built; steps 1, 2, 3, 7, 8 and 9 below.
-2. Next: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5.
-3. Then: Merge PDF end to end, with its page text. Step 6.
+1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
+2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Built and reviewed.
+3. `add-merge-pdf`: Merge PDF end to end, with its page text, on the same pull request as 2. Step 6. Built. Its page text waits for the owner's review.
+4. Then: page thumbnails, which Merge PDF needs to pass "Tool page anatomy" in full. This is the remaining Phase 0 work, with the multilingual test file, opening the output by hand in Chrome, Firefox, Adobe Reader and macOS Preview, and checks in Firefox, Safari and phone browsers. The Phase 0 gate is not passed yet.
 
-A preview of the site is set up to publish on GitHub Pages, through `.github/workflows/pages.yml`. It publishes nothing until the owner switches Pages on (see "Questions waiting for the owner").
+A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
 Phase 0, in order:
 
@@ -41,6 +42,8 @@ Update this section when a phase gate is passed.
 `SPEC.md` is an export of the owner's working doc and is not edited here. Where the owner has decided something since the export, it is listed below and it wins over `SPEC.md` until the export is refreshed.
 
 - **Preview on GitHub Pages (10 Nov 2026).** The owner asked to try the site before signing off the pull request, asked for it to be deployed on GitHub Pages, and chose to deploy the pull request's branch, having been told the preview is public even though the repo is private. This replaces the agent's earlier choice of Cloudflare Pages. How it is done is the agent's choice; see the next section.
+- **Merge PDF keeps bookmarks and attachments from the first file only (11 Nov 2026).** The owner chose this over keeping every file's, accepting the gap against "Definition of done". The page says so. Keeping all of them can come later.
+- **A merged file has no password or restrictions (11 Nov 2026),** even when an input had them. The page says so.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
@@ -72,7 +75,12 @@ Three more that the agent decided at the same time without asking, because they 
 
 - `src/tools/registry.ts` is the one place a tool is declared. `catalogue.ts` beside it is a type only.
 - `src/tools/queries.ts` and `filter.ts` hold rules as plain functions. `src/hooks/` holds hooks. None of them render.
-- `src/components/` holds React components, one folder each, with a CSS Module beside it when it needs styles. Components get what they show through props. From `src/tools/` they may import only `filter` and types; lint enforces this.
+- `src/components/` holds React components, one folder each, with a CSS Module beside it when it needs styles. Components get what they show through props. From `src/tools/` they may import only `filter` and types, and they never import an engine or a worker; lint enforces this.
+- `src/widget/` holds the tool widget's rules as plain functions: the steps a tool goes through (`state.ts`), shared words and numbers (`format.ts`), and the accepted-type check (`accept.ts`).
+- `src/engines/` holds engines: pure functions from bytes to bytes, one file per tool under `src/engines/tools/`, named by the tool's id. They use no page and no network; lint enforces this. `types.ts` is the contract. `qpdf.ts` wraps qpdf compiled to WebAssembly, and `inspect.ts` reads one PDF before a job; libraries reach an engine through `tools`, which the worker or a test fills in.
+- `src/content/tools/` holds the text below each tool, one Markdown file per page slug, rendered to plain HTML at build time.
+- `tests/fixtures/` holds the shared test PDFs, made by `make.mjs`; its README says what each engine does with each file.
+- `src/workers/` holds the one tool worker, its typed messages, the logic it runs (`worker-core.ts`, tested in Node) and the page's client. The worker is ended after every job.
 - `src/pages/` and `src/layouts/` hold thin `.astro` files that read the registry and pass props to components. A component with no `client:` directive ships no script.
 - `src/styles/site.css` is the one global stylesheet.
 
@@ -117,10 +125,12 @@ All but `developer` are read-only.
 
 ## Questions waiting for the owner
 
+- **Repair PDF link.** `SPEC.md` says a damaged file shows a link to Repair PDF. Repair PDF is a phase 2 tool, so for now the page offers to leave the file out, and shows the link only once Repair PDF is published (`add-tool-widget`). The owner may want it otherwise. Also, the WebAssembly build of qpdf does not rebuild a broken cross-reference table that desktop qpdf rebuilds, so Repair PDF may need more than this build.
+
 - **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
 - **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
-- **GitHub Pages settings.** The preview deploys only after the owner has, in the repo's Settings, set Pages > Source to "GitHub Actions" and allowed `claude/*` branches under Environments > github-pages > Deployment branches. Pages on a private repo needs a paid GitHub plan; if the owner's plan is free, the choice between paying, making the repo public and dropping Pages is the owner's.
+- **Which pushes publish to the preview.** The owner switched Pages on, on 10 Nov 2026. Should every push to `main` or a `claude/` branch publish, as built, or only chosen branches? The branch rule is under Settings > Environments > github-pages.
 - **Pages for previews only, or for launch too?** Hosting on GitHub Pages means GitHub serves every page and logs each visitor's IP address, and the address shows the owner's account name. The Privacy page will have to say so if the site launches there.
 
 ## Commands
@@ -133,6 +143,7 @@ All but `developer` are read-only.
 - `npm run check` runs the type check.
 - `npm test` runs the unit tests (Vitest).
 - `npm run weigh` adds up the compressed size of each built page and fails over 100 KB. Run it after a build.
+- `npm run check:worker` checks the built site: each engine is its own file, loaded late by the worker. Run it after a build.
 - `npm run check:base` builds the site as a preview under a sub-path and fails if any link, stylesheet or script would break there. Never write a link as a bare `/path`; pass it through `withBase`.
 - `npm run e2e` runs the end-to-end tests (Playwright) against the built site, at 360px and 1280px. Run it after a build, and add `-- --trace off` unless a trace is wanted.
 - Astro sends anonymous usage figures to its makers unless `ASTRO_TELEMETRY_DISABLED=1` is set. CI and agent sessions set it. On your own machine, run `npx astro telemetry disable` once.

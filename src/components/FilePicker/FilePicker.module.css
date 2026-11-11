@@ -1,0 +1,26 @@
+.picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+/* The input covers no space but stays in the tab order and in reach of screen readers. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+/* The label shows where focus is when the hidden input has it. */
+.picker:has(.input:focus-visible) {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+@media (max-width: 30rem) {
+  .picker {
+    display: flex;
+    width: 100%;
+  }
+}

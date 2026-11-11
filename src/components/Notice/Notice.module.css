@@ -1,0 +1,17 @@
+/* A border in the text colour sets a problem apart from the result box. */
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--text);
+  border-radius: 4px;
+}
+.notice p {
+  margin: 0;
+}
+.heading {
+  margin: 0;
+  font-size: 1.1875rem;
+}

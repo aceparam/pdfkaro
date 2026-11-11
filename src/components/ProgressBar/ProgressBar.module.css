@@ -1,0 +1,11 @@
+.track {
+  box-sizing: border-box;
+  height: 10px;
+  background: var(--field);
+  border: 1px solid var(--control);
+  border-radius: 2px;
+}
+.done {
+  height: 100%;
+  background: var(--button-bg);
+}

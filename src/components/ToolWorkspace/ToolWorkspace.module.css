@@ -1,0 +1,27 @@
+.summary {
+  margin: 0 0 0.625rem;
+  color: var(--muted);
+}
+.summary:focus-visible {
+  outline-offset: 4px;
+}
+.refused {
+  margin: 0 0 0.625rem;
+}
+.apart {
+  gap: 1.75rem;
+  margin-top: 1rem;
+}
+.tooFew {
+  margin: -1rem 0 0;
+  color: var(--muted);
+}
+.working {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.progressLine {
+  margin: 0;
+  font-weight: 700;
+}

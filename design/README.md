@@ -26,11 +26,11 @@ Merge PDF stands in for every tool, because all tools share one page shell. Word
 | `merge-pdf-loading.html` | "Getting ready" beside each file name | `tool-page`: Engine loading state |
 | `merge-pdf-files.html` | The working area: files with thumbnails, Move up, Move down, Remove, and the main button | `tool-page`: Working area, Reordering without drag, One main button named after the result |
 | `merge-pdf-large.html` | The warning when the files are over 100 MB | `privacy`: No fixed size limit, with a warning |
-| `merge-pdf-working.html` | "Page 14 of 120", the progress bar and Cancel | `tool-page`: Working state |
+| `merge-pdf-working.html` | "Reading file 2 of 3", the progress bar and Cancel | `tool-page`: Working state |
 | `merge-pdf-done.html` | File name, size, Download and next steps | `tool-page`: Result block, Handover between tools |
 | `merge-pdf-password.html` | A password field with the note that the password stays in the browser | `tool-page`: Password needed state |
 | `merge-pdf-password-wrong.html` | The same field after a wrong password | `tool-page`: Password needed state |
-| `merge-pdf-damaged.html` | What is wrong and a link to Repair PDF | `tool-page`: Damaged file state |
+| `merge-pdf-damaged.html` | Which file is damaged, and Leave this file out. No link to Repair PDF until it is published | `tool-page`: Damaged file state |
 | `merge-pdf-failed.html` | What happened in one sentence and one thing to try | `tool-page`: Failed state |
 | `word-to-pdf-too-large.html` | The upload sentence for a server tool, the limit, the file's size and what to try | `tool-page`: Too large state, Heading and sentence |
 | `group-organise-pages.html` | A group page listing its tools | `tool-registry`: Seven groups |
@@ -57,10 +57,10 @@ Layout and behaviour:
 
 - **Where the column sits.** It is placed towards the left of a wide screen. "Left-aligned" in `SPEC.md` could also mean a centred column with left-aligned text.
 - **Two steps to download.** "Merge and download" starts the job, then the result block has its own Download button. This follows `SPEC.md` literally; whether the main button should download at once is an open question.
-- **The link to Repair PDF** on the damaged-file screen. Repair PDF is a phase 2 tool, so the link has nowhere to go at launch.
+- **The link to Repair PDF** on the damaged-file screen. Repair PDF is a phase 2 tool, so the screen no longer shows it; the `add-tool-widget` change shows the link only once Repair PDF is published. The owner may want it otherwise.
 - **Group headings on the home page are links** to the group pages. `SPEC.md` does not say how a visitor reaches a group page.
 - **Two lines the specs do not ask for:** "2 tools match." under the filter box, and "You can also drop files anywhere on this page, or paste them." under the file picker. The specs say the home page and the empty state hold nothing else.
-- **Controls the specs do not name:** Add more files, Remove, Leave this file out, Merge the other 2 files, Go back to your files.
+- **Controls the specs do not name:** Add more files, Remove, Leave this file out (for a password or a damaged file), Go back to your files.
 - **The merged file's name** is built from the first file's name. `SPEC.md` gives the rule for one input only.
 - **The 100 MB warning** is shown when the files together pass 100 MB, not when one file does.
 - **The wrong-password message** is bold text above the field. The specs say only that the page says the password is wrong.

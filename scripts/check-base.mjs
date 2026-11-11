@@ -1,6 +1,7 @@
 // Builds the site as a preview under a sub-path, then checks that every link,
 // stylesheet, script, form address and image in the built pages and
-// stylesheets sits under that sub-path.
+// stylesheets, and every built asset address inside a script, sits under that
+// sub-path.
 // A link written as "/about" in a page, and not passed through withBase, would
 // work at the root and break on the preview. This catches it.
 //
@@ -65,6 +66,20 @@ for (const file of pages) {
 }
 for (const file of walk(outDir).filter((name) => name.endsWith('.css'))) {
   for (const match of readFileSync(file, 'utf8').matchAll(cssUrl)) check(file, match[1]);
+}
+
+// Scripts carry addresses too: the worker builds the address of the WebAssembly
+// file from one. Every built asset address in a script must sit under the base.
+const assetAddress = /(["'`])(\/[^"'`\s]*?\/?_astro\/[^"'`\s]+)\1/g;
+let inScripts = 0;
+for (const file of walk(outDir).filter((name) => /\.m?js$/.test(name))) {
+  for (const match of readFileSync(file, 'utf8').matchAll(assetAddress)) {
+    inScripts += 1;
+    check(file, match[2]);
+  }
+}
+if (walk(outDir).some((name) => name.endsWith('.wasm')) && inScripts === 0) {
+  problems.push('A WebAssembly file is built, but no script names its address; this check may have missed it.');
 }
 
 rmSync(outDir, { recursive: true, force: true });

@@ -24,5 +24,10 @@ export default defineConfig({
     inlineStylesheets: 'never',
   },
   devToolbar: { enabled: false },
+  vite: {
+    // Workers are ES modules, so each tool's engine stays its own file and is
+    // fetched only when that tool runs.
+    worker: { format: 'es' },
+  },
   integrations: [react()],
 });

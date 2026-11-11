@@ -17,6 +17,46 @@ export default defineConfig(
   },
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   {
+    // Engines are pure: bytes in, bytes out. They never reach the page or the network.
+    files: ['src/engines/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'window',
+          'self',
+          'globalThis',
+          'document',
+          'navigator',
+          'localStorage',
+          'sessionStorage',
+          'indexedDB',
+          'caches',
+          'fetch',
+          'XMLHttpRequest',
+          'WebSocket',
+          'EventSource',
+          'importScripts',
+          'postMessage',
+        ].map((name) => ({ name, message: 'Engines use no page and no network. What they need comes in through `tools`.' })),
+      ],
+    },
+  },
+  {
+    // The worker and its client fetch nothing either: engines and WebAssembly
+    // come in through the bundler's own imports, never through a request the
+    // code writes itself.
+    files: ['src/workers/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        ...['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'localStorage', 'sessionStorage', 'indexedDB', 'caches'].map(
+          (name) => ({ name, message: 'The worker sends nothing anywhere and stores nothing.' }),
+        ),
+      ],
+    },
+  },
+  {
     // Components get what they show through props. From src/tools/ they may
     // take only the filter rule and types, so the registry stays out of the
     // script a page ships and components stay reusable.
@@ -31,15 +71,25 @@ export default defineConfig(
               allowTypeImports: true,
               message: 'Components may import only the filter rule and types from src/tools/. Pass data in through props.',
             },
+            {
+              // Hooks are part of the island, so an engine imported here would load with the page.
+              group: ['**/engines/*'],
+              allowTypeImports: true,
+              message: 'Components and hooks do not import engines. Only the worker loads them.',
+            },
           ],
         },
       ],
-      // The same rule for import() calls, which the rule above does not see.
+      // The same rules for import() calls, which the rule above does not see.
       'no-restricted-syntax': [
         'error',
         {
           selector: 'ImportExpression[source.value=/tools\\//]',
           message: 'Components may not load src/tools/ with import(). Pass data in through props.',
+        },
+        {
+          selector: 'ImportExpression[source.value=/engines\\//]',
+          message: 'Components and hooks may not load an engine with import(). Only the worker loads them.',
         },
         // A link written as "/path" in a component would break on a preview under
         // a sub-path, and the built-page check cannot see a link that only shows
@@ -55,6 +105,52 @@ export default defineConfig(
         {
           selector: 'JSXAttribute[name.name=/^(href|src|action)$/] > JSXExpressionContainer > TemplateLiteral[quasis.0.value.raw=/^\\//]',
           message: 'Do not write a link as "/path" in a component. Take it as a prop; pages build it with withBase.',
+        },
+      ],
+    },
+  },
+  {
+    // Components and pages never load an engine or a worker themselves. The
+    // workspace starts the worker by its address; types are fine. This block
+    // repeats the src/tools/ rule, because a later block replaces an earlier
+    // one's setting for the same rule.
+    files: ['src/components/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/tools/*', '!**/tools/filter'],
+              allowTypeImports: true,
+              message: 'Components may import only the filter rule and types from src/tools/. Pass data in through props.',
+            },
+            {
+              group: ['**/engines/*'],
+              allowTypeImports: true,
+              message: 'Components and pages do not import engines.',
+            },
+            {
+              group: ['**/workers/*'],
+              allowTypeImports: true,
+              message: 'Components and pages do not import workers. Take what you need through a hook.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Pages read the registry and pass it on, but never load an engine or a worker.
+    files: ['src/pages/**', 'src/layouts/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['**/engines/*'], allowTypeImports: true, message: 'Pages do not import engines.' },
+            { group: ['**/workers/*'], allowTypeImports: true, message: 'Pages do not import workers.' },
+          ],
         },
       ],
     },

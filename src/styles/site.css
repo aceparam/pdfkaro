@@ -183,4 +183,24 @@ a.tap {
   border: 1px solid var(--control);
 }
 
+/* A column of buttons: natural width on a wide screen, full width on a phone. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-top: 1.5rem;
+}
+@media (max-width: 30rem) {
+  .actions {
+    align-items: stretch;
+  }
+}
+.button[aria-disabled='true'] {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--control);
+  cursor: default;
+}
+
 } /* end of the site layer */
