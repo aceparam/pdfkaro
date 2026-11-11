@@ -221,6 +221,36 @@ test.describe('thumbnails are forgotten with their files', () => {
     expect(await stillOpen(page, [removed!])).toEqual([false]);
   });
 
+  test('a picture that arrives after its file was removed is thrown away before any address is made', async ({ page }) => {
+    // Count every picture address the page makes.
+    await page.addInitScript(() => {
+      const made: string[] = [];
+      (window as unknown as { made: string[] }).made = made;
+      const create = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = (object: Blob | MediaSource) => {
+        const url = create(object);
+        if (object instanceof Blob && object.type === 'image/png') made.push(url);
+        return url;
+      };
+    });
+    // Hold PDF.js's data back, so the first thumbnail is still being drawn when its file is removed.
+    const held: Route[] = [];
+    await page.context().route(/\/_astro\/pdfjs-data-[^/]+\.js$/, (route) => {
+      held.push(route);
+    });
+    await open(page);
+    await pick(page, ['text.pdf', 'mixed.pdf']);
+    await expect.poll(() => held.length).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Remove text.pdf' }).click();
+    // Removing it stops that drawing on a fresh worker; from here on, let the data through.
+    await page.context().unroute(/\/_astro\/pdfjs-data-[^/]+\.js$/);
+    for (const route of held.splice(0)) await route.continue().catch(() => {});
+    await expect(pictures(page)).toHaveCount(1, { timeout: 20000 });
+    await expect(items(page).filter({ hasText: 'mixed.pdf' }).locator('img')).toHaveCount(1);
+    // One address only: mixed.pdf's. text.pdf's picture was dropped before an address was made.
+    expect(await page.evaluate(() => (window as unknown as { made: string[] }).made.length)).toBe(1);
+  });
+
   test('Start again and leaving the page revoke every picture', async ({ page }) => {
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf']);

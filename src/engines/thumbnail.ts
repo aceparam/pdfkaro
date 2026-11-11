@@ -66,7 +66,8 @@ async function need<T>(tools: EngineTools, name: string): Promise<T> {
 
 /**
  * Draws page `page` (1-based) to fit inside `box`, keeping the page's shape,
- * and gives back PNG bytes. The document is closed every time.
+ * and gives back PNG bytes. The document is closed every time. `file` is
+ * handed to PDF.js, which takes it over: the caller must not use it after.
  */
 export async function renderPage(
   file: Uint8Array,
@@ -143,8 +144,8 @@ export async function renderPage(
 
   const task = pdfjs.getDocument({
     ...safeOptions,
-    // A copy, because PDF.js takes ownership of the bytes it is given.
-    data: file.slice(),
+    // PDF.js takes ownership of these bytes. They are the worker's own copy, read for this call, so no further copy is made.
+    data: file,
     password,
     CanvasFactory,
     FilterFactory,

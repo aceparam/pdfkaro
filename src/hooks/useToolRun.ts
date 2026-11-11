@@ -196,12 +196,14 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
 
   const removeFile = useCallback(
     (id: string) => {
+      // A file removed while its picture is drawn: stop that drawing, so no two are ever drawn at once.
+      if (drawing.current?.id === id) stopThumbnail();
       files.current.delete(id);
       passwords.current.delete(id);
       forgetThumbnail(id);
       dispatch({ type: 'removed', id });
     },
-    [forgetThumbnail],
+    [forgetThumbnail, stopThumbnail],
   );
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);

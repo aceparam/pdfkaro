@@ -70,11 +70,6 @@ describe('drawing a page', () => {
     await expect(renderPage(fixture('text.pdf'), 4, box, undefined, tools)).rejects.toThrow();
   });
 
-  it('leaves the caller its own bytes', async () => {
-    const bytes = fixture('text.pdf');
-    await renderPage(bytes, 1, box, undefined, tools);
-    expect(bytes.byteLength).toBeGreaterThan(0);
-  });
 });
 
 describe('the options given to PDF.js', () => {
