@@ -27,8 +27,8 @@ The page SHALL take several PDF files at once and let more be added. Files SHALL
 
 #### Scenario: A file is not a PDF
 
-- **WHEN** a visitor chooses a file that is not a PDF
-- **THEN** it is not listed, and the page says the file is not a PDF and names it
+- **WHEN** a visitor chooses `notes.txt`, or a text file renamed `notes.pdf`
+- **THEN** it is not listed, and the page says "notes.pdf is not a PDF, so it was not added."
 
 ### Requirement: Each file is read before the job
 
@@ -65,7 +65,7 @@ Files SHALL be joined in the order listed. Each file SHALL have "Move up", "Move
 
 ### Requirement: Merging
 
-The main button SHALL read "Merge and download". Pressing it SHALL join every page of every listed file, in order, into one PDF. The result MUST pass `qpdf --check`. Page content, links and form fields SHALL be kept. The first file's bookmarks and attachments SHALL be kept; those of later files are not, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; What we are building, rule 4)
+The main button SHALL read "Merge and download". Pressing it SHALL join every page of every listed file, in order, into one PDF. The result MUST pass `qpdf --check`. Page content, links and form fields SHALL be kept. The first file's bookmarks and attachments SHALL be kept; those of later files are not, by the owner's decision of 11 Nov 2026, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; What we are building, rule 4)
 
 #### Scenario: Two files are merged
 
@@ -80,7 +80,7 @@ The main button SHALL read "Merge and download". Pressing it SHALL join every pa
 #### Scenario: One file is listed
 
 - **WHEN** only one file is listed
-- **THEN** the main button is marked as unavailable, and the page says to add at least one more file
+- **THEN** the main button is marked as unavailable and stays focusable, and "Add at least one more file to merge." is tied to it
 
 #### Scenario: The first file has bookmarks
 
@@ -94,7 +94,7 @@ While the job runs the page SHALL show progress in real units, with a Cancel but
 #### Scenario: A job is running
 
 - **WHEN** three files are being merged
-- **THEN** the page shows which file of three is being read, then how much of the result has been written, and a Cancel button
+- **THEN** the page shows "Reading file 2 of 3", then "Writing the merged file, 40%", a bar that never goes back, and a Cancel button
 
 #### Scenario: Cancel is pressed
 
@@ -132,7 +132,7 @@ When the job is done the page SHALL show the result's name, size and page count,
 
 ### Requirement: A file that needs a password
 
-When a file needs a password the page SHALL ask for it in a labelled field that names the file, with a note that the password stays in the browser. A wrong password SHALL be reported and the field kept. The visitor SHALL be able to leave the file out. The merged file has no password, and the page SHALL say so. (SPEC.md: States every tool handles; Privacy, browser tools)
+When a file needs a password the page SHALL ask for it in a labelled field that names the file, with a note that the password stays in the browser. A wrong password SHALL be reported and the field kept. The visitor SHALL be able to leave the file out. The merged file has no password and no restrictions, by the owner's decision of 11 Nov 2026, and the page SHALL say so. (SPEC.md: States every tool handles; Privacy, browser tools)
 
 #### Scenario: A protected file is chosen
 
@@ -165,8 +165,13 @@ When a file cannot be read as a PDF the page SHALL say that the file is damaged,
 
 #### Scenario: A damaged file is chosen with others
 
-- **WHEN** a visitor chooses two good files and one with a broken cross-reference table that cannot be read
-- **THEN** the page says the third file is damaged, lists the two good files, and offers "Merge the other 2 files"
+- **WHEN** a visitor chooses two good files and one that is cut off part way
+- **THEN** the page says "part-3.pdf is damaged and cannot be read.", lists the two good files, and offers "Merge the other 2 files"
+
+#### Scenario: Only one good file is left
+
+- **WHEN** a visitor chooses one good file and one damaged file
+- **THEN** the page says the second is damaged, and leaving it out returns to one file, which asks for at least one more
 
 #### Scenario: Repair PDF is not published
 
@@ -223,3 +228,12 @@ The page SHALL carry three or four how-to steps and questions people really have
 
 - **WHEN** the text has not been reviewed by the owner
 - **THEN** its file says so, and the tool is reported as waiting on the owner
+
+### Requirement: Cancel and failure leave the files as they were
+
+Cancel and a failed job SHALL leave the list of files as it was, so the visitor can try again without choosing the files again. (SPEC.md: States every tool handles)
+
+#### Scenario: Out of memory
+
+- **WHEN** the browser runs out of memory during a merge
+- **THEN** the page says "Your browser ran out of memory. Try fewer or smaller files." and "Go back to your files" returns to the list as it was

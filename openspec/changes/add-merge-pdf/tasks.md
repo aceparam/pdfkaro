@@ -1,49 +1,40 @@
 # Tasks
 
+Depends on `add-tool-widget` being merged.
+
 ## 1. Registry
 
-- [ ] 1.1 Add the widget words to the tool type and to the Merge PDF entry, with a unit test
+- [ ] 1.1 Add the Merge PDF widget words to its registry entry, with a unit test
 
-## 2. Test files
+## 2. Test set
 
-- [ ] 2.1 Add `tests/fixtures/make.mjs` and the files it makes, and `make-large.mjs` for a file over 100 MB that is not committed
-- [ ] 2.2 Record in `tests/fixtures/README.md` what each file is, and that the multilingual file is missing
+- [ ] 2.1 Add `tests/fixtures/make.mjs` and the files it makes, and `make-large.mjs`
+- [ ] 2.2 Write `tests/fixtures/README.md`: each file, what each engine is expected to do with it, and that the multilingual file is missing
 
 ## 3. Engine
 
-- [ ] 3.1 Add `src/engines/types.ts` and `src/engines/qpdf.ts`
-- [ ] 3.2 Add `src/engines/inspect.ts`
-- [ ] 3.3 Add `src/engines/tools/merge-pdf.ts`
-- [ ] 3.4 Unit test `inspect` and the merge engine against every file in `tests/fixtures/`, and check every result with qpdf's own check
-- [ ] 3.5 Add the lint rule that engines use no DOM and that components and pages do not import engines
+- [ ] 3.1 Add `src/engines/inspect.ts` and `src/engines/tools/merge-pdf.ts`
+- [ ] 3.2 Unit test both against every fixture; check every result with qpdf's `--check`, its page count and its page order
+- [ ] 3.3 Record the outcome for each fixture in the README
 
-## 4. Worker
+## 4. Page
 
-- [ ] 4.1 Add `src/workers/messages.ts`, `tool.worker.ts` and `client.ts`, with typed messages, transferred bytes, progress and cancel
+- [ ] 4.1 Mount `ToolWidget` on the tool page
+- [ ] 4.2 Draft `src/content/tools/merge-pdf.md`, 250 to 500 words, marked for the owner, covering bookmarks and the merged file having no password
 
-## 5. Widget logic
+## 5. End-to-end tests
 
-- [ ] 5.1 Add `src/widget/state.ts` and `src/widget/format.ts`, with unit tests
-- [ ] 5.2 Add `src/hooks/useToolRun.ts` and `src/hooks/useFileDrop.ts`
+- [ ] 5.1 Every path listed in design decision 4, at 360px and 1280px
+- [ ] 5.2 The no-upload test
+- [ ] 5.3 The responsiveness test with the 500-page file
 
-## 6. Components and page
+## 6. Checks and housekeeping
 
-- [ ] 6.1 Add `FilePicker`, `PageGrid`, `Result`, `ProgressBar`, `Notice` and `PasswordField`
-- [ ] 6.2 Add `ToolWidget` and `ToolWorkspace`
-- [ ] 6.3 Mount the widget in `src/pages/[slug].astro`
-- [ ] 6.4 Draft the text below the tool in `src/content/tools/merge-pdf.md`, 250 to 500 words, marked for the owner
-
-## 7. End-to-end tests
-
-- [ ] 7.1 The whole job at 360px and 1280px, with the keyboard, checking the saved file
-- [ ] 7.2 The password path, the damaged path, "Start again", and a file that is not a PDF
-- [ ] 7.3 The no-upload test, and that nothing but the picker loads before a pick
-
-## 8. Checks and housekeeping
-
-- [ ] 8.1 Name the late-loading files in `scripts/page-weight.mjs` and record the tool page's weight before a pick
-- [ ] 8.2 Add the two dependencies to `LICENSES.md`
-- [ ] 8.3 Update "Where the project stands" and the questions for the owner in `CLAUDE.md`
-- [ ] 8.4 Take screenshots of each state at 360px and 1280px, in light and dark mode, and check each against "Banned patterns"
-- [ ] 8.5 Run `npm audit` and `openspec validate --all --strict`
-- [ ] 8.6 Run the review panel (see the review-panel skill) and resolve its findings
+- [ ] 6.1 Name the late-loading files in `scripts/page-weight.mjs`; measure and record the tool page before a pick
+- [ ] 6.2 Run the file over 100 MB by hand and record the outcome
+- [ ] 6.3 Add the two dependencies to `LICENSES.md`
+- [ ] 6.4 Update the design screens in `design/screens/` for the progress words and the damaged and failed states
+- [ ] 6.5 Update "Where the project stands" in `CLAUDE.md`; do not claim the Phase 0 gate; name thumbnails as the remaining Phase 0 work
+- [ ] 6.6 Take screenshots of each state at 360px and 1280px, light and dark, and check each against "Banned patterns"
+- [ ] 6.7 Run `npm audit` and `openspec validate --all --strict`
+- [ ] 6.8 Run the review panel (see the review-panel skill) and resolve its findings

@@ -12,11 +12,12 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 
 ## Where the project stands
 
-**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in three changes:
+**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in these changes:
 
-1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Built; steps 1, 2, 3, 7, 8 and 9 below.
-2. Next: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5.
-3. Then: Merge PDF end to end, with its page text. Step 6.
+1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
+2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Proposed.
+3. `add-merge-pdf`: Merge PDF end to end, with its page text. Step 6. Proposed; depends on 2.
+4. Then: page thumbnails, which Merge PDF needs to pass "Tool page anatomy" in full.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -41,6 +42,8 @@ Update this section when a phase gate is passed.
 `SPEC.md` is an export of the owner's working doc and is not edited here. Where the owner has decided something since the export, it is listed below and it wins over `SPEC.md` until the export is refreshed.
 
 - **Preview on GitHub Pages (10 Nov 2026).** The owner asked to try the site before signing off the pull request, asked for it to be deployed on GitHub Pages, and chose to deploy the pull request's branch, having been told the preview is public even though the repo is private. This replaces the agent's earlier choice of Cloudflare Pages. How it is done is the agent's choice; see the next section.
+- **Merge PDF keeps bookmarks and attachments from the first file only (11 Nov 2026).** The owner chose this over keeping every file's, accepting the gap against "Definition of done". The page says so. Keeping all of them can come later.
+- **A merged file has no password or restrictions (11 Nov 2026),** even when an input had them. The page says so.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
