@@ -19,7 +19,7 @@ The rule in "Build phases" says a tool that needs a new shared component adds it
   - Once its one file has been read, the list shows one item per page, "Page 1", "Page 2" and so on, each with a thumbnail of that page.
   - Thumbnails are drawn as items come into view, one at a time, as now.
   - Whether an item has Move up, Move down and Remove buttons is the tool's choice. Split PDF's own control, marking where to cut, comes with Split PDF.
-- **One document stays open across pages.** The tool worker keeps the last PDF.js document it opened, keyed by an id the page makes up (never the file name). So drawing page 40 does not read the whole file again. It is closed when another file is asked for, and when the worker ends.
+- **One document stays open across pages.** The tool worker keeps the last PDF.js document it opened, keyed by an id the page makes up (never the file name). So drawing page 40 does not read the whole file again. It is closed when another file is asked for, when a job or a read starts, when its file is removed, and when the worker ends.
 - **Several results become one zip, made in the worker.**
   - When an engine returns more than one file, the worker zips them with `fflate` before handing them back. The page's own thread never handles the files.
   - The zip is named from the input with the tool's suffix, for example `report-split.zip`.
@@ -36,7 +36,7 @@ The rule in "Build phases" says a tool that needs a new shared component adds it
 
 ### `SPEC.md` sections
 
-- "Tool page anatomy", parts 4 and 6.
+- "Tool page anatomy", parts 4 and 6. Part 6 gives the result as "file name, new size"; for a zip, the result also shows how many files it holds, which refines it.
 - "Details that apply everywhere": several outputs as one zip; output names; thumbnails as they scroll into view; a 500-page file must not freeze the page.
 - "Architecture and tech stack": "Rules for the code" 2 to 4.
 
@@ -46,7 +46,7 @@ The rule in "Build phases" says a tool that needs a new shared component adds it
 
 Everything is in the visitor's browser, in the tool worker. No request carries file contents, a file name or a password.
 
-The one new request is `fflate`'s script, fetched by the worker after a job that gives several files, from the site itself. The no-upload test of the first tool that uses it will name it.
+The one new request is `fflate`'s script, from the site itself. The worker fetches it at the start of every run of a tool that can give several files, before the number of files is known. That way the request tells the site only which tool was used, as the engine's own request already does, and never how many pages or parts a file had. Split PDF's no-upload test will name it.
 
 ## Open decisions and owner questions touched
 

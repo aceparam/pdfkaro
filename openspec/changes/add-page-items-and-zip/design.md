@@ -3,11 +3,11 @@
 ## Context
 
 - **What exists:**
-  - `PageGrid` lists items with a fixed thumbnail slot, optional view reports, and Move up, Move down and Remove on every item.
-  - `useToolRun` keeps a thumbnail queue keyed by item id, where today an item is a file, and asks for page 1.
-  - The worker's thumbnail call opens a document, draws one page and closes it, every time.
-  - `worker-core` already passes every output of an engine back (`Uint8Array[]`). `useToolRun.start()` uses only `outputs[0]`.
-  - `ToolWidgetWords` carries a tool's words and rules.
+  - `PageGrid` lists items with a fixed thumbnail slot, a view watcher created once, and Move up, Move down and Remove on every item. Items can be dragged whenever there are two or more.
+  - `useToolRun` keeps a thumbnail queue keyed by item id. `next()` walks `state.files`, and `pump` looks the file up by that id. Today an item is a file, and page 1 is asked for.
+  - The worker's thumbnail call opens a document, draws one page and closes it, every time. `renderPage` comes in through `WorkerDeps`, is loaded late in `tool.worker.ts`, and is wrapped in `pdfjsLoader.guard`.
+  - `worker-core` already passes every output of an engine back. `useToolRun.start()` uses only `outputs[0]`.
+  - `outputName` cleans an input name and adds a suffix and an extension. There is no separate stem function.
 - **The owner decided on 12 Nov 2026:**
   - zips are made with `fflate`;
   - Split PDF splits at points the visitor picks (built in `add-split-pdf`).
@@ -15,9 +15,9 @@
 ## Goals / Non-Goals
 
 **Goals:**
-- Page items for tools that work on one file's pages.
-- Fast thumbnails across many pages of one file.
-- Several outputs as one zip, made in the worker.
+- Page items for tools that work on one file's pages, usable on a phone with 500 pages.
+- Fast thumbnails across many pages of one file, without a second copy of the file kept longer than needed.
+- Several outputs as one zip, made in the worker, with requests that never depend on the file.
 
 **Non-Goals:**
 - Any tool's own controls on a page.
@@ -26,83 +26,107 @@
 
 ## Decisions
 
-### 1. The registry says what a tool lists
+### 1. The registry says what a tool lists and gives
 
 `ToolWidgetWords` gains:
 - **`items: 'files' | 'pages'`.** Merge PDF stays `'files'`.
-- **`itemControls: boolean`.** Whether items have Move up, Move down and Remove. Merge PDF keeps `true`; a page tool sets `false` until it adds its own.
-- **`partSuffix?`.** The word for files inside a zip, such as `part`.
+- **`itemControls: boolean`.** Whether items have Move up, Move down and Remove, and whether they can be dragged. Merge PDF keeps `true`.
+- **`outputs: 'one' | 'several'`.** Whether a run can give several files. Merge PDF is `'one'`.
+- **`partSuffix?`.** The word for files inside a zip, such as `part`. Needed when `outputs` is `'several'`.
 
 A tool with `items: 'pages'` takes one file (`multiple: false`, `minFiles: 1`).
 
-### 2. Page items
+### 2. Page items, and the queue that draws them
 
 `src/widget/items.ts` is a plain function:
 
 ```ts
-gridItems(state, words) → { id, title, detail, fileId, page }[]
+gridItems(state, words) → { id, title, fileId, page }[]
 ```
 
-- **For `'files'`,** it gives one item per file, as now (page 1).
-- **For `'pages'`,** once the one file is `ready`, it gives `pages` items, with ids `${fileId}:${page}` and titles "Page N". Before that, it gives the file's item, which shows "Getting ready" or its problem.
+- **For `'files'`,** it gives one item per file, as now, with `id` the file id and `page` 1.
+- **For `'pages'`,** it gives nothing until the one file is `ready`. Then it gives `pages` items, with `id` `${fileId}:${page}` and `title` "Page N". Until then, the file's own line shows "Getting ready", the password field, the damaged notice or the large-file warning, as for a list of files.
 
-The thumbnail queue is unchanged: it works on item ids, and `next` checks readiness through the item's `fileId`.
+The thumbnail queue changes:
+- `next(queue, state, items)` walks `items` in order.
+- It checks each item's readiness through `item.fileId` in `state.files`.
+- It keeps its other rules: one at a time, nothing while a file is read, only while listing.
 
-`useToolRun` asks for `item.page` of `item.fileId`.
+`useToolRun` keeps a map from item id to `{ fileId, page }` from the last `gridItems`, and asks for `page` of `fileId`. The unit tests cover page items, files, and an id that names a removed file.
 
-`PageGrid` draws Move up, Move down and Remove only when `itemControls` is true. Its watcher, slot and blank box are unchanged. 500 rows of plain text and an empty slot are cheap to draw, which the 500-page end-to-end test checks.
+### 3. How page items look and stay quick
 
-### 3. One open document in the worker
+- **The file line.** For `'pages'`, `ToolWorkspace` shows one line above the pages: the file's name, its page count and its size, with Remove. Removing it returns to the picker.
+- **The grid.** `PageGrid` lays page items out as a wrapping grid. Each cell is the 52 by 68 slot with "Page N" under it, about 80 by 100 px. At 360 px that gives four to a row, so 500 pages take about 125 rows, roughly 12,500 px.
+- **The skip link.** A plain "Skip to the main button" link sits above the grid. It moves focus to the main button, so keyboard and screen reader users never have to pass 500 pages, and a phone user can jump there.
+- **What does not move.** The page order of the anatomy stays: working area, then the main button. Nothing sticks to the screen.
+- **No controls, no drag.** When `itemControls` is false, items have no buttons and are not draggable.
+- **Quick re-renders.** Rows become a memoised `PageItem` component, with stable `ref` functions held in a map by id. A thumbnail arriving then re-renders only its own row. `ToolWorkspace` builds items with `useMemo` over the files and passes thumbnails as a separate map. The 500-page long-task check stays in task 5.1.
 
-`src/engines/thumbnail.ts` splits in two:
-- **`openDocument(file, password, tools) → { pages, render(page, box), close() }`.**
-- **`renderPage`,** kept for one-off use, opens, renders and closes.
+### 4. One open document in the worker, never in a job's way
 
-The thumbnail message gains `documentKey`, the item's `fileId`, an id the page makes up and never a file name. `worker-core` keeps at most one open document, with its key:
-- **The same key** draws from the open document, without reading the file again.
-- **Another key** closes it and opens the new file.
-- **When the worker ends,** everything goes with it.
+- **Two entry points.** `src/engines/thumbnail.ts` gains `openDocument(file, password, tools) → { pages, render(page, box), close() }`, with `renderPage` kept for one-off use.
+- **Loaded late, through `WorkerDeps`.** `worker-core` gets `openDocument` through `WorkerDeps`, loaded late in `tool.worker.ts` like `renderPage`. Every drawing is wrapped in `pdfjsLoader.guard`.
+- **One document at a time.** The thumbnail message gains `documentKey`, the item's `fileId`, an id the page makes up and never a file name. `worker-core` keeps at most one open document, with its key:
+  - the same key draws from it;
+  - another key closes it and opens the new file;
+  - a `run` or `inspect` message closes it at once, so a job or a read never runs beside a kept copy of a file;
+  - a `close` message from the page closes it.
+- **Removing a file closes it.** `useToolRun.removeFile` sends `close` when the removed file is the open one, or ends the client if a thumbnail is being drawn, as now. Removing a file therefore drops its kept copy at once.
+- **Ending everything.** "Start again", `pagehide` and the end of a job end the worker as now, which ends everything.
 
-Only one document is open at a time, so memory stays at one file's worth.
+### 5. Several outputs become one zip, in the worker
 
-### 4. Several outputs become one zip, in the worker
+- **The request.** For a tool whose `outputs` is `'several'`, every `run` message carries `zip: { stem, partSuffix }`.
+- **Loading `fflate` up front.** On a run with `zip`, `worker-core` loads `fflate` through `WorkerDeps` (`import()` in `tool.worker.ts`) at the start, before the engine has given anything. So the request is the same whether the file gives one part or a hundred.
+- **When there are several outputs:**
+  1. entries are named `partName(stem, partSuffix, n, total)`, numbered from 1 and padded so they sort;
+  2. `zipSync` runs with `level: 0`, since PDFs are already compressed. It is sync only, because `fflate`'s async API starts workers from `blob:` code;
+  3. the outputs are dropped as soon as the zip exists, as the inputs already are;
+  4. one output goes back, the zip, with `parts: n`.
+- **When there is one output,** it goes back as now.
 
-The `run` message gains `zip?: { stem, partSuffix }`, where `stem` is the cleaned input name the page already computes. When an engine returns more than one output, `worker-core`:
-1. loads `fflate` with `import()`;
-2. builds entries named `${stem}-${partSuffix}-${n}.pdf`, numbered from 1, padded so they sort, such as `-01` when there are 10 or more;
-3. calls `zipSync` with `level: 0`, since PDFs are already compressed and storing keeps it fast and its memory low;
-4. sends back one output, the zip, with `parts: n`.
+### 6. Names, and the checks the worker makes
 
-When there is one output, it is sent back as now.
+- **One cleaning for every name.** `format.ts` gains `stem(input)`, split out of `outputName`, so both use the same cleaning. That cleaning also strips `: * ? " < > |` and a leading dot, which Windows refuses or hides. `outputName(input, suffix, ext)` becomes `${stem(input)}-${suffix}.${ext}`. `partName(stem, suffix, n, total)` is unit tested, including `a:b*c?.pdf` and `../x.pdf`.
+- **The worker checks the new fields itself** (`isToWorker`):
+  - `zip.stem`: 1 to 100 characters, no `/`, `\`, control or bidi characters, none of `: * ? " < > |`, no leading dot, and not `.` or `..`;
+  - `zip.partSuffix`: the tool id pattern;
+  - `documentKey`: `^f[0-9]{1,9}$`, the page's own file ids;
+  - unit tests for each.
+- **The result.** `useToolRun.start()` makes a `Blob` of type `application/zip` named `outputName(input, words.outputSuffix, 'zip')` when the reply has `parts`. `ResultInfo` gains `parts?`. `Result` shows "N files" from `fileCount` and no next steps for a zip.
 
-`useToolRun.start()`:
-- **Several files:** a `Blob` of type `application/zip`, named `outputName(input, words.outputSuffix, 'zip')`.
-- **One file:** a PDF as now.
+### 7. Page weight, memory and what loads when
 
-`ResultInfo` gains `parts?`. `Result` shows "N files" in its detail line when `parts > 1`, from `fileCount`.
+- **Before a pick:** nothing new loads. `items.ts`, `PageItem` and the other changes are in the workspace chunk.
+- **`fflate`'s zip step:** about 8 KB gzip, loaded at the start of every run of a tool that gives several files. `page-weight.mjs` and `check-worker.mjs` name it, and check it is not in the worker file.
+- **Peak memory of a split:** the input in the worker and in qpdf, the parts, then the zip. The parts are dropped once the zip exists, so the peak is about the input twice plus the parts twice. For a 500-part split of a 100 MB file that is roughly 400 MB, which the 100 MB warning already covers.
 
-`format.ts` gains `partName(stem, suffix, n, total)`, unit tested.
-
-### 5. Page weight and what loads when
-
-Nothing new loads before a pick: `items.ts` and the `PageGrid` change are in the workspace chunk. `fflate`'s zip step is about 8 KB and loads only after a job that gives several files. `page-weight.mjs` and `check-worker.mjs` name it.
-
-### 6. Dependency
+### 8. Dependency
 
 | Package | Why | Licence | Last release | Shipped |
 | --- | --- | --- | --- | --- |
-| `fflate` 0.8.3, exact | Joins several outputs into one zip, as `SPEC.md` asks, in the worker. The owner's choice of 12 Nov 2026 | MIT | Jul 2026 | About 8 KB gzip, only after a job that gives several files |
+| `fflate` 0.8.3, exact | Joins several outputs into one zip, as `SPEC.md` asks, in the worker. The owner's choice of 12 Nov 2026 | MIT | Jul 2026 | About 8 KB gzip, at the start of every run of a tool that gives several files |
 
 It is already installed as a dependency of `@cantoo/pdf-lib`. This change makes it a direct, pinned dependency.
 
-### 7. Threats
+### 9. Threats
 
-- **A malicious PDF:** as for thumbnails. One document is open at a time, in PDF.js's own worker.
-- **An oversized result:** zipping stores the files without compressing, adding about one copy of the outputs at its peak. The 100 MB warning stands.
-- **A hostile file name:** names inside the zip come from the cleaned stem made by `outputName`'s rules, plus numbers. Never a path.
+- **A malicious PDF:** as for thumbnails. One document is open at a time, in PDF.js's own worker, and closed before any job or read.
+- **An oversized result:** see the peak above. The 100 MB warning stands.
+- **A hostile file name:**
+  - every name comes from the shared cleaning;
+  - the worker refuses a stem that could be a path or carries characters common systems refuse;
+  - zip entries are the stem plus numbers, never a path.
+
+### 10. What Split PDF's no-upload test must cover
+
+These checks are deferred to `add-split-pdf`, the first tool using these parts, and are written down here so they are not dropped:
+- **The allowlist** names `fflate`'s chunk by exact name.
+- **A run that gives one file and a run that gives several** both fetch `fflate`, and the same list of files.
+- **The strings no request may carry** include the input name (`report.pdf` in the test) and the password.
 
 ## Risks / Trade-offs
 
-- **The open document holds a copy of the file** in PDF.js's worker while the list is shown. The worker is still ended after every job, on "Start again" and on leaving.
+- **About 12,500 px of grid** for 500 pages at 360 px. The skip link covers keyboard and screen reader users. A phone user scrolls, or uses the link. If it proves too long on a phone, the grid can be windowed later without changing the spec.
 - **No tool uses these parts yet.** The end-to-end proof comes with Split PDF. This change is proven by unit tests and component tests, and by a scratch build with a made-up page tool and engine, as `add-tool-widget` was.
-- **500 items in one list.** Drawing them is cheap, but if it proves slow on a phone, the list can be windowed later without changing the spec.
