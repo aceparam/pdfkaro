@@ -31,9 +31,13 @@ class EngineLoadError extends Error {}
 /** Sorts a thrown error into the kinds the page can explain. No message or stack leaves the worker. */
 export function failureKind(error: unknown): FailureKind {
   if (error instanceof EngineLoadError) return 'engine-load';
+  // An engine's files would not fit in one zip. Known by name, so engines need not import worker code.
+  if (error instanceof Error && error.name === 'TooBigForZip') {
+    return (error as Error & { reason?: unknown }).reason === 'files' ? 'too-many-files' : 'zip-too-large';
+  }
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
-  if (/out of memory|\boom\b|cannot enlarge memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
+  if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
     return 'memory';
   }
   return 'engine';

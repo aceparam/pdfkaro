@@ -86,7 +86,7 @@ export function isToWorker(value: unknown): value is ToWorker {
   return false;
 }
 
-const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory'];
+const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large'];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
 export function isFromWorker(value: unknown): value is FromWorker {

@@ -48,7 +48,10 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
   const factory = (typeof loaded === 'function' ? loaded : loaded.default) as QpdfFactory;
 
   // One line in progress for each stream, so a warning never runs into an answer.
-  const lines = { out: '', err: '' };
+  // qpdf writes UTF-8 (its JSON holds document text, such as bookmark titles),
+  // so the bytes of a line are kept and decoded whole.
+  const lines: Record<'out' | 'err', number[]> = { out: [], err: [] };
+  const utf8 = new TextDecoder();
   let out = '';
   let printed = '';
   const qpdf: Qpdf = {
@@ -59,8 +62,8 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
     call(args) {
       out = '';
       printed = '';
-      lines.out = '';
-      lines.err = '';
+      lines.out = [];
+      lines.err = [];
       let code: number;
       try {
         code = module.callMain(args);
@@ -70,15 +73,15 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
         if (typeof status !== 'number') throw error;
         code = status;
       }
-      if (lines.out) take('out');
-      if (lines.err) take('err');
+      if (lines.out.length) take('out');
+      if (lines.err.length) take('err');
       return { code, out, printed };
     },
   };
 
   function take(stream: 'out' | 'err') {
-    const line = lines[stream];
-    lines[stream] = '';
+    const line = utf8.decode(new Uint8Array(lines[stream]));
+    lines[stream] = [];
     if (stream === 'out') out += `${line}\n`;
     printed += `${line}\n`;
     qpdf.onLine?.(line);
@@ -86,7 +89,8 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
   const capture = (stream: 'out' | 'err') => (code: number | null) => {
     if (code === null) return;
     if (code === 10) take(stream);
-    else lines[stream] += String.fromCharCode(code);
+    // Emscripten gives bytes as signed or unsigned numbers depending on the stream.
+    else lines[stream].push(code & 0xff);
   };
 
   const module = await factory({

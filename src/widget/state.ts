@@ -19,7 +19,7 @@ export type FileEntry = {
 
 export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
 
-export type FailureKind = 'engine-load' | 'engine' | 'memory';
+export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large';
 
 /** The finished result. `parts` is set when it is a zip holding that many files. */
 export type ResultInfo = { name: string; size: number; pages?: number; parts?: number };
