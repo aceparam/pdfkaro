@@ -22,6 +22,7 @@ This change has no tool of its own, so there is no registry entry, engine or pag
 - [x] 4.1 Add `src/widget/items.ts` (`gridItems`); change the thumbnail queue's `next` to walk items and check readiness through `fileId`; unit test files, pages before and after reading, each problem state, and a removed file
 - [x] 4.2 Use items in `useToolRun` and `ToolWorkspace`: ask for `page` of `fileId`, send `close` when the open file is removed, and make a zip `Blob` and name when the reply has `parts`
 - [x] 4.3 `ToolWorkspace`: the file line above the pages with Remove named for its file ("Remove report.pdf"), and the "Skip to the main button" link, always visible, at least 44px tall, which moves focus to the main button and scrolls it into view; `PageGrid`: a wrapping grid for pages, a memoised `PageItem` with stable `ref` functions, and buttons and drag only when `itemControls` is true; the result block: "N files" for a zip; update the component render tests
+- [x] 4.4 From the stage 2 review: `chooseFiles` in `src/widget/accept.ts`, so a one-file tool keeps the first file of a drop or paste, which replaces a listed file, and says the rest were not added (unit tested); a list of files sends `close` after each thumbnail, so Merge PDF keeps no document open; the registry test refuses `items: 'pages'` with `itemControls: true`
 
 ## 5. Checks
 
