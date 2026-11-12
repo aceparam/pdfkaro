@@ -39,6 +39,9 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible }: Props)
 
   // Report each item once when it comes on screen or within 300px of it, so
   // thumbnails are drawn only for what the visitor can see or is about to.
+  // One watcher lives as long as the list; each row is added to it once, when
+  // it first appears, so a picture arriving costs the page no extra work.
+  const watcher = useRef<IntersectionObserver | null>(null);
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
@@ -53,9 +56,13 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible }: Props)
       },
       { rootMargin: '300px 0px' },
     );
+    watcher.current = observer;
     for (const [id, row] of rows.current) if (!reported.current.has(id)) observer.observe(row);
-    return () => observer.disconnect();
-  }, [items]);
+    return () => {
+      observer.disconnect();
+      watcher.current = null;
+    };
+  }, []);
   const focusNext = useRef<FocusTarget | null>(null);
   const dragging = useRef<string | null>(null);
 
@@ -102,8 +109,13 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible }: Props)
           <li
             key={item.id}
             ref={(element) => {
-              if (element) rows.current.set(item.id, element);
-              else rows.current.delete(item.id);
+              if (element) {
+                if (rows.current.get(item.id) === element) return;
+                rows.current.set(item.id, element);
+                if (!reported.current.has(item.id)) watcher.current?.observe(element);
+              } else {
+                rows.current.delete(item.id);
+              }
             }}
             data-id={item.id}
             className={styles.item}

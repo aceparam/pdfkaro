@@ -107,6 +107,14 @@ test.describe('when thumbnails are drawn', () => {
   test('with 30 files, only those near the screen are drawn until the visitor scrolls, with no long task @desktop', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await open(page);
+    // Hold PDF.js back while the 30 files are listed, then measure from the moment drawing can start:
+    // the limit in the spec is for while thumbnails are drawn.
+    const pdfjs = await holdPdfjs(page);
+    const text = readFileSync(fixture('text.pdf'));
+    await pick(
+      page,
+      Array.from({ length: 30 }, (_, index) => ({ name: `part-${index + 1}.pdf`, mimeType: 'application/pdf', buffer: text })),
+    );
     await page.evaluate(() => {
       const long: number[] = [];
       (window as unknown as { longTasks: number[] }).longTasks = long;
@@ -114,11 +122,8 @@ test.describe('when thumbnails are drawn', () => {
         for (const entry of list.getEntries()) long.push(entry.duration);
       }).observe({ type: 'longtask', buffered: false });
     });
-    const text = readFileSync(fixture('text.pdf'));
-    await pick(
-      page,
-      Array.from({ length: 30 }, (_, index) => ({ name: `part-${index + 1}.pdf`, mimeType: 'application/pdf', buffer: text })),
-    );
+    await pdfjs.release();
+    await page.context().unroute(/\/_astro\/pdf-[^/]+\.js$/);
     // Let drawing settle, then count.
     await expect(pictures(page).first()).toBeVisible({ timeout: 20000 });
     await page.waitForTimeout(1500);

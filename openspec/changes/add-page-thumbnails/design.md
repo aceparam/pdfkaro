@@ -212,6 +212,7 @@ PDF.js and its data are fetched when the first thumbnail is asked for, after the
 - **PDF.js repairs `damaged-xref.pdf`,** which qpdf cannot read. The page asks for thumbnails only of files qpdf has read, so this never shows.
 - **The PDF.js loader is its own module,** `src/workers/pdfjs-loader.ts`, so that starting PDF.js's worker once and stopping every drawing when it fails are unit tested.
 - **A flaky test from `add-merge-pdf` was fixed.** "The picker opens with Enter and with Space" failed about one run in ten under load: Playwright starts catching file choosers only once a listener is attached, which takes a round trip that a key press could beat. The test now listens before the page loads, and passed 50 runs in a row.
+- **One view watcher for the life of the list.** CI saw a 101 ms task with 30 files listed. `PageGrid` had rebuilt its watcher for every row each time a picture arrived; it now keeps one, adding each row once. The 30-file test measures from the moment drawing can start, as the spec's limit is for while thumbnails are drawn. With the processor slowed four times, no task ran over 50 ms while 30 thumbnails were drawn and scrolled.
 - **Without the standard fonts, PDF.js still drew text** in Node, with a fallback font, so the font tests check that PDF.js asked for the font rather than counting ink.
 
 ## Risks / Trade-offs
