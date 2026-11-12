@@ -21,7 +21,7 @@ This change has no tool of its own, so there is no registry entry, engine or pag
 
 - [ ] 4.1 Add `src/widget/items.ts` (`gridItems`); change the thumbnail queue's `next` to walk items and check readiness through `fileId`; unit test files, pages before and after reading, each problem state, and a removed file
 - [ ] 4.2 Use items in `useToolRun` and `ToolWorkspace`: ask for `page` of `fileId`, send `close` when the open file is removed, and make a zip `Blob` and name when the reply has `parts`
-- [ ] 4.3 `ToolWorkspace`: the file line above the pages with Remove, and the "Skip to the main button" link; `PageGrid`: a wrapping grid for pages, a memoised `PageItem` with stable `ref` functions, and buttons and drag only when `itemControls` is true; `Result`: "N files" and no next steps for a zip; update the component render tests
+- [ ] 4.3 `ToolWorkspace`: the file line above the pages with Remove named for its file ("Remove report.pdf"), and the "Skip to the main button" link, always visible, at least 44px tall, which moves focus to the main button and scrolls it into view; `PageGrid`: a wrapping grid for pages, a memoised `PageItem` with stable `ref` functions, and buttons and drag only when `itemControls` is true; `Result`: "N files" and no next steps for a zip; update the component render tests
 
 ## 5. Checks
 

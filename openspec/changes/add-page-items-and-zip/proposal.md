@@ -34,6 +34,10 @@ The rule in "Build phases" says a tool that needs a new shared component adds it
   - reordering pages, which belongs to Reorder pages;
   - a viewer for large pages.
 
+### A gap against "Tool page anatomy" part 6
+
+Part 6 gives every result "a short list of next steps that carry the file into another tool". A zip shows none, because no tool in the catalogue opens a zip. This is a gap against part 6, and it will be pointed out to the owner in the Split PDF pull request.
+
 ### `SPEC.md` sections
 
 - "Tool page anatomy", parts 4 and 6. Part 6 gives the result as "file name, new size"; for a zip, the result also shows how many files it holds, which refines it.
