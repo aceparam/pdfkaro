@@ -60,7 +60,9 @@ The thumbnail queue changes:
 - **The grid.** `PageGrid` lays page items out as a wrapping grid. Each cell is the 52 by 68 slot with "Page N" under it, about 80 by 100 px. At 360 px that gives four to a row, so 500 pages take about 125 rows, roughly 12,500 px.
 - **The skip link.** A plain "Skip to the main button" link sits above the grid. It moves focus to the main button, so keyboard and screen reader users never have to pass 500 pages, and a phone user can jump there.
 - **What does not move.** The page order of the anatomy stays: working area, then the main button. Nothing sticks to the screen.
-- **No controls, no drag.** When `itemControls` is false, items have no buttons and are not draggable.
+- **No controls, no drag.** When `itemControls` is false, items have no buttons and are not draggable. Until a tool brings page moves, the registry test refuses `items: 'pages'` with `itemControls: true`.
+- **One file only.** A drop or paste can bring several files even when the picker takes one. `chooseFiles` in `src/widget/accept.ts` keeps the first, which replaces a file already listed, and the page says the others were not added.
+- **Before the pages appear.** The grid is not drawn until there are pages, so no empty list shows. When the file has been read, the status region says the file line's words, such as "mixed.pdf, 4 pages, 2 KB". The large-file notice says "This file is more than 100 MB".
 - **Quick re-renders.** Rows become a memoised `PageItem` component, with stable `ref` functions held in a map by id. A thumbnail arriving then re-renders only its own row. `ToolWorkspace` builds items with `useMemo` over the files and passes thumbnails as a separate map. The 500-page long-task check stays in task 5.1.
 
 ### 4. One open document in the worker, never in a job's way
@@ -72,6 +74,7 @@ The thumbnail queue changes:
   - another key closes it and opens the new file;
   - a `run` or `inspect` message closes it at once, so a job or a read never runs beside a kept copy of a file;
   - a `close` message from the page closes it.
+- **Only page tools keep a document.** A list of files draws one picture from each file, so after each one the page sends `close`; Merge PDF keeps no copy between pictures.
 - **Removing a file closes it.** `useToolRun.removeFile` sends `close` when the removed file is the open one, or ends the client if a thumbnail is being drawn, as now. Removing a file therefore drops its kept copy at once.
 - **Ending everything.** "Start again", `pagehide` and the end of a job end the worker as now, which ends everything.
 
@@ -94,7 +97,7 @@ The thumbnail queue changes:
   - `zip.partSuffix`: the tool id pattern;
   - `documentKey`: `^f[0-9]{1,9}$`, the page's own file ids;
   - unit tests for each.
-- **The result.** `useToolRun.start()` makes a `Blob` of type `application/zip` named `outputName(input, words.outputSuffix, 'zip')` when the reply has `parts`. `ResultInfo` gains `parts?`. `Result` shows "N files" from `fileCount` and no next steps for a zip.
+- **The result.** `useToolRun.start()` makes a `Blob` of type `application/zip` named `outputName(input, words.outputSuffix, 'zip')` when the reply has `parts`. `ResultInfo` gains `parts?`. The result block shows "N files" from `fileCount`, built in `ToolWorkspace` and passed to `Result` as its detail. No result has next steps yet; for a zip that is a known gap against part 6, put to the owner in this change's pull request, and no rule about it is written into the spec.
 
 ### 7. Page weight, memory and what loads when
 
@@ -125,6 +128,9 @@ These checks are deferred to `add-split-pdf`, the first tool using these parts, 
 - **The allowlist** names `fflate`'s chunk by exact name.
 - **A run that gives one file and a run that gives several** both fetch `fflate`, and the same list of files.
 - **The strings no request may carry** include the input name (`report.pdf` in the test) and the password.
+- **A planted fflate request** with a body or a query string is seen and flagged, like the planted requests in Merge PDF's test.
+
+`add-split-pdf` must also cap the page count before page items are made, with a fixture of a very large page count beside `pages-500.pdf`, so a crafted file cannot freeze the tab. The same cap bounds Split's one-file-per-page output. (Stage 2 security review of this change.)
 
 ## Risks / Trade-offs
 

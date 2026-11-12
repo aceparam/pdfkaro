@@ -41,17 +41,12 @@ A tool that works on the pages of one file SHALL, once the file has been read, s
 
 ### Requirement: Several results come as one zip
 
-When a job gives more than one file, the files SHALL be joined into one zip off the page's own thread, and the result block SHALL show the zip's name, its true size and how many files it holds, with one Download button and no next steps into other tools. Nothing SHALL download until the visitor presses it. (SPEC.md: Details that apply everywhere; Tool page anatomy, 6)
+When a job gives more than one file, the files SHALL be joined into one zip off the page's own thread, and the result block SHALL show the zip's name, its true size and how many files it holds, with one Download button. Nothing SHALL download until the visitor presses it. (SPEC.md: Details that apply everywhere; Tool page anatomy, 6)
 
 #### Scenario: A job gives four files
 
 - **WHEN** a job on `report.pdf` gives four files
 - **THEN** the result block shows `report-split.zip`, its size, and "4 files", and Download saves that one zip
-
-#### Scenario: A zip offers no next steps
-
-- **WHEN** the result is a zip
-- **THEN** the result block shows no links that carry the result into another tool
 
 #### Scenario: A job gives one file
 

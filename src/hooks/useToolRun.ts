@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
-import { looksAccepted, sniffLength } from '../widget/accept';
+import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, stem } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
 import { gridItems } from '../widget/items';
@@ -17,8 +17,11 @@ export type ToolRun = {
   thumbnails: Readonly<Record<string, string>>;
   /** A listed file has come into view, so its thumbnail may be drawn. */
   showThumbnail(id: string): void;
-  /** Adds files. Gives back how many were added and the names of any turned away for being of the wrong type. */
-  addFiles(files: File[]): Promise<{ added: number; refused: string[] }>;
+  /**
+   * Adds files. Gives back how many were added, the names of any turned away for being of the wrong
+   * type, and, for a tool that takes one file, the names of the others left out.
+   */
+  addFiles(files: File[]): Promise<{ added: number; refused: string[]; leftOut: string[] }>;
   submitPassword(id: string, password: string): Promise<void>;
   removeFile(id: string): void;
   moveFile(id: string, to: number): void;
@@ -120,10 +123,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     queue.current = started(queue.current, id);
     const token = { id, fileId: item.fileId, stopped: false };
     drawing.current = token;
-    keptFile.current = item.fileId;
-    void getClient()
+    // Only a tool that lists one file's pages keeps its document open between pictures;
+    // a list of files draws one picture from each, so each document is let go at once.
+    const keep = words.items === 'pages';
+    keptFile.current = keep ? item.fileId : null;
+    const worker = getClient();
+    void worker
       .thumbnail(file, passwords.current.get(item.fileId), item.page, thumbnailBox, item.fileId)
       .then((image) => {
+        if (!keep && !token.stopped) worker.closeDocument();
         if (token.stopped) return;
         if (drawing.current === token) drawing.current = null;
         // A file removed while its picture was drawn: the picture is thrown away before any address is made.
@@ -175,37 +183,6 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     [getClient, stopThumbnail],
   );
 
-  const addFiles = useCallback(
-    async (picked: File[]) => {
-      const accepted: { id: string; name: string; size: number }[] = [];
-      const refused: string[] = [];
-      for (const file of picked) {
-        const head = new Uint8Array(await file.slice(0, sniffLength).arrayBuffer());
-        if (!looksAccepted(head, accepts)) {
-          refused.push(file.name);
-          continue;
-        }
-        const id = `f${nextId.current++}`;
-        files.current.set(id, file);
-        accepted.push({ id, name: file.name, size: file.size });
-      }
-      if (accepted.length > 0) dispatch({ type: 'added', files: accepted });
-      if (refused.length > 0) dispatch({ type: 'refused', names: refused });
-      for (const { id } of accepted) await inspect(id);
-      return { added: accepted.length, refused };
-    },
-    [accepts, inspect],
-  );
-
-  const submitPassword = useCallback(
-    async (id: string, password: string) => {
-      passwords.current.set(id, password);
-      dispatch({ type: 'reading-again', id });
-      await inspect(id);
-    },
-    [inspect],
-  );
-
   const removeFile = useCallback(
     (id: string) => {
       // A file removed while its picture is drawn: stop that drawing, so no two are ever drawn at once.
@@ -221,6 +198,41 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       dispatch({ type: 'removed', id });
     },
     [forgetThumbnails, stopThumbnail],
+  );
+
+  const addFiles = useCallback(
+    async (picked: File[]) => {
+      const looked: File[] = [];
+      const refused: string[] = [];
+      for (const file of picked) {
+        const head = new Uint8Array(await file.slice(0, sniffLength).arrayBuffer());
+        if (looksAccepted(head, accepts)) looked.push(file);
+        else refused.push(file.name);
+      }
+      const listed = stateRef.current.files.map((entry) => entry.id);
+      const { take, leftOut, replace } = chooseFiles(looked, listed, words.multiple);
+      const accepted = take.map((file) => {
+        const id = `f${nextId.current++}`;
+        files.current.set(id, file);
+        return { id, name: file.name, size: file.size };
+      });
+      if (accepted.length > 0) dispatch({ type: 'added', files: accepted });
+      // The file it replaces goes after the new one is listed, so the list is never empty in between.
+      for (const id of replace) removeFile(id);
+      if (refused.length > 0) dispatch({ type: 'refused', names: refused });
+      for (const { id } of accepted) await inspect(id);
+      return { added: accepted.length, refused, leftOut: leftOut.map((file) => file.name) };
+    },
+    [accepts, inspect, removeFile, words.multiple],
+  );
+
+  const submitPassword = useCallback(
+    async (id: string, password: string) => {
+      passwords.current.set(id, password);
+      dispatch({ type: 'reading-again', id });
+      await inspect(id);
+    },
+    [inspect],
   );
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);

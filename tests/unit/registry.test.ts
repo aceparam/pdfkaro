@@ -88,6 +88,8 @@ describe('registry', () => {
       if (!words) continue;
       if (words.items === 'pages') expect(words).toMatchObject({ multiple: false, minFiles: 1 });
       if (words.outputs === 'several') expect(words.partSuffix).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+      // Page items have no moves yet: Move up, Move down and Remove act on files.
+      if (words.items === 'pages') expect(words.itemControls).toBe(false);
     }
     expect(tools.find((tool) => tool.id === 'merge-pdf')?.widget).toMatchObject({ items: 'files', itemControls: true, outputs: 'one' });
   });

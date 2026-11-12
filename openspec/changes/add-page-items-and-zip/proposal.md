@@ -36,7 +36,7 @@ The rule in "Build phases" says a tool that needs a new shared component adds it
 
 ### A gap against "Tool page anatomy" part 6
 
-Part 6 gives every result "a short list of next steps that carry the file into another tool". A zip shows none, because no tool in the catalogue opens a zip. This is a gap against part 6, and it will be pointed out to the owner in the Split PDF pull request.
+Part 6 gives every result "a short list of next steps that carry the file into another tool". A zip shows none, because no tool in the catalogue opens a zip. This is a known gap against part 6, not a rule: the spec delta says nothing about next steps for a zip, and the question goes to the owner in this change's pull request.
 
 ### `SPEC.md` sections
 
@@ -79,7 +79,7 @@ None.
   - `src/widget/state.ts` and `src/widget/thumbnails.ts`: items for pages.
   - `src/hooks/useToolRun.ts`: a thumbnail asks for a page of a file.
   - `PageGrid`: controls are optional.
-  - `Result`: shows a count.
+  - `ToolWorkspace`: the result block's detail shows how many files a zip holds; `Result` itself is unchanged.
   - `src/engines/thumbnail.ts`: opening a document, separate from drawing a page.
   - `src/workers/worker-core.ts`: zipping several outputs, and the open document.
   - `messages.ts`: the thumbnail request gains a document key.

@@ -89,20 +89,28 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     (names: string[]) => names.map((name) => `${name} is not ${words.acceptsName}, so it was not added.`).join(' '),
     [words.acceptsName],
   );
+  // A tool that takes one file keeps the first of several dropped or pasted, and says so.
+  const [leftOut, setLeftOut] = useState<string[]>([]);
+  const leftOutText = useCallback(
+    (names: string[]) => (names.length === 0 ? '' : `This tool takes one file, so ${names.join(', ')} ${names.length === 1 ? 'was' : 'were'} not added.`),
+    [],
+  );
   // Tell the widget when the last file has gone. Not before the first files have
   // arrived: on the first render the list is still empty.
   const hadFiles = useRef(false);
 
   const add = useCallback(
     (files: File[]) => {
-      void run.addFiles(files).then(({ added, refused }) => {
-        if (refused.length === 0) return;
+      void run.addFiles(files).then(({ added, refused, leftOut }) => {
+        setLeftOut(leftOut);
+        const said = [refused.length > 0 ? refusedText(refused) : '', leftOutText(leftOut)].filter(Boolean).join(' ');
+        if (!said) return;
         // Nothing was added and nothing was listed before: back to the picker, which says why.
-        if (added === 0 && !hadFiles.current) onEmpty(refusedText(refused));
-        else setAnnouncement(refusedText(refused));
+        if (added === 0 && !hadFiles.current) onEmpty(said);
+        else setAnnouncement(said);
       });
     },
-    [run, refusedText, onEmpty, setAnnouncement],
+    [run, refusedText, leftOutText, onEmpty, setAnnouncement],
   );
 
   const started = useRef(false);
@@ -185,6 +193,15 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   }, [entries, state.files, thumbnails, pages]);
   // A tool that lists pages has one file, shown on its own line above them.
   const onlyFile = pages ? state.files[0] : undefined;
+
+  // When that file has been read and its pages appear, say what the line now says.
+  const onlyReady = onlyFile && onlyFile.status === 'ready' && !onlyFile.checking ? `${onlyFile.id}:${detailFor(onlyFile)}` : '';
+  const announcedReady = useRef('');
+  useEffect(() => {
+    if (!onlyReady || !onlyFile || announcedReady.current === onlyReady) return;
+    announcedReady.current = onlyReady;
+    setAnnouncement(`${onlyFile.name}, ${detailFor(onlyFile)}.`);
+  }, [onlyReady, onlyFile, setAnnouncement]);
 
   const others = state.files.length - 1;
   const everyReady = allReady(state);
@@ -273,6 +290,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               {refusedText(state.refused)}
             </p>
           )}
+          {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
@@ -288,15 +306,17 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </a>
           ) : null}
 
-          <PageGrid
-            items={items}
-            controls={words.itemControls}
-            layout={pages ? 'grid' : 'rows'}
-            onMove={run.moveFile}
-            onRemove={run.removeFile}
-            onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
-            onVisible={run.showThumbnail}
-          />
+          {items.length > 0 ? (
+            <PageGrid
+              items={items}
+              controls={words.itemControls}
+              layout={pages ? 'grid' : 'rows'}
+              onMove={run.moveFile}
+              onRemove={run.removeFile}
+              onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
+              onVisible={run.showThumbnail}
+            />
+          ) : null}
 
           {askingPassword && problem ? (
             <PasswordField
@@ -330,7 +350,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ) : null}
 
           {isLarge(state) && !askingPassword ? (
-            <Notice heading="These files add up to more than 100 MB">
+            <Notice heading={pages ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
               <p>The job may be slow, and a phone may run out of memory. You can still go ahead.</p>
             </Notice>
           ) : null}

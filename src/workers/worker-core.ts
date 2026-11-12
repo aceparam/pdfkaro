@@ -118,7 +118,8 @@ export function createHandler(deps: WorkerDeps) {
               if (kept?.doc === opening) kept = null;
             });
           }
-          image = await (await kept!.doc).render(data.page, data.box);
+          const current = kept;
+          if (current) image = await (await current.doc).render(data.page, data.box);
         }
       } catch {
         image = null;
@@ -157,12 +158,13 @@ export function createHandler(deps: WorkerDeps) {
       );
       // The worker's copies of the inputs are dropped here; only the results go back, moved, not copied.
       files.length = 0;
-      if (outputs.length > 1 && data.zip) {
+      const zip = data.type === 'run' ? data.zip : undefined;
+      if (outputs.length > 1 && zip) {
         if (!zipSync) throw new EngineLoadError();
         const total = outputs.length;
         const entries: Record<string, Uint8Array> = {};
         outputs.forEach((output, index) => {
-          entries[partName(data.zip!.stem, data.zip!.partSuffix, index + 1, total)] = output;
+          entries[partName(zip.stem, zip.partSuffix, index + 1, total)] = output;
         });
         // PDFs are already compressed, so the files are stored, which is fast and keeps memory low.
         const zipped = zipSync(entries, { level: 0 });
