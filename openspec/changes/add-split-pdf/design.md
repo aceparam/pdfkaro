@@ -110,7 +110,7 @@ The engine checks `options` itself, because the worker passes it on unchecked.
 
 **Why one qpdf call per part, and not `--split-pages`:** `--split-pages` reads the file once, but it drops bookmarks and attachments, which the owner's decisions keep. One call per part reads the file each time, so 500 parts of a large file is slow. It shows progress per file, Cancel works, and the page never blocks, because all of this runs in the worker. See Risks.
 
-**Limits of the zip format.** `fflate`'s `zipSync` has no ZIP64, so a zip cannot hold more than 65,535 entries or 4 GB. These are limits of the format, not limits chosen for the site:
+**Limits of the zip format.** `fflate`'s `zipSync` has no ZIP64, so a zip cannot hold more than 65,535 entries or 4 GB. These are limits of the format, not limits chosen for the site. Both numbers are exported from one shared module beside the zip naming (`src/engines/zip-limits.ts`), so PDF to JPG and PDF to PNG reuse them. The engine signals the first by throwing an error named `TooManyParts`, which `failureKind` recognises by name, so the engine imports no worker code:
 - before any part is written, a job of more than 65,535 parts fails at once with its own failure kind, `too-many-parts`, and the page says "This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts.";
 - while parts are written, if their total passes 4 GB less the room for the zip's own headers, the job stops with the `memory` failure and Split's memory advice.
 
