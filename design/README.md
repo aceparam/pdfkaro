@@ -102,7 +102,7 @@ Things the static screens cannot show:
 
 Other notes:
 
-- The thumbnails are stand-ins drawn with CSS. Real ones are renders of the visitor's own pages.
+- The thumbnails here are stand-ins drawn with CSS. On the site they are pictures of the visitor's own first pages, drawn by PDF.js in a worker (`add-page-thumbnails`), with a blank paper box of the same size until each is drawn. Screenshots of the real ones are in `openspec/changes/add-page-thumbnails/screenshots/`.
 - The fonts in the screenshots are those of the machine that took them. The site uses the system font stack, so they will differ by device.
 - Buttons here do nothing. The screens show one state each.
 - File names, sizes and page counts are examples.

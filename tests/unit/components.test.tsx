@@ -49,6 +49,20 @@ describe('PageGrid', () => {
     expect(renderToStaticMarkup(<PageGrid items={[items[0]!]} onMove={noop} onRemove={noop} />)).toContain('draggable="false"');
   });
 
+  it('shows blank paper in a hidden slot until a thumbnail is drawn', () => {
+    expect(html.match(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*blank[^"]*"><\/div><\/div>/g)).toHaveLength(2);
+    expect(html).not.toContain('<img');
+  });
+
+  it('shows a drawn thumbnail as a picture nobody can focus, hear or drag on its own', () => {
+    const drawn = renderToStaticMarkup(
+      <PageGrid items={[{ ...items[0]!, thumbnail: 'blob:http://localhost/1' }, items[1]!]} onMove={noop} onRemove={noop} />,
+    );
+    expect(drawn).toMatch(/<div class="[^"]*slot[^"]*" aria-hidden="true"><img class="[^"]*thumb[^"]*" src="blob:http:\/\/localhost\/1" alt="" draggable="false"\/><\/div>/);
+    expect(drawn).not.toMatch(/<img[^>]*tabindex/);
+    expect(drawn.match(/blank/g)).toHaveLength(1);
+  });
+
   it('shows each item in order with its detail', () => {
     expect(html.indexOf('report.pdf')).toBeLessThan(html.indexOf('appendix.pdf'));
     expect(html).toContain('Getting ready');

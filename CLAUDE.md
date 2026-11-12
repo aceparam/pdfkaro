@@ -15,9 +15,15 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 **Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in these changes:
 
 1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
-2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Built and reviewed.
-3. `add-merge-pdf`: Merge PDF end to end, with its page text, on the same pull request as 2. Step 6. Built. Its page text waits for the owner's review.
-4. Then: page thumbnails, which Merge PDF needs to pass "Tool page anatomy" in full. This is the remaining Phase 0 work, with the multilingual test file, opening the output by hand in Chrome, Firefox, Adobe Reader and macOS Preview, and checks in Firefox, Safari and phone browsers. The Phase 0 gate is not passed yet.
+2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Merged and archived.
+3. `add-merge-pdf`: Merge PDF end to end, with its page text. Step 6. Merged and archived, in the same pull request as 2, which the owner merged on 11 Nov 2026. Its page text waits for the owner's review.
+4. `add-page-thumbnails`: page thumbnails in `PageGrid`, drawn by PDF.js in the tool worker, so Merge PDF meets "Tool page anatomy" in full. Built; waiting for review and merge.
+
+The Phase 0 gate is not passed yet. What remains for it, and for Merge PDF to pass "Definition of done":
+- the owner's review of the Merge PDF page text;
+- opening the merged file by hand in Chrome, Firefox, Adobe Reader and macOS Preview;
+- trying the page in Firefox and Safari, and on Android Chrome and iOS Safari, at phone size;
+- the multilingual test file, which needs fonts the build machine does not have.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -44,6 +50,8 @@ Update this section when a phase gate is passed.
 - **Preview on GitHub Pages (10 Nov 2026).** The owner asked to try the site before signing off the pull request, asked for it to be deployed on GitHub Pages, and chose to deploy the pull request's branch, having been told the preview is public even though the repo is private. This replaces the agent's earlier choice of Cloudflare Pages. How it is done is the agent's choice; see the next section.
 - **Merge PDF keeps bookmarks and attachments from the first file only (11 Nov 2026).** The owner chose this over keeping every file's, accepting the gap against "Definition of done". The page says so. Keeping all of them can come later.
 - **A merged file has no password or restrictions (11 Nov 2026),** even when an input had them. The page says so.
+- **PDF.js's helper data is one fixed set (11 Nov 2026).** Thumbnails need PDF.js's standard fonts and image decoders. The owner chose to load them as one fixed set, the same for every file, so no request depends on what a PDF needs, and to ship no character maps, so Chinese, Japanese and Korean text in fonts a PDF does not embed is missing from its thumbnail. The owner was quoted about 670 KB; as built the set is 760 KB by gzip, because it is bundled as a script so that no `fetch` is written in our worker code.
+- **The Liberation Sans fonts are shipped (11 Nov 2026),** though they are GPL v2 with a font exception, as unchanged data PDF.js reads. Without them, text in Helvetica-like fonts that a PDF does not embed may be drawn with a fallback font or not at all.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner

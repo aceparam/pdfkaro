@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { PDFDocument, PDFName, PDFNumber, PDFString, StandardFonts, degrees } from '@cantoo/pdf-lib';
+import { PDFDocument, PDFName, PDFNumber, PDFString, StandardFonts, cmyk, degrees, drawObject, popGraphicsState, pushGraphicsState, concatTransformationMatrix } from '@cantoo/pdf-lib';
 
 const require = createRequire(import.meta.url);
 const out = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
@@ -188,3 +188,20 @@ context.assign(two, context.obj({ Title: PDFString.of('Chapter two'), Parent: ou
 context.assign(outline, context.obj({ Type: 'Outlines', First: one, Last: two, Count: PDFNumber.of(2) }));
 rich.catalog.set(PDFName.of('Outlines'), outline);
 save('rich.pdf', await rich.save());
+
+// 12. Images and colour that need PDF.js's decoders: a JPEG 2000 image and
+// text and shapes in CMYK colour. The JPEG 2000 bytes (a 48 by 32 colour
+// gradient) were made once with Pillow and are kept here, because no JPEG 2000
+// encoder runs in Node. JBIG2 cannot be made on the build machine.
+const jpx = Buffer.from('AAAADGpQICANCocKAAAAFGZ0eXBqcDIgAAAAAGpwMiAAAAAtanAyaAAAABZpaGRyAAAAIAAAADAAAwcHAAAAAAAPY29scgEAAAAAABAAAAEOanAyY/9P/1EALwAAAAAAMAAAACAAAAAAAAAAAAAAADAAAAAgAAAAAAAAAAAAAwcBAQcBAQcBAf9SAAwAAAABAAUEBAAB/1wAE0BASEhQSEhQSEhQSEhQSEhQ/2QAJQABQ3JlYXRlZCBieSBPcGVuSlBFRyB2ZXJzaW9uIDIuNS40/5AACgAAAAAAhwAB/5PfgCAG6wE/x9QGCR9/x9QECHPAfCCACICn4AYCZYfD6gMAET1/gKPtBQALO3fin8HzhAAsWplbgKH1AwADgl91jqfA+QUASyVADlZBxTv6P4Cg+cQAUipMCt9zgvHAfCaAgt3nkhJtvJ8WKGR6f4CgfIGAtzgqj/9//9k=', 'base64');
+const pictures = await newDoc('Images and colour for the decoders');
+const picturesFont = await pictures.embedFont(StandardFonts.Helvetica);
+const picturePage = pictures.addPage([595, 842]);
+picturePage.drawText('A JPEG 2000 image and CMYK colour', { x: 60, y: 760, size: 18, font: picturesFont, color: cmyk(0, 0.9, 0.9, 0) });
+picturePage.drawRectangle({ x: 60, y: 650, width: 200, height: 60, color: cmyk(1, 0, 0, 0) });
+const jpxImage = pictures.context.register(
+  pictures.context.stream(jpx, { Type: 'XObject', Subtype: 'Image', Width: 48, Height: 32, Filter: 'JPXDecode' }),
+);
+const jpxName = picturePage.node.newXObject('Im', jpxImage);
+picturePage.pushOperators(pushGraphicsState(), concatTransformationMatrix(300, 0, 0, 200, 60, 400), drawObject(jpxName), popGraphicsState());
+save('images.pdf', await pictures.save());

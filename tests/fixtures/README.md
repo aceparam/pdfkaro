@@ -24,6 +24,9 @@ The encrypted files come out different on each run, because encryption uses rand
 | `form.pdf` | A fillable form: a text field `name` and a check box `agree` | 1 |
 | `mixed.pdf` | Mixed page sizes and rotation: A4, Letter on its side, A5 turned a quarter, A4 upside down | 4 |
 | `rich.pdf` | Two bookmarks, a link and an attached file `note.txt` | 2 |
+| `images.pdf` | A JPEG 2000 image and text and shapes in CMYK colour, for PDF.js's decoders. The JPEG 2000 bytes were made once with Pillow and are kept in `make.mjs` | 1 |
+
+**Missing:** a file with a JBIG2 image, as no JBIG2 encoder runs on the build machine. PDF.js's JBIG2 decoder is in the same fixed helper data as the JPEG 2000 one, which `images.pdf` tests.
 
 **Missing:** a file with text in Hindi, Telugu, Arabic and Chinese, which `SPEC.md` lists. Making it needs fonts for those scripts, and none are on the build machine or in the repo. It is to be added with the first tool that reads or changes text.
 
@@ -70,3 +73,23 @@ Each readable file was merged both before and after `text.pdf`. Each result pass
 | `form.pdf` | Merged; both fields are kept, whether the form is first or later |
 | `mixed.pdf` | Merged; each page keeps its size and rotation, in order |
 | `rich.pdf` | First: its bookmarks, link and attachment are kept. Later: its pages and link are kept, but its bookmarks and attachment are not, by the owner's decision of 11 Nov 2026 |
+
+### Page thumbnails (`src/engines/thumbnail.ts`)
+
+Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 104 by 136 box (`tests/unit/thumbnail.test.ts`).
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Drawn. Its font, Helvetica, is not embedded, so PDF.js takes `LiberationSans-Regular.ttf` from the fixed helper data |
+| `pages-500.pdf` | Drawn |
+| `scanned.pdf` | Drawn; the image is drawn through our canvas maker |
+| `password.pdf` | Drawn with `open-sesame`; refused without it or with a wrong one |
+| `restricted.pdf` | Drawn, with no password |
+| `warning.pdf` | Drawn |
+| `damaged-xref.pdf` | Drawn: PDF.js repairs it, though qpdf cannot read it. The page never asks, as it asks only for files qpdf has read |
+| `damaged-cut.pdf` | Refused |
+| `not-a-pdf.pdf` | Refused |
+| `form.pdf` | Drawn |
+| `mixed.pdf` | Page 1 drawn upright; page 2, on its side, drawn wide |
+| `rich.pdf` | Drawn |
+| `images.pdf` | Drawn. PDF.js takes `openjpeg.wasm` from the fixed helper data for the JPEG 2000 image |
