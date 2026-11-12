@@ -12,20 +12,21 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 
 ## Where the project stands
 
-**Phase 0, the skeleton**, is under way (see "Build phases" in `SPEC.md`). It is built in these changes:
+**Phase 0, the skeleton**, is done (see "Build phases" in `SPEC.md`). It is built in these changes:
 
 1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
 2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Merged and archived.
 3. `add-merge-pdf`: Merge PDF end to end, with its page text. Step 6. Merged and archived, in the same pull request as 2, which the owner merged on 11 Nov 2026. Its page text waits for the owner's review.
 4. `add-page-thumbnails`: page thumbnails in `PageGrid`, drawn by PDF.js in the tool worker, so Merge PDF meets "Tool page anatomy" in full. Merged and archived.
 
-All Phase 0 code is built.
-
-The Phase 0 gate is not passed yet. What remains for it, and for Merge PDF to pass "Definition of done":
+All Phase 0 code is built. **The owner accepted the Phase 0 gate on 12 Nov 2026** ("things are fine, we can fix later") and asked to start Phase 1. The hand checks still owed for Merge PDF's "Definition of done" are tracked in issue #7:
 - the owner's review of the Merge PDF page text;
 - opening the merged file by hand in Chrome, Firefox, Adobe Reader and macOS Preview;
-- trying the page in Firefox and Safari, and on Android Chrome and iOS Safari, at phone size;
-- the multilingual test file, which needs fonts the build machine does not have.
+- trying the page in Firefox, Safari and Edge, and on Android Chrome and iOS Safari, at phone size.
+
+The multilingual test file is also still missing.
+
+**Phase 1, launch,** has started. Its tools are built in catalogue order, beginning with Split PDF. Its gate: every phase 1 tool passes "Definition of done", and the owner has written the About page.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -54,6 +55,9 @@ Update this section when a phase gate is passed.
 - **A merged file has no password or restrictions (11 Nov 2026),** even when an input had them. The page says so.
 - **PDF.js's helper data is one fixed set (11 Nov 2026).** Thumbnails need PDF.js's standard fonts and image decoders. The owner chose to load them as one fixed set, the same for every file, so no request depends on what a PDF needs, and to ship no character maps, so Chinese, Japanese and Korean text in fonts a PDF does not embed is missing from its thumbnail. The owner was quoted about 670 KB; as built the set is 760 KB by gzip, because it is bundled as a script so that no `fetch` is written in our worker code.
 - **The Liberation Sans fonts are shipped (11 Nov 2026),** though they are GPL v2 with a font exception, as unchanged data PDF.js reads. Without them, text in Helvetica-like fonts that a PDF does not embed may be drawn with a fallback font or not at all.
+- **Split PDF splits at points the visitor picks (12 Nov 2026).** Every page is shown as a thumbnail, and the visitor marks where to cut. With no cuts marked, the main button gives one file per page. Typed ranges can come later.
+- **Several outputs download as one zip, made with `fflate` (12 Nov 2026),** chosen over a zip written in our own code.
+- **The Phase 0 gate was accepted (12 Nov 2026),** with the hand checks moved to issue #7.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
