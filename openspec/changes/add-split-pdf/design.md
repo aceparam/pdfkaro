@@ -78,7 +78,9 @@ export const inspect = inspectPdf;
 The engine checks `options` itself, because the worker passes it on unchecked.
 
 **Two facts about this qpdf build shape `run`** (measured in Node by the stage 1 architect review):
-- **One qpdf instance breaks after about 276 calls** ("table index is out of bounds"). So every part gets a fresh instance from `tools.qpdf()`, which `tool.worker.ts` already makes afresh for each call. The input is written into each one. No files need deleting, because the instance is let go. Measured: 500 one-page parts of `pages-500.pdf`, split and checked, took 28.1 s, with peak memory about 124 MB.
+- **One qpdf instance breaks after about 240 to 276 writing calls** ("table index is out of bounds", "memory access out of bounds"). So every part gets a fresh instance from `tools.qpdf()`. The input is written into each one. No files need deleting, because the instance is let go. Measured: 500 one-page parts of `pages-500.pdf`, split and checked, took 28.1 s, with peak memory about 124 MB.
+  - **The WebAssembly is compiled once per worker.** `tool.worker.ts` compiles `qpdf.wasm` to a `WebAssembly.Module` on the first call and hands it to each new instance through Emscripten's `instantiateWasm`. So a 500-part split fetches the WebAssembly once, not 500 times, and the no-upload test's set of requests stays the same. `createQpdf` takes either the file's address or a compiled module.
+  - A failed instance allocation reads "could not allocate memory" in V8; `failureKind` counts it as memory.
 - **`--update-from-json` is applied before pages are selected.** So the outline is read once from the input, and each part is written in one call: `/in.pdf --update-from-json=/u.json --pages . first-last -- /out.pdf`. The format that worked gives each changed object as its whole dictionary, in the input's own object numbers:
 
   ```
@@ -96,7 +98,7 @@ The engine checks `options` itself, because the worker passes it on unchecked.
    - Work out the update in a pure function: `keptOutline(outline, first, last)`, then the whole dictionaries that change.
      - `keptOutline` keeps an item whose page is in the part, drops one whose page is not, and moves a kept child of a dropped item up to its place.
      - The update rewrites `/First`, `/Last`, `/Next`, `/Prev`, `/Parent` and `/Count` on the outline objects. It removes `/Outlines` from the catalog when nothing is kept.
-     - For parts after the first, it also removes `/EmbeddedFiles` from the catalog's `/Names`. That drops the attached files without passing any attachment name to qpdf as an argument.
+     - For parts after the first, it also removes `/EmbeddedFiles` from `/Names`, and removes the catalog's `/AF`, which points at the same file entries (`rich.pdf`'s catalog has both). When `/Names` is an object of its own rather than written inside the catalog, the update rewrites that object. This drops the attached files without passing any attachment name to qpdf as an argument.
    - A part that needs no change skips the update.
    - Write it: `--password=… --decrypt /in.pdf [--update-from-json=/u.json] --pages . first-last -- /out.pdf`.
      - Using the input as the primary file keeps form fields, links and document metadata.
@@ -108,11 +110,21 @@ The engine checks `options` itself, because the worker passes it on unchecked.
 
 **Why one qpdf call per part, and not `--split-pages`:** `--split-pages` reads the file once, but it drops bookmarks and attachments, which the owner's decisions keep. One call per part reads the file each time, so 500 parts of a large file is slow. It shows progress per file, Cancel works, and the page never blocks, because all of this runs in the worker. See Risks.
 
+**Limits of the zip format.** `fflate`'s `zipSync` has no ZIP64, so a zip cannot hold more than 65,535 entries or 4 GB. These are limits of the format, not limits chosen for the site:
+- before any part is written, a job of more than 65,535 parts fails at once with its own failure kind, `too-many-parts`, and the page says "This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts.";
+- while parts are written, if their total passes 4 GB less the room for the zip's own headers, the job stops with the `memory` failure and Split's memory advice.
+
+**Outlines deeper than qpdf reports.** qpdf's JSON stops at about 50 levels without saying so. An item that qpdf reports at the deepest level, whose own dictionary still has `/First`, has children the engine cannot see. The update clears that item's `/First`, `/Last` and `/Count`, so nothing below it survives to point into another part. The engine's own depth limit is 48, below qpdf's cut.
+
+**Attachments are checked, not assumed.** After writing each part after the first, the engine lists its attachments (`--json=2 --json-key=attachments`) and checks that the catalog has no `/AF`. If either remains, the job fails, never handing back a part that still carries an attached file. File-attachment annotations on a page are part of that page, so they go with whichever part holds the page; the page text says so. The program manager confirms this reading of the owner's decision at stage 1.
+
 **Unknown outline shapes.** A bookmark whose destination qpdf cannot resolve to a page counts as pointing nowhere, and is dropped. That covers named destinations qpdf cannot follow, and actions other than go-to.
 
 **`keptOutline` will have more callers.** Extract pages and Delete pages need the same rule. It stays in `split-pdf.ts` for now. The second caller's change moves it into `src/engines/outline.ts`, beside `inspect.ts`, rather than copying it.
 
-**Memory.** At the peak the worker holds the input twice (its own copy, and one inside the current qpdf instance), every part, and then the zip, about the size of all the parts together. The parts can add up to much more than the input, because shared resources such as fonts are copied into each one: no cuts on `pages-500.pdf` gave 559 KB of parts from a 198 KB input. Task 3.2 records the time and peak memory for the `make-large.mjs` file with no cuts and with two cuts, and those figures go into this design. If they are too high, handing parts one at a time to a streaming zip would change the shared engine and worker contract, which needs its own change first.
+**Memory.** The parts are kept as `Uint8Array`s and zipped with `zipSync`, as built in `add-page-items-and-zip`. A renderer the system kills for memory, as Android does, shows no message at all. So task 3.2 runs, by hand, no cuts on the `make-many-pages.mjs` file, and no cuts on a generated file whose 5,000 pages share one 1 MB image, and records time, peak memory and outcome. Only a finished file, the `memory` message or the `too-many-parts` message is acceptable; a crashed tab or a "damaged" message is not. If either run crashes the tab, building stops: streaming parts into a `Blob` with fflate's `Zip` changes the shared worker contract, which needs its own change first.
+
+At the peak the worker holds the input twice (its own copy, and one inside the current qpdf instance), every part, and then the zip, about the size of all the parts together. The parts can add up to much more than the input, because shared resources such as fonts are copied into each one: no cuts on `pages-500.pdf` gave 559 KB of parts from a 198 KB input. Task 3.2 records the time and peak memory for the `make-large.mjs` file with no cuts and with two cuts, and those figures go into this design. If they are too high, handing parts one at a time to a streaming zip would change the shared engine and worker contract, which needs its own change first.
 
 ### 3. The cut toggles
 
@@ -229,8 +241,10 @@ None added. qpdf, PDF.js and fflate are already shipped.
 - **A malicious PDF:**
   - qpdf and PDF.js run in workers, as for Merge PDF;
   - a part that fails `qpdf --check` fails the job;
-  - outline JSON from qpdf is parsed with `JSON.parse` and walked with a depth limit of 64 and a visited set, so a cyclic or very deep outline cannot hang the worker. Past the limit, the whole outline of that part is dropped and the job carries on.
-- **A huge page count:** batches of 500 on the page, in place of the page-count cap `add-page-items-and-zip` asked for, since a cap would be a fixed limit `SPEC.md` rules out. In the worker, `parts` makes one entry per part. With no cuts on a 120,000-page file, that is 120,000 qpdf calls and a zip of 120,000 entries. It runs with progress and Cancel and never blocks the page, and a phone may run out of memory, which the failure message covers.
+  - outline JSON from qpdf is parsed with `JSON.parse` (which does not recurse in V8) and walked with a depth limit of 48, below qpdf's own cut at about 50 levels, and a visited set, so a cyclic or very deep outline cannot hang the worker. Items below the cut are cleared explicitly (decision 2).
+- **A huge page count:** batches of 500 on the page, in place of the page-count cap `add-page-items-and-zip` asked for, since a cap would be a fixed limit `SPEC.md` rules out. In the worker, `parts` makes one entry per part. More than 65,535 parts, or more than 4 GB, cannot fit in one zip, so such a job fails at once, or as soon as the total passes, with a message that says to mark cuts (decision 2). Below that it runs with progress and Cancel and never blocks the page. Whether a phone gives the memory message or loses the tab is measured in task 3.2.
+- **Shared resources multiplied:** a small file whose many pages share one large image gives parts many times its size. Task 3.2 measures this case and building stops if it crashes the tab.
+- **Attached files leaking into later parts:** removed through `/Names` and `/AF`, then checked; a part after the first that still carries one fails the job.
 - **An oversized file:** the 100 MB warning; no limit.
 - **A hostile file name:** names go only through the shared cleaning and the worker's stem check. Zip entries are the stem plus numbers. qpdf sees only made-up paths.
 - **Document text in traces:** this is the first engine to read document text, the outline titles. Outline JSON and titles never go into a log, an error message or a failure sentence; a JSON or qpdf error on that step is caught and turned into the plain failure kind, with no text kept.
@@ -238,7 +252,7 @@ None added. qpdf, PDF.js and fflate are already shipped.
 
 ## Risks / Trade-offs
 
-- **Memory for many parts of a large file** is not yet measured; see decision 2.
+- **Memory for many parts of a large file** is not yet measured; see decision 2. If the hand runs crash the tab, a streaming-zip change comes first.
 - **One qpdf call per part is slow for many parts of a large file.** 500 parts of a 100 MB file reads 50 GB in all. The 100 MB warning, progress and Cancel cover it. If the owner wants it faster, `--split-pages` could be used for files with no bookmarks and no attachments. That is a later change, measured first.
 - **`--update-from-json` is proven on `rich.pdf`'s flat outline only.** Task 2.2 proves it on a nested outline and on a part whose catalog loses `/Outlines` entirely. If it cannot be made to work, building stops and the owner is asked. The choices would be: keep every bookmark in every part, or add a library that edits outlines.
 - **Named destinations and go-to actions** that qpdf cannot resolve are dropped, never kept pointing nowhere. A part may then have fewer bookmarks than a person expects. The fixtures README records what each fixture gives.

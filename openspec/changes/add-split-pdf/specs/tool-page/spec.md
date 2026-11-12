@@ -12,7 +12,7 @@ A list of pages SHALL show at most 500 pages at first, then a button naming the 
 #### Scenario: A file with very many pages
 
 - **WHEN** a file of 120,000 pages is listed
-- **THEN** pages 1 to 500 are shown, followed by "Show pages 501 to 1,000", the page never blocks for more than 100 ms, and the tool can still run on the whole file
+- **THEN** pages 1 to 500 are shown, followed by "Show pages 501 to 1,000", the page never blocks for more than 100 ms, and every page can still be reached
 
 #### Scenario: More pages are shown with the keyboard
 
