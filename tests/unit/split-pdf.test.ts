@@ -272,19 +272,19 @@ describe('splitting the shared test set', () => {
     for (const output of outputs) expect((await qpdfOn(output, ['--check'])).code).toBe(0);
   }, 300_000);
 
-  it('scanned.pdf, restricted.pdf, warning.pdf, damaged-xref is refused, mixed.pdf keeps sizes and rotation', async () => {
+  it('scanned.pdf, restricted.pdf, warning.pdf and images.pdf split; mixed.pdf keeps each page\'s size and turn', async () => {
     expect(await Promise.all((await split(fixture('scanned.pdf'))).outputs.map(pageCount))).toEqual([1, 1]);
     const restricted = (await split(fixture('restricted.pdf'), { cuts: [1] })).outputs;
     expect((await qpdfOn(restricted[0]!, ['--show-encryption'])).out).toContain('not encrypted');
     expect(await Promise.all((await split(fixture('warning.pdf'))).outputs.map(pageCount))).toEqual([1, 1, 1]);
+    expect(await Promise.all((await split(fixture('images.pdf'))).outputs.map(pageCount))).toEqual([1]);
+    // Each part keeps its page's size and turn.
+    const { PDFDocument } = await import('@cantoo/pdf-lib');
+    const shape = async (bytes: Uint8Array) =>
+      (await PDFDocument.load(bytes)).getPages().map((page) => ({ size: [page.getWidth(), page.getHeight()].map(Math.round), turn: page.getRotation().angle }));
+    const original = await shape(fixture('mixed.pdf'));
     const mixed = (await split(fixture('mixed.pdf'))).outputs;
-    const boxes = await Promise.all(
-      mixed.map(async (output) => {
-        const { out } = await qpdfOn(output, ['--json=2', '--json-key=pages']);
-        return out.length > 0;
-      }),
-    );
-    expect(boxes).toEqual([true, true, true, true]);
+    expect((await Promise.all(mixed.map(shape))).flat()).toEqual(original);
   });
 
   it('password.pdf opens with its password, and its parts have no password', async () => {
@@ -316,7 +316,7 @@ describe('splitting the shared test set', () => {
   });
 
   it('refuses a damaged file, a file that is not a PDF, and bad cuts', async () => {
-    for (const name of ['damaged-cut.pdf', 'not-a-pdf.pdf']) await expect(split(fixture(name)), name).rejects.toThrow();
+    for (const name of ['damaged-cut.pdf', 'damaged-xref.pdf', 'not-a-pdf.pdf']) await expect(split(fixture(name)), name).rejects.toThrow();
     await expect(split(fixture('text.pdf'), { cuts: [3] })).rejects.toThrow(/not valid/);
     await expect(split(fixture('text.pdf'), { cuts: 'all' as never })).rejects.toThrow(/not valid/);
   });

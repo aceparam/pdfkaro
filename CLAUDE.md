@@ -58,6 +58,10 @@ Update this section when a phase gate is passed.
 - **Split PDF splits at points the visitor picks (12 Nov 2026).** Every page is shown as a thumbnail, and the visitor marks where to cut. With no cuts marked, the main button gives one file per page. Typed ranges can come later.
 - **Several outputs download as one zip, made with `fflate` (12 Nov 2026),** chosen over a zip written in our own code.
 - **The Phase 0 gate was accepted (12 Nov 2026),** with the hand checks moved to issue #7.
+- **Split PDF: each part keeps only its own bookmarks (12 Nov 2026).** A bookmark that points to a page in another part is dropped, and a kept bookmark whose parent was dropped moves up.
+- **Split PDF: attached files go with the first part only (12 Nov 2026).** The page says so.
+- **Split PDF: parts have no password and no restrictions (12 Nov 2026),** as for Merge PDF. The page says so.
+- **A zip result shows no next steps for now (12 Nov 2026).** No tool opens a zip, so "Tool page anatomy" part 6 cannot be met for a zip until one does.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
@@ -84,6 +88,11 @@ Three more that the agent decided at the same time without asking, because they 
 - **Column position.** The column sits towards the left of a wide screen, as the designs draw it.
 - **No white fill for inputs.** The designs proposed one; `SPEC.md` names none.
 - **A solid border on placeholder boxes.** The designs proposed a dashed one; `SPEC.md` gives solid lines only.
+
+Decided by the agent on 12 Nov 2026 while planning Split PDF, accepted by the review panel, and named in its pull request:
+
+- **Attachments drawn on a page stay with that page.** The owner's "attached files go with the first part only" is read as files attached to the document as a whole (the `/EmbeddedFiles` name tree and the catalog's `/AF`). A file-attachment annotation on a page is part of the page, so it goes with whichever part holds it. The page text says so.
+- **One zip holds at most 65,535 files and 4 GB.** `fflate`'s `zipSync`, the owner's choice of zip library, writes no ZIP64. A split past either fails at once with a sentence saying to mark cuts, never with a broken zip. Lifting it needs a ZIP64 writer, our own code or another library, which is the owner's call. The limits live in `src/engines/zip-limits.ts`.
 
 ## How the code is laid out
 
