@@ -230,23 +230,23 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 #### Scenario: The no-upload test
 
-- **WHEN** the end-to-end test picks `report.pdf`, types a password, marks a cut, splits and downloads, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, naming the zip step's file exactly; no request has a body; none goes to another origin; none carries `report.pdf` or the password in its address; and the test fails the build if any does
+- **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, marks a cut, splits and downloads, while watching every request from the page and its workers
+- **THEN** after the pick only an exact list of the site's own files is requested, naming the zip step's file exactly; no request has a body; none goes to another origin; none carries `qz7report.pdf`, `qz7report` or the password in its address; and the test fails the build if any does
 
 #### Scenario: One part and several parts fetch the same files
 
-- **WHEN** the test splits a one-page file and a three-page file in turn
-- **THEN** both runs fetch the zip step, and the set of files fetched is the same
+- **WHEN** the test splits a one-page file and a three-page file, each on a fresh page, recording from the press of the main button to the result
+- **THEN** each run's own requests include the zip step's file, and the two sets of paths, leaving out `blob:` addresses, are the same
 
 #### Scenario: The watcher is shown to work
 
-- **WHEN** a control test plants a POST, a `sendBeacon`, an image address holding the file name, a fetch from the worker, and a request for the zip step's file with a query string
-- **THEN** the no-upload watcher fails on each one
+- **WHEN** a control test plants a POST, a `sendBeacon`, an image address holding the file name, a fetch from the worker, a request for the zip step's own path with `?x=1`, and a POST with a body to that path
+- **THEN** the no-upload watcher fails on each one, reporting the query as data in the address and the POST for its method and body
 
 #### Scenario: Storage and traces are looked at after a job
 
 - **WHEN** a job has finished
-- **THEN** cookies, local storage, session storage, IndexedDB, the Cache API and the private file system hold nothing of the file, and no file name or password is in the page title, the page address or the console
+- **THEN** cookies, local storage, session storage, IndexedDB, the Cache API and the private file system hold nothing of the file, and no file name, password or bookmark title ("Chapter one" from `rich.pdf`) is in the page title, the page address or the console
 
 ### Requirement: The words on the page
 

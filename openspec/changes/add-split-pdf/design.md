@@ -166,10 +166,11 @@ The text runs 250 to 500 words.
 - "Show the next 500 pages", with a generated file of a very large page count.
 
 **The no-upload test.** It moves the watcher from `merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, shared by both tools. Split's test adds the four checks from `add-page-items-and-zip` design decision 10:
-1. The allowlist names `fflate-<hash>.js` and `split-pdf-<hash>.js` exactly.
-2. A one-part run and a several-part run both fetch fflate, and the same set of files.
-3. `report.pdf` and the password are among the strings no request may carry.
-4. A planted fflate request with a query string, and one with a body, are caught.
+1. **The allowlist** names `fflate-<hash>.js` and `split-pdf-<hash>.js` exactly. The shared file exports `watch` and `violations` and takes each tool's allowlist as an argument: Merge PDF's list stays exactly as it is, so it never allows fflate or the Split engine.
+2. **One part and several parts.** Each run is recorded on a fresh page, from the press of "Split and download" to the result. Each run's own set must hold the exact `fflate-<hash>.js` path, and the two sets of pathnames, leaving out `blob:` addresses, must be equal.
+3. **Secrets.** The file is picked under a distinctive name, `qz7report.pdf`, a copy of `password.pdf` given with `setInputFiles({ name, mimeType, buffer })`. The full name, its stem `qz7report` and the password are all strings no request may carry. Matching the stem also catches every output name, `qz7report-split.zip` and `qz7report-part-1.pdf`.
+4. **Plants.** A request to the real `/_astro/fflate-<hash>.js` path with `?x=1` must be reported as data in the address, and only that. A POST with a body to the same path must be reported for its method and body. The general plants (a POST, a `sendBeacon`, an image address holding the name, a fetch from the worker) run once against the shared code; the fflate plants run on `/split-pdf`.
+5. **Bookmark titles.** The test runs `rich.pdf` and checks that "Chapter one" is in no request and not in the console.
 
 **The very-large-page-count file:**
 - `tests/fixtures/make-many-pages.mjs` writes 120,000 pages that share one content stream, about 10 MB, to the system's temporary folder, refusing a path inside the repo, as `make-large.mjs` does.
@@ -195,6 +196,7 @@ None added. qpdf, PDF.js and fflate are already shipped.
 - **A huge page count:** batches of 500 on the page, in place of the page-count cap `add-page-items-and-zip` asked for, since a cap would be a fixed limit `SPEC.md` rules out. In the worker, `parts` makes one entry per part. With no cuts on a 120,000-page file, that is 120,000 qpdf calls and a zip of 120,000 entries. It runs with progress and Cancel and never blocks the page, and a phone may run out of memory, which the failure message covers.
 - **An oversized file:** the 100 MB warning; no limit.
 - **A hostile file name:** names go only through the shared cleaning and the worker's stem check. Zip entries are the stem plus numbers. qpdf sees only made-up paths.
+- **Document text in traces:** this is the first engine to read document text, the outline titles. Outline JSON and titles never go into a log, an error message or a failure sentence; a JSON or qpdf error on that step is caught and turned into the plain failure kind, with no text kept.
 - **Hostile options:** `cuts` comes from the page, which could be tampered with. The engine refuses anything but sorted, unique whole numbers in range.
 
 ## Risks / Trade-offs

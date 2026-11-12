@@ -10,7 +10,7 @@
 - [ ] 2.1 Write `parts(pages, cuts)` in `src/engines/tools/split-pdf.ts`, refusing cuts that are not sorted, unique whole numbers from 1 to `pages - 1`
 - [ ] 2.2 Prove `--update-from-json` in this qpdf build by rewriting the outline of a part of `rich.pdf`; if it cannot be made to work, stop and ask the owner (design, Risks)
 - [ ] 2.3 Write `keptOutline(tree)`, with a depth limit of 64 and a visited set, and the step that writes the kept outline back
-- [ ] 2.4 Write `run`: one qpdf call per part with `--decrypt`, attachments removed from parts after the first, the outline step, `qpdf --check` on each part, and progress per file; `inspect` is `inspectPdf`
+- [ ] 2.4 Write `run`, with outline JSON and titles never put in a log, an error message or a failure sentence: one qpdf call per part with `--decrypt`, attachments removed from parts after the first, the outline step, `qpdf --check` on each part, and progress per file; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
@@ -44,13 +44,13 @@
 
 ## 7. No-upload test
 
-- [ ] 7.1 Move the watcher from `tests/e2e/merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, shared by both tools, and keep Merge PDF's test passing
+- [ ] 7.1 Move `watch` and `violations` from `tests/e2e/merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, with each tool passing its own allowlist; keep Merge PDF's list exactly as it is, run the general plants once against the shared code, and keep Merge PDF's test passing
 - [ ] 7.2 Split PDF's no-upload test, with the four checks of `add-page-items-and-zip` design decision 10:
   - the exact allowlist, naming `fflate-<hash>.js` and `split-pdf-<hash>.js`;
-  - a one-part and a several-part run fetching the same set, both with fflate;
-  - `report.pdf` and the password as strings no request may carry;
-  - planted fflate requests, one with a query string and one with a body, being caught;
-  - plus storage and traces after a job
+  - a one-part and a several-part run, each on a fresh page and recorded from the main button to the result, each fetching fflate, with equal sets of paths leaving out `blob:`;
+  - a copy of `password.pdf` picked as `qz7report.pdf`, with the full name, the stem `qz7report` and the password as strings no request may carry;
+  - fflate plants on its real path: `?x=1` reported only as data in the address, and a POST with a body reported for its method and body;
+  - storage and traces after a job, with `rich.pdf`'s "Chapter one" in no request and not in the console
 
 ## 8. Screenshots
 
