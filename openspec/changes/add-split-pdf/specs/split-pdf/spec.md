@@ -127,12 +127,17 @@ Each part SHALL keep the bookmarks that point to its own pages and no others; a 
 
 ### Requirement: More parts than a zip can hold
 
-A job that would give more than 65,535 parts, or more than 4 GB of parts, SHALL fail with a sentence saying a zip cannot hold that many files and to mark cuts, and SHALL never hand back a broken zip. There SHALL be no other limit. (SPEC.md: States every tool handles, Failed; Privacy, limits and security, "There is no fixed size limit")
+A job that would give more than 65,535 parts, or more than 4 GB of parts, SHALL fail with a sentence saying it is more than one zip can hold and to mark cuts, and SHALL never hand back a broken zip. There SHALL be no other limit. (SPEC.md: Definition of done, Each tool, "a correct result … or a clear message saying why it cannot"; States every tool handles, Failed)
 
 #### Scenario: Too many parts
 
 - **WHEN** a 120,000-page file is split with no cuts
 - **THEN** the page says "This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts." at once, and "Go back to your files" returns to the pages
+
+#### Scenario: Parts over 4 GB
+
+- **WHEN** the parts being written pass 4 GB in all
+- **THEN** the job stops and the page says "This would make a zip over 4 GB, more than one zip can hold. Mark cuts so the file is split into fewer parts."
 
 ### Requirement: Progress and cancel
 
