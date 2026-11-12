@@ -70,6 +70,8 @@ export type ToolWidgetWords = {
   resultPages: 'sum' | 'input' | 'none';
   /** After running out of memory, the one thing to try. Without it: "Try fewer or smaller files." */
   memoryAdvice?: string;
+  /** For a tool that gives several files: the one thing to try when they would not fit in one zip. */
+  zipLimitAdvice?: string;
   /**
    * A toggle on each page, for a tool that lists pages. `kind` says what the
    * toggles mean, which decides the option sent to the engine, which pages have
@@ -205,6 +207,7 @@ export const tools: Tool[] = [
       multiple: false,
       resultPages: 'input',
       memoryAdvice: 'Mark cuts so the file is split into fewer parts, then try again.',
+      zipLimitAdvice: 'Mark cuts so the file is split into fewer parts.',
       items: 'pages',
       itemControls: false,
       itemToggle: { kind: 'cut-after', label: 'Cut after' },

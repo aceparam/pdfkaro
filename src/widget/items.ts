@@ -31,3 +31,8 @@ export function gridItems(state: Pick<State, 'files'>, items: 'files' | 'pages',
     page: index + 1,
   }));
 }
+
+/** The items a list shows now: for a list of pages, only the batches shown. The thumbnail queue walks these. */
+export function shownItems(state: Pick<State, 'files' | 'shown'>, items: 'files' | 'pages'): GridEntry[] {
+  return gridItems(state, items, state.shown);
+}

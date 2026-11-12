@@ -4,7 +4,7 @@ import type { ToolWidgetWords } from '../tools/registry';
 import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, stem } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
-import { gridItems } from '../widget/items';
+import { shownItems } from '../widget/items';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
 
@@ -120,7 +120,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
 
   const pump = useCallback(() => {
     // Only the pages shown are made, so a file of very many pages costs the page no more than one batch.
-    const items = gridItems(stateRef.current, words.items, stateRef.current.shown);
+    const items = shownItems(stateRef.current, words.items);
     const id = next(queue.current, stateRef.current, items);
     const item = items.find((entry) => entry.id === id);
     const file = item ? files.current.get(item.fileId) : undefined;

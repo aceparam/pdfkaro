@@ -17,7 +17,7 @@ No. The file is read and split in your browser, on your device, and several new 
 
 ### How do I choose where to cut?
 
-Each page has a "Cut after" button under it, except the last page. A cut after page 3 means pages 1 to 3 become one file and the next file starts at page 4. The line above the pages says how many files you will get.
+Each page has a "Cut after" button under it, except the last page. A cut after page 3 means pages 1 to 3 become one file and the next file starts at page 4.
 
 ### What do I get if I mark no cuts?
 
@@ -25,7 +25,7 @@ One file for each page. A 12-page PDF gives 12 files.
 
 ### How are the new files named?
 
-They are named after your file. Splitting report.pdf gives report-split.zip, which holds report-part-1.pdf, report-part-2.pdf and so on, numbered in page order. A one-page file comes back as report-split.pdf.
+They are named after your file. Splitting report.pdf gives report-split.zip, which holds report-part-1.pdf, report-part-2.pdf and so on, numbered in page order; with 10 or more files the numbers start 01, 02. A one-page file comes back as report-split.pdf.
 
 ### What happens to bookmarks and attached files?
 

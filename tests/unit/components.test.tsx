@@ -86,6 +86,31 @@ describe('PageGrid listing the pages of one file', () => {
   });
 });
 
+describe('PageGrid with a toggle on each page', () => {
+  const pages = Array.from({ length: 3 }, (_, index) => ({ id: `f1:${index + 1}`, title: `Page ${index + 1}`, detail: '' }));
+  const toggle = {
+    label: 'Cut after',
+    name: (title: string) => `Cut after ${title.toLowerCase()}`,
+    pressed: new Set(['f1:1']),
+    skip: new Set(['f1:3']),
+    onToggle: noop,
+  };
+  const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" toggle={toggle} />);
+
+  it('gives each page but the skipped one a real button, named for its page, marked pressed or not', () => {
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*aria-label="Cut after page 1"[^>]*>Cut after<\/button>/);
+    expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*aria-label="Cut after page 2"[^>]*>Cut after<\/button>/);
+    expect(html).not.toContain('Cut after page 3');
+  });
+
+  it('marks the cell with a cut, and lets a page with no toggle take focus from code only', () => {
+    expect(html.match(/<li[^>]*class="[^"]*cut/g)).toHaveLength(1);
+    expect(html).toMatch(/<li[^>]*tabindex="-1"[^>]*data-id="f1:3"|<li[^>]*data-id="f1:3"[^>]*tabindex="-1"/);
+    expect(html).not.toMatch(/<li[^>]*data-id="f1:1"[^>]*tabindex/);
+  });
+});
+
 describe('PasswordField', () => {
   const html = renderToStaticMarkup(<PasswordField fileName="secret.pdf" onSubmit={noop} onLeaveOut={noop} />);
 

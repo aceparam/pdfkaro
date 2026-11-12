@@ -59,6 +59,8 @@
 - [x] 8.1 Screenshots of `/split-pdf` at 360px and 1280px, in light and dark: empty, pages with no cuts, pages with cuts, working, result, password, damaged; plus pages with cuts at 420px, and at 200% text size, with nothing overflowing
 - [x] 8.2 Measure the text contrast of the "Cut after" toggle, pressed and not, the cut line, and the button to show more pages, in light and dark; each must be at least 4.5 to 1 (3 to 1 for the line)
 
+- [x] 8.3 From the stage 2 review: `PasswordField` takes the words of its leave button, so a one-file tool offers "Choose another file" (Merge PDF with one protected file now does too); failure sentences and the Working line move into `src/widget/failures.ts`, with the zip-limit advice from the registry (`zipLimitAdvice`); `src/widget/zip-limits.ts` replaces `src/engines/zip-limits.ts`, with the worker's exact check before `zipSync`; `PageGrid`'s `focusId` is a one-time request (`onFocused`); the thumbnail queue walks `shownItems`; pages are put on the page about a screenful (30) first, then 100 a frame, because 500 at once blocked the page for 145 ms with the CPU slowed four times (now 69 to 91 ms); unit and render tests for each
+
 ## 9. Checks and review
 
 - [x] 9.1 No `LICENSES.md` line is needed: no dependency is added (check `package.json` is unchanged)

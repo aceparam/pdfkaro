@@ -200,3 +200,30 @@ describe('several outputs, zipped in the worker', async () => {
     expect(posted).toEqual([{ type: 'failed', requestId: 4, kind: 'engine-load' }]);
   });
 });
+
+describe('putting several files into one zip, as the worker does it', async () => {
+  const { zipSync } = await import('fflate');
+  const engine = (count: number, size = 1): EngineModule => ({ run: async () => Array.from({ length: count }, () => new Uint8Array(size)) });
+  const handler = (count: number) => {
+    const posted: FromWorker[] = [];
+    const handle = createHandler({ loadEngine: async () => engine(count), tools: {}, post: (message) => posted.push(message), loadZip: async () => zipSync });
+    return { handle, posted };
+  };
+  const zip = { stem: 'report', partSuffix: 'part' };
+
+  it('says it is writing before it zips several files, and not for one', async () => {
+    const several = handler(3);
+    await several.handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(several.posted.map((message) => message.type)).toEqual(['progress', 'done']);
+    expect(several.posted[0]).toEqual({ type: 'progress', requestId: 1, progress: { stage: 'writing', percent: 100 } });
+    const one = handler(1);
+    await one.handle({ type: 'run', requestId: 2, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(one.posted.map((message) => message.type)).toEqual(['done']);
+  });
+
+  it('refuses to zip more files than one zip can hold, whatever the engine checked', async () => {
+    const { handle, posted } = handler(65_536);
+    await handle({ type: 'run', requestId: 3, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(posted.at(-1)).toEqual({ type: 'failed', requestId: 3, kind: 'too-many-files' });
+  });
+});

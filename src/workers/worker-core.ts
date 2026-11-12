@@ -4,6 +4,7 @@
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FailureKind } from '../widget/state';
 import { partName } from '../widget/format';
+import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
 import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
 
 /** A document kept open so that several pages can be drawn without reading the file again. */
@@ -172,6 +173,9 @@ export function createHandler(deps: WorkerDeps) {
         outputs.forEach((output, index) => {
           entries[partName(zip.stem, zip.partSuffix, index + 1, total)] = output;
         });
+        // zipSync writes no ZIP64 and does not check: past its limits it would write a broken zip.
+        const fit = fitsInOneZip(Object.keys(entries), outputs.map((output) => output.byteLength));
+        if (!fit.fits) throw new TooBigForZip(fit.reason);
         // PDFs are already compressed, so the files are stored, which is fast and keeps memory low.
         const zipped = zipSync(entries, { level: 0 });
         // The parts and the zip have to exist together while it is made; the parts are let go here.

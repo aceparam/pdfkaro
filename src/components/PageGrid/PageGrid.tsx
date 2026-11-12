@@ -35,8 +35,9 @@ type Props = {
     skip?: ReadonlySet<string>;
     onToggle(id: string, title: string): void;
   };
-  /** An item to move focus to when it appears: its toggle, or the item itself. */
+  /** An item to move focus to when it appears: its toggle, or the item itself. Asked once; `onFocused` says it is done. */
   focusId?: string | null;
+  onFocused?(): void;
 };
 
 type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
@@ -147,7 +148,7 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
  * touch screen, and by mouse drag. A button that cannot be used stays
  * focusable and is marked unavailable.
  */
-export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows', toggle, focusId }: Props) {
+export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows', toggle, focusId, onFocused }: Props) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const rows = useRef(new Map<string, HTMLLIElement>());
   const reported = useRef(new Set<string>());
@@ -155,16 +156,20 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
   const dragging = useRef<string | null>(null);
 
   // The latest props, read by the stable callbacks below.
-  const latest = useRef({ items, onMove, onRemove, onMoved, onVisible, toggle });
+  const latest = useRef({ items, onMove, onRemove, onMoved, onVisible, toggle, onFocused });
   useEffect(() => {
-    latest.current = { items, onMove, onRemove, onMoved, onVisible, toggle };
+    latest.current = { items, onMove, onRemove, onMoved, onVisible, toggle, onFocused };
   });
 
   // When asked, move focus to an item as soon as it is on the page: its toggle, or the item itself.
   useEffect(() => {
     if (!focusId) return;
-    (buttons.current.get(`${focusId}:toggle`) ?? rows.current.get(focusId))?.focus();
-  }, [focusId]);
+    const target = buttons.current.get(`${focusId}:toggle`) ?? rows.current.get(focusId);
+    if (!target) return;
+    target.focus();
+    // A one-time request: once focus has moved, it is not asked again when the list comes back.
+    latest.current.onFocused?.();
+  }, [focusId, items]);
 
   // Report each item once when it comes on screen or within 300px of it, so
   // thumbnails are drawn only for what the visitor can see or is about to.

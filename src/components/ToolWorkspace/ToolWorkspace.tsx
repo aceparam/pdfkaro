@@ -4,9 +4,10 @@ import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
+import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems } from '../../widget/items';
 import { cutAnnouncement, cutSummary, showMoreLabel, shownAnnouncement } from '../../widget/cuts';
-import { allReady, canRun, currentProblem, isLarge, pageBatch, totals, type FailureKind, type FileEntry } from '../../widget/state';
+import { allReady, canRun, currentProblem, isLarge, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -28,22 +29,12 @@ type Props = {
   onEmpty(message?: string): void;
 };
 
+/** How many pages are put on the page first (about a screenful), and how many are added each frame after. */
+const drawFirst = 30;
+const drawStep = 100;
+
 const createWorker = (): WorkerLike =>
   new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
-
-const failureText: Record<FailureKind, string> = {
-  memory: 'Your browser ran out of memory. Try fewer or smaller files.',
-  'engine-load': 'The tool could not be loaded. Check your connection and try again.',
-  engine: 'Something went wrong. Try again.',
-  'too-many-files': 'This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts.',
-  'zip-too-large': 'This would make a zip over 4 GB, more than one zip can hold. Mark cuts so the file is split into fewer parts.',
-};
-
-/** The one sentence for a failure, with the tool's own advice after running out of memory. */
-function failureSentence(kind: FailureKind, words: ToolWidgetWords): string {
-  if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
-  return failureText[kind];
-}
 
 function detailFor(file: FileEntry): string {
   if (file.checking) return 'Trying the password';
@@ -203,6 +194,21 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   // A tool that lists pages has one file, shown on its own line above them.
   const onlyFile = pages ? state.files[0] : undefined;
 
+  // Pages are put on the page a screenful first, then 100 a frame, so that 500 at once never
+  // block the page for more than 100 ms on a slow phone. A list of files is drawn whole.
+  const [drawn, setDrawn] = useState(drawFirst);
+  const drawnFor = useRef<string | undefined>(undefined);
+  if (drawnFor.current !== onlyFile?.id) {
+    drawnFor.current = onlyFile?.id;
+    if (drawn !== drawFirst) setDrawn(drawFirst);
+  }
+  useEffect(() => {
+    if (!pages || drawn >= items.length) return;
+    const frame = requestAnimationFrame(() => setDrawn((count) => count + drawStep));
+    return () => cancelAnimationFrame(frame);
+  }, [pages, drawn, items.length]);
+  const gridItemsDrawn = useMemo(() => (pages ? items.slice(0, drawn) : items), [pages, items, drawn]);
+
   // When that file has been read and its pages appear, say what the line now says.
   const onlyReady = onlyFile && onlyFile.status === 'ready' && !onlyFile.checking ? `${onlyFile.id}:${detailFor(onlyFile)}` : '';
   const announcedReady = useRef('');
@@ -294,12 +300,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       {state.step === 'working' ? (
         <div className={styles.working}>
           <p className={styles.progressLine}>
-            {state.progress
-              ? progressLine(state.progress, words.writingLabel)
-              : // A tool that gives several files counts its parts once they come, not the file it was given.
-                words.outputs === 'several'
-                ? 'Starting'
-                : `Starting on ${fileCount(state.files.length)}`}
+            {workingLine(state.progress, words, state.files.length)}
           </p>
           <ProgressBar fraction={state.fraction} label={words.actionLabel} />
           <div className="actions">
@@ -360,7 +361,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
           {items.length > 0 ? (
             <PageGrid
-              items={items}
+              items={gridItemsDrawn}
               controls={words.itemControls}
               layout={pages ? 'grid' : 'rows'}
               onMove={run.moveFile}
@@ -369,6 +370,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               onVisible={run.showThumbnail}
               toggle={toggle}
               focusId={focusId}
+              onFocused={() => setFocusId(null)}
             />
           ) : null}
 

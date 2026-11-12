@@ -92,7 +92,7 @@ Three more that the agent decided at the same time without asking, because they 
 Decided by the agent on 12 Nov 2026 while planning Split PDF, accepted by the review panel, and named in its pull request:
 
 - **Attachments drawn on a page stay with that page.** The owner's "attached files go with the first part only" is read as files attached to the document as a whole (the `/EmbeddedFiles` name tree and the catalog's `/AF`). A file-attachment annotation on a page is part of the page, so it goes with whichever part holds it. The page text says so.
-- **One zip holds at most 65,535 files and 4 GB.** `fflate`'s `zipSync`, the owner's choice of zip library, writes no ZIP64. A split past either fails at once with a sentence saying to mark cuts, never with a broken zip. Lifting it needs a ZIP64 writer, our own code or another library, which is the owner's call. The limits live in `src/engines/zip-limits.ts`.
+- **One zip holds at most 65,535 files and 4 GB.** `fflate`'s `zipSync`, the owner's choice of zip library, writes no ZIP64. A split past either fails at once with a sentence saying to mark cuts, never with a broken zip. Lifting it needs a ZIP64 writer, our own code or another library, which is the owner's call. The limits live in `src/widget/zip-limits.ts`; the engine checks them early and the worker checks the exact size again before it zips.
 
 ## How the code is laid out
 

@@ -17,7 +17,7 @@
 import { inspectPdf } from '../inspect';
 import { finished, qpdfFrom, saidInvalidPassword, type Qpdf } from '../qpdf';
 import type { Engine, EngineTools, Inspector } from '../types';
-import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../zip-limits';
+import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../widget/zip-limits';
 
 type Options = { passwords?: unknown; cuts?: unknown };
 type Part = { first: number; last: number };
@@ -29,7 +29,11 @@ type Part = { first: number; last: number };
  */
 export function parts(pages: number, cuts: readonly number[]): Part[] {
   if (!Number.isInteger(pages) || pages < 1) throw new Error('The file has no pages.');
-  if (cuts.length === 0) return Array.from({ length: pages }, (_, index) => ({ first: index + 1, last: index + 1 }));
+  if (cuts.length === 0)
+    return Array.from({ length: pages }, (_, index) => ({
+      first: index + 1,
+      last: index + 1,
+    }));
   let previous = 0;
   for (const cut of cuts) {
     if (!Number.isInteger(cut) || cut <= previous || cut >= pages) throw new Error('The cuts are not valid.');
@@ -65,16 +69,18 @@ export type OutlineItem = {
 export const outlineDepthLimit = 48;
 
 /**
- * Reads qpdf's `outlines` JSON into items, with no titles. Gives null when the
- * shape is not what qpdf writes, an object is met twice, or the outline is
- * deeper than the limit, so the caller drops the whole outline.
+ * Reads qpdf's `outlines` JSON into items, with no titles. An item at the
+ * depth limit is kept with no children, so whatever lies below it is dropped
+ * when the part's links are written. Gives null when the shape is not what
+ * qpdf writes or an object is met twice, so the caller drops the whole outline.
  */
 export function readOutline(json: unknown): OutlineItem[] | null {
   const seen = new Set<string>();
   const ref = /^\d+ \d+ R$/;
   const walk = (list: unknown, depth: number): OutlineItem[] | null => {
     if (!Array.isArray(list)) return null;
-    if (list.length > 0 && depth > outlineDepthLimit) return null;
+    // Past the limit, children are not read; the item above keeps none.
+    if (depth > outlineDepthLimit) return [];
     const items: OutlineItem[] = [];
     for (const raw of list) {
       if (typeof raw !== 'object' || raw === null) return null;
@@ -83,7 +89,12 @@ export function readOutline(json: unknown): OutlineItem[] | null {
       seen.add(object);
       const children = walk(kids, depth + 1);
       if (!children) return null;
-      items.push({ object, page: Number.isInteger(page) && (page as number) > 0 ? (page as number) : null, open: open !== false, kids: children });
+      items.push({
+        object,
+        page: Number.isInteger(page) && (page as number) > 0 ? (page as number) : null,
+        open: open !== false,
+        kids: children,
+      });
     }
     return items;
   };
@@ -141,6 +152,10 @@ export function outlineIsSafe(structure: Omit<Structure, 'outline'>, outline: re
       const dict = structure.items.get(item.object);
       if (!dict || reserved.has(item.object)) return false;
       if (typeof dict['/Type'] === 'string' && outlineTypes.has(dict['/Type'])) return false;
+      // An outline item has a title and a parent; a name tree, a file specification or an embedded file does not look like one.
+      if (!('/Title' in dict) || !isRef(dict['/Parent'])) return false;
+      // (/F on an outline item is its style, so it is not among these.)
+      if (['/Names', '/Kids', '/Limits', '/EF', '/UF', '/Filter', '/Length'].some((key) => key in dict)) return false;
       return check(item.kids);
     });
   return check(outline);
@@ -165,7 +180,9 @@ export function partUpdate(structure: Structure, part: Part, isFirst: boolean): 
     } else {
       const link = (items: OutlineItem[], parent: string) => {
         items.forEach((item, index) => {
-          const dict: Dict = { ...structure.items.get(item.object)! };
+          const original = structure.items.get(item.object);
+          if (!original) throw new Error('A bookmark could not be read.');
+          const dict: Dict = { ...original };
           for (const key of ['/First', '/Last', '/Count', '/Prev', '/Next']) delete dict[key];
           dict['/Parent'] = parent;
           if (index > 0) dict['/Prev'] = items[index - 1]!.object;
@@ -214,7 +231,15 @@ export function updateJson(maxObjectId: number, update: Map<string, Dict>): stri
   const objects: Record<string, { value: Dict }> = {};
   for (const [id, value] of update) objects[`obj:${id}`] = { value };
   return JSON.stringify({
-    qpdf: [{ jsonversion: 2, pushedinheritedpageresources: false, calledgetallpages: false, maxobjectid: maxObjectId }, objects],
+    qpdf: [
+      {
+        jsonversion: 2,
+        pushedinheritedpageresources: false,
+        calledgetallpages: false,
+        maxobjectid: maxObjectId,
+      },
+      objects,
+    ],
   });
 }
 
@@ -282,7 +307,16 @@ function readStructure(qpdf: Qpdf, passwordArgs: string[]): Structure {
     root = rootId ? (found.values.get(rootId) ?? null) : null;
     names = namesId ? (found.values.get(namesId) ?? null) : null;
   }
-  const base = { maxObjectId: withCatalog.max, catalogId, catalog, rootId, root, namesId, names, items };
+  const base = {
+    maxObjectId: withCatalog.max,
+    catalogId,
+    catalog,
+    rootId,
+    root,
+    namesId,
+    names,
+    items,
+  };
   if (outline && (!rootId || !root || !outlineIsSafe(base, outline))) outline = null;
   return { ...base, outline };
 }
@@ -293,7 +327,8 @@ function carriesAttachment(qpdf: Qpdf, path: string): boolean {
   if (isDict(listed.attachments) && Object.keys(listed.attachments).length > 0) return true;
   const { code, out } = qpdf.call(['--json=2', '--json-key=qpdf', '--json-object=trailer', path]);
   if (!finished(code)) return true;
-  const body = (JSON.parse(out) as Dict).qpdf;
+  const parsed: unknown = JSON.parse(out);
+  const body = isDict(parsed) ? parsed.qpdf : null;
   const trailer = Array.isArray(body) && isDict(body[1]) && isDict(body[1].trailer) ? (body[1].trailer as Dict).value : null;
   const rootId = isDict(trailer) ? trailer['/Root'] : null;
   if (!isRef(rootId)) return true;
@@ -307,8 +342,9 @@ function carriesAttachment(qpdf: Qpdf, path: string): boolean {
 
 function cutsFrom(options: Options): number[] {
   if (options.cuts === undefined) return [];
-  if (!Array.isArray(options.cuts)) throw new Error('The cuts are not valid.');
-  return options.cuts as number[];
+  const cuts: unknown = options.cuts;
+  if (!Array.isArray(cuts) || !cuts.every((cut): cut is number => Number.isInteger(cut))) throw new Error('The cuts are not valid.');
+  return cuts;
 }
 
 function passwordFrom(options: Options): string | undefined {
@@ -324,55 +360,61 @@ async function freshQpdf(tools: EngineTools, file: Uint8Array): Promise<Qpdf> {
   return qpdf;
 }
 
-export const run: Engine<Options> = async (files, options, onProgress, tools) => {
-  const file = files[0];
-  if (!file || files.length !== 1) throw new Error('Split takes one file.');
-  const password = passwordFrom(options);
-  const passwordArgs = password === undefined ? [] : [`--password=${password}`];
-  const cuts = cutsFrom(options);
+/** The engine, with the most bytes one zip can hold given; tests pass a small limit. */
+export function makeRun(maxBytes: (files: number) => number = zipMaxBytes): Engine<Options> {
+  return async (files, options, onProgress, tools) => {
+    const file = files[0];
+    if (!file || files.length !== 1) throw new Error('Split takes one file.');
+    const password = passwordFrom(options);
+    const passwordArgs = password === undefined ? [] : [`--password=${password}`];
+    const cuts = cutsFrom(options);
 
-  // First, one plain copy: decrypted, by the owner's decision, and with no
-  // object streams, because qpdf's JSON update does not reach objects kept in
-  // an object stream. Every later step works on this copy, with no password.
-  const opener = await freshQpdf(tools, file);
-  const opened = opener.call([...passwordArgs, '--decrypt', '/in.pdf', '--object-streams=disable', '/plain.pdf']);
-  if (!finished(opened.code)) {
-    throw new Error(saidInvalidPassword(opened.printed) ? 'A password did not open the file.' : 'qpdf could not read the file.');
-  }
-  const plain = opener.read('/plain.pdf');
-
-  // Read once: the page count, then the catalog, outline and /Names.
-  const counted = (await freshQpdf(tools, plain)).call(['--show-npages', '/in.pdf']);
-  if (!finished(counted.code)) throw new Error('qpdf could not read the file.');
-  const pages = Number(counted.out.split('\n').find((line) => /^\d+$/.test(line.trim())));
-  const total = partCount(pages, cuts);
-  if (total > zipMaxFiles) throw new TooBigForZip('files');
-  const list = parts(pages, cuts);
-  const structure = readStructure(await freshQpdf(tools, plain), []);
-
-  const outputs: Uint8Array[] = [];
-  let bytes = 0;
-  for (const [index, part] of list.entries()) {
-    const isFirst = index === 0;
-    const qpdf = await freshQpdf(tools, plain);
-    const update = partUpdate(structure, part, isFirst);
-    const updateArgs: string[] = [];
-    if (update.size > 0) {
-      qpdf.write('/u.json', new TextEncoder().encode(updateJson(structure.maxObjectId, update)));
-      updateArgs.push('--update-from-json=/u.json');
+    // First, one plain copy: decrypted, by the owner's decision, and with no
+    // object streams, because qpdf's JSON update does not reach objects kept in
+    // an object stream. Every later step works on this copy, with no password.
+    const opener = await freshQpdf(tools, file);
+    const opened = opener.call([...passwordArgs, '--decrypt', '/in.pdf', '--object-streams=disable', '/plain.pdf']);
+    if (!finished(opened.code)) {
+      throw new Error(saidInvalidPassword(opened.printed) ? 'A password did not open the file.' : 'qpdf could not read the file.');
     }
-    const range = part.first === part.last ? `${part.first}` : `${part.first}-${part.last}`;
-    const written = qpdf.call(['/in.pdf', ...updateArgs, '--pages', '.', range, '--', '/out.pdf']);
-    if (!finished(written.code)) throw new Error(`qpdf could not write part ${index + 1} (exit ${written.code}).`);
-    if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error(`Part ${index + 1} did not pass qpdf's check.`);
-    const output = qpdf.read('/out.pdf');
-    if (!isFirst && carriesAttachment(await freshQpdf(tools, output), '/in.pdf')) throw new Error(`Part ${index + 1} still carries an attached file.`);
-    bytes += output.byteLength;
-    if (total > 1 && bytes > zipMaxBytes(total)) throw new TooBigForZip('bytes');
-    outputs.push(output);
-    onProgress({ stage: 'working', unit: 'file', done: index + 1, total });
-  }
-  return outputs;
-};
+    const plain = opener.read('/plain.pdf');
+
+    // Read once: the page count, then the catalog, outline and /Names.
+    const counted = (await freshQpdf(tools, plain)).call(['--show-npages', '/in.pdf']);
+    if (!finished(counted.code)) throw new Error('qpdf could not read the file.');
+    const pages = Number(counted.out.split('\n').find((line) => /^\d+$/.test(line.trim())));
+    const total = partCount(pages, cuts);
+    if (total > zipMaxFiles) throw new TooBigForZip('files');
+    const list = parts(pages, cuts);
+    const structure = readStructure(await freshQpdf(tools, plain), []);
+
+    const outputs: Uint8Array[] = [];
+    let bytes = 0;
+    for (const [index, part] of list.entries()) {
+      const isFirst = index === 0;
+      const qpdf = await freshQpdf(tools, plain);
+      const update = partUpdate(structure, part, isFirst);
+      const updateArgs: string[] = [];
+      if (update.size > 0) {
+        qpdf.write('/u.json', new TextEncoder().encode(updateJson(structure.maxObjectId, update)));
+        updateArgs.push('--update-from-json=/u.json');
+      }
+      const range = part.first === part.last ? `${part.first}` : `${part.first}-${part.last}`;
+      const written = qpdf.call(['/in.pdf', ...updateArgs, '--pages', '.', range, '--', '/out.pdf']);
+      if (!finished(written.code)) throw new Error(`qpdf could not write part ${index + 1} (exit ${written.code}).`);
+      if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error(`Part ${index + 1} did not pass qpdf's check.`);
+      const output = qpdf.read('/out.pdf');
+      if (!isFirst && carriesAttachment(await freshQpdf(tools, output), '/in.pdf'))
+        throw new Error(`Part ${index + 1} still carries an attached file.`);
+      bytes += output.byteLength;
+      if (total > 1 && bytes > maxBytes(total)) throw new TooBigForZip('bytes');
+      outputs.push(output);
+      onProgress({ stage: 'working', unit: 'file', done: index + 1, total });
+    }
+    return outputs;
+  };
+}
+
+export const run: Engine<Options> = makeRun();
 
 export const inspect: Inspector = inspectPdf;

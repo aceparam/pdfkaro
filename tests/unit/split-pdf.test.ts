@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import {
   keptOutline,
+  makeRun,
   outlineDepthLimit,
   partCount,
   partUpdate,
@@ -19,7 +20,7 @@ import {
   type Structure,
 } from '../../src/engines/tools/split-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
-import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../src/engines/zip-limits';
+import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../src/widget/zip-limits';
 import { failureKind } from '../../src/workers/worker-core';
 import { deepOutline, indirectNamesWithAF, nestedOutline, outlineAliasingCatalog } from './outline-fixtures';
 
@@ -104,9 +105,21 @@ describe('what one zip can hold', () => {
     expect(made).toBe(2);
   });
 
-  it('stops when the parts pass what one zip can hold, as a zip failure', () => {
+  it('stops when the parts pass what one zip can hold, as a zip failure', async () => {
     expect(zipMaxBytes(2)).toBeLessThan(0xffffffff);
     expect(failureKind(new TooBigForZip('bytes'))).toBe('zip-too-large');
+    // With a small limit: three parts of text.pdf pass it partway through.
+    const small = makeRun(() => 3000);
+    const error = await small([fixture('text.pdf')], {}, () => {}, tools).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(TooBigForZip);
+    expect((error as TooBigForZip).reason).toBe('bytes');
+    // One part is never zipped, so the limit does not apply to it.
+    await expect(small([fixture('form.pdf')], {}, () => {}, tools)).resolves.toHaveLength(1);
+  });
+
+  it('leaves room in a zip for the longest names a part can have', () => {
+    // A 100-character stem in a script of three bytes a character, and "-part-65535.pdf".
+    expect(0xffffffff - zipMaxBytes(65_535)).toBeGreaterThanOrEqual(65_535 * (76 + 2 * (300 + 15)) + 22);
   });
 });
 
@@ -121,14 +134,19 @@ describe('reading an outline', () => {
     expect(JSON.stringify(read)).not.toContain('Part A');
   });
 
-  it('gives up on a cycle, an odd shape or an outline past the depth limit', () => {
+  it('cuts an outline at the depth limit, keeping the item there with no children', () => {
+    let deep: unknown[] = [];
+    for (let level = outlineDepthLimit + 3; level >= 1; level--) deep = [{ object: `${level} 0 R`, destpageposfrom1: 1, kids: deep }];
+    let depth = 0;
+    for (let items = readOutline(deep); items && items.length > 0; items = items[0]!.kids) depth++;
+    expect(depth).toBe(outlineDepthLimit);
+  });
+
+  it('gives up on a cycle or an odd shape', () => {
     const twice = [{ object: '1 0 R', destpageposfrom1: 1, kids: [{ object: '1 0 R', destpageposfrom1: 1, kids: [] }] }];
     expect(readOutline(twice)).toBeNull();
     expect(readOutline([{ object: 'nope', kids: [] }])).toBeNull();
     expect(readOutline('x')).toBeNull();
-    let deep: unknown[] = [];
-    for (let level = outlineDepthLimit + 1; level >= 1; level--) deep = [{ object: `${level} 0 R`, destpageposfrom1: 1, kids: deep }];
-    expect(readOutline(deep)).toBeNull();
   });
 });
 
@@ -229,7 +247,17 @@ describe('splitting files made here', () => {
     expect(await outlineTitles(outputs[1]!)).toEqual(['Level 3']);
   });
 
-  it('leaves nothing of an outline deeper than qpdf reports pointing into another part', async () => {
+  it('keeps a deep outline to the depth limit, and nothing below it points into another part', async () => {
+    type Shown = { kids: Shown[] };
+    const depthOf = async (bytes: Uint8Array) => {
+      const { out } = await qpdfOn(bytes, ['--json=2', '--json-key=outlines']);
+      let depth = 0;
+      for (let items = (JSON.parse(out) as { outlines: Shown[] }).outlines; items.length > 0; items = items[0]!.kids) depth++;
+      return depth;
+    };
+    const sixty = await split(await deepOutline(60), { cuts: [1] });
+    // Levels 1 to 59 point at page 1; qpdf reports about 51 of them, and the engine keeps 48.
+    expect(await depthOf(sixty.outputs[0]!)).toBe(outlineDepthLimit);
     const { outputs } = await split(await deepOutline(100), { cuts: [1] });
     expect(await deadBookmarks(outputs[0]!)).toBe(0);
     expect(await deadBookmarks(outputs[1]!)).toBe(0);
