@@ -197,7 +197,7 @@ export const tools: Tool[] = [
       acceptsName: 'a PDF',
       actionLabel: 'Split and download',
       writingLabel: 'Putting the files into one zip',
-      doneHeading: 'Your split file is ready',
+      doneHeading: 'Your files are ready',
       failedHeading: 'The split did not finish.',
       tooFewFiles: 'Choose a PDF file to split.',
       outputSuffix: 'split',

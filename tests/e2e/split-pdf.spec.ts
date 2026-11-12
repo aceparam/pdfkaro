@@ -39,7 +39,7 @@ async function pick(page: Page, file: string | { name: string; mimeType: string;
 
 async function splitAndDownload(page: Page): Promise<Download> {
   await mainButton(page).click();
-  await expect(page.getByRole('heading', { name: 'Your split file is ready' })).toBeFocused({ timeout: 60000 });
+  await expect(page.getByRole('heading', { name: 'Your files are ready' })).toBeFocused({ timeout: 60000 });
   const download = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Download' }).click();
   return download;

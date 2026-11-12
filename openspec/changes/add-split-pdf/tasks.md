@@ -46,7 +46,7 @@
 
 ## 7. No-upload test
 
-- [x] 7.1 Move `watch` and `violations` from `tests/e2e/merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, with each tool passing its own allowlist; keep Merge PDF's list exactly as it is, run the general plants once against the shared code, and keep Merge PDF's test passing
+- [x] 7.1 Move `watch` and `violations` from `tests/e2e/merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, with each tool passing its own allowlist; keep Merge PDF's list as it was, adding only the engines' shared `inspect-<hash>.js` once the build splits it out, run the general plants once against the shared code, and keep Merge PDF's test passing
 - [x] 7.2 Split PDF's no-upload test, with the four checks of `add-page-items-and-zip` design decision 10:
   - the exact allowlist, naming `fflate-<hash>.js` and `split-pdf-<hash>.js`;
   - a one-part and a several-part run, each on a fresh page and recorded from the main button to the result, each fetching fflate, with equal sets of paths leaving out `blob:`;
