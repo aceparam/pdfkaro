@@ -276,7 +276,11 @@ function objects(qpdf: Qpdf, passwordArgs: string[], ids: string[]): { max: numb
   return { max, values, trailer };
 }
 
-function readStructure(qpdf: Qpdf, passwordArgs: string[]): Structure {
+/** How many objects one qpdf call is asked for: each is an argument, and qpdf's arguments sit on its small stack. */
+export const objectsPerCall = 200;
+
+async function readStructure(fresh: () => Promise<Qpdf>, passwordArgs: string[]): Promise<Structure> {
+  const qpdf = await fresh();
   const first = objects(qpdf, passwordArgs, []);
   const catalogId = first.trailer?.['/Root'];
   if (!isRef(catalogId)) throw new Error('The file has no catalog.');
@@ -300,12 +304,23 @@ function readStructure(qpdf: Qpdf, passwordArgs: string[]): Structure {
   const ids: string[] = [];
   const collect = (list: readonly OutlineItem[]) => list.forEach((item) => (ids.push(item.object), collect(item.kids)));
   if (outline) collect(outline);
-  const wanted = [rootId, namesId, ...ids].filter((id): id is string => id !== null);
-  if (wanted.length > 0) {
-    const found = objects(qpdf, passwordArgs, wanted);
-    items = found.values;
+  // The outline root and /Names, which attachments need whatever happens to the outline.
+  const named = [rootId, namesId].filter((id): id is string => id !== null);
+  if (named.length > 0) {
+    const found = objects(qpdf, passwordArgs, named);
     root = rootId ? (found.values.get(rootId) ?? null) : null;
     names = namesId ? (found.values.get(namesId) ?? null) : null;
+  }
+  // Each bookmark's dictionary, a batch at a time, each batch on an instance of its own, so a
+  // long outline neither overflows qpdf's stack nor wears one instance out. A failure drops the outline.
+  try {
+    for (let start = 0; start < ids.length; start += objectsPerCall) {
+      const found = objects(await fresh(), passwordArgs, ids.slice(start, start + objectsPerCall));
+      for (const [id, value] of found.values) items.set(id, value);
+    }
+  } catch {
+    outline = null;
+    items = new Map();
   }
   const base = {
     maxObjectId: withCatalog.max,
@@ -386,7 +401,7 @@ export function makeRun(maxBytes: (files: number) => number = zipMaxBytes): Engi
     const total = partCount(pages, cuts);
     if (total > zipMaxFiles) throw new TooBigForZip('files');
     const list = parts(pages, cuts);
-    const structure = readStructure(await freshQpdf(tools, plain), []);
+    const structure = await readStructure(() => freshQpdf(tools, plain), []);
 
     const outputs: Uint8Array[] = [];
     let bytes = 0;

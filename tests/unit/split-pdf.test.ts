@@ -22,7 +22,7 @@ import {
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../src/widget/zip-limits';
 import { failureKind } from '../../src/workers/worker-core';
-import { deepOutline, indirectNamesWithAF, nestedOutline, outlineAliasingCatalog } from './outline-fixtures';
+import { deepOutline, indirectNamesWithAF, manyBookmarks, nestedOutline, outlineAliasingCatalog } from './outline-fixtures';
 
 const require = createRequire(import.meta.url);
 const wasm = require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
@@ -263,6 +263,14 @@ describe('splitting files made here', () => {
     expect(await deadBookmarks(outputs[1]!)).toBe(0);
     for (const output of outputs) expect((await qpdfOn(output, ['--check'])).code).toBe(0);
   }, 60_000);
+
+  it('keeps each part to its own bookmarks with 3,000 of them, reading them in batches', async () => {
+    const { outputs } = await split(await manyBookmarks(3000), { cuts: [1] });
+    const count = async (bytes: Uint8Array) => ((await outlineTitles(bytes)) as unknown[]).length;
+    expect(await count(outputs[0]!)).toBe(1500);
+    expect(await count(outputs[1]!)).toBe(1500);
+    for (const output of outputs) expect(await deadBookmarks(output)).toBe(0);
+  }, 120_000);
 
   it('drops the whole outline when a bookmark is the catalog', async () => {
     const { outputs } = await split(await outlineAliasingCatalog());

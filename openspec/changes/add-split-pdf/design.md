@@ -122,6 +122,8 @@ The engine checks `options` itself, because the worker passes it on unchecked.
 
 **Attachments are checked, not assumed.** After writing each part after the first, the engine lists its attachments (`--json=2 --json-key=attachments`) and checks that the catalog has no `/AF`. If either remains, the job fails, never handing back a part that still carries an attached file. File-attachment annotations on a page are part of that page, so they go with whichever part holds the page; the page text says so. This is the agent's reading of the owner's decision, accepted by the program manager at stage 1, recorded under "Decisions the agent made for the owner" in `CLAUDE.md` and named in the pull request, so the owner can overturn it.
 
+**Long outlines.** Each object asked of qpdf is one argument, and qpdf's arguments sit on its small WebAssembly stack: about 1,700 in one call overflowed it (found at stage 2). Bookmark dictionaries are read 200 at a time, each batch on an instance of its own; if reading still fails, the outline is dropped and the split goes on. 3,000 bookmarks are unit tested.
+
 **Unknown outline shapes.** A bookmark whose destination qpdf cannot resolve to a page counts as pointing nowhere, and is dropped. A file whose outline items lack the `/Title` or the `/Parent` the PDF standard requires loses its whole outline in every part, which is the safe way to fail. That covers named destinations qpdf cannot follow, and actions other than go-to.
 
 **`keptOutline` will have more callers.** Extract pages and Delete pages need the same rule. It stays in `split-pdf.ts` for now. The second caller's change moves it into `src/engines/outline.ts`, beside `inspect.ts`, rather than copying it.
