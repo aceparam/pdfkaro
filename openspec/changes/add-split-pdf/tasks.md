@@ -66,4 +66,4 @@
 - [x] 9.1 No `LICENSES.md` line is needed: no dependency is added (check `package.json` is unchanged)
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [x] 9.3 Add Split PDF's hand checks to issue #7, as for Merge PDF: the owner's review of the page text; the parts opened in Chrome, Firefox, Adobe Reader and macOS Preview; the page tried in Firefox, Safari and Edge and on Android Chrome and iOS Safari. The pull request reports Split PDF as not done until they pass
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings
