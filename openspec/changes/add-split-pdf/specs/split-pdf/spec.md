@@ -67,6 +67,16 @@ Every page but the last SHALL have a "Cut after" toggle button, named "Cut after
 - **WHEN** the visitor presses "Cut after" under page 3 again
 - **THEN** that cut is cleared and the line reads "Cut after page 7. You will get 2 files."
 
+#### Scenario: The only cut is cleared
+
+- **WHEN** a 12-page file has one cut, after page 3, and the visitor presses that toggle again
+- **THEN** the line reads "No cuts marked. You will get one file per page, 12 files." and a screen reader hears "Cut after page 3 cleared. No cuts marked. You will get one file per page, 12 files."
+
+#### Scenario: Many cuts
+
+- **WHEN** twelve cuts are marked
+- **THEN** the line reads "12 cuts marked. You will get 13 files."
+
 #### Scenario: The last page
 
 - **WHEN** a file has been read
@@ -122,7 +132,7 @@ While the job runs the page SHALL show progress in real units, "File 3 of 12", w
 #### Scenario: A job is running
 
 - **WHEN** a file is being split into 12 parts
-- **THEN** the page shows "File 3 of 12" as each part is written, a bar, and a Cancel button that takes focus
+- **THEN** the page shows "Starting", then "File 3 of 12" as each part is written, then "Putting the files into one zip", with a bar and a Cancel button that takes focus
 
 #### Scenario: Cancel is pressed
 
@@ -208,7 +218,7 @@ When the job fails the page SHALL say what happened in one sentence and give one
 #### Scenario: The browser runs out of memory
 
 - **WHEN** the browser runs out of memory during a split
-- **THEN** the page says so in one sentence with one thing to try, and "Go back to your files" returns to the pages with the same cuts
+- **THEN** the page says "Your browser ran out of memory. Mark cuts so the file is split into fewer parts, then try again.", and "Go back to your files" returns to the pages with the same cuts
 
 #### Scenario: The engine cannot be fetched
 

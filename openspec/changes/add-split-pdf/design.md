@@ -39,13 +39,16 @@
 ```ts
 { id: 'split-pdf', group: 'organise', runsIn: 'browser', phase: 1, accepts: ['application/pdf'],
   related: ['merge-pdf', 'extract-pdf-pages', 'delete-pdf-pages', 'rearrange-pdf-pages', 'rotate-pdf'],
-  pages: [{ slug: 'split-pdf', name: 'Split PDF', summary: 'Cut one PDF into several.', ... }],
+  pages: [{ slug: 'split-pdf', name: 'Split PDF', summary: 'Cut one PDF into several.',
+           heading: 'Split a PDF file', sentence: 'Cut one PDF into several. Files stay on your device.', ... }],
   widget: { pickerLabel: 'Choose a PDF file', multiple: false, minFiles: 1,
             items: 'pages', itemControls: false, itemToggle: 'Cut after',
             outputs: 'several', partSuffix: 'part', outputSuffix: 'split',
-            actionLabel: 'Split and download', ... } }
+            actionLabel: 'Split and download', writingLabel: 'Putting the files into one zip',
+            memoryAdvice: 'Mark cuts so the file is split into fewer parts, then try again.', ... } }
 ```
 
+- **`memoryAdvice`** is a new optional word: the thing to try after running out of memory. The shared sentence stays "Your browser ran out of memory. Try fewer or smaller files." for tools without it; Split's advice points the right way, since no cuts gives the most files.
 - **`related`** links only to published tools, as now. Until the others exist, that is Merge PDF alone.
 - **`itemToggle`** is a new optional word: the visible label of a per-item toggle. Only `items: 'pages'` tools may set it; the registry test checks this.
 - **The registry test** gains Split PDF in the catalogue order check. It already refuses `items: 'pages'` with `itemControls: true`.
@@ -95,10 +98,10 @@ Then it returns the parts. The worker zips them when there are several, as built
   toggle?: { label: string; name(title: string): string; pressed: ReadonlySet<string>; onToggle(id: string): void; skip?: ReadonlySet<string> }
   ```
 
-  - It is a real `<button type="button" aria-pressed>`, 44px tall, under the page's caption.
+  - It is a real `<button type="button" aria-pressed>`, at least 44px tall, under the page's caption, as wide as its cell, with its text allowed to wrap, so it never overflows a cell at any width or text size.
   - Its visible text is the registry word ("Cut after"). Its accessible name is "Cut after page 3".
   - `skip` holds the last page, which has no button.
-  - A pressed toggle uses the main button's look. The cell also draws a 2px `--text` line on its trailing edge, so a cut shows without colour alone.
+  - A pressed toggle shows by shape, not fill: a 2px `--text` border and bold text. The cell also draws a 2px `--text` line on its trailing edge. Only the main button is filled, so it still stands out with many cuts marked.
   - Toggling keeps focus on the button. `PageItem` stays memoised: its `pressed` flag is a plain boolean prop.
 - **`useToolRun`** keeps the cuts as a set of page numbers in the reducer (`state.marks`):
   - cleared when the file is removed, replaced or started again;
@@ -109,26 +112,35 @@ Then it returns the parts. The worker zips them when there are several, as built
   - "Cut after page 7. You will get 2 files."
   - "Cuts after pages 3 and 7. You will get 3 files."
   - "Cuts after pages 3, 7 and 9. You will get 4 files."
+  - up to five cut points are listed; past five it gives a count: "12 cuts marked. You will get 13 files."
   - "This file has one page. You will get it back as one file."
+  - numbers have a thousands separator: "You will get one file per page, 1,200 files."
 
-  It is shown in `ToolWorkspace` under the file line. After each toggle the status region says "Cut after page 3. You will get 2 files." or "Cut after page 3 cleared. You will get 1 file."
+  It is shown in `ToolWorkspace` under the file line. After a cut is marked, the status region says the new summary, which names it: "Cuts after pages 3 and 7. You will get 3 files." Past five cuts the summary gives only a count, so the cut is named first: "Cut after page 40. 6 cuts marked. You will get 7 files." After a cut is cleared, it says so first, then the summary: clearing the only cut on a 12-page file, "Cut after page 3 cleared. No cuts marked. You will get one file per page, 12 files."
 - **These words are not Split's own text in shared code.** `cutSummary` is named for what it says, and it is used only when the registry gives a toggle word. If a later tool needs other words, its change adds them to the registry.
 
 ### 4. Batches of 500 pages
 
 - **`gridItems`** is unchanged. `ToolWorkspace` passes `items.slice(0, shown)` to `PageGrid`, with `shown` starting at 500.
-- **After the last shown page,** a "Show the next 500 pages" button raises `shown` by 500. Focus stays on the button, which moves to after the new pages. The status region says "Showing 1,000 of 120,000 pages".
+- **After the last shown page,** a button in real units, "Show pages 501 to 1,000" (and, for a last short batch, "Show pages 1,001 to 1,200"), raises `shown` by up to 500.
+- **Focus after the press** moves to the first new page's toggle, "Cut after page 501", which sits where the button was, so it stays in view. For a grid with no per-page control, it moves to the first new cell, focusable with `tabindex="-1"`. The status region says "Showing 1,000 of 120,000 pages".
 - **No item array is built** for pages past `shown`: `gridItems` gains an optional `limit` argument, so a 120,000-page file builds 500 entries, not 120,000.
 - **Thumbnails** are still drawn only as items come into view.
 - **The skip link** stays above the grid.
 - **What it does to Merge PDF:** nothing. Its list is of files.
 
-### 5. The result
+### 5. Working
+
+- **Before the first progress report** the line reads "Starting" for a tool with `outputs: 'several'`, not "Starting on 1 file", which would count the input while the next line counts parts.
+- **Then** "File 3 of 12" as each part is written.
+- **After the last part,** while the worker zips them, the engine has finished, so the line shows the tool's `writingLabel`, "Putting the files into one zip". The worker posts `{ stage: 'writing', percent: 100 }` before zipping, so the line never sits at "File 12 of 12".
+
+### 6. The result
 
 - **Several parts:** `report-split.zip` with "N files", as built.
 - **One part:** only a one-page input gives one part, since any file of two or more pages gives at least two. It comes back as `form-split.pdf` with "1 page". `words.resultPagesAreSum` stays false. For a tool that lists pages, `useToolRun` gives a single output the input's page count, which is right because the one part is the whole file. No extra read is needed.
 
-### 6. The page text
+### 7. The page text
 
 `src/content/tools/split-pdf.md`, marked as a draft for the owner:
 - how-to steps;
@@ -143,7 +155,7 @@ Then it returns the parts. The worker zips them when there are several, as built
 
 The text runs 250 to 500 words.
 
-### 7. Tests
+### 8. Tests
 
 **Engine unit tests (`tests/unit/split-pdf.test.ts`):**
 - `parts`: no cuts; cuts; edge cuts; refusals.
@@ -163,7 +175,7 @@ The text runs 250 to 500 words.
 - `form.pdf` gives one PDF;
 - the password, damaged, not-a-PDF, two-file drop, replace by paste, Cancel and failure states;
 - the skip link;
-- "Show the next 500 pages", with a generated file of a very large page count.
+- the button to show more pages ("Show pages 501 to 1,000"), with a generated file of a very large page count.
 
 **The no-upload test.** It moves the watcher from `merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, shared by both tools. Split's test adds the four checks from `add-page-items-and-zip` design decision 10:
 1. **The allowlist** names `fflate-<hash>.js` and `split-pdf-<hash>.js` exactly. The shared file exports `watch` and `violations` and takes each tool's allowlist as an argument: Merge PDF's list stays exactly as it is, so it never allows fflate or the Split engine.
@@ -176,18 +188,18 @@ The text runs 250 to 500 words.
 - `tests/fixtures/make-many-pages.mjs` writes 120,000 pages that share one content stream, about 10 MB, to the system's temporary folder, refusing a path inside the repo, as `make-large.mjs` does.
 - It is not committed.
 
-### 8. Page weight, and what loads when
+### 9. Page weight, and what loads when
 
 - **Before a pick:** the same as Merge PDF, 76.8 KB gzip plus the page's own HTML. `PageGrid`'s toggle and the batch button are in the workspace chunk, which loads after a pick.
 - **After a pick:** the worker; qpdf and its WebAssembly, fetched when the file is read, as for Merge PDF; PDF.js and its data, for thumbnails; the Split engine, a small file.
 - **On every run:** fflate, 4.4 KB.
 - **`page-weight.mjs` and `check-worker.mjs`** name `split-pdf-<hash>.js`. `check-worker.mjs` already checks every engine is its own late file.
 
-### 9. Dependencies
+### 10. Dependencies
 
 None added. qpdf, PDF.js and fflate are already shipped.
 
-### 10. Threats
+### 11. Threats
 
 - **A malicious PDF:**
   - qpdf and PDF.js run in workers, as for Merge PDF;

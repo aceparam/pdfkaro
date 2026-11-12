@@ -3,7 +3,7 @@
 ## 1. Registry entry
 
 - [ ] 1.1 Record the owner's decisions of 12 Nov 2026 under "Owner decisions" in `CLAUDE.md`: bookmarks per part, attachments with the first part, no password or restrictions on parts, and no next steps for a zip result
-- [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts` and the optional `itemToggle` word; the registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
+- [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts` and the optional `itemToggle` and `memoryAdvice` words, with the failure sentence using `memoryAdvice` when set; the registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
 
 ## 2. Engine
 
@@ -25,9 +25,9 @@
 ## 5. Page and page text
 
 - [ ] 5.1 Keep the cuts in the reducer (`marks`): toggled by page, cleared on remove, replace and Start again, kept through Cancel and failure; unit test
-- [ ] 5.2 Add `cutSummary(pages, cuts)` to `src/widget/format.ts`, with unit tests for each wording in design decision 3
-- [ ] 5.3 `PageGrid`: the optional per-item toggle (`aria-pressed`, 44px, named "Cut after page N", none on the last page, a 2px line on a cut); `ToolWorkspace`: the summary line, the toggle announcements, and a single output's page count from the input for a page tool; component render tests
-- [ ] 5.4 Batches of 500: a `limit` argument to `gridItems`, the "Show the next 500 pages" button keeping focus and announcing the count; unit and render tests
+- [ ] 5.2 Add `cutSummary(pages, cuts)` to `src/widget/format.ts`, with unit tests for each wording in design decision 3, including clearing the only cut, more than five cuts, and thousands separators
+- [ ] 5.3 `PageGrid`: the optional per-item toggle (`aria-pressed`, at least 44px, the cell's full width with wrapping text, named "Cut after page N", none on the last page, pressed shown by a 2px border, bold text and a 2px line on the cell, never filled); `ToolWorkspace`: the summary line, the toggle announcements, a single output's page count from the input for a page tool, and the Working line ("Starting", then "File N of M", then the writing label while zipping, with the worker posting writing progress before it zips); component render tests
+- [ ] 5.4 Batches of 500: a `limit` argument to `gridItems`, the "Show pages 501 to 1,000" button in real units, focus moving to the first new page's control and the count announced; unit and render tests
 - [ ] 5.5 Write `src/content/tools/split-pdf.md`, 250 to 500 words, marked as a draft for the owner; check it and the page against "Banned patterns"
 
 ## 6. End-to-end test
@@ -38,7 +38,7 @@
   - `form.pdf` giving one PDF;
   - the password, damaged, not-a-PDF, two-file drop, replace by paste, large-file, Cancel and failure states;
   - the skip link;
-  - `pages-500.pdf` shows all 500 pages with no "Show the next 500 pages" button and no long task over 100 ms;
+  - `pages-500.pdf` shows all 500 pages with no button to show more and no long task over 100 ms;
   - batches of 500 with the generated file, with no long task over 100 ms;
   - removing the file while its pages are listed, which ends its kept document
 
@@ -54,8 +54,8 @@
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/split-pdf` at 360px and 1280px, in light and dark: empty, pages with no cuts, pages with cuts, working, result, password, damaged
-- [ ] 8.2 Measure the text contrast of the "Cut after" toggle, pressed and not, the cut line, and "Show the next 500 pages", in light and dark; each must be at least 4.5 to 1 (3 to 1 for the line)
+- [ ] 8.1 Screenshots of `/split-pdf` at 360px and 1280px, in light and dark: empty, pages with no cuts, pages with cuts, working, result, password, damaged; plus pages with cuts at 420px, and at 200% text size, with nothing overflowing
+- [ ] 8.2 Measure the text contrast of the "Cut after" toggle, pressed and not, the cut line, and the button to show more pages, in light and dark; each must be at least 4.5 to 1 (3 to 1 for the line)
 
 ## 9. Checks and review
 
