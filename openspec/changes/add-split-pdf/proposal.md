@@ -11,8 +11,10 @@ Split PDF is second in the catalogue ("Organise pages", Phase 1) and the next to
   - every page but the last has a "Cut after" toggle button, named "Cut after page 3" for screen readers, which works with the keyboard and on a touch screen;
   - a line above the pages says what the main button will give: "No cuts marked. You will get one file per page, 12 files." or "Cuts after pages 3 and 7. You will get 3 files.";
   - with no cuts marked, the main button gives one file per page, so the main button works without touching any option.
-- **The main button, "Split and download",** runs a qpdf engine in the tool worker. Each part keeps its pages as they were, with the bookmarks that point to them; attached files go with part 1. Several parts come back as one zip, `report-split.zip`, holding `report-part-1.pdf` and so on. A one-page file gives one part, handed back as `report-split.pdf`.
-- **Large page counts never freeze the page.** The grid shows pages in batches of 500, with a "Show the next 500 pages" button, so a crafted file with hundreds of thousands of pages cannot build that many items at once. There is no page limit and no size limit (SPEC.md: no fixed size limit). The stage 2 security review of `add-page-items-and-zip` asked for this.
+- **The main button, "Split and download",** runs a qpdf engine in the tool worker. Each part keeps its pages as they were, with the bookmarks that point to them; attached files go with part 1. Several parts come back as one zip, `report-split.zip`, holding `report-part-1.pdf` and so on; the number is padded to the width of the total, so 12 parts are `report-part-01.pdf` to `report-part-12.pdf`. A one-page file gives one part, handed back as `report-split.pdf`.
+- **Large page counts never freeze the page.** The grid shows pages in batches of 500, with a "Show the next 500 pages" button, so a crafted file with hundreds of thousands of pages cannot build that many items at once.
+  - **This replaces the page-count cap** that `add-page-items-and-zip` (design decision 10) asked for after its stage 2 security review. A cap would be a fixed limit, which `SPEC.md` rules out ("There is no fixed size limit"), so setting one would be the owner's call.
+  - **The output has no bound either.** No cuts on a 120,000-page file means 120,000 parts. That job runs in the worker with progress and Cancel and never blocks the page; a phone may run out of memory, which the failure message covers.
 - **Page text** below the tool: how-to steps and questions, marked as a draft for the owner.
 - **Tests:**
   - engine unit tests over every fixture;
@@ -58,8 +60,8 @@ No dependency is added.
 - **Split modes:** split points, the owner's choice of 12 Nov 2026. Built here.
 - **Zip:** `fflate`, the owner's choice of 12 Nov 2026, through `add-page-items-and-zip`.
 - **Bookmarks and attachments in parts (owner's decisions, 12 Nov 2026).** Asked while this proposal was written, because qpdf alone either keeps every bookmark in every part, some pointing nowhere, or drops them all. The owner chose: each part keeps only the bookmarks that point to its own pages, and attached files go with the first part only. The page says both.
-- **Passwords and restrictions on parts.** No open decision covers this. Split PDF follows the owner's Merge PDF decision of 11 Nov 2026: parts have no password and no restrictions, even when the input had them, and the page says so. The owner can overturn this; it is one argument to the engine.
-- **Next steps for a zip (owner question).** "Tool page anatomy" part 6 gives every result next steps into another tool. No tool opens a zip, so a zip can offer none. This is a known gap, put to the owner with `add-page-items-and-zip`. No result shows next steps yet, so this change adds none.
+- **Passwords and restrictions on parts (owner's decision, 12 Nov 2026).** Asked at the stage 1 review. The owner chose to drop them, as Merge PDF does: parts have no password and no restrictions, even when the input had them, and the page says so.
+- **Next steps for a zip (owner's decision, 12 Nov 2026).** "Tool page anatomy" part 6 gives every result next steps into another tool. No tool opens a zip, so a zip can offer none. The owner accepted leaving them off zips for now. No result shows next steps yet, so this change adds none.
 - **Repair PDF link:** as for Merge PDF, a damaged file is offered no link until Repair PDF is published (the existing owner question in `CLAUDE.md`).
 - **Licence, source code, domain, analytics, money:** not touched.
 

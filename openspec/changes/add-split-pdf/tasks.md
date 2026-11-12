@@ -2,7 +2,7 @@
 
 ## 1. Registry entry
 
-- [ ] 1.1 Record the owner's decisions of 12 Nov 2026 (bookmarks per part, attachments with the first part) under "Owner decisions" in `CLAUDE.md`
+- [ ] 1.1 Record the owner's decisions of 12 Nov 2026 under "Owner decisions" in `CLAUDE.md`: bookmarks per part, attachments with the first part, no password or restrictions on parts, and no next steps for a zip result
 - [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts` and the optional `itemToggle` word; the registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
 
 ## 2. Engine
@@ -15,7 +15,7 @@
 ## 3. Engine unit tests
 
 - [ ] 3.1 Unit test `parts` and `keptOutline` (flat, nested, a dropped parent with kept children, nothing kept, too deep, a cycle)
-- [ ] 3.2 Unit test `run` on every file in `tests/fixtures/`: parts and their page counts, `qpdf --check`, links and form fields kept, `rich.pdf`'s bookmarks and attachment per the owner's decisions, `password.pdf`'s parts with no encryption, damaged files failing, progress per file; record each outcome in the fixtures README
+- [ ] 3.2 Unit test `run` on every file in `tests/fixtures/`: parts and their page counts, `qpdf --check`, links and form fields kept, `rich.pdf`'s bookmarks and attachment per the owner's decisions, `password.pdf`'s parts with no encryption, damaged files failing, progress per file; record each outcome in the fixtures README; also run it by hand on the file from `make-large.mjs` and on the file from `make-many-pages.mjs` with two cuts, and record those outcomes
 - [ ] 3.3 Add `tests/fixtures/make-many-pages.mjs`, which writes a 120,000-page file outside the repo, as `make-large.mjs` does
 
 ## 4. Worker wiring
@@ -38,6 +38,7 @@
   - `form.pdf` giving one PDF;
   - the password, damaged, not-a-PDF, two-file drop, replace by paste, large-file, Cancel and failure states;
   - the skip link;
+  - `pages-500.pdf` shows all 500 pages with no "Show the next 500 pages" button and no long task over 100 ms;
   - batches of 500 with the generated file, with no long task over 100 ms;
   - removing the file while its pages are listed, which ends its kept document
 
@@ -54,9 +55,11 @@
 ## 8. Screenshots
 
 - [ ] 8.1 Screenshots of `/split-pdf` at 360px and 1280px, in light and dark: empty, pages with no cuts, pages with cuts, working, result, password, damaged
+- [ ] 8.2 Measure the text contrast of the "Cut after" toggle, pressed and not, the cut line, and "Show the next 500 pages", in light and dark; each must be at least 4.5 to 1 (3 to 1 for the line)
 
 ## 9. Checks and review
 
 - [ ] 9.1 No `LICENSES.md` line is needed: no dependency is added (check `package.json` is unchanged)
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
-- [ ] 9.3 Run the review panel (see the review-panel skill) and resolve its findings
+- [ ] 9.3 Add Split PDF's hand checks to issue #7, as for Merge PDF: the owner's review of the page text; the parts opened in Chrome, Firefox, Adobe Reader and macOS Preview; the page tried in Firefox, Safari and Edge and on Android Chrome and iOS Safari. The pull request reports Split PDF as not done until they pass
+- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings

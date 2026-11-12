@@ -14,9 +14,11 @@
   - `--split-pages` drops every bookmark and attachment.
   - `--remove-attachment=<key>` removes an attachment.
   - `--update-from-json` exits 0. A first try with a hand-written partial object did not change the title, so its exact input format is still to be pinned down (task 2.2).
-- **The owner decided on 12 Nov 2026,** while this change was written:
+- **The owner decided on 12 Nov 2026,** while this change was written and reviewed:
   - each part keeps only the bookmarks that point to its own pages;
-  - attached files go with the first part only.
+  - attached files go with the first part only;
+  - parts have no password and no restrictions, as for Merge PDF;
+  - a zip result shows no next steps for now.
 
 ## Goals / Non-Goals
 
@@ -190,7 +192,7 @@ None added. qpdf, PDF.js and fflate are already shipped.
   - qpdf and PDF.js run in workers, as for Merge PDF;
   - a part that fails `qpdf --check` fails the job;
   - outline JSON from qpdf is parsed with `JSON.parse` and walked with a depth limit of 64 and a visited set, so a cyclic or very deep outline cannot hang the worker. Past the limit, the whole outline of that part is dropped and the job carries on.
-- **A huge page count:** batches of 500 on the page. In the worker, `parts` makes one entry per part. With no cuts on a 120,000-page file, that is 120,000 qpdf calls and a zip of 120,000 entries. It runs with progress and Cancel and never blocks the page, and a phone may run out of memory, which the failure message covers.
+- **A huge page count:** batches of 500 on the page, in place of the page-count cap `add-page-items-and-zip` asked for, since a cap would be a fixed limit `SPEC.md` rules out. In the worker, `parts` makes one entry per part. With no cuts on a 120,000-page file, that is 120,000 qpdf calls and a zip of 120,000 entries. It runs with progress and Cancel and never blocks the page, and a phone may run out of memory, which the failure message covers.
 - **An oversized file:** the 100 MB warning; no limit.
 - **A hostile file name:** names go only through the shared cleaning and the worker's stem check. Zip entries are the stem plus numbers. qpdf sees only made-up paths.
 - **Hostile options:** `cuts` comes from the page, which could be tampered with. The engine refuses anything but sorted, unique whole numbers in range.
