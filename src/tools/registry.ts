@@ -67,6 +67,14 @@ export type ToolWidgetWords = {
   resultPagesAreSum: boolean;
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
+  /** What the list shows: one item per file, or the pages of one file. */
+  items: 'files' | 'pages';
+  /** Whether items have Move up, Move down and Remove, and can be dragged. */
+  itemControls: boolean;
+  /** Whether a run gives one file, or can give several, which come back as one zip. */
+  outputs: 'one' | 'several';
+  /** The word for files inside a zip: "part", as in "report-part-1.pdf". Needed when outputs is 'several'. */
+  partSuffix?: string;
 };
 
 export type Tool = {
@@ -135,6 +143,9 @@ export const tools: Tool[] = [
       multiple: true,
       resultPagesAreSum: true,
       // Both by the owner's decisions of 11 Nov 2026.
+      items: 'files',
+      itemControls: true,
+      outputs: 'one',
       resultNotes: [
         'Bookmarks and attachments come from the first file only.',
         'The merged file has no password and no restrictions, even if a file you chose had them.',

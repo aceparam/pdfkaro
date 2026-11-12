@@ -99,14 +99,14 @@ The thumbnail queue changes:
 ### 7. Page weight, memory and what loads when
 
 - **Before a pick:** nothing new loads. `items.ts`, `PageItem` and the other changes are in the workspace chunk.
-- **`fflate`'s zip step:** about 8 KB gzip, loaded at the start of every run of a tool that gives several files. `page-weight.mjs` and `check-worker.mjs` name it, and check it is not in the worker file.
+- **`fflate`'s zip step:** 4.4 KB gzip as built, loaded at the start of every run of a tool that gives several files. fflate's file is called `browser.js`, so the worker build names its chunk `fflate-<hash>.js` (`astro.config.mjs`), and `page-weight.mjs` and `check-worker.mjs` name it exactly and check it is not in the worker file.
 - **Peak memory of a split:** the input in the worker and in qpdf, the parts, then the zip. The parts are dropped once the zip exists, so the peak is about the input twice plus the parts twice. For a 500-part split of a 100 MB file that is roughly 400 MB, which the 100 MB warning already covers.
 
 ### 8. Dependency
 
 | Package | Why | Licence | Last release | Shipped |
 | --- | --- | --- | --- | --- |
-| `fflate` 0.8.3, exact | Joins several outputs into one zip, as `SPEC.md` asks, in the worker. The owner's choice of 12 Nov 2026 | MIT | Jul 2026 | About 8 KB gzip, at the start of every run of a tool that gives several files |
+| `fflate` 0.8.3, exact | Joins several outputs into one zip, as `SPEC.md` asks, in the worker. The owner's choice of 12 Nov 2026 | MIT | Jul 2026 | 4.4 KB gzip as built, at the start of every run of a tool that gives several files |
 
 It is already installed as a dependency of `@cantoo/pdf-lib`. This change makes it a direct, pinned dependency.
 

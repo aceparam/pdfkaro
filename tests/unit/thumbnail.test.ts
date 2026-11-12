@@ -2,7 +2,7 @@
 // data, drawing through @napi-rs/canvas in place of the worker's OffscreenCanvas.
 
 import { describe, expect, it } from 'vitest';
-import { renderPage, safeOptions } from '../../src/engines/thumbnail';
+import { openDocument, renderPage, safeOptions } from '../../src/engines/thumbnail';
 import type { EngineTools } from '../../src/engines/types';
 import { box, fixture, look, tools } from './thumbnail-helpers';
 
@@ -70,6 +70,34 @@ describe('drawing a page', () => {
     await expect(renderPage(fixture('text.pdf'), 4, box, undefined, tools)).rejects.toThrow();
   });
 
+});
+
+describe('an open document', () => {
+  it('draws many pages of one file without opening it again', async () => {
+    const doc = await openDocument(fixture('pages-500.pdf'), undefined, tools);
+    expect(doc.pages).toBe(500);
+    for (const page of [1, 2, 250, 500]) {
+      const seen = await look(await doc.render(page, box));
+      expect(seen.ink).toBeGreaterThan(0.0005);
+    }
+    await expect(doc.render(501, box)).rejects.toThrow();
+    await doc.close();
+  }, 30000);
+
+  it('cannot draw once closed, and closing twice is harmless', async () => {
+    const doc = await openDocument(fixture('text.pdf'), undefined, tools);
+    await doc.close();
+    await doc.close();
+    await expect(doc.render(1, box)).rejects.toThrow(/closed/);
+  });
+
+  it('refuses to open a damaged file or a protected one without its password', async () => {
+    await expect(openDocument(fixture('damaged-cut.pdf'), undefined, tools)).rejects.toThrow();
+    await expect(openDocument(fixture('password.pdf'), undefined, tools)).rejects.toThrow();
+    const opened = await openDocument(fixture('password.pdf'), 'open-sesame', tools);
+    expect(opened.pages).toBe(3);
+    await opened.close();
+  });
 });
 
 describe('the options given to PDF.js', () => {

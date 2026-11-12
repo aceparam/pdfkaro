@@ -43,21 +43,42 @@ export function progressFraction(progress: Progress): number {
   return 0.2 + 0.8 * share(progress.done, progress.total);
 }
 
-// Characters a file name must not carry into an output name: control
-// characters, and marks that change the direction text is shown in.
+// Characters a file name must not carry: control characters, marks that
+// change the direction text is shown in, and characters that Windows refuses
+// in file names.
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
-const unsafe = /[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/g;
+const unsafe = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069:*?"<>|]/g;
+
+/**
+ * The cleaned base of an input file's name, used for every output name:
+ * "report.pdf" gives "report". No folder, no extension, no unsafe character,
+ * no leading or trailing dot or space, at most 100 characters; "document"
+ * when nothing is left.
+ */
+export function stem(input: string): string {
+  const lastPart = input.split(/[\\/]/).pop() ?? '';
+  const base = lastPart
+    .replace(unsafe, '')
+    .replace(/\.[a-z0-9]{1,5}$/i, '')
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+    .slice(0, 100)
+    .replace(/[.\s]+$/, '');
+  return base || 'document';
+}
 
 /**
  * The name for an output file, built from an input file's name:
  * "report.pdf" and "merged" give "report-merged.pdf".
  */
 export function outputName(input: string, suffix: string, extension = 'pdf'): string {
-  const lastPart = input.split(/[\\/]/).pop() ?? '';
-  const base = lastPart
-    .replace(unsafe, '')
-    .replace(/\.[a-z0-9]{1,5}$/i, '')
-    .replace(/^[.\s]+|[.\s]+$/g, '')
-    .slice(0, 100);
-  return `${base || 'document'}-${suffix}.${extension}`;
+  return `${stem(input)}-${suffix}.${extension}`;
+}
+
+/**
+ * The name of one file inside a zip: "report", "part", 3 of 12 gives
+ * "report-part-03.pdf". Numbers are padded so the files sort in order.
+ */
+export function partName(base: string, suffix: string, number: number, total: number, extension = 'pdf'): string {
+  const width = String(Math.max(1, total)).length;
+  return `${base}-${suffix}-${String(number).padStart(width, '0')}.${extension}`;
 }

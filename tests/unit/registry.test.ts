@@ -82,6 +82,16 @@ describe('registry', () => {
     expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
   });
 
+  it('gives every widget a consistent shape: page tools take one file, several outputs need a part word', () => {
+    for (const tool of tools) {
+      const words = tool.widget;
+      if (!words) continue;
+      if (words.items === 'pages') expect(words).toMatchObject({ multiple: false, minFiles: 1 });
+      if (words.outputs === 'several') expect(words.partSuffix).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+    }
+    expect(tools.find((tool) => tool.id === 'merge-pdf')?.widget).toMatchObject({ items: 'files', itemControls: true, outputs: 'one' });
+  });
+
   it('keeps widget words plain: no exclamation marks, and nothing empty', () => {
     for (const tool of tools) {
       if (!tool.widget) continue;

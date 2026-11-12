@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileCount, formatSize, outputName, pageCount, progressFraction, progressLine } from '../../src/widget/format';
+import { fileCount, formatSize, outputName, pageCount, partName, progressFraction, progressLine, stem } from '../../src/widget/format';
 
 describe('counts and sizes', () => {
   it('says one page and many pages', () => {
@@ -53,5 +53,32 @@ describe('output names', () => {
     expect(outputName('.pdf', 'merged')).toBe('document-merged.pdf');
     expect(outputName('', 'merged')).toBe('document-merged.pdf');
     expect(outputName(`${'a'.repeat(300)}.pdf`, 'merged')).toBe(`${'a'.repeat(100)}-merged.pdf`);
+  });
+});
+
+describe('names that every system accepts', () => {
+  it('strips characters Windows refuses, and any path or leading dot', () => {
+    expect(stem('a:b*c?.pdf')).toBe('abc');
+    expect(stem('q"u<o>t|e.pdf')).toBe('quote');
+    expect(stem('../x.pdf')).toBe('x');
+    expect(stem('.hidden.pdf')).toBe('hidden');
+    expect(stem('...')).toBe('document');
+    expect(outputName('a:b.pdf', 'split', 'zip')).toBe('ab-split.zip');
+  });
+
+  it('keeps the stem and outputName in step', () => {
+    for (const name of ['report.pdf', 'C:\\scan.pdf', 'x'.repeat(300), 'in\u202Ex.pdf']) {
+      expect(outputName(name, 'merged')).toBe(`${stem(name)}-merged.pdf`);
+    }
+  });
+});
+
+describe('the files inside a zip', () => {
+  it('are numbered from 1 and padded so they sort', () => {
+    expect(partName('report', 'part', 1, 3)).toBe('report-part-1.pdf');
+    expect(partName('report', 'part', 3, 12)).toBe('report-part-03.pdf');
+    expect(partName('report', 'part', 7, 500)).toBe('report-part-007.pdf');
+    const names = Array.from({ length: 12 }, (_, index) => partName('r', 'part', index + 1, 12));
+    expect([...names].sort()).toEqual(names);
   });
 });

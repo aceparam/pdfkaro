@@ -4,6 +4,7 @@ import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
+import { gridItems } from '../../widget/items';
 import { allReady, canRun, currentProblem, isLarge, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
@@ -173,17 +174,31 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const tooFew = state.files.length < words.minFiles;
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
-  const items: GridItem[] = useMemo(
-    () => state.files.map((file) => ({ id: file.id, title: file.name, detail: detailFor(file), thumbnail: thumbnails[file.id] })),
-    [state.files, thumbnails],
-  );
+  const pages = words.items === 'pages';
+  const entries = useMemo(() => gridItems({ files: state.files }, words.items), [state.files, words.items]);
+  const items: GridItem[] = useMemo(() => {
+    const byId = new Map(state.files.map((file) => [file.id, file]));
+    return entries.map((entry) => {
+      const file = byId.get(entry.fileId);
+      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file), thumbnail: thumbnails[entry.id] };
+    });
+  }, [entries, state.files, thumbnails, pages]);
+  // A tool that lists pages has one file, shown on its own line above them.
+  const onlyFile = pages ? state.files[0] : undefined;
 
   const others = state.files.length - 1;
   const everyReady = allReady(state);
   const anyReady = state.files.some((file) => file.status === 'ready');
 
   if (state.step === 'done' && state.result && result) {
-    const detail = [formatSize(state.result.size), state.result.pages ? pageCount(state.result.pages) : null].filter(Boolean).join(', ');
+    // A zip says how many files it holds; a PDF, how many pages.
+    const detail = [
+      state.result.parts ? fileCount(state.result.parts) : null,
+      formatSize(state.result.size),
+      state.result.pages ? pageCount(state.result.pages) : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
     return (
       <Result
         heading={words.doneHeading}
@@ -230,11 +245,28 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
       {state.step === 'listing' ? (
         <>
-          <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
-            {fileCount(count.files)}
-            {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
-            {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
-          </p>
+          {onlyFile ? (
+            <div className={styles.fileLine}>
+              <p ref={summaryRef} tabIndex={-1} className={styles.fileName}>
+                <span className={styles.name}>{onlyFile.name}</span>
+                <span className="muted">, {detailFor(onlyFile)}</span>
+              </p>
+              <button
+                type="button"
+                className={`button-secondary ${styles.small}`}
+                aria-label={`Remove ${onlyFile.name}`}
+                onClick={() => run.removeFile(onlyFile.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
+              {fileCount(count.files)}
+              {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
+              {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
+            </p>
+          )}
 
           {state.refused.length > 0 && (
             <p className={styles.refused}>
@@ -242,8 +274,24 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </p>
           )}
 
+          {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
+            <a
+              href={`#${toolId}-main`}
+              className={styles.skip}
+              onClick={(event) => {
+                event.preventDefault();
+                mainRef.current?.focus({ preventScroll: true });
+                mainRef.current?.scrollIntoView({ block: 'center' });
+              }}
+            >
+              Skip to the main button
+            </a>
+          ) : null}
+
           <PageGrid
             items={items}
+            controls={words.itemControls}
+            layout={pages ? 'grid' : 'rows'}
             onMove={run.moveFile}
             onRemove={run.removeFile}
             onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
@@ -289,9 +337,12 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
           {!askingPassword && problem?.status !== 'damaged' ? (
             <div className={`actions ${styles.apart}`}>
-              <FilePicker label={words.addLabel} accepts={accepts} multiple={words.multiple} onFiles={add} look="secondary" inputRef={addRef} />
+              {pages ? null : (
+                <FilePicker label={words.addLabel} accepts={accepts} multiple={words.multiple} onFiles={add} look="secondary" inputRef={addRef} />
+              )}
               <button
                 ref={mainRef}
+                id={`${toolId}-main`}
                 type="button"
                 className="button"
                 aria-disabled={ready ? undefined : true}

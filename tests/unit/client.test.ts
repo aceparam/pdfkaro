@@ -52,10 +52,19 @@ describe('the tool client', () => {
     const { requestId } = workers[0]!.sent[0]!;
     workers[0]!.reply({ type: 'progress', requestId, progress: { stage: 'writing', percent: 50 } });
     workers[0]!.reply({ type: 'done', requestId, outputs: [new Uint8Array([1, 2])] });
-    await expect(job).resolves.toEqual([new Uint8Array([1, 2])]);
+    await expect(job).resolves.toEqual({ outputs: [new Uint8Array([1, 2])], parts: undefined });
     expect(seen).toEqual([{ stage: 'writing', percent: 50 }]);
     expect(workers[0]!.ended).toBe(true);
     expect(client.running).toBe(false);
+  });
+
+  it('sends the zip naming with a run, and gives back how many files the zip holds', async () => {
+    const { client, workers } = setup();
+    const job = client.run([file], [undefined], {}, () => {}, { stem: 'report', partSuffix: 'part' });
+    const sent = workers[0]!.sent[0]!;
+    expect(sent).toMatchObject({ type: 'run', zip: { stem: 'report', partSuffix: 'part' } });
+    workers[0]!.reply({ type: 'done', requestId: sent.requestId, outputs: [new Uint8Array([80, 75])], parts: 3 });
+    await expect(job).resolves.toEqual({ outputs: [new Uint8Array([80, 75])], parts: 3 });
   });
 
   it('ends the worker when the job fails, and says how', async () => {

@@ -27,7 +27,17 @@ export default defineConfig({
   vite: {
     // Workers are ES modules, so each tool's engine stays its own file and is
     // fetched only when that tool runs.
-    worker: { format: 'es' },
+    worker: {
+      format: 'es',
+      rollupOptions: {
+        output: {
+          // fflate's file is called browser.js; it is named for what it is, so the page-weight and
+          // no-upload checks can name it exactly.
+          chunkFileNames: (chunk) =>
+            chunk.moduleIds.some((id) => id.includes('/node_modules/fflate/')) ? '_astro/fflate-[hash].js' : '_astro/[name]-[hash].js',
+        },
+      },
+    },
     // PDF.js's Type 1 fonts and decoders, bundled as data for thumbnails (src/workers/pdfjs-data.ts).
     assetsInclude: ['**/*.pfb', '**/*.wasm'],
   },

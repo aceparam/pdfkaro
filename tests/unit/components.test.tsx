@@ -69,6 +69,23 @@ describe('PageGrid', () => {
   });
 });
 
+describe('PageGrid listing the pages of one file', () => {
+  const pages = Array.from({ length: 3 }, (_, index) => ({ id: `f1:${index + 1}`, title: `Page ${index + 1}`, detail: '' }));
+  const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" />);
+
+  it('lays the pages out as a grid, each named under its picture', () => {
+    expect(html).toMatch(/^<ol class="[^"]*grid/);
+    expect(html.match(/<li /g)).toHaveLength(3);
+    expect(html).toContain('Page 3</div>');
+  });
+
+  it('gives pages no buttons and no drag when the tool gives them no controls', () => {
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('draggable="true"');
+    expect(html).not.toContain('<div class="muted">');
+  });
+});
+
 describe('PasswordField', () => {
   const html = renderToStaticMarkup(<PasswordField fileName="secret.pdf" onSubmit={noop} onLeaveOut={noop} />);
 

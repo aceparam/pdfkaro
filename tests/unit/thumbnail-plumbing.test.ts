@@ -14,8 +14,8 @@ const box = { width: 104, height: 136 };
 
 describe('thumbnail messages', () => {
   it('accept a request for a page that fits inside a sensible box', () => {
-    expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, page: 1, box })).toBe(true);
-    expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, password: 'x', page: 3, box: { width: 16, height: 400 } })).toBe(true);
+    expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, page: 1, box, documentKey: 'f1' })).toBe(true);
+    expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, password: 'x', page: 3, box: { width: 16, height: 400 }, documentKey: 'f123456789' })).toBe(true);
   });
 
   it('refuse a bad page, box or file', () => {
@@ -29,9 +29,20 @@ describe('thumbnail messages', () => {
       { box: null },
       { file: 'not a blob' },
       { password: 42 },
+      { documentKey: undefined },
+      { documentKey: 'report.pdf' },
+      { documentKey: 'f' },
+      { documentKey: 'f1234567890' },
+      { documentKey: 'f1:2' },
+      { documentKey: 1 },
     ]) {
-      expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, page: 1, box, ...change }), JSON.stringify(change)).toBe(false);
+      expect(isToWorker({ type: 'thumbnail', requestId: 1, toolId: 'merge-pdf', file, page: 1, box, documentKey: 'f1', ...change }), JSON.stringify(change)).toBe(false);
     }
+  });
+
+  it('accept a close message', () => {
+    expect(isToWorker({ type: 'close', requestId: 1, toolId: 'merge-pdf' })).toBe(true);
+    expect(isToWorker({ type: 'close', requestId: 1, toolId: '../x' })).toBe(false);
   });
 
   it('accept a reply with a picture or with none, and nothing else', () => {
@@ -43,7 +54,7 @@ describe('thumbnail messages', () => {
 });
 
 describe('the worker handling a thumbnail', () => {
-  function setup(renderPage?: (...args: unknown[]) => Promise<Uint8Array>) {
+  function setup(renderPage?: (page: number, box: unknown, password: string | undefined) => Promise<Uint8Array>) {
     const posted: { message: FromWorker; transfer?: Transferable[] }[] = [];
     const handle = createHandler({
       loadEngine: async () => {
@@ -51,16 +62,18 @@ describe('the worker handling a thumbnail', () => {
       },
       tools: {},
       post: (message, transfer) => posted.push({ message, transfer }),
-      renderPage: renderPage as never,
+      openDocument: renderPage
+        ? async (_file, password) => ({ render: (page, given) => renderPage(page, given, password), close: async () => {} })
+        : undefined,
     });
     return { handle, posted };
   }
-  const request: ToWorker = { type: 'thumbnail', requestId: 7, toolId: 'merge-pdf', file, password: 'pw', page: 1, box };
+  const request: ToWorker = { type: 'thumbnail', requestId: 7, toolId: 'merge-pdf', file, password: 'pw', page: 1, box, documentKey: 'f1' };
 
   it('sends the picture back, moved, without loading a tool engine', async () => {
     const seen: unknown[] = [];
     const { handle, posted } = setup(async (...args) => {
-      seen.push(args.slice(1, 4));
+      seen.push(args);
       return new Uint8Array([137, 80]);
     });
     await handle(request);
@@ -117,9 +130,9 @@ function client(limitMs = 10_000) {
 describe('the client asking for a thumbnail', () => {
   it('gives the picture, or null, and keeps the worker', async () => {
     const { tool, workers } = client();
-    const asked = tool.thumbnail(file, undefined, 1, box);
+    const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
     const sent = workers[0]!.sent[0]!;
-    expect(sent).toMatchObject({ type: 'thumbnail', page: 1, box });
+    expect(sent).toMatchObject({ type: 'thumbnail', page: 1, box, documentKey: 'f1' });
     workers[0]!.reply({ type: 'thumbnail', requestId: sent.requestId, image: null });
     await expect(asked).resolves.toBeNull();
     expect(workers[0]!.ended).toBe(false);
@@ -129,7 +142,7 @@ describe('the client asking for a thumbnail', () => {
     vi.useFakeTimers();
     try {
       const { tool, workers } = client(50);
-      const asked = tool.thumbnail(file, undefined, 1, box);
+      const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
       vi.advanceTimersByTime(60);
       await expect(asked).resolves.toBeNull();
       expect(workers[0]!.ended).toBe(true);
@@ -145,7 +158,7 @@ describe('the client asking for a thumbnail', () => {
     vi.useFakeTimers();
     try {
       const { tool, workers } = client(50);
-      const asked = tool.thumbnail(file, undefined, 1, box);
+      const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
       workers[0]!.reply({ type: 'thumbnail', requestId: workers[0]!.sent[0]!.requestId, image: new Uint8Array([1]) });
       await expect(asked).resolves.toEqual(new Uint8Array([1]));
       const read = tool.inspect(file);
@@ -160,7 +173,7 @@ describe('the client asking for a thumbnail', () => {
 
   it('lets a read that follows a stopped thumbnail finish on a fresh worker, so no file is left reading', async () => {
     const { tool, workers } = client();
-    const asked = tool.thumbnail(file, undefined, 1, box);
+    const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
     // What the page does when a file is about to be read while a thumbnail is drawn.
     tool.end();
     await expect(asked).resolves.toBeNull();
@@ -173,13 +186,101 @@ describe('the client asking for a thumbnail', () => {
   it('leaves a pending read alone when a thumbnail fails', async () => {
     const { tool, workers } = client();
     const read = tool.inspect(file);
-    const asked = tool.thumbnail(file, undefined, 1, box);
+    const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
     const [readRequest, thumbRequest] = workers[0]!.sent;
     workers[0]!.reply({ type: 'thumbnail', requestId: thumbRequest!.requestId, image: null });
     await expect(asked).resolves.toBeNull();
     expect(workers[0]!.ended).toBe(false);
     workers[0]!.reply({ type: 'inspected', requestId: readRequest!.requestId, outcome: { kind: 'ready', pages: 2 } });
     await expect(read).resolves.toEqual({ kind: 'ready', pages: 2 });
+  });
+});
+
+describe('the one document kept open in the worker', () => {
+  function setup(failOpen = false) {
+    const log: string[] = [];
+    let opened = 0;
+    const posted: FromWorker[] = [];
+    const handle = createHandler({
+      loadEngine: async () => ({
+        inspect: async () => {
+          log.push('inspect');
+          return { kind: 'ready', pages: 2 };
+        },
+        run: async () => {
+          log.push('run');
+          return [new Uint8Array([1])];
+        },
+      }),
+      tools: {},
+      post: (message) => posted.push(message),
+      openDocument: async (bytes) => {
+        const id = ++opened;
+        log.push(`open ${id} (${bytes.length} bytes)`);
+        if (failOpen) throw new Error('damaged');
+        return {
+          render: async (page) => {
+            log.push(`draw ${id}:${page}`);
+            return new Uint8Array([page]);
+          },
+          close: async () => {
+            log.push(`close ${id}`);
+          },
+        };
+      },
+    });
+    const thumb = (documentKey: string, page: number, blob = file): ToWorker => ({
+      type: 'thumbnail',
+      requestId: page,
+      toolId: 'merge-pdf',
+      file: blob,
+      page,
+      box,
+      documentKey,
+    });
+    return { handle, log, posted, thumb };
+  }
+
+  it('draws many pages of one file from one open document', async () => {
+    const { handle, log, thumb } = setup();
+    for (const page of [1, 2, 40]) await handle(thumb('f1', page));
+    expect(log).toEqual(['open 1 (8 bytes)', 'draw 1:1', 'draw 1:2', 'draw 1:40']);
+  });
+
+  it('closes it when another file is asked for', async () => {
+    const { handle, log, thumb } = setup();
+    await handle(thumb('f1', 1));
+    await handle(thumb('f2', 1, new Blob(['%PDF-2.0 other'])));
+    expect(log).toEqual(['open 1 (8 bytes)', 'draw 1:1', 'close 1', 'open 2 (14 bytes)', 'draw 2:1']);
+  });
+
+  it('closes it before a read and before a job, so neither runs beside a kept copy', async () => {
+    const { handle, log, thumb } = setup();
+    await handle(thumb('f1', 1));
+    await handle({ type: 'inspect', requestId: 2, toolId: 'merge-pdf', file });
+    await handle(thumb('f1', 2));
+    await handle({ type: 'run', requestId: 3, toolId: 'merge-pdf', files: [file], passwords: [undefined], options: {} });
+    expect(log).toEqual(['open 1 (8 bytes)', 'draw 1:1', 'close 1', 'inspect', 'open 2 (8 bytes)', 'draw 2:2', 'close 2', 'run']);
+  });
+
+  it('closes it when the page says so, and opens it again when asked', async () => {
+    const { handle, log, thumb } = setup();
+    await handle(thumb('f1', 1));
+    await handle({ type: 'close', requestId: 2, toolId: 'merge-pdf' });
+    await handle({ type: 'close', requestId: 3, toolId: 'merge-pdf' });
+    await handle(thumb('f1', 2));
+    expect(log).toEqual(['open 1 (8 bytes)', 'draw 1:1', 'close 1', 'open 2 (8 bytes)', 'draw 2:2']);
+  });
+
+  it('keeps nothing for a file that cannot be opened, and gives no picture', async () => {
+    const { handle, log, posted, thumb } = setup(true);
+    await handle(thumb('f1', 1));
+    await handle(thumb('f1', 2));
+    expect(log).toEqual(['open 1 (8 bytes)', 'open 2 (8 bytes)']);
+    expect(posted).toEqual([
+      { type: 'thumbnail', requestId: 1, image: null },
+      { type: 'thumbnail', requestId: 2, image: null },
+    ]);
   });
 });
 

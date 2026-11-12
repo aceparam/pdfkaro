@@ -93,3 +93,23 @@ Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 1
 | `mixed.pdf` | Page 1 drawn upright; page 2, on its side, drawn wide |
 | `rich.pdf` | Drawn |
 | `images.pdf` | Drawn. PDF.js takes `openjpeg.wasm` from the fixed helper data for the JPEG 2000 image |
+
+### One open document across pages (`openDocument` in `src/engines/thumbnail.ts`)
+
+Each file was opened once, then its first, second and last pages were drawn from that one open document inside a 104 by 136 box, in Node through the real PDF.js. After `close`, called twice, every file refused to draw again.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Opened, 3 pages; all drawn |
+| `pages-500.pdf` | Opened, 500 pages; pages 1, 2 and 500 drawn from the one document |
+| `scanned.pdf` | Opened, 2 pages; both drawn |
+| `password.pdf` | Refused without a password or with a wrong one (PDF.js's password error); opened with `open-sesame`, 3 pages drawn |
+| `restricted.pdf` | Opened with no password, 3 pages drawn |
+| `warning.pdf` | Opened, 3 pages drawn |
+| `damaged-xref.pdf` | Opened and drawn, as for one-off thumbnails: PDF.js repairs it. The page never asks, as qpdf cannot read it |
+| `damaged-cut.pdf` | Refused (invalid PDF structure) |
+| `not-a-pdf.pdf` | Refused (invalid PDF structure) |
+| `form.pdf` | Opened, 1 page drawn |
+| `mixed.pdf` | Opened, 4 pages; page 1 drawn upright, page 2 on its side drawn wide (104 by 80), page 4 drawn |
+| `rich.pdf` | Opened, 2 pages drawn |
+| `images.pdf` | Opened, 1 page drawn, with the JPEG 2000 image |

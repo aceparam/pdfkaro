@@ -54,7 +54,7 @@ The one new request is `fflate`'s script, from the site itself. The worker fetch
 
 ## Open decisions and owner questions touched
 
-- **Zip library:** `fflate`, chosen by the owner on 12 Nov 2026 over a zip written in our own code. It is MIT, about 8 KB, and its last release was July 2026.
+- **Zip library:** `fflate`, chosen by the owner on 12 Nov 2026 over a zip written in our own code. It is MIT, 4.4 KB gzip as built, and its last release was July 2026.
 - **Split modes:** the owner chose split points on 12 Nov 2026. That is built with Split PDF, not here.
 
 No open decision needs more than its assumed default.
