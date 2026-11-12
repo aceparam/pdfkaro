@@ -24,6 +24,7 @@ const loadedLater = [
   { name: 'tool.worker', type: 'js', why: 'the one tool worker, started after a pick' },
   { name: 'merge-pdf', type: 'js', why: 'the Merge PDF engine, which the worker loads' },
   { name: 'split-pdf', type: 'js', why: 'the Split PDF engine, which the worker loads' },
+  { name: 'inspect', type: 'js', why: 'reads one PDF before a job; shared by the engines, so the bundler gives it a file of its own' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
   { name: 'thumbnail', type: 'js', why: 'draws a page thumbnail, which the worker loads when the first thumbnail is asked for' },
   { name: 'pdf', type: 'js', why: 'PDF.js, which the worker loads when the first thumbnail is asked for' },
