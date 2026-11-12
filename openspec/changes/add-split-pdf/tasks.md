@@ -1,0 +1,62 @@
+# Tasks
+
+## 1. Registry entry
+
+- [ ] 1.1 Record the owner's decisions of 12 Nov 2026 (bookmarks per part, attachments with the first part) under "Owner decisions" in `CLAUDE.md`
+- [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts` and the optional `itemToggle` word; the registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
+
+## 2. Engine
+
+- [ ] 2.1 Write `parts(pages, cuts)` in `src/engines/tools/split-pdf.ts`, refusing cuts that are not sorted, unique whole numbers from 1 to `pages - 1`
+- [ ] 2.2 Prove `--update-from-json` in this qpdf build by rewriting the outline of a part of `rich.pdf`; if it cannot be made to work, stop and ask the owner (design, Risks)
+- [ ] 2.3 Write `keptOutline(tree)`, with a depth limit of 64 and a visited set, and the step that writes the kept outline back
+- [ ] 2.4 Write `run`: one qpdf call per part with `--decrypt`, attachments removed from parts after the first, the outline step, `qpdf --check` on each part, and progress per file; `inspect` is `inspectPdf`
+
+## 3. Engine unit tests
+
+- [ ] 3.1 Unit test `parts` and `keptOutline` (flat, nested, a dropped parent with kept children, nothing kept, too deep, a cycle)
+- [ ] 3.2 Unit test `run` on every file in `tests/fixtures/`: parts and their page counts, `qpdf --check`, links and form fields kept, `rich.pdf`'s bookmarks and attachment per the owner's decisions, `password.pdf`'s parts with no encryption, damaged files failing, progress per file; record each outcome in the fixtures README
+- [ ] 3.3 Add `tests/fixtures/make-many-pages.mjs`, which writes a 120,000-page file outside the repo, as `make-large.mjs` does
+
+## 4. Worker wiring
+
+- [ ] 4.1 Send `options: { cuts }` from `useToolRun` when the tool has a toggle word; name `split-pdf-<hash>.js` in `page-weight.mjs`, and check `check-worker.mjs` finds it as its own late-loaded file
+
+## 5. Page and page text
+
+- [ ] 5.1 Keep the cuts in the reducer (`marks`): toggled by page, cleared on remove, replace and Start again, kept through Cancel and failure; unit test
+- [ ] 5.2 Add `cutSummary(pages, cuts)` to `src/widget/format.ts`, with unit tests for each wording in design decision 3
+- [ ] 5.3 `PageGrid`: the optional per-item toggle (`aria-pressed`, 44px, named "Cut after page N", none on the last page, a 2px line on a cut); `ToolWorkspace`: the summary line, the toggle announcements, and a single output's page count from the input for a page tool; component render tests
+- [ ] 5.4 Batches of 500: a `limit` argument to `gridItems`, the "Show the next 500 pages" button keeping focus and announcing the count; unit and render tests
+- [ ] 5.5 Write `src/content/tools/split-pdf.md`, 250 to 500 words, marked as a draft for the owner; check it and the page against "Banned patterns"
+
+## 6. End-to-end test
+
+- [ ] 6.1 `tests/e2e/split-pdf.spec.ts` at 360px and 1280px:
+  - pick, mark and clear cuts by mouse and by keyboard, split, download and unzip;
+  - no cuts on `text.pdf`;
+  - `form.pdf` giving one PDF;
+  - the password, damaged, not-a-PDF, two-file drop, replace by paste, large-file, Cancel and failure states;
+  - the skip link;
+  - batches of 500 with the generated file, with no long task over 100 ms;
+  - removing the file while its pages are listed, which ends its kept document
+
+## 7. No-upload test
+
+- [ ] 7.1 Move the watcher from `tests/e2e/merge-pdf.spec.ts` into `tests/e2e/no-upload.ts`, shared by both tools, and keep Merge PDF's test passing
+- [ ] 7.2 Split PDF's no-upload test, with the four checks of `add-page-items-and-zip` design decision 10:
+  - the exact allowlist, naming `fflate-<hash>.js` and `split-pdf-<hash>.js`;
+  - a one-part and a several-part run fetching the same set, both with fflate;
+  - `report.pdf` and the password as strings no request may carry;
+  - planted fflate requests, one with a query string and one with a body, being caught;
+  - plus storage and traces after a job
+
+## 8. Screenshots
+
+- [ ] 8.1 Screenshots of `/split-pdf` at 360px and 1280px, in light and dark: empty, pages with no cuts, pages with cuts, working, result, password, damaged
+
+## 9. Checks and review
+
+- [ ] 9.1 No `LICENSES.md` line is needed: no dependency is added (check `package.json` is unchanged)
+- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
+- [ ] 9.3 Run the review panel (see the review-panel skill) and resolve its findings
