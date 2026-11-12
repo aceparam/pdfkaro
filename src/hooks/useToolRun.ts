@@ -25,6 +25,10 @@ export type ToolRun = {
   submitPassword(id: string, password: string): Promise<void>;
   removeFile(id: string): void;
   moveFile(id: string, to: number): void;
+  /** Marks or clears the toggle on a page, such as a cut after it. */
+  toggleMark(page: number): void;
+  /** Shows the next batch of pages. */
+  showMore(): void;
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
@@ -115,7 +119,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
   }, []);
 
   const pump = useCallback(() => {
-    const items = gridItems(stateRef.current, words.items);
+    // Only the pages shown are made, so a file of very many pages costs the page no more than one batch.
+    const items = gridItems(stateRef.current, words.items, stateRef.current.shown);
     const id = next(queue.current, stateRef.current, items);
     const item = items.find((entry) => entry.id === id);
     const file = item ? files.current.get(item.fileId) : undefined;
@@ -252,7 +257,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
-        {},
+        // Split's cuts, sorted as numbers: sorted as text, 10 would come before 9.
+        words.itemToggle?.kind === 'cut-after' ? { cuts: [...stateRef.current.marks].sort((a, b) => a - b) } : {},
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -271,7 +277,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
         result: {
           name,
           size: blob.size,
-          pages: !zipped && words.resultPagesAreSum ? totals(stateRef.current).pages : undefined,
+          // 'sum' adds the inputs up; 'input' is the one input as it was. Both are the listed total.
+          pages: !zipped && words.resultPages !== 'none' ? totals(stateRef.current).pages : undefined,
           parts: zipped ? parts : undefined,
         },
       });
@@ -279,7 +286,10 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.resultPagesAreSum, words.outputs, words.partSuffix]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.resultPages, words.outputs, words.partSuffix, words.itemToggle]);
+
+  const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
+  const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
 
   const cancel = useCallback(() => {
     client.current?.end();
@@ -321,5 +331,5 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, showMore, start, cancel, backToFiles, clear };
 }

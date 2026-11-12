@@ -76,8 +76,28 @@ describe('registry', () => {
   it('gives Merge PDF its widget words: at least two files, several at once, named after the first file', () => {
     const words = tools.find((tool) => tool.id === 'merge-pdf')?.widget;
     expect(words).toBeDefined();
-    expect(words).toMatchObject({ actionLabel: 'Merge and download', outputSuffix: 'merged', minFiles: 2, multiple: true, resultPagesAreSum: true });
+    expect(words).toMatchObject({ actionLabel: 'Merge and download', outputSuffix: 'merged', minFiles: 2, multiple: true, resultPages: 'sum' });
     // The owner's decisions of 11 Nov 2026 are said with the result.
+    expect(words!.resultNotes.join(' ')).toMatch(/first file only/);
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+  });
+
+  it('gives Split PDF its words: one file, its pages, cut toggles and several files as a zip', () => {
+    const words = tools.find((tool) => tool.id === 'split-pdf')?.widget;
+    expect(words).toMatchObject({
+      actionLabel: 'Split and download',
+      outputSuffix: 'split',
+      minFiles: 1,
+      multiple: false,
+      items: 'pages',
+      itemControls: false,
+      itemToggle: { kind: 'cut-after', label: 'Cut after' },
+      outputs: 'several',
+      partSuffix: 'part',
+      resultPages: 'input',
+    });
+    // The owner's decisions of 12 Nov 2026 are said with the result.
+    expect(words!.resultNotes.join(' ')).toMatch(/bookmarks that point to its own pages/);
     expect(words!.resultNotes.join(' ')).toMatch(/first file only/);
     expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
   });
@@ -90,6 +110,8 @@ describe('registry', () => {
       if (words.outputs === 'several') expect(words.partSuffix).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       // Page items have no moves yet: Move up, Move down and Remove act on files.
       if (words.items === 'pages') expect(words.itemControls).toBe(false);
+      // A per-page toggle needs a list of pages.
+      if (words.itemToggle) expect(words.items).toBe('pages');
     }
     expect(tools.find((tool) => tool.id === 'merge-pdf')?.widget).toMatchObject({ items: 'files', itemControls: true, outputs: 'one' });
   });
@@ -103,5 +125,17 @@ describe('registry', () => {
         expect(value).not.toContain('!');
       }
     }
+  });
+});
+
+describe('catalogue order', () => {
+  it('declares tools in the order SPEC.md lists them, so they are built in that order', async () => {
+    const { readFileSync } = await import('node:fs');
+    const spec = readFileSync('SPEC.md', 'utf8');
+    const catalogue = spec.slice(spec.indexOf('## Tool catalogue'), spec.indexOf('## Architecture'));
+    const order = [...catalogue.matchAll(/\| (\/[a-z0-9-]+) \|/g)].map((match) => match[1]!.slice(1));
+    const positions = tools.map((tool) => order.indexOf(tool.pages[0]!.slug));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 });

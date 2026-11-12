@@ -23,6 +23,7 @@ const loadedLater = [
   { name: 'FilePicker', type: 'css', why: "a copy of the picker's styles, which the workspace chunk links; the page already has them" },
   { name: 'tool.worker', type: 'js', why: 'the one tool worker, started after a pick' },
   { name: 'merge-pdf', type: 'js', why: 'the Merge PDF engine, which the worker loads' },
+  { name: 'split-pdf', type: 'js', why: 'the Split PDF engine, which the worker loads' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
   { name: 'thumbnail', type: 'js', why: 'draws a page thumbnail, which the worker loads when the first thumbnail is asked for' },
   { name: 'pdf', type: 'js', why: 'PDF.js, which the worker loads when the first thumbnail is asked for' },

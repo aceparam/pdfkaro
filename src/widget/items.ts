@@ -17,13 +17,14 @@ export type GridEntry = {
 /**
  * The items to list. A tool that lists files gets one per file. A tool that
  * lists pages gets nothing until its one file has been read, then one item per
- * page; until then the file's own line shows its state.
+ * page, up to `limit`; until then the file's own line shows its state.
  */
-export function gridItems(state: Pick<State, 'files'>, items: 'files' | 'pages'): GridEntry[] {
+export function gridItems(state: Pick<State, 'files'>, items: 'files' | 'pages', limit = Number.POSITIVE_INFINITY): GridEntry[] {
   if (items === 'files') return state.files.map((file) => ({ id: file.id, title: file.name, fileId: file.id, page: 1 }));
   const file = state.files[0];
   if (!file || file.status !== 'ready' || file.checking || !file.pages) return [];
-  return Array.from({ length: file.pages }, (_, index) => ({
+  // Only the pages shown are made, so a file of 120,000 pages costs no more than its first batch.
+  return Array.from({ length: Math.min(file.pages, limit) }, (_, index) => ({
     id: `${file.id}:${index + 1}`,
     title: `Page ${index + 1}`,
     fileId: file.id,

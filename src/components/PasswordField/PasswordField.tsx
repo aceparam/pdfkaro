@@ -7,6 +7,8 @@ type Props = {
   error?: string;
   onSubmit(password: string): void;
   onLeaveOut(): void;
+  /** The words of the button that goes on without this file: "Leave this file out", or "Choose another file" when it is the only one. */
+  leaveLabel?: string;
   inputRef?: Ref<HTMLInputElement>;
 };
 
@@ -14,7 +16,7 @@ type Props = {
  * Asks for one file's password. It sits in no form and the field has no name,
  * so the password can never be sent to an address. Enter does the same as the button.
  */
-export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef }: Props) {
+export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef, leaveLabel = 'Leave this file out' }: Props) {
   const [value, setValue] = useState('');
   const id = useId();
   const submit = () => {
@@ -50,7 +52,7 @@ export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef 
           Open the file
         </button>
         <button type="button" className="button-secondary" onClick={onLeaveOut}>
-          Leave this file out
+          {leaveLabel}
         </button>
       </div>
     </div>

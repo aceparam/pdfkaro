@@ -63,8 +63,20 @@ export type ToolWidgetWords = {
   minFiles: number;
   /** Whether the picker takes several files at once. */
   multiple: boolean;
-  /** Whether the result has as many pages as the inputs together, so the page can say how many. */
-  resultPagesAreSum: boolean;
+  /**
+   * Where a single result's page count comes from, so the page can say it:
+   * the inputs added up, the one input as it was, or not known.
+   */
+  resultPages: 'sum' | 'input' | 'none';
+  /** After running out of memory, the one thing to try. Without it: "Try fewer or smaller files." */
+  memoryAdvice?: string;
+  /**
+   * A toggle on each page, for a tool that lists pages. `kind` says what the
+   * toggles mean, which decides the option sent to the engine, which pages have
+   * none and the line that says what the main button will give. `label` is its
+   * visible text. Only one kind exists so far.
+   */
+  itemToggle?: { kind: 'cut-after'; label: string };
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
   /** What the list shows: one item per file, or the pages of one file. */
@@ -149,7 +161,7 @@ export const tools: Tool[] = [
       outputSuffix: 'merged',
       minFiles: 2,
       multiple: true,
-      resultPagesAreSum: true,
+      resultPages: 'sum',
       // Both by the owner's decisions of 11 Nov 2026.
       items: 'files',
       itemControls: true,
@@ -157,6 +169,51 @@ export const tools: Tool[] = [
       resultNotes: [
         'Bookmarks and attachments come from the first file only.',
         'The merged file has no password and no restrictions, even if a file you chose had them.',
+      ],
+    },
+  },
+  {
+    id: 'split-pdf',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['merge-pdf', 'extract-pdf-pages', 'delete-pdf-pages', 'rearrange-pdf-pages', 'rotate-pdf'],
+    pages: [
+      {
+        slug: 'split-pdf',
+        name: 'Split PDF',
+        summary: 'Cut one PDF into several.',
+        title: 'Split a PDF file in your browser - PDFkaro',
+        description: 'Cut one PDF into several files at the pages you choose, or one file per page. The file stays on your device and is not uploaded.',
+        heading: 'Split a PDF file',
+        sentence: 'Cut one PDF into several. Files stay on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Split and download',
+      writingLabel: 'Putting the files into one zip',
+      doneHeading: 'Your split file is ready',
+      failedHeading: 'The split did not finish.',
+      tooFewFiles: 'Choose a PDF file to split.',
+      outputSuffix: 'split',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Mark cuts so the file is split into fewer parts, then try again.',
+      items: 'pages',
+      itemControls: false,
+      itemToggle: { kind: 'cut-after', label: 'Cut after' },
+      outputs: 'several',
+      partSuffix: 'part',
+      // The owner's decisions of 12 Nov 2026.
+      resultNotes: [
+        'Each file keeps the bookmarks that point to its own pages. Files attached to the document go with the first file only.',
+        'The new files have no password and no restrictions, even if the file you chose had them.',
       ],
     },
   },

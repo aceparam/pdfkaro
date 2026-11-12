@@ -262,7 +262,7 @@ function readStructure(qpdf: Qpdf, passwordArgs: string[]): Structure {
   const namesId = isRef(catalog['/Names']) ? catalog['/Names'] : null;
 
   // The outline is read without titles, and any problem with it drops it whole rather than failing the split.
-  let outline: OutlineItem[] | null = null;
+  let outline: OutlineItem[] | null;
   let items = new Map<string, Dict>();
   let root: Dict | null = null;
   let names: Dict | null = null;

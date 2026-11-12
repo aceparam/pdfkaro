@@ -54,3 +54,10 @@
   min-height: 2.75rem;
   margin: 0 0 0.25rem;
 }
+/* What the main button will give, for a tool with cut toggles. */
+.cutSummary {
+  margin: 0 0 0.625rem;
+}
+.more {
+  margin-top: 1rem;
+}

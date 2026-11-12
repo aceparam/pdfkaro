@@ -34,7 +34,14 @@ export type State = {
   fraction: number;
   result: ResultInfo | null;
   failure: FailureKind | null;
+  /** Pages the visitor marked, in order, for a tool with per-page toggles: Split PDF's cuts. */
+  marks: number[];
+  /** How many pages of a page list are shown; more are shown in batches. */
+  shown: number;
 };
+
+/** How many pages a page list shows at first, and adds each time. */
+export const pageBatch = 500;
 
 export type Action =
   | { type: 'added'; files: { id: string; name: string; size: number }[] }
@@ -48,6 +55,8 @@ export type Action =
   | { type: 'finished'; result: ResultInfo }
   | { type: 'failed'; failure: FailureKind }
   | { type: 'back-to-files' }
+  | { type: 'toggled'; page: number }
+  | { type: 'shown-more' }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -58,6 +67,8 @@ export const initialState: State = {
   fraction: 0,
   result: null,
   failure: null,
+  marks: [],
+  shown: pageBatch,
 };
 
 const statusFor: Record<InspectOutcome['kind'], FileStatus> = {
@@ -124,6 +135,15 @@ export function reducer(state: State, action: Action): State {
       return { ...state, step: 'failed', progress: null, failure: action.failure };
     case 'back-to-files':
       return { ...state, step: state.files.length > 0 ? 'listing' : 'empty', progress: null, fraction: 0, failure: null, result: null };
+    case 'toggled': {
+      if (state.step !== 'listing' || !Number.isInteger(action.page) || action.page < 1) return state;
+      const marks = state.marks.includes(action.page)
+        ? state.marks.filter((page) => page !== action.page)
+        : [...state.marks, action.page].sort((a, b) => a - b);
+      return { ...state, marks };
+    }
+    case 'shown-more':
+      return { ...state, shown: state.shown + pageBatch };
     case 'reset':
       return initialState;
   }

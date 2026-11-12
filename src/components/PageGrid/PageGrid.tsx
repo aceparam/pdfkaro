@@ -23,10 +23,25 @@ type Props = {
   controls?: boolean;
   /** Rows for a list of files; a wrapping grid for the pages of one file. */
   layout?: 'rows' | 'grid';
+  /**
+   * A toggle button on each item, such as Split PDF's "Cut after". `label` is
+   * its visible text, `name` its full name for a screen reader, `pressed` the
+   * items toggled on, and `skip` the items that have none.
+   */
+  toggle?: {
+    label: string;
+    name(title: string): string;
+    pressed: ReadonlySet<string>;
+    skip?: ReadonlySet<string>;
+    onToggle(id: string, title: string): void;
+  };
+  /** An item to move focus to when it appears: its toggle, or the item itself. */
+  focusId?: string | null;
 };
 
 type FocusTarget = { id: string; button: 'up' | 'down' | 'remove' };
 type Actions = {
+  toggle(id: string, title: string): void;
   setRow(id: string, element: HTMLLIElement | null): void;
   setButton(key: string, element: HTMLButtonElement | null): void;
   move(id: string, by: -1 | 1, button: 'up' | 'down'): void;
@@ -43,20 +58,26 @@ type ItemProps = GridItem & {
   controls: boolean;
   grid: boolean;
   actions: Actions;
+  /** The toggle's visible text and full name, when this item has one; whether it is pressed. */
+  toggleLabel?: string;
+  toggleName?: string;
+  pressed: boolean;
 };
 
 /**
  * One item. Memoised, with plain props and stable callbacks, so that a
  * thumbnail arriving draws only its own item again, even in a list of 500 pages.
  */
-const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, last, controls, grid, actions }: ItemProps) {
+const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, last, controls, grid, actions, toggleLabel, toggleName, pressed }: ItemProps) {
   const item = { id, title, detail, thumbnail };
   const rowRef = useCallback((element: HTMLLIElement | null) => actions.setRow(id, element), [actions, id]);
   return (
     <li
       ref={rowRef}
       data-id={item.id}
-      className={grid ? styles.cell : styles.item}
+      // A page can take focus from code, when more pages are shown and it has no control of its own.
+      tabIndex={grid && !toggleLabel ? -1 : undefined}
+      className={`${grid ? styles.cell : styles.item}${pressed ? ` ${styles.cut}` : ''}`}
       draggable={controls && !(first && last)}
       onDragStart={controls ? (event) => actions.dragStart(item.id, item.title, event) : undefined}
       onDragOver={controls ? actions.dragOver : undefined}
@@ -71,6 +92,18 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
         <div className={grid ? undefined : styles.title}>{item.title}</div>
         {item.detail && <div className="muted">{item.detail}</div>}
       </div>
+      {toggleLabel && (
+        <button
+          ref={(element) => actions.setButton(`${item.id}:toggle`, element)}
+          type="button"
+          className={`${styles.toggle}${pressed ? ` ${styles.pressed}` : ''}`}
+          aria-pressed={pressed}
+          aria-label={toggleName}
+          onClick={() => actions.toggle(item.id, item.title)}
+        >
+          {toggleLabel}
+        </button>
+      )}
       {controls && (
         <div className={styles.moves}>
           <button
@@ -114,7 +147,7 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
  * touch screen, and by mouse drag. A button that cannot be used stays
  * focusable and is marked unavailable.
  */
-export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows' }: Props) {
+export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows', toggle, focusId }: Props) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const rows = useRef(new Map<string, HTMLLIElement>());
   const reported = useRef(new Set<string>());
@@ -122,10 +155,16 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
   const dragging = useRef<string | null>(null);
 
   // The latest props, read by the stable callbacks below.
-  const latest = useRef({ items, onMove, onRemove, onMoved, onVisible });
+  const latest = useRef({ items, onMove, onRemove, onMoved, onVisible, toggle });
   useEffect(() => {
-    latest.current = { items, onMove, onRemove, onMoved, onVisible };
+    latest.current = { items, onMove, onRemove, onMoved, onVisible, toggle };
   });
+
+  // When asked, move focus to an item as soon as it is on the page: its toggle, or the item itself.
+  useEffect(() => {
+    if (!focusId) return;
+    (buttons.current.get(`${focusId}:toggle`) ?? rows.current.get(focusId))?.focus();
+  }, [focusId]);
 
   // Report each item once when it comes on screen or within 300px of it, so
   // thumbnails are drawn only for what the visitor can see or is about to.
@@ -164,6 +203,9 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
 
   // Made once, so every item keeps the same callbacks; they read the latest props through refs.
   const [actions] = useState<Actions>(() => ({
+    toggle(id, title) {
+      latest.current.toggle?.onToggle(id, title);
+    },
     setRow(id, element) {
       if (element) {
         if (rows.current.get(id) === element) return;
@@ -236,6 +278,9 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
           controls={controls}
           grid={grid}
           actions={actions}
+          toggleLabel={toggle && !toggle.skip?.has(item.id) ? toggle.label : undefined}
+          toggleName={toggle && !toggle.skip?.has(item.id) ? toggle.name(item.title) : undefined}
+          pressed={toggle?.pressed.has(item.id) ?? false}
         />
       ))}
     </ol>

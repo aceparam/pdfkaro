@@ -5,7 +5,8 @@ import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
 import { gridItems } from '../../widget/items';
-import { allReady, canRun, currentProblem, isLarge, totals, type FileEntry } from '../../widget/state';
+import { cutAnnouncement, cutSummary, showMoreLabel, shownAnnouncement } from '../../widget/cuts';
+import { allReady, canRun, currentProblem, isLarge, pageBatch, totals, type FailureKind, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -30,11 +31,19 @@ type Props = {
 const createWorker = (): WorkerLike =>
   new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
 
-const failureText = {
+const failureText: Record<FailureKind, string> = {
   memory: 'Your browser ran out of memory. Try fewer or smaller files.',
   'engine-load': 'The tool could not be loaded. Check your connection and try again.',
   engine: 'Something went wrong. Try again.',
-} as const;
+  'too-many-files': 'This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts.',
+  'zip-too-large': 'This would make a zip over 4 GB, more than one zip can hold. Mark cuts so the file is split into fewer parts.',
+};
+
+/** The one sentence for a failure, with the tool's own advice after running out of memory. */
+function failureSentence(kind: FailureKind, words: ToolWidgetWords): string {
+  if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
+  return failureText[kind];
+}
 
 function detailFor(file: FileEntry): string {
   if (file.checking) return 'Trying the password';
@@ -183,7 +192,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
   const pages = words.items === 'pages';
-  const entries = useMemo(() => gridItems({ files: state.files }, words.items), [state.files, words.items]);
+  const entries = useMemo(() => gridItems({ files: state.files }, words.items, state.shown), [state.files, words.items, state.shown]);
   const items: GridItem[] = useMemo(() => {
     const byId = new Map(state.files.map((file) => [file.id, file]));
     return entries.map((entry) => {
@@ -202,6 +211,42 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     announcedReady.current = onlyReady;
     setAnnouncement(`${onlyFile.name}, ${detailFor(onlyFile)}.`);
   }, [onlyReady, onlyFile, setAnnouncement]);
+
+  // Split's cuts: a toggle after every page but the last. The words are Split's own, from cuts.ts.
+  const cutAfter = words.itemToggle?.kind === 'cut-after' ? words.itemToggle : undefined;
+  const filePages = onlyFile?.status === 'ready' ? (onlyFile.pages ?? 0) : 0;
+  const marks = state.marks;
+  const pressed = useMemo(() => new Set(onlyFile ? marks.map((page) => `${onlyFile.id}:${page}`) : []), [marks, onlyFile]);
+  const skip = useMemo(() => new Set(onlyFile ? [`${onlyFile.id}:${filePages}`] : []), [onlyFile, filePages]);
+  const toggle = useMemo(
+    () =>
+      cutAfter
+        ? {
+            label: cutAfter.label,
+            name: (title: string) => `${cutAfter.label} ${title.toLowerCase()}`,
+            pressed,
+            skip,
+            onToggle: (id: string) => {
+              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              const marked = !marks.includes(page);
+              const next = marked ? [...marks, page].sort((a, b) => a - b) : marks.filter((each) => each !== page);
+              run.toggleMark(page);
+              setAnnouncement(cutAnnouncement(filePages, next, page, marked));
+            },
+          }
+        : undefined,
+    [cutAfter, pressed, skip, marks, run, filePages, setAnnouncement],
+  );
+
+  // More pages: focus goes to the first new page, which sits where the button was.
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const moreToShow = pages && onlyFile && filePages > state.shown;
+  const showMore = () => {
+    if (!onlyFile) return;
+    setFocusId(`${onlyFile.id}:${state.shown + 1}`);
+    run.showMore();
+    setAnnouncement(shownAnnouncement(state.shown + pageBatch, filePages));
+  };
 
   const others = state.files.length - 1;
   const everyReady = allReady(state);
@@ -237,7 +282,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>
-          <p>{failureText[state.failure]}</p>
+          <p>{failureSentence(state.failure, words)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
               Go back to your files
@@ -249,7 +294,12 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       {state.step === 'working' ? (
         <div className={styles.working}>
           <p className={styles.progressLine}>
-            {state.progress ? progressLine(state.progress, words.writingLabel) : `Starting on ${fileCount(state.files.length)}`}
+            {state.progress
+              ? progressLine(state.progress, words.writingLabel)
+              : // A tool that gives several files counts its parts once they come, not the file it was given.
+                words.outputs === 'several'
+                ? 'Starting'
+                : `Starting on ${fileCount(state.files.length)}`}
           </p>
           <ProgressBar fraction={state.fraction} label={words.actionLabel} />
           <div className="actions">
@@ -292,6 +342,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           )}
           {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
+          {cutAfter && filePages > 0 ? <p className={styles.cutSummary}>{cutSummary(filePages, marks)}</p> : null}
+
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
               href={`#${toolId}-main`}
@@ -315,7 +367,17 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               onRemove={run.removeFile}
               onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
               onVisible={run.showThumbnail}
+              toggle={toggle}
+              focusId={focusId}
             />
+          ) : null}
+
+          {moreToShow ? (
+            <div className={styles.more}>
+              <button type="button" className="button-secondary" onClick={showMore}>
+                {showMoreLabel(state.shown, filePages, pageBatch)}
+              </button>
+            </div>
           ) : null}
 
           {askingPassword && problem ? (
@@ -329,6 +391,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 summaryRef.current?.focus();
               }}
               inputRef={passwordRef}
+              leaveLabel={others > 0 ? 'Leave this file out' : 'Choose another file'}
             />
           ) : null}
 

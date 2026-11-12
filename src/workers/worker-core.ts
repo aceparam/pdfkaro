@@ -166,6 +166,8 @@ export function createHandler(deps: WorkerDeps) {
       if (outputs.length > 1 && zip) {
         if (!zipSync) throw new EngineLoadError();
         const total = outputs.length;
+        // The engine has finished; say the files are being put together, so the line does not sit on the last file.
+        deps.post({ type: 'progress', requestId, progress: { stage: 'writing', percent: 100 } });
         const entries: Record<string, Uint8Array> = {};
         outputs.forEach((output, index) => {
           entries[partName(zip.stem, zip.partSuffix, index + 1, total)] = output;
