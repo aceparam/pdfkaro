@@ -65,7 +65,7 @@ The thumbnail queue changes:
 
 ### 4. One open document in the worker, never in a job's way
 
-- **Two entry points.** `src/engines/thumbnail.ts` gains `openDocument(file, password, tools) → { pages, render(page, box), close() }`, with `renderPage` kept for one-off use.
+- **Two entry points.** `src/engines/thumbnail.ts` gains `openDocument(file, password, tools) → { pages, render(page, box), close() }`, with `renderPage` kept as a one-off wrapper over it, which the Node tests use.
 - **Loaded late, through `WorkerDeps`.** `worker-core` gets `openDocument` through `WorkerDeps`, loaded late in `tool.worker.ts` like `renderPage`. Every drawing is wrapped in `pdfjsLoader.guard`.
 - **One document at a time.** The thumbnail message gains `documentKey`, the item's `fileId`, an id the page makes up and never a file name. `worker-core` keeps at most one open document, with its key:
   - the same key draws from it;

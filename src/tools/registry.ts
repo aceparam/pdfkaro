@@ -71,11 +71,19 @@ export type ToolWidgetWords = {
   items: 'files' | 'pages';
   /** Whether items have Move up, Move down and Remove, and can be dragged. */
   itemControls: boolean;
-  /** Whether a run gives one file, or can give several, which come back as one zip. */
-  outputs: 'one' | 'several';
-  /** The word for files inside a zip: "part", as in "report-part-1.pdf". Needed when outputs is 'several'. */
-  partSuffix?: string;
-};
+} & (
+  | {
+      /** A run gives one file. */
+      outputs: 'one';
+      partSuffix?: never;
+    }
+  | {
+      /** A run can give several files, which come back as one zip. */
+      outputs: 'several';
+      /** The word for files inside the zip: "part", as in "report-part-1.pdf". */
+      partSuffix: string;
+    }
+);
 
 export type Tool = {
   id: string;

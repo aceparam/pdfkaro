@@ -236,7 +236,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       keptFile.current = null;
       // A tool that can give several files always says how to name them in a zip, so the worker fetches the
       // zip code on every run, whatever the file gives.
-      const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix ?? 'part' } : undefined;
+      const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix } : undefined;
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),

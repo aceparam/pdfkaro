@@ -166,7 +166,9 @@ export function createHandler(deps: WorkerDeps) {
         });
         // PDFs are already compressed, so the files are stored, which is fast and keeps memory low.
         const zipped = zipSync(entries, { level: 0 });
+        // The parts and the zip have to exist together while it is made; the parts are let go here.
         outputs.length = 0;
+        for (const name of Object.keys(entries)) delete entries[name];
         const moved = ownBuffers([zipped]);
         deps.post({ type: 'done', requestId, outputs: moved.outputs, parts: total }, moved.transfer);
         return;

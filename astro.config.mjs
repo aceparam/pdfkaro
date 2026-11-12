@@ -32,9 +32,10 @@ export default defineConfig({
       rollupOptions: {
         output: {
           // fflate's file is called browser.js; it is named for what it is, so the page-weight and
-          // no-upload checks can name it exactly.
+          // no-upload checks can name it exactly. Only a chunk made wholly of fflate gets the name,
+          // so no other code can pass those checks under it.
           chunkFileNames: (chunk) =>
-            chunk.moduleIds.some((id) => id.includes('/node_modules/fflate/')) ? '_astro/fflate-[hash].js' : '_astro/[name]-[hash].js',
+            chunk.moduleIds.length > 0 && chunk.moduleIds.every((id) => id.includes('/node_modules/fflate/')) ? '_astro/fflate-[hash].js' : '_astro/[name]-[hash].js',
         },
       },
     },
