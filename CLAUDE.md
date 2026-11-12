@@ -99,7 +99,7 @@ Decided by the agent on 12 Nov 2026 while planning Split PDF, accepted by the re
 - `src/tools/registry.ts` is the one place a tool is declared. `catalogue.ts` beside it is a type only.
 - `src/tools/queries.ts` and `filter.ts` hold rules as plain functions. `src/hooks/` holds hooks. None of them render.
 - `src/components/` holds React components, one folder each, with a CSS Module beside it when it needs styles. Components get what they show through props. From `src/tools/` they may import only `filter` and types, and they never import an engine or a worker; lint enforces this.
-- `src/widget/` holds the tool widget's rules as plain functions: the steps a tool goes through (`state.ts`), shared words and numbers (`format.ts`), and the accepted-type check (`accept.ts`).
+- `src/widget/` holds the tool widget's rules as plain functions: the steps a tool goes through (`state.ts`), shared words and numbers (`format.ts`), and the accepted-type check (`accept.ts`). `zip-limits.ts` is also read by engines and the worker, so what one zip can hold is written once.
 - `src/engines/` holds engines: pure functions from bytes to bytes, one file per tool under `src/engines/tools/`, named by the tool's id. They use no page and no network; lint enforces this. `types.ts` is the contract. `qpdf.ts` wraps qpdf compiled to WebAssembly, and `inspect.ts` reads one PDF before a job; libraries reach an engine through `tools`, which the worker or a test fills in.
 - `src/content/tools/` holds the text below each tool, one Markdown file per page slug, rendered to plain HTML at build time.
 - `tests/fixtures/` holds the shared test PDFs, made by `make.mjs`; its README says what each engine does with each file.
