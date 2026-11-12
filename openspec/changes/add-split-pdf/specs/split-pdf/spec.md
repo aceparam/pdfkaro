@@ -84,7 +84,7 @@ Every page but the last SHALL have a "Cut after" toggle button, named "Cut after
 
 ### Requirement: Splitting
 
-The main button SHALL read "Split and download". Pressing it SHALL write one PDF for each run of pages between cuts, in page order, or one per page with no cuts. Every part MUST pass `qpdf --check` and SHALL keep its pages' text, links and form fields. Parts SHALL have no password and no restrictions, following the owner's Merge PDF decision of 11 Nov 2026, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done, Each tool)
+The main button SHALL read "Split and download". Pressing it SHALL write one PDF for each run of pages between cuts, in page order, or one per page with no cuts. Every part MUST pass `qpdf --check` and SHALL keep its pages' text, links and form fields. Parts SHALL have no password and no restrictions, by the owner's decision of 12 Nov 2026, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done, Each tool)
 
 #### Scenario: A file is split at two cuts
 
