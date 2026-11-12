@@ -126,9 +126,20 @@ The engine checks `options` itself, because the worker passes it on unchecked.
 
 **`keptOutline` will have more callers.** Extract pages and Delete pages need the same rule. It stays in `split-pdf.ts` for now. The second caller's change moves it into `src/engines/outline.ts`, beside `inspect.ts`, rather than copying it.
 
-**Memory.** The parts are kept as `Uint8Array`s and zipped with `zipSync`, as built in `add-page-items-and-zip`. A renderer the system kills for memory, as Android does, shows no message at all. So task 3.2 runs, by hand, no cuts on the `make-many-pages.mjs` file, and no cuts on a generated file whose 5,000 pages share one 1 MB image, and records time, peak memory and outcome. Only a finished file, the `memory` message or a zip-limit message is acceptable; a crashed tab or a "damaged" message is not. If either run crashes the tab, building stops: streaming parts into a `Blob` with fflate's `Zip` changes the shared worker contract, which needs its own change first.
+**Memory and time, measured** (task 3.2, desktop Chromium, headless, on the built site; peak is the browser's largest process):
 
-At the peak the worker holds the input twice (its own copy, and one inside the current qpdf instance), every part, and then the zip, about the size of all the parts together. The parts can add up to much more than the input, because shared resources such as fonts are copied into each one: no cuts on `pages-500.pdf` gave 559 KB of parts from a 198 KB input. Task 3.2 records the time and peak memory for the `make-large.mjs` file with no cuts and with two cuts, and those figures go into this design. If they are too high, handing parts one at a time to a streaming zip would change the shared engine and worker contract, which needs its own change first.
+| Run | Time | Peak | Outcome |
+| --- | --- | --- | --- |
+| `pages-500.pdf`, no cuts | 34 s | about 470 MB | 500 files, 653 KB zip |
+| `pages-500.pdf`, two cuts | 0.9 s | about 180 MB | 3 files |
+| The 105 MB file from `make-large.mjs` (one page) | 1.9 s | about 190 MB | One PDF, 105 MB |
+| 500 pages sharing one 10 MB image, no cuts (about 5 GB of parts) | 51 s | about 4.9 GB | Stopped with "This would make a zip over 4 GB, more than one zip can hold. Mark cuts so the file is split into fewer parts." The tab did not crash |
+| 120,000 pages, no cuts | 3.4 s | about 340 MB | Stopped at once with the 65,535-file sentence |
+| 120,000 pages, cuts after pages 100 and 400 | over 25 min, stopped by hand | about 760 MB | Still working; the page stayed responsive. See Risks |
+
+The 5,000-page file sharing a 1 MB image was started, but about 1.4 s per part makes it about two hours, so the 500-page file sharing a 10 MB image stood in for it: the same 5 GB of parts in a tenth of the parts. No run crashed the tab, so building did not stop. A phone has far less memory; the hand check on a phone is in issue #7.
+
+At the peak the worker holds the input (its own copy, the plain copy, and one inside the current qpdf instance), every part, and then the zip, about the size of all the parts together. The parts can add up to much more than the input, because shared resources such as fonts and images are copied into each one: no cuts on `pages-500.pdf` gave 559 KB of parts from a 198 KB input. Handing parts one at a time to a streaming zip would lower the peak, but changes the shared engine and worker contract, which needs its own change first.
 
 ### 3. The cut toggles
 
@@ -256,7 +267,8 @@ None added. qpdf, PDF.js and fflate are already shipped.
 
 ## Risks / Trade-offs
 
-- **Memory for many parts of a large file** is not yet measured; see decision 2. If the hand runs crash the tab, a streaming-zip change comes first.
+- **Memory for many parts of a large file** is measured in decision 2. No run crashed the tab on a desktop; a phone may close it, with no message.
+- **Files of very many pages split slowly.** qpdf's page selection, with the input as the primary file, takes time that grows with the square of the input's page count: picking 400 pages took 1 s from a 5,000-page file, 18 s from a 20,000-page file, and an estimated 10 minutes from a 120,000-page file. qpdf's `--empty` form takes 3 s, but drops the document-level parts the owner's decisions keep (bookmarks, attachments). So above roughly 20,000 pages each part is slow, though the page stays responsive and Cancel works. A faster route for such files would be its own change.
 - **One qpdf call per part is slow for many parts of a large file.** 500 parts of a 100 MB file reads 50 GB in all. The 100 MB warning, progress and Cancel cover it. If the owner wants it faster, `--split-pages` could be used for files with no bookmarks and no attachments. That is a later change, measured first.
 - **`--update-from-json` is proven on `rich.pdf`'s flat outline only.** Task 2.2 proves it on a nested outline and on a part whose catalog loses `/Outlines` entirely. If it cannot be made to work, building stops and the owner is asked. The choices would be: keep every bookmark in every part, or add a library that edits outlines.
 - **Named destinations and go-to actions** that qpdf cannot resolve are dropped, never kept pointing nowhere. A part may then have fewer bookmarks than a person expects. The fixtures README records what each fixture gives.
