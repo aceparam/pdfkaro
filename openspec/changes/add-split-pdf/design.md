@@ -133,7 +133,8 @@ Then it returns the parts. The worker zips them when there are several, as built
 
 - **Before the first progress report** the line reads "Starting" for a tool with `outputs: 'several'`, not "Starting on 1 file", which would count the input while the next line counts parts.
 - **Then** "File 3 of 12" as each part is written.
-- **After the last part,** while the worker zips them, the engine has finished, so the line shows the tool's `writingLabel`, "Putting the files into one zip". The worker posts `{ stage: 'writing', percent: 100 }` before zipping, so the line never sits at "File 12 of 12".
+- **After the last part,** while the worker zips them, the engine has finished, so the line shows the tool's `writingLabel`, "Putting the files into one zip". The worker posts `{ stage: 'writing', percent: 100 }` before zipping, and only when there are several parts to zip, so the line never sits at "File 12 of 12" and a one-page file never says it is making a zip.
+- **A pressed toggle keeps its size.** An unpressed toggle has 1px more padding than a pressed one, so the 2px border and bold text neither move the cell's contents nor re-wrap the label.
 
 ### 6. The result
 
