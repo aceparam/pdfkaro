@@ -17,7 +17,9 @@ Read `SPEC.md` from top to bottom. It is the source of truth for what to build, 
 1. `add-site-skeleton`: the project, registry, stylesheet, first components, home page, placeholder pages and checks. Merged and archived; steps 1, 2, 3, 7, 8 and 9 below.
 2. `add-tool-widget`: the Web Worker plumbing and the interactive shared components (`FilePicker`, `PageGrid`, `Result`, and one generic `ToolWidget` island). Steps 4 and 5. Merged and archived.
 3. `add-merge-pdf`: Merge PDF end to end, with its page text. Step 6. Merged and archived, in the same pull request as 2, which the owner merged on 11 Nov 2026. Its page text waits for the owner's review.
-4. `add-page-thumbnails`: page thumbnails in `PageGrid`, drawn by PDF.js in the tool worker, so Merge PDF meets "Tool page anatomy" in full. Built; waiting for review and merge.
+4. `add-page-thumbnails`: page thumbnails in `PageGrid`, drawn by PDF.js in the tool worker, so Merge PDF meets "Tool page anatomy" in full. Merged and archived.
+
+All Phase 0 code is built.
 
 The Phase 0 gate is not passed yet. What remains for it, and for Merge PDF to pass "Definition of done":
 - the owner's review of the Merge PDF page text;
