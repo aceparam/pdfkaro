@@ -3,31 +3,31 @@
 ## 1. Registry entry
 
 - [ ] 1.1 Record the owner's decisions of 12 Nov 2026 under "Owner decisions" in `CLAUDE.md`: bookmarks per part, attachments with the first part, no password or restrictions on parts, and no next steps for a zip result
-- [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts` and the optional `itemToggle` and `memoryAdvice` words, with the failure sentence using `memoryAdvice` when set; the registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
+- [ ] 1.2 Add the Split PDF entry to `src/tools/registry.ts`, and the new fields: `itemToggle: { kind: 'cut-after', label }`, `resultPages: 'sum' | 'input' | 'none'` in place of `resultPagesAreSum` (Merge PDF becomes `'sum'`), and `memoryAdvice`, with the failure sentence using it when set. The registry test checks catalogue order, that `itemToggle` is set only with `items: 'pages'`, and that `related` names only published tools
 
 ## 2. Engine
 
 - [ ] 2.1 Write `parts(pages, cuts)` in `src/engines/tools/split-pdf.ts`, refusing cuts that are not sorted, unique whole numbers from 1 to `pages - 1`
-- [ ] 2.2 Prove `--update-from-json` in this qpdf build by rewriting the outline of a part of `rich.pdf`; if it cannot be made to work, stop and ask the owner (design, Risks)
-- [ ] 2.3 Write `keptOutline(tree)`, with a depth limit of 64 and a visited set, and the step that writes the kept outline back
-- [ ] 2.4 Write `run`, with outline JSON and titles never put in a log, an error message or a failure sentence: one qpdf call per part with `--decrypt`, attachments removed from parts after the first, the outline step, `qpdf --check` on each part, and progress per file; `inspect` is `inspectPdf`
+- [ ] 2.2 Prove the one-call route (`--update-from-json` before `--pages`, whole dictionaries in the input's object numbers) on a nested outline and on a part whose catalog loses `/Outlines`; if it cannot be made to work, stop and ask the owner (design, Risks)
+- [ ] 2.3 Write `keptOutline(outline, first, last)`, with a depth limit of 64 and a visited set, and the pure step that turns it into the update's whole dictionaries, including dropping `/EmbeddedFiles` for parts after the first
+- [ ] 2.4 Write `run`, with outline JSON and titles never put in a log, an error message or a failure sentence: read the page count, outline, outline and catalog objects, and attachment names once from the input; for each part, a fresh qpdf from `tools.qpdf()`, one write call with `--decrypt` and the update, `qpdf --check`, and progress per file; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
 - [ ] 3.1 Unit test `parts` and `keptOutline` (flat, nested, a dropped parent with kept children, nothing kept, too deep, a cycle)
-- [ ] 3.2 Unit test `run` on every file in `tests/fixtures/`: parts and their page counts, `qpdf --check`, links and form fields kept, `rich.pdf`'s bookmarks and attachment per the owner's decisions, `password.pdf`'s parts with no encryption, damaged files failing, progress per file; record each outcome in the fixtures README; also run it by hand on the file from `make-large.mjs` and on the file from `make-many-pages.mjs` with two cuts, and record those outcomes
+- [ ] 3.2 Unit test `run` on every file in `tests/fixtures/`: parts and their page counts, `qpdf --check`, links and form fields kept, `rich.pdf`'s bookmarks and attachment per the owner's decisions, `password.pdf`'s parts with no encryption, damaged files failing, progress per file; record each outcome in the fixtures README; record the time and peak memory of `pages-500.pdf` with no cuts, and of the `make-large.mjs` file with no cuts and with two cuts, and put the figures in the design; also run it by hand on the file from `make-large.mjs` and on the file from `make-many-pages.mjs` with two cuts, and record those outcomes
 - [ ] 3.3 Add `tests/fixtures/make-many-pages.mjs`, which writes a 120,000-page file outside the repo, as `make-large.mjs` does
 
 ## 4. Worker wiring
 
-- [ ] 4.1 Send `options: { cuts }` from `useToolRun` when the tool has a toggle word; name `split-pdf-<hash>.js` in `page-weight.mjs`, and check `check-worker.mjs` finds it as its own late-loaded file
+- [ ] 4.1 Send `options: { cuts }` from `useToolRun` for `kind: 'cut-after'`, sorted as numbers (unit test with cuts 9 and 10); name `split-pdf-<hash>.js` in `page-weight.mjs`, and check `check-worker.mjs` finds it as its own late-loaded file
 
 ## 5. Page and page text
 
-- [ ] 5.1 Keep the cuts in the reducer (`marks`): toggled by page, cleared on remove, replace and Start again, kept through Cancel and failure; unit test
-- [ ] 5.2 Add `cutSummary(pages, cuts)` to `src/widget/format.ts`, with unit tests for each wording in design decision 3, including clearing the only cut, more than five cuts, and thousands separators
-- [ ] 5.3 `PageGrid`: the optional per-item toggle (`aria-pressed`, at least 44px, the cell's full width with wrapping text, named "Cut after page N", none on the last page, pressed shown by a 2px border, bold text and a 2px line on the cell, never filled); `ToolWorkspace`: the summary line, the toggle announcements, a single output's page count from the input for a page tool, and the Working line ("Starting", then "File N of M", then the writing label while zipping, with the worker posting writing progress before it zips); component render tests
-- [ ] 5.4 Batches of 500: a `limit` argument to `gridItems`, the "Show pages 501 to 1,000" button in real units, focus moving to the first new page's control and the count announced; unit and render tests
+- [ ] 5.1 Keep the cuts (`marks`) and `shown` in the reducer: cuts toggled by page, cleared on remove, replace and Start again, kept through Cancel and failure; `shown` back to 500 on remove, replace and Start again; unit test
+- [ ] 5.2 Add `cutSummary(pages, cuts)` in `src/widget/cuts.ts`, with unit tests for each wording in design decision 3, including clearing the only cut, more than five cuts, and thousands separators
+- [ ] 5.3 `PageGrid`: the optional per-item toggle (`aria-pressed`, at least 44px, the cell's full width with wrapping text, named "Cut after page N", none on the last page, pressed shown by a 2px border, bold text and a 2px line on the cell, never filled); `ToolWorkspace`: the summary line, the toggle announcements, a single output's page count from `resultPages`, `PageItem` getting only plain flags with the toggle's callbacks through the stable refs, and the Working line ("Starting", then "File N of M", then the writing label while zipping, with the worker posting writing progress before it zips); component render tests
+- [ ] 5.4 Batches of 500: a `limit` argument to `gridItems`, passed `shown` by `ToolWorkspace` and by the thumbnail queue's `pump` (unit test that `pump` builds no more than `shown`), the "Show pages 501 to 1,000" button in real units, focus moving to the first new page's control and the count announced; unit and render tests
 - [ ] 5.5 Write `src/content/tools/split-pdf.md`, 250 to 500 words, marked as a draft for the owner; check it and the page against "Banned patterns"
 
 ## 6. End-to-end test

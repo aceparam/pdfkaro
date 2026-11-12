@@ -13,7 +13,8 @@
   - `in.pdf --pages . 2 -- out.pdf` keeps the whole outline. A bookmark to a page not in the part stays, pointing nowhere (`destpageposfrom1: null` in `--json=2 --json-key=outlines`). Attachments and form fields are kept.
   - `--split-pages` drops every bookmark and attachment.
   - `--remove-attachment=<key>` removes an attachment.
-  - `--update-from-json` exits 0. A first try with a hand-written partial object did not change the title, so its exact input format is still to be pinned down (task 2.2).
+  - `--update-from-json` works when each changed object is given whole, and it is applied before pages are selected (decision 2).
+  - One qpdf instance breaks after about 276 calls (decision 2).
 - **The owner decided on 12 Nov 2026,** while this change was written and reviewed:
   - each part keeps only the bookmarks that point to its own pages;
   - attached files go with the first part only;
@@ -42,15 +43,21 @@
   pages: [{ slug: 'split-pdf', name: 'Split PDF', summary: 'Cut one PDF into several.',
            heading: 'Split a PDF file', sentence: 'Cut one PDF into several. Files stay on your device.', ... }],
   widget: { pickerLabel: 'Choose a PDF file', multiple: false, minFiles: 1,
-            items: 'pages', itemControls: false, itemToggle: 'Cut after',
-            outputs: 'several', partSuffix: 'part', outputSuffix: 'split',
+            items: 'pages', itemControls: false, itemToggle: { kind: 'cut-after', label: 'Cut after' },
+            outputs: 'several', partSuffix: 'part', outputSuffix: 'split', resultPages: 'input',
             actionLabel: 'Split and download', writingLabel: 'Putting the files into one zip',
             memoryAdvice: 'Mark cuts so the file is split into fewer parts, then try again.', ... } }
 ```
 
-- **`memoryAdvice`** is a new optional word: the thing to try after running out of memory. The shared sentence stays "Your browser ran out of memory. Try fewer or smaller files." for tools without it; Split's advice points the right way, since no cuts gives the most files.
+- **`itemToggle: { kind, label }`** is a new optional field. `kind` decides what the toggles mean, so a later tool with a different per-page toggle (Extract pages, Delete pages) adds its own kind instead of inheriting Split's. Only one kind is added now, `'cut-after'`, which decides:
+  - the engine option, `cuts`;
+  - that the last page has no toggle;
+  - the summary line, from `cutSummary`.
+
+  Only `items: 'pages'` tools may set it; the registry test checks this.
+- **`resultPages: 'sum' | 'input' | 'none'`** replaces the boolean `resultPagesAreSum`. It says where a single output's page count comes from. Merge PDF becomes `'sum'`, and Split PDF is `'input'`: its one part, from a one-page file, is the whole file. Delete pages and Extract pages will choose their own value. The count is never keyed on `items: 'pages'`.
+- **`memoryAdvice`** is a new optional word: the thing to try after running out of memory. Tools without it keep the shared sentence, "Your browser ran out of memory. Try fewer or smaller files." Split's advice points the right way, since no cuts gives the most files.
 - **`related`** links only to published tools, as now. Until the others exist, that is Merge PDF alone.
-- **`itemToggle`** is a new optional word: the visible label of a per-item toggle. Only `items: 'pages'` tools may set it; the registry test checks this.
 - **The registry test** gains Split PDF in the catalogue order check. It already refuses `items: 'pages'` with `itemControls: true`.
 
 ### 2. The engine: `src/engines/tools/split-pdf.ts`
@@ -58,6 +65,7 @@
 ```ts
 type Options = { passwords?: (string | undefined)[]; cuts?: number[] };
 export function parts(pages: number, cuts: number[]): { first: number; last: number }[];
+export function keptOutline(outline: OutlineItem[], first: number, last: number): OutlineItem[];
 export const run: Engine<Options>;
 export const inspect = inspectPdf;
 ```
@@ -69,26 +77,42 @@ export const inspect = inspectPdf;
 
 The engine checks `options` itself, because the worker passes it on unchecked.
 
-**`run`, for each part `k`, in order:**
-1. `qpdf --password=… --decrypt /in/0.pdf --pages . first-last -- [--remove-attachment=… for k > 1] /out.pdf`.
-   - Using the input as the primary file keeps form fields, links, attachments and document metadata.
-   - `--decrypt` drops encryption and restrictions, as Merge PDF does.
-   - The password goes only inside `--password=`, as in `inspect` and Merge PDF. A visitor's file name is never a path or an argument.
-2. **Bookmarks.** Read the part's outline with `--json=2 --json-key=outlines`. If any bookmark points to no page in the part:
-   - work out the outline to keep in a pure function, `keptOutline(tree)`:
-     - keep an item whose page is in the part;
-     - drop an item whose page is not;
-     - move a kept child of a dropped item up to its place;
-   - write it back with `--update-from-json`, which rewrites `/First`, `/Last`, `/Next`, `/Prev`, `/Parent` and `/Count` on the outline objects, and `/Outlines` in the catalog when nothing is kept.
-   - A part whose bookmarks all point into it skips this step.
-3. Run `qpdf --check` on the part. A part that fails is a failed job, never a broken file handed back.
-4. Read the part, report `{ stage: 'working', unit: 'file', done: k, total }`, and delete the part's files from qpdf's memory.
+**Two facts about this qpdf build shape `run`** (measured in Node by the stage 1 architect review):
+- **One qpdf instance breaks after about 276 calls** ("table index is out of bounds"). So every part gets a fresh instance from `tools.qpdf()`, which `tool.worker.ts` already makes afresh for each call. The input is written into each one. No files need deleting, because the instance is let go. Measured: 500 one-page parts of `pages-500.pdf`, split and checked, took 28.1 s, with peak memory about 124 MB.
+- **`--update-from-json` is applied before pages are selected.** So the outline is read once from the input, and each part is written in one call: `/in.pdf --update-from-json=/u.json --pages . first-last -- /out.pdf`. The format that worked gives each changed object as its whole dictionary, in the input's own object numbers:
 
-Then it returns the parts. The worker zips them when there are several, as built in `add-page-items-and-zip`.
+  ```
+  {"qpdf":[{"jsonversion":2,"pushedinheritedpageresources":false,"calledgetallpages":false,"maxobjectid":N},
+           {"obj:12 0 R":{"value":{...whole dictionary...}}}]}
+  ```
+
+**`run`:**
+1. **Read once, from the input,** on one qpdf instance:
+   - the page count;
+   - the outline, with `--json=2 --json-key=outlines`;
+   - the outline objects' dictionaries and the catalog's, with `--json=2 --json-key=qpdf` and `--json-object` for each;
+   - the attachment names, with `--json=2 --json-key=attachments`.
+2. **For each part `k`, on a fresh instance:**
+   - Work out the update in a pure function: `keptOutline(outline, first, last)`, then the whole dictionaries that change.
+     - `keptOutline` keeps an item whose page is in the part, drops one whose page is not, and moves a kept child of a dropped item up to its place.
+     - The update rewrites `/First`, `/Last`, `/Next`, `/Prev`, `/Parent` and `/Count` on the outline objects. It removes `/Outlines` from the catalog when nothing is kept.
+     - For parts after the first, it also removes `/EmbeddedFiles` from the catalog's `/Names`. That drops the attached files without passing any attachment name to qpdf as an argument.
+   - A part that needs no change skips the update.
+   - Write it: `--password=… --decrypt /in.pdf [--update-from-json=/u.json] --pages . first-last -- /out.pdf`.
+     - Using the input as the primary file keeps form fields, links and document metadata.
+     - `--decrypt` drops encryption and restrictions, by the owner's decision.
+     - The password goes only inside `--password=`, as in `inspect` and Merge PDF. A visitor's file name is never a path or an argument.
+   - Run `qpdf --check` on the part. A part that fails is a failed job, never a broken file handed back.
+   - Read the part and report `{ stage: 'working', unit: 'file', done: k, total }`.
+3. Return the parts. The worker zips them when there are several, as built in `add-page-items-and-zip`.
 
 **Why one qpdf call per part, and not `--split-pages`:** `--split-pages` reads the file once, but it drops bookmarks and attachments, which the owner's decisions keep. One call per part reads the file each time, so 500 parts of a large file is slow. It shows progress per file, Cancel works, and the page never blocks, because all of this runs in the worker. See Risks.
 
 **Unknown outline shapes.** A bookmark whose destination qpdf cannot resolve to a page counts as pointing nowhere, and is dropped. That covers named destinations qpdf cannot follow, and actions other than go-to.
+
+**`keptOutline` will have more callers.** Extract pages and Delete pages need the same rule. It stays in `split-pdf.ts` for now. The second caller's change moves it into `src/engines/outline.ts`, beside `inspect.ts`, rather than copying it.
+
+**Memory.** At the peak the worker holds the input twice (its own copy, and one inside the current qpdf instance), every part, and then the zip, about the size of all the parts together. The parts can add up to much more than the input, because shared resources such as fonts are copied into each one: no cuts on `pages-500.pdf` gave 559 KB of parts from a 198 KB input. Task 3.2 records the time and peak memory for the `make-large.mjs` file with no cuts and with two cuts, and those figures go into this design. If they are too high, handing parts one at a time to a streaming zip would change the shared engine and worker contract, which needs its own change first.
 
 ### 3. The cut toggles
 
@@ -99,15 +123,17 @@ Then it returns the parts. The worker zips them when there are several, as built
   ```
 
   - It is a real `<button type="button" aria-pressed>`, at least 44px tall, under the page's caption, as wide as its cell, with its text allowed to wrap, so it never overflows a cell at any width or text size.
-  - Its visible text is the registry word ("Cut after"). Its accessible name is "Cut after page 3".
+  - Its visible text is the registry label ("Cut after"). Its accessible name is "Cut after page 3".
   - `skip` holds the last page, which has no button.
   - A pressed toggle shows by shape, not fill: a 2px `--text` border and bold text. The cell also draws a 2px `--text` line on its trailing edge. Only the main button is filled, so it still stands out with many cuts marked.
-  - Toggling keeps focus on the button. `PageItem` stays memoised: its `pressed` flag is a plain boolean prop.
+  - **A pressed toggle keeps its size.** An unpressed toggle has 1px more padding than a pressed one, so the 2px border and bold text neither move the cell's contents nor re-wrap the label.
+  - Toggling keeps focus on the button.
+  - **`PageItem` stays memoised.** Each item gets only plain props: its `pressed` and `toggleable` flags. `onToggle` and `name` are reached through the existing stable `actions` and `latest` refs, never passed into each item.
 - **`useToolRun`** keeps the cuts as a set of page numbers in the reducer (`state.marks`):
   - cleared when the file is removed, replaced or started again;
   - kept through Cancel and failure;
-  - sent as `options: { cuts: [...].sort() }` when `words.itemToggle` is set.
-- **The line above the pages,** in `src/widget/format.ts`, is a pure function `cutSummary(pages, cuts)`:
+  - for `kind: 'cut-after'`, sent as `options: { cuts: [...marks].sort((a, b) => a - b) }`, sorted as numbers. Sorted as text, `[10, 9]` would stay out of order and the engine would refuse it. A unit test covers cuts 9 and 10.
+- **The line above the pages** comes from `cutSummary(pages, cuts)`, in its own file, `src/widget/cuts.ts`. These are Split's own words, and `format.ts` says a tool's own words do not belong there. It is used only for `kind: 'cut-after'`.
   - "No cuts marked. You will get one file per page, 12 files."
   - "Cut after page 7. You will get 2 files."
   - "Cuts after pages 3 and 7. You will get 3 files."
@@ -116,15 +142,14 @@ Then it returns the parts. The worker zips them when there are several, as built
   - "This file has one page. You will get it back as one file."
   - numbers have a thousands separator: "You will get one file per page, 1,200 files."
 
-  It is shown in `ToolWorkspace` under the file line. After a cut is marked, the status region says the new summary, which names it: "Cuts after pages 3 and 7. You will get 3 files." Past five cuts the summary gives only a count, so the cut is named first: "Cut after page 40. 6 cuts marked. You will get 7 files." After a cut is cleared, it says so first, then the summary: clearing the only cut on a 12-page file, "Cut after page 3 cleared. No cuts marked. You will get one file per page, 12 files."
-- **These words are not Split's own text in shared code.** `cutSummary` is named for what it says, and it is used only when the registry gives a toggle word. If a later tool needs other words, its change adds them to the registry.
+  It is shown in `ToolWorkspace` under the file line. After a cut is marked, the status region says the new summary, which names it: "Cuts after pages 3 and 7. You will get 3 files." Past five cuts the summary gives only a count, so the cut is named first: "Cut after page 40. 6 cuts marked. You will get 7 files." After a cut is cleared, it says so first, then the summary: clearing the only cut on a 12-page file gives "Cut after page 3 cleared. No cuts marked. You will get one file per page, 12 files."
 
 ### 4. Batches of 500 pages
 
-- **`gridItems`** is unchanged. `ToolWorkspace` passes `items.slice(0, shown)` to `PageGrid`, with `shown` starting at 500.
+- **`shown` lives in the reducer,** starting at 500. It goes back to 500 when the file is removed, replaced or started again.
+- **`gridItems` gains a `limit` argument,** and every caller passes `shown`: `ToolWorkspace`, and the thumbnail queue's `pump` in `useToolRun`. So a 120,000-page file builds at most `shown` entries, on every render and after every thumbnail. A unit test checks that `pump` builds no more than `shown`.
 - **After the last shown page,** a button in real units, "Show pages 501 to 1,000" (and, for a last short batch, "Show pages 1,001 to 1,200"), raises `shown` by up to 500.
 - **Focus after the press** moves to the first new page's toggle, "Cut after page 501", which sits where the button was, so it stays in view. For a grid with no per-page control, it moves to the first new cell, focusable with `tabindex="-1"`. The status region says "Showing 1,000 of 120,000 pages".
-- **No item array is built** for pages past `shown`: `gridItems` gains an optional `limit` argument, so a 120,000-page file builds 500 entries, not 120,000.
 - **Thumbnails** are still drawn only as items come into view.
 - **The skip link** stays above the grid.
 - **What it does to Merge PDF:** nothing. Its list is of files.
@@ -133,13 +158,12 @@ Then it returns the parts. The worker zips them when there are several, as built
 
 - **Before the first progress report** the line reads "Starting" for a tool with `outputs: 'several'`, not "Starting on 1 file", which would count the input while the next line counts parts.
 - **Then** "File 3 of 12" as each part is written.
-- **After the last part,** while the worker zips them, the engine has finished, so the line shows the tool's `writingLabel`, "Putting the files into one zip". The worker posts `{ stage: 'writing', percent: 100 }` before zipping, and only when there are several parts to zip, so the line never sits at "File 12 of 12" and a one-page file never says it is making a zip.
-- **A pressed toggle keeps its size.** An unpressed toggle has 1px more padding than a pressed one, so the 2px border and bold text neither move the cell's contents nor re-wrap the label.
+- **After the last part,** while the worker zips them, the line shows the tool's `writingLabel`, "Putting the files into one zip". The worker posts `{ stage: 'writing', percent: 100 }` before zipping, and only when there are several parts. So the line never sits at "File 12 of 12", and a one-page file never says it is making a zip.
 
 ### 6. The result
 
 - **Several parts:** `report-split.zip` with "N files", as built.
-- **One part:** only a one-page input gives one part, since any file of two or more pages gives at least two. It comes back as `form-split.pdf` with "1 page". `words.resultPagesAreSum` stays false. For a tool that lists pages, `useToolRun` gives a single output the input's page count, which is right because the one part is the whole file. No extra read is needed.
+- **One part:** only a one-page input gives one part, since any file of two or more pages gives at least two. It comes back as `form-split.pdf` with "1 page", from `resultPages: 'input'`. No extra read is needed.
 
 ### 7. The page text
 
@@ -214,6 +238,7 @@ None added. qpdf, PDF.js and fflate are already shipped.
 
 ## Risks / Trade-offs
 
+- **Memory for many parts of a large file** is not yet measured; see decision 2.
 - **One qpdf call per part is slow for many parts of a large file.** 500 parts of a 100 MB file reads 50 GB in all. The 100 MB warning, progress and Cancel cover it. If the owner wants it faster, `--split-pages` could be used for files with no bookmarks and no attachments. That is a later change, measured first.
-- **`--update-from-json` is not yet proven** for rewriting outline links in this build. Task 2.2 proves it first. If it cannot be made to work, building stops and the owner is asked. The choices would be: keep every bookmark in every part, or add a library that edits outlines.
+- **`--update-from-json` is proven on `rich.pdf`'s flat outline only.** Task 2.2 proves it on a nested outline and on a part whose catalog loses `/Outlines` entirely. If it cannot be made to work, building stops and the owner is asked. The choices would be: keep every bookmark in every part, or add a library that edits outlines.
 - **Named destinations and go-to actions** that qpdf cannot resolve are dropped, never kept pointing nowhere. A part may then have fewer bookmarks than a person expects. The fixtures README records what each fixture gives.

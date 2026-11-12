@@ -91,7 +91,7 @@ No open decision needs more than its assumed default.
   - `tests/e2e/split-pdf.spec.ts`;
   - `tests/fixtures/make-many-pages.mjs`, which writes the very-large-page-count file outside the repo.
 - **Changed code:**
-  - `src/tools/registry.ts`: the Split PDF entry, and an optional `itemToggle` word;
+  - `src/tools/registry.ts`: the Split PDF entry, an optional `itemToggle` with a kind, `resultPages` in place of `resultPagesAreSum`, and an optional `memoryAdvice`;
   - `PageGrid`: an optional per-item toggle button, and batches of 500;
   - `ToolWorkspace` and `useToolRun`: the toggles' state, the line saying what the button will give, and the cuts passed to the engine as options;
   - `scripts/page-weight.mjs` and `scripts/check-worker.mjs`: the new engine file.
