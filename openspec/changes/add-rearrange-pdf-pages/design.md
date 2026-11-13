@@ -44,64 +44,74 @@
 
 ### The page order in the state
 
-`State` gains `order: number[] | null`. It is the page numbers in the order shown.
+`State` gains `order: number[] | null`. `null` means the original order, for every tool, so the reducer needs no tool setting and a file that is never moved holds no list (the architect, stage 1).
 
-- `inspected` with a ready file, for a tool whose page items move, sets `order` to `1..pages`. For other tools it stays `null`, so they hold no extra list.
-- `added` (replacing the file), `removed` and `reset` clear it, as they clear marks. `started`, `failed` and `cancelled` leave it, so Cancel and failure keep the order.
-- A new action, `page-moved { from, to }`, moves one entry: places count from 0, and `to` is clamped to the list. For a 120,000-page file this is one `splice` on an array of 120,000 numbers, about a millisecond, so it stays well under the 100 ms rule. The e2e test measures it.
-- `gridItems` builds a tool's page items from `order` when it is set: item `i` is page `order[i]`, with id `${fileId}:${page}` and title "Page N". Ids and titles stay with the page, so thumbnails, already keyed by page, follow it, and the visitor can tell pages apart.
-- **`orderSummary(order)`** in `src/widget/format.ts`-style rules (a new `src/widget/order.ts`):
-  - "Pages in their original order." when every page is in its place;
-  - otherwise "The order has changed. N pages are in a new place.", with "1 page is" for one.
+- A new action, `page-moved { page, to }`: the page number and its new place, counted from 0. On the first move the reducer builds `1..pages` from `files[0].pages`; it finds the page's place, takes it out and puts it at `to`, clamped to the file. For a 120,000-page file this is one copy and one `splice` of 120,000 numbers, about a millisecond; the e2e test measures the 100 ms rule.
+- **The next batch.** When `to` is at or past `shown`, the same action raises `shown` by `pageBatch`, so the moved page stays in view. One action, tested in Node; the component does not dispatch two in order.
+- `added` (replacing the file), `removed` and `reset` set `order` back to `null`, as they clear marks. `started`, `failed` and `cancelled` leave it, so Cancel and failure keep the order.
+- `gridItems` and `shownItems` take `Pick<State, 'files' | 'order'>`: item `i` is page `order[i]` (or `i + 1` when `order` is `null`), with id `${fileId}:${page}` and title "Page N". Ids and titles stay with the page, so thumbnails, keyed by page, follow it. `ToolWorkspace`'s items memo is keyed on `state.order` too.
+- **`orderSummary(order, pages)`** in a new `src/widget/order.ts`, memoised on `state.order` in `ToolWorkspace` (it renders again on every thumbnail):
+  - "This file has one page, so there is nothing to move." for one page;
+  - "Pages in their original order. Press “Earlier” or “Later” under a page to move it." when `order` is `null` or every page is in its place;
+  - otherwise "The order has changed. Press “Earlier” or “Later” under a page to move it."
 
-  It counts in one pass, so it is cheap on every move.
+  It gives no count: after moving one page, "3 pages are in a new place" reads as a mistake (the UX reviewer, stage 1). It stops at the first page out of place. The line is not a live region; the move announcement covers that.
+- `useToolRun` sends `{ order: order ?? [1..pages] }` when `words.items === 'pages' && words.itemControls`.
 
 ### Moves in the page grid
 
 `PageGrid` already moves items for Merge: `move(id, by, button)` and drag call `onMove(id, to)` and keep focus. For pages:
 
-- With `controls` and `layout === 'grid'`, each cell shows two buttons under "Page N": visible "Up" and "Down", named "Move page N up" and "Move page N down". Two short words fit side by side in a 5rem cell at 360px; "Move up" and "Move down" do not. A grid cell has no Remove.
+- With `controls` and `layout === 'grid'`, each cell shows two buttons under "Page N", stacked, each as wide as the cell and at least 2.75rem tall, as the toggle of Split, Extract and Delete is built: visible "Earlier" and "Later", named "Move page N earlier" and "Move page N later". A grid cell has no Remove.
+  - **Why "Earlier" and "Later", not SPEC's "move up" and "move down":** in a wrapping grid a move goes one cell left or right and wraps at a row's end, so "Up" would usually not move a page up. The UX reviewer asked for the words that say what happens (stage 1). SPEC's "move up and move down" describes what the buttons do; Merge's rows keep the literal words. Named in the pull request as the agent's choice.
+  - Side by side, two buttons need about 115px and a cell has about 80px at 1280px and 95px at 360px (the UX reviewer's sums), so they stack.
+- `.caption` may wrap, so "Page 120,000" does not overflow an 80px cell; this also applies to Split, Extract and Delete.
 - Rows (Merge) keep "Move up", "Move down" and "Remove" as they are.
-- The first item's "Up" and the last item's "Down" are `aria-disabled`. The last item is the file's last page, not the last one shown: a page at the end of a batch can still move down.
-- `ToolWorkspace` passes `onMove` as a page move when the items are pages, and a file move otherwise. `onMoved` announces "Page 3 moved to place 1 of 12.", with the place in the whole file and the file's page count.
-- **Moving past the pages shown.** When a page moves to a place beyond `shown`, `ToolWorkspace` dispatches `shown-more` first, so the page stays in view and focus can follow it.
+- **`PageGrid` gains `total?: number`,** defaulting to `items.length` (the architect, stage 1). It is used for the last item's "Later" being unavailable, the bounds check in `move`, the count in `onMoved` and the focus rule. `ToolWorkspace` passes the file's page count for pages. Without it, the grid would treat the last page drawn as the end: the page at place 500 could not move on, and moves would be announced "of 500".
+- **Focus into the next batch.** After a move past the pages shown, the moved page is not drawn until the grid's next frame. `PageGrid` keeps the focus request until the button registers in `setButton`, and moves focus then, so focus never falls to the page's body (the architect, stage 1).
+- `ToolWorkspace` passes `onMove` as a page move when the items are pages (`page-moved` with the item's page), and a file move otherwise. `onMoved` announces "Page 3 moved to place 1 of 12.", with the place in the whole file and the file's page count.
 
 ### The option and the engine
 
-- `useToolRun` sends `{ order: state.order }` for a tool whose page items move.
 - `src/engines/tools/rearrange-pdf-pages.ts`:
   1. `plainCopy`;
   2. `pageOrder(pages, options.order)` checks that the order names every page from 1 to `pages` once, and refuses anything else ("The page order is not valid."). It checks `Array.isArray(order) && order.length === pages` first, so its loop is bounded by the file and not by what was sent; it tracks pages seen in a `Uint8Array(pages + 1)`; it refuses holes, `NaN`, fractions and strings; and it returns a copy;
   3. progress 0;
-  4. `keepPages(tools, plain, order, { everyPage: true })`;
+  4. `writePages(tools, plain, order)`;
   5. progress 100.
-- **`keepPages` with every page kept** skips `readStructure` and the outline update: no page is left out, so no bookmark can be dropped, and a crafted file with a huge outline costs Reorder nothing (the security reviewer's suggestion at stage 1). It writes only `--pages . <list> --` through the argument file and runs `qpdf --check`. The comments on `keepPages` and `callWithArgumentFile` say the list may be in any order: a sorted, unique list from `chosenPages` or a permutation from `pageOrder`.
-- `pageOrder` lives in `src/engines/plain.ts` beside `chosenPages`, because Rotate PDF and later page tools may send a full order too. It has one caller now; if none comes, it can move into the engine.
-- `keepPages` keeps every page, so the outline update is empty and no bookmark is dropped. `pageList` joins ascending runs, so an order with one move is a few ranges: "3,1-2,4-12".
+- **`pageOrder` lives in the engine file**, exported for its test, until a second caller needs it (the architect, stage 1), as `pagesLeft` lives in Delete's.
+- **`writePages(tools, plain, list, update?)`** in `src/engines/plain.ts` is the tail of `keepPages`, split out: write the update if one is given, write `--pages . <list> --` through the argument file, and run `qpdf --check`. `keepPages` reads the structure, builds its outline update and calls it. Reorder calls it with no update and never reads the structure.
+  - **Why not `keepPages`:** its outline update rewrites every bookmark even when every page is kept. It drops bookmarks with no page (headings, web-address actions), cuts outlines below 48 levels, and drops the outline when it cannot be read safely. Those trade-offs fit tools that leave pages out; a tool that keeps every page needs none of them. qpdf keeps the input's outline and other document-level data, and bookmarks point to page objects, so they follow their pages untouched (the architect, stage 1). It also means a crafted file with a huge outline costs Reorder nothing (the security reviewer, stage 1).
+  - Rotate PDF, Add page numbers, Watermark and Sign keep every page too, and can call `writePages` the same way.
+  - The comments on `writePages`, `keepPages` and `callWithArgumentFile` say the list may be in any order: a sorted, unique list from `chosenPages` or a permutation from `pageOrder`.
+- `pageList` joins ascending runs, so an order with one move is a few ranges: "3,1-2,4-12".
 - **Long orders.** A 120,000-page file with many scattered moves gives a long list, carried by the argument file; a reversed order joins no runs, about 730 KB on one line, which qpdf reads from the argument file on its heap. qpdf selects pages slowly from very large files, as the 20,000-page notice already warns.
 
 ### Tests
 
 - **Unit:**
-  - the reducer: order made on read, page moves, clamping, cleared on remove and replace, kept through Cancel;
-  - `gridItems` from an order;
-  - `orderSummary`;
-  - `pageOrder` (refuses missing, repeated, extra, out of range, not whole, not an array);
-  - `run` on every file in `tests/fixtures/`, with page order checked through the uncompressed result; `rich.pdf` swapped, with each bookmark pointing to the page that holds its chapter; `mixed.pdf` shapes following their pages; `tagged.pdf` keeping everything; the unchanged order.
-- **Component:** grid cells with controls show "Up" and "Down" with full names and no Remove; rows still show "Move up", "Move down" and "Remove".
+  - the reducer: no order until the first move, page moves, clamping, the next batch shown on a move past `shown`, back to `null` on remove, replace and reset, kept through Cancel;
+  - `gridItems` and `shownItems` from an order and from `null`;
+  - `orderSummary`, including one page;
+  - `pageOrder` (refuses missing, repeated, extra, out of range, a hole, `NaN`, `1.5`, `'1'`, the wrong length, not an array);
+  - `writePages` called by `keepPages`: Extract's and Delete's tests unchanged;
+  - `run` on every file in `tests/fixtures/`, with page order checked through the uncompressed result; `rich.pdf` swapped, with each bookmark pointing to the page that holds its chapter and the outline's own order unchanged; `mixed.pdf` shapes following their pages; `tagged.pdf` keeping everything; the unchanged order; a fully reversed `pages-500.pdf`;
+  - the outline comes out unchanged for a bookmark with no destination, the 100-level `deepOutline`, and the outline-as-catalog file, which `keepPages` would change.
+- **Component:** grid cells with controls show "Earlier" and "Later" stacked, with full names and no Remove; `total` sets the ends and the announced count; rows still show "Move up", "Move down" and "Remove".
 - **E2e:**
   - moving by keyboard, with announcement and focus;
   - drag;
   - the unavailable ends;
-  - moving past the pages shown;
+  - moving past the pages shown, with focus on the moved page's "Later" and the announcement "of 900";
+  - a one-page file's line;
   - reordering and checking the page order of the download (`mixed.pdf` page sizes);
   - password, damaged, not a PDF, two files dropped;
   - Cancel keeps the order;
   - engine-load failure;
   - skip link;
   - the 20,000-page notice, with a move on the 120,000-page file blocking nothing for more than 100 ms;
-  - no-upload with an exact allowlist, and the `rich.pdf` strings;
-  - Merge PDF's e2e tests still pass.
+  - no-upload with an exact allowlist; the `rich.pdf` strings; the `tagged.pdf` strings (its tag text, link address, field value and page text) in requests and the console; and the address with no query and no hash, so the order is not written there (the privacy reviewer, stage 1);
+  - Merge, Split, Extract and Delete's e2e tests still pass.
 
 ### What keeps its original order
 
@@ -109,6 +119,6 @@ qpdf moves page objects, not the document's other structures. The outline lists 
 
 ## Risks and trade-offs
 
-- **Many taps on a phone.** Moving page 40 to the front takes 39 presses of "Up". `SPEC.md` asks for move up and move down; a "move to place" field can come later. Named in issue #7's phone check and the pull request.
+- **Many taps on a phone.** Moving page 40 to the front takes 39 presses of "Earlier". `SPEC.md` asks for move up and move down; a "move to place" field can come later. The page text says each press moves a page one place and that dragging is quicker for long moves on a computer. Named in issue #7's phone check and the pull request, as an owner question for later and a candidate for Known problems.
 - **Drag in a wrapping grid** drops a page onto another and takes its place, as Merge does in rows; there is no drop line between cells. Keyboard and touch use the buttons.
-- **"Up" and "Down" in a grid** mean earlier and later in the order, which can wrap to the row above. The names say "Move page N up", and the announcement gives the new place. The UX reviewer checks this.
+- **"Earlier" and "Later" differ from SPEC's words** "move up" and "move down". They say what happens in a grid; the owner can ask for the literal words instead.

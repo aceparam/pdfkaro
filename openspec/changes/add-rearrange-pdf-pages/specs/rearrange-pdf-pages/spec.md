@@ -35,12 +35,12 @@ While the engine loads, the file's line SHALL show "Getting ready". Once read, i
 
 ### Requirement: Moving pages
 
-Every page SHALL have "Up" and "Down" buttons, named "Move page N up" and "Move page N down", and no Remove, and SHALL be movable by mouse drag. A page SHALL keep its name wherever it moves. The first page's "Up" and the last page's "Down" SHALL be unavailable but focusable. A move SHALL be announced, and focus SHALL stay on a usable move button. (SPEC.md: Details that apply everywhere, reordering; Tool page anatomy, 4)
+Every page SHALL have "Earlier" and "Later" buttons, named "Move page N earlier" and "Move page N later", and no Remove, and SHALL be movable by mouse drag. A page SHALL keep its name wherever it moves. The first page's "Earlier" and the last page's "Later" SHALL be unavailable but focusable. A move SHALL be announced, and focus SHALL stay on a usable move button. (SPEC.md: Details that apply everywhere, reordering; Tool page anatomy, 4)
 
 #### Scenario: A page is moved with the keyboard
 
-- **WHEN** a keyboard user presses "Move page 3 up" twice in a 12-page file
-- **THEN** page 3 is first, the status region says "Page 3 moved to place 1 of 12.", and focus moves to "Move page 3 down" because "Up" can no longer be used
+- **WHEN** a keyboard user presses "Move page 3 earlier" twice in a 12-page file
+- **THEN** page 3 is first, the status region says "Page 3 moved to place 1 of 12.", and focus moves to "Move page 3 later" because "Earlier" can no longer be used
 
 #### Scenario: A page is dragged
 
@@ -50,26 +50,31 @@ Every page SHALL have "Up" and "Down" buttons, named "Move page N up" and "Move 
 #### Scenario: The ends
 
 - **WHEN** a file has been read
-- **THEN** the first page's "Up" and the last page's "Down" are marked unavailable and can still be focused
+- **THEN** the first page's "Earlier" and the last page's "Later" are marked unavailable and can still be focused
 
 #### Scenario: Moving past the pages shown
 
 - **WHEN** the last page shown of a 900-page file, place 500, is moved down
-- **THEN** the next batch is shown and the page is at place 501, in view
+- **THEN** the next batch is shown, the page is at place 501 in view with focus on its "Later" button, and the status region says "Page 500 moved to place 501 of 900."
 
 ### Requirement: What the line above the pages says
 
-A line above the pages SHALL say whether the order has changed and how many pages are in a new place. The order SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4)
+A line above the pages SHALL say whether the order has changed and how to move a page, or that a one-page file has nothing to move. The order SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4)
 
 #### Scenario: The order is unchanged
 
-- **WHEN** a file has been read, or its pages have been moved back to where they were
-- **THEN** the line reads "Pages in their original order."
+- **WHEN** a file of several pages has been read, or its pages have been moved back to where they were
+- **THEN** the line reads "Pages in their original order. Press “Earlier” or “Later” under a page to move it."
 
 #### Scenario: Pages have moved
 
 - **WHEN** page 3 of a 12-page file has been moved to place 1
-- **THEN** the line reads "The order has changed. 3 pages are in a new place."
+- **THEN** the line reads "The order has changed. Press “Earlier” or “Later” under a page to move it."
+
+#### Scenario: A file of one page
+
+- **WHEN** a one-page file has been read
+- **THEN** the line reads "This file has one page, so there is nothing to move.", both buttons are unavailable, and the main button can still be used
 
 ### Requirement: Reordering
 
@@ -166,12 +171,17 @@ There SHALL be no fixed size limit. When the file is over 100 MB the page SHALL 
 
 ### Requirement: Nothing is uploaded
 
-From the moment a file is picked until the result is downloaded, no request SHALL carry file contents, a file name or a password, and none SHALL go to another origin. Files, names and passwords MUST NOT be written to browser storage or the page address. (SPEC.md: Privacy, browser tools)
+From the moment a file is picked until the result is downloaded, no request SHALL carry file contents, a file name or a password, and none SHALL go to another origin. Files, names, passwords and the page order MUST NOT be written to browser storage or the page address. (SPEC.md: Privacy, browser tools)
 
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, moves a page, reorders and downloads, while watching every request from the page and its workers
 - **THEN** after the pick only an exact list of the site's own files is requested, including the Reorder engine and with no `fflate`, Split, Merge, Extract or Delete file; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report` or the password; and storage, the title, the address and the console hold none of them
+
+#### Scenario: No hidden text reaches a request
+
+- **WHEN** a page of `tagged.pdf` is moved and the file reordered while every request and the console are watched
+- **THEN** its tag text, link address, field value and page text are in no request and not in the console, and the address has no query and no hash
 
 #### Scenario: No bookmark title reaches a request
 
@@ -180,7 +190,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, moving pages by keyboard or phone, bookmarks and attached files, the bookmark list and tagged reading order keeping their order, the original file, and passwords. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, moving pages by keyboard or phone, bookmarks and attached files, the bookmark list and tagged reading order keeping their order, the original file, passwords, and that the page forgets the file and the order. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
 
 #### Scenario: The text is in the served page
 
