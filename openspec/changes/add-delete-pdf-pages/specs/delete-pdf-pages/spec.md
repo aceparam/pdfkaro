@@ -125,8 +125,8 @@ The new file SHALL keep the document's details, accessibility tags, named destin
 
 #### Scenario: A tagged file
 
-- **WHEN** page 2 of `tagged.pdf`, which has a tag with alternative text, an untagged field, and a filled field and a note that the tags point to, is deleted
-- **THEN** the result has one page; page 2's text and its untagged field are gone; its tag text, the tagged field with its value, and the note are still in the file; and the page text says such things can remain
+- **WHEN** page 2 of `tagged.pdf`, which has a tag with alternative text, an untagged field, and a filled field, a note and a web link that the tags point to, is deleted
+- **THEN** the result has one page; page 2's text and its untagged field are gone; its tag text, the tagged field with its value, the note and the link are still in the file; and the page text says such things can remain
 
 ### Requirement: Progress and cancel
 
