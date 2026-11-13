@@ -103,7 +103,9 @@ export const inspect = inspectPdf;
 
 ### Long page lists
 
-A file of 120,000 pages with one page marked keeps 119,999 pages. `pageList` writes runs as ranges, so that list is "1-41,43-120000", short. The worst case is every other page marked: 60,000 single pages, about 400 KB, which the argument file carries. The unit test on a 64 KB list already covers the step; Delete adds a run on `pages-500.pdf` with every other page marked.
+A file of 120,000 pages with one page marked keeps 119,999 pages. `pageList` writes runs as ranges, so that list is "1-41,43-120000", short. The worst case is every other page marked: 60,000 single pages, about 400 KB, which the argument file carries without overflowing qpdf's stack. qpdf is slow on it, though: at stage 1 the security reviewer ran that case on the 120,000-page file in Node and qpdf had not finished after more than 10 minutes. It runs in the worker, so the page stays responsive and Cancel ends it, and the 20,000-page notice already warns that the job may take a long time. This change does not claim the case is quick; it records it in the fixtures README.
+
+`pagesLeft` walks the sorted marks alongside the page numbers once, so it costs one pass over the pages, never pages times marks.
 
 ### Tests
 

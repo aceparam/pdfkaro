@@ -7,11 +7,11 @@
 ## 2. Engine
 
 - [ ] 2.1 Move `chosenPages`, `pageList` and `callWithArgumentFile` from `extract-pdf-pages.ts` into `src/engines/plain.ts`, and add `keepPages(tools, plain, keep)` there with the structure read, outline update, argument-file write and `qpdf --check`; Extract's `run` calls it, building `new Set(keep)` once; Extract's tests keep their cases and expectations with only imports changed, and the moved functions' cases move to `tests/unit/plain.test.ts`; `chosenPages` says "No pages were given."; update the comment at the top of `plain.ts`
-- [ ] 2.2 Write `src/engines/tools/delete-pdf-pages.ts`: `pagesLeft` (checked by `chosenPages`, refusing every page) and `run` through `plainCopy` and `keepPages`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
+- [ ] 2.2 Write `src/engines/tools/delete-pdf-pages.ts`: `pagesLeft` (checked by `chosenPages`, refusing every page, one pass over the pages) and `run` through `plainCopy` and `keepPages`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping `SECRET-ALT-TEXT`, `SECRET-ACTUAL-TEXT`, `SECRET-DEST-NAME` and `SECRET-THREAD-TITLE` while `SECRET-PAGE-TWO-TEXT` and the field `secretfield` are gone, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
+- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping `SECRET-ALT-TEXT`, `SECRET-ACTUAL-TEXT`, `SECRET-DEST-NAME` and `SECRET-THREAD-TITLE` while `SECRET-PAGE-TWO-TEXT` and the field `secretfield` are gone, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; a 3,000-bookmark file keeping most of its pages; run the `make-large.mjs` file by hand; record in the fixtures README that every other page of the 120,000-page file did not finish within 10 minutes at stage 1; record each outcome in the fixtures README, and that the multilingual file is still missing
 
 ## 4. Worker wiring
 
