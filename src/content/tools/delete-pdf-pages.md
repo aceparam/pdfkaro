@@ -6,7 +6,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 1. Choose the PDF file you want to delete pages from. You can also drop it anywhere on this page, or paste it.
 2. Each page is shown. Press “Delete” under each page you want to delete. Press it again to keep the page.
-3. Press Delete and download.
+3. Press “Delete and download”.
 4. When the new file is ready, press Download.
 
 ## Questions
@@ -29,7 +29,7 @@ The new file keeps the bookmarks that point to the pages left, and drops the oth
 
 ### Does deleting a page remove everything about it?
 
-The page itself goes, with its text, form fields and notes. But some parts of a PDF belong to the whole document, and deleting a page does not remove them: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name the pages you deleted. If you are deleting pages to keep something private, check the new file before you share it.
+No. The page itself goes, with its text, and usually its form fields and notes. But some parts of a PDF belong to the whole document, and deleting a page does not remove them: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name the pages you deleted. In a file with accessibility tags, the tags can also keep the deleted pages' form fields, with what was typed in them, and their notes. If you are deleting pages to keep something private, check the new file before you share it.
 
 ### Can I use a PDF that has a password?
 

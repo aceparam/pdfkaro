@@ -121,12 +121,12 @@ The new file SHALL keep the bookmarks that point to a page left and no others, a
 
 ### Requirement: Document details and accessibility tags come over whole
 
-The new file SHALL keep the document's title, author and other details, its accessibility tags, named destinations and reading threads, whole, and the page SHALL say that these can carry text from the pages deleted. The pages deleted SHALL themselves be gone, with their text, form fields and annotations. (SPEC.md: Privacy, limits and security; the owner's decision of 13 Nov 2026)
+The new file SHALL keep the document's details, accessibility tags, named destinations and reading threads whole, with the form fields (and their values) and annotations the tags point to; the page SHALL say these can carry text and fields from the pages deleted. Other content of the pages deleted SHALL be gone. (SPEC.md: Privacy, limits and security; the owner's decision of 13 Nov 2026)
 
 #### Scenario: A tagged file
 
-- **WHEN** page 2 of `tagged.pdf`, which has a tag with alternative text, is deleted
-- **THEN** the result has one page, page 2's text and form field are gone, its tag text is still in the file, and the page text says such text can remain
+- **WHEN** page 2 of `tagged.pdf`, which has a tag with alternative text, an untagged field, and a filled field and a note that the tags point to, is deleted
+- **THEN** the result has one page; page 2's text and its untagged field are gone; its tag text, the tagged field with its value, and the note are still in the file; and the page text says such things can remain
 
 ### Requirement: Progress and cancel
 

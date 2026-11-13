@@ -11,7 +11,7 @@
 
 ## 3. Engine unit tests
 
-- [x] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping `SECRET-ALT-TEXT`, `SECRET-ACTUAL-TEXT`, `SECRET-DEST-NAME` and `SECRET-THREAD-TITLE` while `SECRET-PAGE-TWO-TEXT` and the field `secretfield` are gone, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; a 3,000-bookmark file keeping most of its pages; run the `make-large.mjs` file by hand; record in the fixtures README that every other page of the 120,000-page file did not finish within 10 minutes at stage 1; record each outcome in the fixtures README, and that the multilingual file is still missing
+- [x] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping `SECRET-ALT-TEXT`, `SECRET-ACTUAL-TEXT`, `SECRET-DEST-NAME` and `SECRET-THREAD-TITLE` while `SECRET-PAGE-TWO-TEXT` and the field `secretfield` are gone, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; a 500-page file with 3,000 bookmarks keeping most of its pages; the `make-large.mjs` file is not run, because it has one page and Delete refuses any one-page file (Extract's hand run covers reading it); record in the fixtures README that every other page of the 120,000-page file did not finish within 10 minutes at stage 1; record each outcome in the fixtures README, and that the multilingual file is still missing
 
 ## 4. Worker wiring
 
@@ -33,6 +33,10 @@
 ## 8. Screenshots
 
 - [x] 8.1 Screenshots of `/delete-pdf-pages` at 360px and 1280px, light and dark: empty, none marked, some marked, every page marked, result, password, damaged; check a marked and an unmarked toggle are told apart at a glance
+
+## 8a. Review fix (stage 2)
+
+- [x] 8a.1 Add a tagged, filled field and a tagged note to page 2 of `tagged.pdf`; unit test that Delete and Extract keep them; say so in both tools' page text, notes shown with the result and specs; retake the screenshots that show the notes
 
 ## 9. Checks and review
 

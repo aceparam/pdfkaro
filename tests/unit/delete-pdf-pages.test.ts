@@ -39,6 +39,13 @@ async function plainText(bytes: Uint8Array): Promise<string> {
   qpdf.call(['--qdf', '--object-streams=disable', '--stream-data=uncompress', '/r.pdf', '/q.pdf']);
   return new TextDecoder('latin1').decode(qpdf.read('/q.pdf'));
 }
+/** Whether the uncompressed file holds a string, written plainly, as hex, or as UTF-16 hex as pdf-lib writes field names and values. */
+const holds = (text: string, value: string) => {
+  const hex = Buffer.from(value, 'latin1').toString('hex');
+  const utf16 = `feff${[...value].map((c) => `00${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join('')}`;
+  const upper = text.toUpperCase();
+  return text.includes(value) || upper.includes(hex.toUpperCase()) || upper.includes(utf16.toUpperCase());
+};
 /** Where a line of page text sits in that text, which qpdf's QDF mode writes as a literal string. -1 when absent. */
 const at = (text: string, line: string) => text.indexOf(`(${line}) Tj`);
 type PageJson = { object: string };
@@ -112,6 +119,15 @@ describe('deleting from the shared test set', () => {
     expect(dead(await outline(output))).toBe(0);
   });
 
+  it('a 500-page file with 3,000 bookmarks keeps those of the 495 pages left', async () => {
+    // Six bookmarks a page; deleting five pages drops their 30 and keeps the other 2,970.
+    const { output } = await remove(await manyBookmarks(3000, 500), [1, 100, 250, 499, 500]);
+    expect(await pageCount(output)).toBe(495);
+    const kept = await outline(output);
+    expect(kept).toHaveLength(2970);
+    expect(dead(kept)).toBe(0);
+  }, 120_000);
+
   it('a file with 3,000 bookmarks keeps those of the page left', async () => {
     const { output } = await remove(await manyBookmarks(3000), [2]);
     expect(titles(await outline(output))).toHaveLength(1500);
@@ -152,6 +168,9 @@ describe('what stays from deleted pages (the owner decision of 13 Nov 2026)', ()
     const text = await plainText(output);
     expect(text).not.toContain('SECRET-PAGE-TWO-TEXT');
     expect(text).not.toContain('secretfield');
+    // The tags point to page 2's filled field and note, so they stay too, as the page says.
+    for (const kept of ['SECRET-TAGGED-FIELD', 'SECRET-TAGGED-VALUE', 'SECRET-NOTE']) expect(holds(text, kept), kept).toBe(true);
+    expect(holds(text, 'SECRET-NOT-IN-THE-FILE')).toBe(false);
     for (const kept of ['SECRET-ALT-TEXT', 'SECRET-ACTUAL-TEXT', 'SECRET-DEST-NAME', 'SECRET-THREAD-TITLE']) expect(text).toContain(kept);
   });
 });

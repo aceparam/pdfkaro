@@ -102,6 +102,19 @@ test.describe('marking pages and deleting', () => {
     expect(await pagesOf(download)).toBe(1);
   });
 
+  test('the pages left are the ones not marked: mixed.pdf without pages 1 and 4 keeps its Letter and A5 pages', async ({ page }) => {
+    await open(page);
+    await pick(page, 'mixed.pdf');
+    await mark(page, 1).click();
+    await mark(page, 4).click();
+    const download = await deleteAndDownload(page);
+    const doc = await PDFDocument.load(readFileSync((await download.path())!));
+    expect(doc.getPages().map((each) => [each.getWidth(), each.getHeight(), each.getRotation().angle])).toEqual([
+      [792, 612, 0],
+      [420, 595, 90],
+    ]);
+  });
+
   test('marking every page says so and holds the button back; clearing the last mark holds it back too', async ({ page }) => {
     await open(page);
     await pick(page, 'text.pdf');

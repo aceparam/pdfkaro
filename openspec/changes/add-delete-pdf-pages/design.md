@@ -39,7 +39,7 @@ Delete pages is Extract with the marks turned round: the visitor marks the pages
             actionLabel: 'Delete and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-                          "It also keeps the document's details, accessibility tags, link names and reading threads whole, which can describe or name the pages you deleted.",
+                          "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name the pages you deleted, and in a file with accessibility tags can keep their form fields, with what was typed in them, and notes.",
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 
@@ -130,6 +130,10 @@ A file of 120,000 pages with one page marked keeps 119,999 pages. `pageList` wri
   - the 20,000-page notice;
   - no-upload with an exact allowlist (no `fflate`, Split, Merge or Extract file), and the `rich.pdf` and `tagged.pdf` strings.
 - **The 100 ms rule:** the 120,000-page e2e test also watches for long tasks on Delete's own page while marking, which Extract left to Split's tests.
+
+### What the tags bring along
+
+Found at stage 2 by the privacy reviewer: qpdf drops a left-out page and what only it points to, but keeps whatever the kept accessibility tags point to. Tagging tools tag form fields and notes through object references, so in a tagged file a deleted page's filled field, with its value, and its notes stay in the new file. This follows from the owner's decision to keep tags whole. The words on Delete and Extract now say so, and `tagged.pdf` has a tagged, filled field and a tagged note that the unit tests check stay. Whether to remove those references from the tags instead is put to the owner in the pull request.
 
 ## Risks and trade-offs
 

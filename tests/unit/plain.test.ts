@@ -43,7 +43,6 @@ describe('the pages chosen', () => {
   });
 });
 
-
 describe('the shared plain copy', () => {
   it('decrypts, counts pages, and refuses a wrong password', async () => {
     const { plain, pages } = await plainCopy(tools, fixture('password.pdf'), 'open-sesame');
@@ -52,7 +51,6 @@ describe('the shared plain copy', () => {
     await expect(plainCopy(tools, fixture('password.pdf'), 'wrong')).rejects.toThrow(/password/);
   });
 });
-
 
 describe('the argument file', () => {
   it('carries a page list over 64 KB, which would overflow qpdf on the command line', async () => {

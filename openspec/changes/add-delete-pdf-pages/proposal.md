@@ -87,11 +87,12 @@ None. The 20,000-page notice in `tool-page` already covers every tool that lists
   - unit tests;
   - `tests/e2e/delete-pdf-pages.spec.ts`.
 - **Changed code:**
-  - the registry and `catalogue.ts`, with the entry and a new toggle kind, `drop`;
+  - the registry, with the entry and a new toggle kind, `drop`;
   - `src/widget/toggles.ts`, with `drop`, and `blocked(pages, marks)`;
   - `ToolWorkspace`, which passes the page count to `blocked`;
   - `src/engines/plain.ts`, which takes `chosenPages`, `pageList`, `callWithArgumentFile` and `keepPages`;
   - `src/engines/tools/extract-pdf-pages.ts`, which calls `keepPages`;
   - `page-weight.mjs` and `check-worker.mjs`, which name the new engine;
   - the tests that import those functions.
+- **Extract pages' words:** its page text, its note shown with the result, and its spec say that in a file with accessibility tags the tags can bring along the form fields, with what was typed in them, and notes of pages not taken. The privacy reviewer found at Delete's stage 2 that qpdf keeps what the tags point to, so the old words, that those pages' fields and notes are gone, promised more than the code does. The same words apply to Delete.
 - **Merge PDF, Split PDF and Extract pages:** no change in behaviour.
