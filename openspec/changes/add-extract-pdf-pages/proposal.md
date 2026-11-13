@@ -101,4 +101,4 @@ No open decision needs more than its assumed default.
   - `split-pdf.ts`, which imports from `outline.ts`;
   - `page-weight.mjs` and `check-worker.mjs`, which name the new engine and the shared chunks;
   - Split PDF's no-upload allowlist, which gains the shared chunks.
-- **Merge PDF and Split PDF:** no change in behaviour.
+- **Merge PDF:** no change in behaviour. **Split PDF:** no change in behaviour apart from the 20,000-page notice.

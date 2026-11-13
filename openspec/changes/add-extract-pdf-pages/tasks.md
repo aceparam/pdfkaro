@@ -11,11 +11,11 @@
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Add `tagged.pdf` to `make.mjs` (a page-2 tag with `/Alt` text and a page-2 form field); unit test `chosenPages`, `pageList`, `plainCopy`, `keptOutline` with a set of pages, and `run` on every file in `tests/fixtures/` (with `rich.pdf` page 2, `password.pdf` with its password, damaged files, a 3,000-bookmark file, a page list over 64 KB from repeated pages of `pages-500.pdf`, and `tagged.pdf` page 1 keeping page 2's tag text but not its content); run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
+- [ ] 3.1 Add `tagged.pdf` to `make.mjs` (on page 2: a tag with `/Alt` and `/ActualText` text, a named destination, a titled reading thread and a form field); unit test `chosenPages`, `pageList`, `plainCopy`, `keptOutline` with a set of pages, and `run` on every file in `tests/fixtures/` (with `rich.pdf` page 2, `password.pdf` with its password, damaged files, a 3,000-bookmark file, a page list over 64 KB from repeated pages of `pages-500.pdf` written through the argument-file step directly (below `chosenPages`, which refuses repeats), and `tagged.pdf` page 1 keeping page 2's tag text but not its content); run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
 
 ## 4. Worker wiring
 
-- [ ] 4.1 Send the toggle kind's option and result page count from `useToolRun` through `toggleRules`; name `extract-pdf-pages` and each new shared chunk (such as `outline`) in `page-weight.mjs`, check `check-worker.mjs` finds the engine and keeps the shared chunks out of the worker file, and add the shared chunks to Split PDF's no-upload allowlist
+- [ ] 4.1 Send the toggle kind's option and result page count from `useToolRun` through `toggleRules`; name `extract-pdf-pages` and each new shared chunk, as `dist/_astro` actually holds them, in `page-weight.mjs`, check `check-worker.mjs` finds the engine and keeps the shared chunks out of the worker file, and add the shared chunks to Split PDF's no-upload allowlist
 
 ## 5. Page and page text
 
@@ -25,7 +25,7 @@
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/extract-pdf-pages.spec.ts` at 360px and 1280px: choosing by mouse and keyboard, the unavailable button and its sentence only once pages are shown, extract and check the pages, password, damaged, not-a-PDF, two-file drop, Cancel keeps choices, engine-load failure, skip link, no cut line on a chosen page, and the 20,000-page notice on the generated file; Split PDF's e2e tests still pass
+- [ ] 6.1 `tests/e2e/extract-pdf-pages.spec.ts` at 360px and 1280px: choosing by mouse and keyboard, the unavailable button and its sentence only once pages are shown, extract and check the pages, password, damaged, not-a-PDF, two-file drop, Cancel keeps choices, engine-load failure, skip link, no cut line on a chosen page, and the 20,000-page notice on the generated file, on Extract and on Split; Split PDF's e2e tests still pass
 
 ## 7. No-upload test
 

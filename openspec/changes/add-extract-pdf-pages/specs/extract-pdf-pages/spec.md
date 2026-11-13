@@ -116,7 +116,7 @@ While the job runs the page SHALL show progress with a bar and a Cancel button, 
 #### Scenario: A job is running
 
 - **WHEN** a job starts
-- **THEN** the line reads "Starting", then "Writing the new file", with a bar and a Cancel button that takes focus
+- **THEN** the line reads "Starting on 1 file", then "Writing the new file", with a bar and a Cancel button that takes focus
 
 #### Scenario: Cancel is pressed
 

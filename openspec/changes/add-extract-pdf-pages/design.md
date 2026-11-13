@@ -27,7 +27,7 @@
 
 **Goals:**
 - Extract pages end to end, meeting "Definition of done".
-- The toggle, outline and plain-copy code shared, with no change to Split PDF's behaviour.
+- The toggle, outline and plain-copy code shared, with no change to Split PDF's behaviour apart from the 20,000-page notice.
 - The 20,000-page notice for every page tool.
 
 **Non-Goals:**
@@ -150,7 +150,7 @@ export const run: Engine<Options>; export const inspect = inspectPdf;
 6. Run `qpdf --check`.
 
 **Progress, in what can honestly be told:**
-- the line reads "Starting" until the first report;
+- the line reads "Starting on 1 file" until the first report, as for every one-output tool;
 - once the plain copy is made, the engine posts `{ stage: 'writing', percent: 0 }`, so the line reads "Writing the new file" and the bar moves to a fifth;
 - after the check it posts `percent: 100`.
 - Nothing claims a page count it has not reached.
@@ -173,7 +173,7 @@ Return `[output]`. Bookmark titles never go into an error.
 
 These can carry text from pages that were not taken. qpdf drops the pages themselves, with their text, form fields and annotations.
 
-**A test pins this.** A tagged fixture, `tagged.pdf`, made by `make.mjs`, has a page-2 tag with `/Alt` text. The unit test records that this text survives when only page 1 is taken, while page 2's content does not. A later engine change cannot then make the page untrue without a test failing.
+**A test pins this.** A tagged fixture, `tagged.pdf`, made by `make.mjs`, has on page 2 a tag with `/Alt` and `/ActualText` text, a named destination and a reading thread with a title. The unit test records that this text survives when only page 1 is taken, while page 2's content does not. A later engine change cannot then make the page untrue without a test failing.
 
 **Page text:** `src/content/tools/extract-pdf-pages.md`, a draft for the owner. Its questions:
 - Is my file uploaded? (Extract makes no zip.)
