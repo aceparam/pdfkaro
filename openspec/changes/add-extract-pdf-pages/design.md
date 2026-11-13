@@ -51,7 +51,8 @@
             actionLabel: 'Extract and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-                          'The new file has no password and no restrictions, even if the file you chose had them.'] } }
+                          'The new file has no password and no restrictions, even if the file you chose had them.',
+                          "It also keeps the document's details, accessibility tags, link names and reading threads whole, which can describe or name pages you did not take."] } }
 ```
 
 - **`ToggleKind`** (`'cut-after' | 'take'`) is a type in `registry.ts`. `toggles.ts` imports it, so its rules record covers every kind, and the registry stays data and types only.
