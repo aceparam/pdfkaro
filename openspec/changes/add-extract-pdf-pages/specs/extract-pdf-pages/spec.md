@@ -35,27 +35,37 @@ While the engine loads, the file's line SHALL show "Getting ready". Once read, i
 
 ### Requirement: Choosing the pages to take out
 
-Every page SHALL have a "Take" toggle button, named "Take page N" and marked as pressed or not. A line above the pages SHALL say what the main button will give. With no page chosen, the main button SHALL be marked unavailable, stay focusable, and have "Choose at least one page to take out." tied to it. Choices SHALL be forgotten when the file is removed or replaced, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4 and 5)
+Every page SHALL have a "Take" toggle button, named "Take page N", marked as pressed or not, drawing no cut line. A line above the pages SHALL say what is chosen. Once pages are shown and none is chosen, the main button SHALL be unavailable but focusable, with "Choose at least one page to take out." tied to it. Choices SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4 and 5; owner, 13 Nov 2026)
 
 #### Scenario: No page is chosen
 
 - **WHEN** a 12-page file has been read
-- **THEN** the line reads "No pages chosen yet. Choose the pages to take out.", and the main button is unavailable with "Choose at least one page to take out." tied to it
+- **THEN** the line reads "No pages chosen. Press "Take" under each page you want.", and the main button is unavailable with "Choose at least one page to take out." tied to it
 
 #### Scenario: Pages are chosen
 
 - **WHEN** the visitor presses "Take" under pages 1, 3 and 7
-- **THEN** the three buttons show as pressed, the line reads "Pages 1, 3 and 7 chosen. You will get one file of 3 pages.", and the main button can be used
+- **THEN** the three buttons show as pressed, no cut line is drawn, the line reads "Pages 1, 3 and 7 chosen.", and the main button can be used
 
 #### Scenario: A page is chosen with the keyboard and a screen reader
 
 - **WHEN** a keyboard user tabs to "Take page 3" and presses Space
-- **THEN** the button is announced as pressed, focus stays on it, and the status region says "Page 3 chosen. You will get one file of 1 page."
+- **THEN** the button is announced as pressed, focus stays on it, and the status region says "Page 3 chosen, 1 in all."
 
 #### Scenario: Many pages are chosen
 
 - **WHEN** twelve pages are chosen
-- **THEN** the line reads "12 pages chosen. You will get one file of 12 pages."
+- **THEN** the line reads "12 pages chosen."
+
+#### Scenario: The last chosen page is cleared
+
+- **WHEN** only page 3 is chosen and the visitor presses its "Take" again
+- **THEN** the status region says "Page 3 no longer chosen. No pages chosen.", and the main button is unavailable again
+
+#### Scenario: The file is still getting ready
+
+- **WHEN** the file is still being read, or asks for a password
+- **THEN** the sentence "Choose at least one page to take out." is not shown
 
 #### Scenario: The last page
 
@@ -80,6 +90,20 @@ The main button SHALL read "Extract and download". Pressing it SHALL write one P
 
 The new file SHALL keep the bookmarks that point to a chosen page and no others, a kept bookmark whose parent was dropped moving up, and the files attached to the document. The page SHALL say so. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change"; the owner's decision of 13 Nov 2026)
 
+#### Scenario: Bookmarks are kept for chosen pages
+
+- **WHEN** pages 2 and 3 of a file with a nested outline are extracted
+- **THEN** the bookmarks to pages 2 and 3 are kept, moved up past dropped parents, and none points nowhere
+
+### Requirement: Document details and accessibility tags come over whole
+
+The new file SHALL keep the document's title, author and other details, its accessibility tags, named destinations and reading threads, whole, and the page SHALL say that these can carry text from pages that were not taken. The pages not taken SHALL themselves be gone, with their text, form fields and annotations. (SPEC.md: Privacy, limits and security; the owner's decision of 13 Nov 2026)
+
+#### Scenario: A tagged file
+
+- **WHEN** page 1 of `tagged.pdf`, whose page 2 has a tag with alternative text, is extracted
+- **THEN** the result has one page, page 2's text and form field are gone, its tag text is still in the file, and the page text says such text can remain
+
 #### Scenario: A file with bookmarks and an attachment
 
 - **WHEN** page 2 of `rich.pdf` is extracted
@@ -87,7 +111,12 @@ The new file SHALL keep the bookmarks that point to a chosen page and no others,
 
 ### Requirement: Progress and cancel
 
-While the job runs the page SHALL show progress with a bar and a Cancel button. Cancel SHALL stop the work and return to the pages with the same pages chosen. The page MUST stay responsive while a job runs. (SPEC.md: States every tool handles, Working)
+While the job runs the page SHALL show progress with a bar and a Cancel button, claiming no count it has not reached. Cancel SHALL stop the work and return to the pages with the same pages chosen. The page MUST stay responsive while a job runs. (SPEC.md: States every tool handles, Working)
+
+#### Scenario: A job is running
+
+- **WHEN** a job starts
+- **THEN** the line reads "Starting", then "Writing the new file", with a bar and a Cancel button that takes focus
 
 #### Scenario: Cancel is pressed
 
@@ -156,11 +185,16 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, chooses pages, extracts and downloads, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, with no `fflate` file; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report` or the password; and storage, the title, the address and the console hold none of them
+- **THEN** after the pick only an exact list of the site's own files is requested, including the Extract engine and with no `fflate`, Split or Merge file; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report` or the password; and storage, the title, the address and the console hold none of them
+
+#### Scenario: No bookmark title reaches a request
+
+- **WHEN** page 2 of `rich.pdf` is taken and extracted while every request and the console are watched
+- **THEN** "Chapter one", "Chapter two" and `note.txt` are in no request and not in the console
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover how to choose pages, what happens to bookmarks and attached files, and that the new file has no password. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover whether the file is uploaded, how to choose pages, what happens to bookmarks and attached files, what else comes over from pages not taken, that the original file is not changed, and that the new file has no password. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
 
 #### Scenario: The text is in the served page
 

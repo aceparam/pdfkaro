@@ -29,7 +29,7 @@ The multilingual test file is also still missing.
 **Phase 1, launch,** has started. Its tools are built in catalogue order. Its gate: every phase 1 tool passes "Definition of done", and the owner has written the About page. Built so far:
 
 1. `add-page-items-and-zip`: page items for tools that work on one file's pages, one PDF.js document kept open across thumbnails, and several outputs zipped in the worker with `fflate`. Merged and archived (PR #8).
-2. `add-split-pdf`: Split PDF end to end. Merged and archived (PR #8, merged by the agent at the owner's request on 13 Nov 2026). Not yet done: its hand checks and page text review are in issue #7, and four owner questions are in PR #8.
+2. `add-split-pdf`: Split PDF end to end. Merged and archived (PR #8, merged by the agent at the owner's request on 13 Nov 2026). Not yet done: its hand checks and page text review are in issue #7. PR #8's questions are answered (13 Nov 2026) except whether to keep the 65,535-file, 4 GB zip limit, which stays until the owner says otherwise.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -71,6 +71,10 @@ Update this section when a phase gate is passed.
 - **The Privacy page is drafted by the agent (13 Nov 2026)** from what the code does, marked as a draft for the owner's review.
 - **Page tools drop passwords and restrictions (13 Nov 2026).** Extract pages, Delete pages, Reorder pages, Rotate PDF, Add page numbers, Watermark and Sign PDF give back a file with no password and no restrictions, as Merge and Split do, and each page says so.
 - **Tools that give back one file with fewer pages keep what still applies (13 Nov 2026).** Extract pages and Delete pages keep the bookmarks that point to a kept page and drop the rest; files attached to the document are kept.
+- **Extract pages starts with no pages chosen (13 Nov 2026).** The main button is unavailable until a page is chosen, with a sentence tied to it, as Merge PDF does with too few files. The pages chosen are the job's input, not an option, so this does not break "Defaults are set so the main button works".
+- **New files keep accessibility tags, named destinations and reading threads whole, and the page says so (13 Nov 2026).** This answers PR #8's first question for Split, Extract and Delete: a file with fewer pages can still carry descriptive text from pages left out, with the document's title and author, and each page tells the visitor.
+- **Warn above 20,000 pages (13 Nov 2026).** Page tools show a notice when a file has more than 20,000 pages, because qpdf selects pages slowly from very large files. No limit; the job still runs. The owner may list it on Known problems.
+- **Attachments drawn on a page go with that page (13 Nov 2026).** The owner confirmed the agent's reading of "attached files go with the first part only".
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
@@ -100,7 +104,7 @@ Three more that the agent decided at the same time without asking, because they 
 
 Decided by the agent on 12 Nov 2026 while planning Split PDF, accepted by the review panel, and named in its pull request:
 
-- **Attachments drawn on a page stay with that page.** The owner's "attached files go with the first part only" is read as files attached to the document as a whole (the `/EmbeddedFiles` name tree and the catalog's `/AF`). A file-attachment annotation on a page is part of the page, so it goes with whichever part holds it. The page text says so.
+- **Attachments drawn on a page stay with that page** (confirmed by the owner on 13 Nov 2026). The owner's "attached files go with the first part only" is read as files attached to the document as a whole (the `/EmbeddedFiles` name tree and the catalog's `/AF`). A file-attachment annotation on a page is part of the page, so it goes with whichever part holds it. The page text says so.
 - **One zip holds at most 65,535 files and 4 GB.** `fflate`'s `zipSync`, the owner's choice of zip library, writes no ZIP64. A split past either fails at once with a sentence saying to mark cuts, never with a broken zip. Lifting it needs a ZIP64 writer, our own code or another library, which is the owner's call. The limits live in `src/widget/zip-limits.ts`; the engine checks them early and the worker checks the exact size again before it zips.
 
 ## How the code is laid out
