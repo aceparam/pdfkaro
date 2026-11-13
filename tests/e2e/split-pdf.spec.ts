@@ -290,6 +290,7 @@ test.describe('long files', () => {
     await open(page);
     await picker(page).setInputFiles(generated('pdfkaro-many-pages.pdf'));
     await expect(cells(page)).toHaveCount(500, { timeout: 120000 });
+    await expect(page.getByRole('heading', { name: 'This file has more than 20,000 pages' })).toBeVisible();
     await watchLongTasks(page);
     const more = page.getByRole('button', { name: 'Show pages 501 to 1,000' });
     await more.click();

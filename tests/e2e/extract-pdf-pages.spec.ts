@@ -34,6 +34,15 @@ async function pick(page: Page, file: string | { name: string; mimeType: string;
   await picker(page).setInputFiles(typeof file === 'string' ? fixture(file) : file);
 }
 
+async function drop(page: Page, names: string[]) {
+  const files = names.map((name) => ({ name, data: readFileSync(fixture(name)).toString('base64') }));
+  await page.evaluate((given) => {
+    const transfer = new DataTransfer();
+    for (const { name, data } of given) transfer.items.add(new File([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], name, { type: 'application/pdf' }));
+    for (const type of ['dragenter', 'dragover', 'drop']) document.body.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true }));
+  }, files);
+}
+
 async function extractAndDownload(page: Page): Promise<Download> {
   await mainButton(page).click();
   await expect(page.getByRole('heading', { name: 'Your new file is ready' })).toBeFocused({ timeout: 60000 });
@@ -140,6 +149,13 @@ test.describe('problems with the file', () => {
     await open(page);
     await pick(page, 'not-a-pdf.pdf');
     await expect(page.getByText('not-a-pdf.pdf is not a PDF, so it was not added.')).toBeVisible();
+  });
+
+  test('two files dropped at once: the first is listed, and the page says the other was not added', async ({ page }) => {
+    await open(page);
+    await drop(page, ['text.pdf', 'mixed.pdf']);
+    await expect(fileLine(page)).toContainText('text.pdf, 3 pages');
+    await expect(page.locator('p:not([role=status])', { hasText: 'This tool takes one file, so mixed.pdf was not added.' })).toBeVisible();
   });
 
   test('when the engine cannot be fetched, the page says so', async ({ page, context }) => {
