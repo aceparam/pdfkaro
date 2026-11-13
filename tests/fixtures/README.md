@@ -147,6 +147,27 @@ Files made in the test: a nested outline keeps the bookmarks of the pages left, 
 
 The file over 100 MB from `make-large.mjs` has one page, so Delete refuses it and it was not run, as it refuses any one-page file; Extract's hand run covers reading that file. The 120,000-page file from `make-many-pages.mjs` with every other page marked, a page list of about 400 KB, did not finish within 10 minutes in Node when the security reviewer ran it at stage 1: the list reaches qpdf, but qpdf selects pages slowly from a file that large. The page warns above 20,000 pages, and Cancel ends the job. The multilingual file is still missing.
 
+### Reorder pages (`src/engines/tools/rearrange-pdf-pages.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/rearrange-pdf-pages.test.ts`). Every result passes `qpdf --check`, holds every page in the order sent, and is not encrypted. Reorder writes through `writePages` with no outline update, so the file's bookmarks and other document-level parts are left as they were.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Order 3, 1, 2: the pages in that order, with progress at 0 and 100. Order unchanged: the pages in place |
+| `pages-500.pdf` | Reversed: 500 pages, last to first, through the argument file with no runs joined |
+| `scanned.pdf`, `warning.pdf` | Reordered; qpdf's warning does not stop the job |
+| `password.pdf` | Reordered when its password is given; the result has no password. Without the password the job fails |
+| `restricted.pdf` | Reordered; the result has no restrictions |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | Not reordered: the job fails and hands back nothing |
+| `form.pdf`, `images.pdf` | One page each: written in its only order, keeping the field and the JPEG 2000 image |
+| `mixed.pdf` | Reversed: each page keeps its size and rotation in its new place |
+| `rich.pdf` | Swapped: "Chapter one" points to its page, now second, and "Chapter two" to the first; the outline keeps its order; `note.txt` and the link are kept |
+| `tagged.pdf` | Swapped: everything is kept, page 2's text now first |
+
+Files made in the test: a nested outline keeps every bookmark, each pointing to its page in its new place; a heading that points to no page is kept with its child; an outline 100 levels deep keeps every level; and an outline item that points back at the catalog is not dropped. Orders that leave out, repeat or add a page are refused.
+
+The file over 100 MB from `make-large.mjs` has one page, so its only order is the one it has; Extract's hand run covers reading it. The multilingual file is still missing.
+
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
 Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 104 by 136 box (`tests/unit/thumbnail.test.ts`).

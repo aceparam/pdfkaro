@@ -30,8 +30,6 @@ async function qpdfOn(bytes: Uint8Array, args: string[]): Promise<{ code: number
 const pageCount = async (bytes: Uint8Array) => Number((await qpdfOn(bytes, ['--show-npages'])).out.trim());
 type Shown = { title: string; destpageposfrom1: number | null; kids: Shown[] };
 const outline = async (bytes: Uint8Array) => (JSON.parse((await qpdfOn(bytes, ['--json=2', '--json-key=outlines'])).out) as { outlines: Shown[] }).outlines;
-const titles = (items: Shown[]): unknown[] => items.map((item) => (item.kids.length ? { [item.title]: titles(item.kids) } : item.title));
-const dead = (items: Shown[]): number => items.reduce((sum, item) => sum + (item.destpageposfrom1 === null ? 1 : 0) + dead(item.kids), 0);
 /** The result uncompressed, as text, to read what it holds. */
 async function plainText(bytes: Uint8Array): Promise<string> {
   const qpdf = await makeQpdf();

@@ -389,7 +389,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               onMove={onMove}
               total={pageMoves ? filePages : undefined}
               onRemove={run.removeFile}
-              onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
+              onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${number(place)} of ${number(of)}.`)}
               onVisible={run.showThumbnail}
               toggle={toggle}
               focusId={focusId}
