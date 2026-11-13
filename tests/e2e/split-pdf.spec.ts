@@ -19,7 +19,7 @@ const password = 'open-sesame';
 const picker = (page: Page) => page.locator('input[type=file]').first();
 const mainButton = (page: Page) => page.getByRole('button', { name: 'Split and download' });
 const fileLine = (page: Page) => page.locator('p[tabindex="-1"]');
-const cutLine = (page: Page) => page.locator('p[class*=cutSummary]');
+const cutLine = (page: Page) => page.locator('p[class*=toggleSummary]');
 const cells = (page: Page) => page.locator('astro-island ol > li');
 const cut = (page: Page, n: number) => page.getByRole('button', { name: `Cut after page ${n}`, exact: true });
 const status = (page: Page) => page.locator('[role=status]').first();
@@ -290,6 +290,7 @@ test.describe('long files', () => {
     await open(page);
     await picker(page).setInputFiles(generated('pdfkaro-many-pages.pdf'));
     await expect(cells(page)).toHaveCount(500, { timeout: 120000 });
+    await expect(page.getByRole('heading', { name: 'This file has more than 20,000 pages' })).toBeVisible();
     await watchLongTasks(page);
     const more = page.getByRole('button', { name: 'Show pages 501 to 1,000' });
     await more.click();
@@ -313,7 +314,7 @@ test.describe('long files', () => {
 /** Split PDF's own files that may load after a pick, by exact name, read from the build. */
 const filesAfterPick = () =>
   builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|split-pdf-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
+    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|split-pdf-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
   );
 const fflatePath = () => filesAfterPick().find((path) => /\/fflate-/.test(path))!;
 const paths = (seen: Seen[]) => new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname));

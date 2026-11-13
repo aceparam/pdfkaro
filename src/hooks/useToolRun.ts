@@ -5,6 +5,7 @@ import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, stem } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
+import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
 
@@ -242,6 +243,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);
 
+  // How many pages the one result has: from the toggle kind when it knows (Extract: the pages chosen);
+  // else 'sum' adds the inputs up and 'input' is the one input as it was, both the listed total.
+  const resultPageCount = useCallback((): number | undefined => {
+    const rules = words.itemToggle ? toggleRules[words.itemToggle.kind] : undefined;
+    const listed = totals(stateRef.current).pages;
+    if (rules?.resultPages) return rules.resultPages(listed, stateRef.current.marks);
+    return words.resultPages === 'none' ? undefined : listed;
+  }, [words.itemToggle, words.resultPages]);
+
   const start = useCallback(async () => {
     const listed = stateRef.current.files;
     const inputs = listed.map((entry) => files.current.get(entry.id)).filter((file): file is File => file !== undefined);
@@ -257,8 +267,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
-        // Split's cuts, sorted as numbers: sorted as text, 10 would come before 9.
-        words.itemToggle?.kind === 'cut-after' ? { cuts: [...stateRef.current.marks].sort((a, b) => a - b) } : {},
+        // The toggle kind's option, from marks sorted as numbers: sorted as text, 10 would come before 9.
+        words.itemToggle ? toggleRules[words.itemToggle.kind].option([...stateRef.current.marks].sort((a, b) => a - b)) : {},
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -277,8 +287,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
         result: {
           name,
           size: blob.size,
-          // 'sum' adds the inputs up; 'input' is the one input as it was. Both are the listed total.
-          pages: !zipped && words.resultPages !== 'none' ? totals(stateRef.current).pages : undefined,
+          pages: zipped ? undefined : resultPageCount(),
           parts: zipped ? parts : undefined,
         },
       });
@@ -286,7 +295,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.resultPages, words.outputs, words.partSuffix, words.itemToggle]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.itemToggle, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);

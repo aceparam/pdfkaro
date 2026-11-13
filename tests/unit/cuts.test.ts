@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cutAnnouncement, cutSummary, showMoreLabel, shownAnnouncement } from '../../src/widget/cuts';
+import { cutAnnouncement, cutSummary } from '../../src/widget/cuts';
+import { showMoreLabel, shownAnnouncement } from '../../src/widget/format';
 import { gridItems } from '../../src/widget/items';
 import { initialState, reducer, type State } from '../../src/widget/state';
 

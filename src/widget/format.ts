@@ -82,3 +82,22 @@ export function partName(base: string, suffix: string, number: number, total: nu
   const width = String(Math.max(1, total)).length;
   return `${base}-${suffix}-${String(number).padStart(width, '0')}.${extension}`;
 }
+
+/** A number as the page shows it, with a thousands separator: "1,200". */
+export const number = (value: number) => value.toLocaleString('en-GB');
+
+/** "3", "3 and 7", "3, 7 and 9". */
+export function list(values: readonly number[]): string {
+  const shown = values.map(number);
+  return shown.length === 1 ? shown[0]! : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}`;
+}
+
+/** The button that shows the next batch of pages, in real units. */
+export function showMoreLabel(shown: number, pages: number, batch: number): string {
+  return `Show pages ${number(shown + 1)} to ${number(Math.min(pages, shown + batch))}`;
+}
+
+/** What the status region says after more pages are shown. */
+export function shownAnnouncement(shown: number, pages: number): string {
+  return `Showing ${number(Math.min(shown, pages))} of ${number(pages)} pages`;
+}

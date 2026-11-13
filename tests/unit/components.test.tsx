@@ -93,6 +93,7 @@ describe('PageGrid with a toggle on each page', () => {
     name: (title: string) => `Cut after ${title.toLowerCase()}`,
     pressed: new Set(['f1:1']),
     skip: new Set(['f1:3']),
+    drawsCut: true,
     onToggle: noop,
   };
   const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" toggle={toggle} />);
@@ -102,6 +103,12 @@ describe('PageGrid with a toggle on each page', () => {
     expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*aria-label="Cut after page 1"[^>]*>Cut after<\/button>/);
     expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*aria-label="Cut after page 2"[^>]*>Cut after<\/button>/);
     expect(html).not.toContain('Cut after page 3');
+  });
+
+  it('draws a cut line only for a toggle kind that draws one', () => {
+    const take = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" toggle={{ ...toggle, drawsCut: false }} />);
+    expect(take).not.toMatch(/<li[^>]*class="[^"]*cut/);
+    expect(take).toMatch(/aria-pressed="true"/);
   });
 
   it('marks the cell with a cut, and lets a page with no toggle take focus from code only', () => {

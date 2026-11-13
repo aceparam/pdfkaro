@@ -139,3 +139,12 @@ describe('catalogue order', () => {
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 });
+
+describe('Extract pages', () => {
+  it('lists pages with a take toggle and gives one file', () => {
+    const words = tools.find((tool) => tool.id === 'extract-pdf-pages')?.widget;
+    expect(words).toMatchObject({ items: 'pages', itemControls: false, itemToggle: { kind: 'take', label: 'Take' }, outputs: 'one', outputSuffix: 'extracted', minFiles: 1, multiple: false });
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+    expect(words!.resultNotes.join(' ')).toMatch(/accessibility tags/);
+  });
+});

@@ -4,6 +4,7 @@
 
 import type { InspectOutcome, Progress } from '../engines/types';
 import { progressFraction } from './format';
+import { toggledMarks } from './toggles';
 
 export type FileStatus = 'reading' | 'ready' | 'needs-password' | 'wrong-password' | 'damaged';
 
@@ -137,10 +138,7 @@ export function reducer(state: State, action: Action): State {
       return { ...state, step: state.files.length > 0 ? 'listing' : 'empty', progress: null, fraction: 0, failure: null, result: null };
     case 'toggled': {
       if (state.step !== 'listing' || !Number.isInteger(action.page) || action.page < 1) return state;
-      const marks = state.marks.includes(action.page)
-        ? state.marks.filter((page) => page !== action.page)
-        : [...state.marks, action.page].sort((a, b) => a - b);
-      return { ...state, marks };
+      return { ...state, marks: toggledMarks(state.marks, action.page) };
     }
     case 'shown-more':
       return { ...state, shown: state.shown + pageBatch };
@@ -155,8 +153,9 @@ export function currentProblem(state: State): FileEntry | undefined {
 }
 
 /** Whether every listed file has been read and enough are listed to run the tool. */
-export function canRun(state: State, minFiles: number): boolean {
+export function canRun(state: State, minFiles: number, ready = true): boolean {
   return (
+    ready &&
     state.step === 'listing' &&
     state.files.length >= minFiles &&
     state.files.every((file) => file.status === 'ready')
@@ -179,6 +178,14 @@ export function totals(state: State): { files: number; pages: number; size: numb
     pages: state.files.reduce((sum, file) => sum + (file.pages ?? 0), 0),
     size: state.files.reduce((sum, file) => sum + file.size, 0),
   };
+}
+
+/** Above this many pages, a page tool warns that the job may take a long time (the owner's decision of 13 Nov 2026). */
+export const manyPages = 20_000;
+
+/** Whether a tool that lists pages has a file of more than `manyPages` pages. */
+export function isManyPages(state: Pick<State, 'files'>): boolean {
+  return state.files.some((file) => file.status === 'ready' && (file.pages ?? 0) > manyPages);
 }
 
 /** Above this, the page warns that the job may be slow or run out of memory on a phone. */

@@ -8,17 +8,15 @@ import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import {
   keptOutline,
-  makeRun,
   outlineDepthLimit,
-  partCount,
-  partUpdate,
-  parts,
+  outlineUpdate,
+  pageRange,
   readOutline,
-  run,
   updateJson,
   type OutlineItem,
   type Structure,
-} from '../../src/engines/tools/split-pdf';
+} from '../../src/engines/outline';
+import { makeRun, partCount, parts, run } from '../../src/engines/tools/split-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../src/widget/zip-limits';
 import { failureKind } from '../../src/workers/worker-core';
@@ -154,14 +152,14 @@ describe('the bookmarks a part keeps', () => {
   const outline = [item(14, 1, [item(16, 2), item(17, 3)]), item(15, 4, [item(18, 1)])];
 
   it('keeps those that point into the part, and moves kept children up past a dropped parent', () => {
-    expect(keptOutline(outline, 2, 3)).toEqual([item(16, 2), item(17, 3)]);
-    expect(keptOutline(outline, 1, 1)).toEqual([item(14, 1), item(18, 1)]);
-    expect(keptOutline(outline, 1, 4)).toEqual(outline);
+    expect(keptOutline(outline, pageRange(2, 3))).toEqual([item(16, 2), item(17, 3)]);
+    expect(keptOutline(outline, pageRange(1, 1))).toEqual([item(14, 1), item(18, 1)]);
+    expect(keptOutline(outline, pageRange(1, 4))).toEqual(outline);
   });
 
   it('keeps nothing when nothing points into the part, and drops bookmarks that point nowhere', () => {
-    expect(keptOutline([item(14, 5)], 1, 4)).toEqual([]);
-    expect(keptOutline([item(14, null, [item(15, 2)])], 1, 4)).toEqual([item(15, 2)]);
+    expect(keptOutline([item(14, 5)], pageRange(1, 4))).toEqual([]);
+    expect(keptOutline([item(14, null, [item(15, 2)])], pageRange(1, 4))).toEqual([item(15, 2)]);
   });
 });
 
@@ -186,7 +184,7 @@ describe("a part's update", () => {
   });
 
   it('relinks the kept bookmarks under the root', () => {
-    const update = partUpdate(base(), { first: 2, last: 3 }, true);
+    const update = outlineUpdate(base(), pageRange(2, 3), { dropAttachments: false });
     expect(update.get('13 0 R')).toMatchObject({ '/First': '16 0 R', '/Last': '17 0 R', '/Count': 2 });
     expect(update.get('16 0 R')).toEqual({ '/Title': 'u:A1', '/Parent': '13 0 R', '/Next': '17 0 R' });
     expect(update.get('17 0 R')).toEqual({ '/Title': 'u:A2', '/Parent': '13 0 R', '/Prev': '16 0 R' });
@@ -194,30 +192,30 @@ describe("a part's update", () => {
   });
 
   it('clears the children of a kept bookmark whose children are all dropped, or were never reported', () => {
-    const update = partUpdate(base(), { first: 1, last: 1 }, true);
+    const update = outlineUpdate(base(), pageRange(1, 1), { dropAttachments: false });
     expect(update.get('14 0 R')).toEqual({ '/Title': 'u:Part A', '/Parent': '13 0 R', '/Next': '18 0 R' });
     // A bookmark at qpdf's depth cut: its dictionary has /First, but no children were reported.
-    const cut = partUpdate(base({ outline: [item(14, 1)] }), { first: 1, last: 4 }, true);
+    const cut = outlineUpdate(base({ outline: [item(14, 1)] }), pageRange(1, 4), { dropAttachments: false });
     expect(cut.get('14 0 R')).toEqual({ '/Title': 'u:Part A', '/Parent': '13 0 R' });
   });
 
   it('counts a closed bookmark as negative', () => {
-    const update = partUpdate(base({ outline: [item(14, 1, [item(16, 2), item(17, 3)], false)] }), { first: 1, last: 4 }, true);
+    const update = outlineUpdate(base({ outline: [item(14, 1, [item(16, 2), item(17, 3)], false)] }), pageRange(1, 4), { dropAttachments: false });
     expect(update.get('14 0 R')?.['/Count']).toBe(-2);
     expect(update.get('13 0 R')?.['/Count']).toBe(1);
   });
 
   it('removes /Outlines from the catalog when nothing is kept, or the outline was dropped whole', () => {
-    expect(partUpdate(base({ outline: [item(14, 9)] }), { first: 1, last: 4 }, true).get('2 0 R')).not.toHaveProperty('/Outlines');
-    expect(partUpdate(base({ outline: null }), { first: 1, last: 4 }, true).get('2 0 R')).not.toHaveProperty('/Outlines');
+    expect(outlineUpdate(base({ outline: [item(14, 9)] }), pageRange(1, 4), { dropAttachments: false }).get('2 0 R')).not.toHaveProperty('/Outlines');
+    expect(outlineUpdate(base({ outline: null }), pageRange(1, 4), { dropAttachments: false }).get('2 0 R')).not.toHaveProperty('/Outlines');
   });
 
   it('drops attached files from parts after the first, wherever /Names sits, and the catalog /AF', () => {
     const inline = base({ catalog: { '/Type': '/Catalog', '/Names': { '/EmbeddedFiles': '30 0 R', '/Dests': '31 0 R' }, '/AF': ['9 0 R'] }, rootId: null, root: null, outline: null });
-    expect(partUpdate(inline, { first: 1, last: 1 }, true).size).toBe(0);
-    expect(partUpdate(inline, { first: 2, last: 2 }, false).get('2 0 R')).toEqual({ '/Type': '/Catalog', '/Names': { '/Dests': '31 0 R' } });
+    expect(outlineUpdate(inline, pageRange(1, 1), { dropAttachments: false }).size).toBe(0);
+    expect(outlineUpdate(inline, pageRange(2, 2), { dropAttachments: true }).get('2 0 R')).toEqual({ '/Type': '/Catalog', '/Names': { '/Dests': '31 0 R' } });
     const indirect = base({ catalog: { '/Type': '/Catalog', '/Names': '40 0 R' }, namesId: '40 0 R', names: { '/EmbeddedFiles': '30 0 R' }, rootId: null, root: null, outline: null });
-    expect(partUpdate(indirect, { first: 2, last: 2 }, false).get('40 0 R')).toEqual({});
+    expect(outlineUpdate(indirect, pageRange(2, 2), { dropAttachments: true }).get('40 0 R')).toEqual({});
   });
 
   it('is written as JSON from objects', () => {
