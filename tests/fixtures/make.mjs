@@ -205,3 +205,31 @@ const jpxImage = pictures.context.register(
 const jpxName = picturePage.node.newXObject('Im', jpxImage);
 picturePage.pushOperators(pushGraphicsState(), concatTransformationMatrix(300, 0, 0, 200, 60, 400), drawObject(jpxName), popGraphicsState());
 save('images.pdf', await pictures.save());
+
+// 13. A tagged file, for what a file with fewer pages keeps of pages left out.
+// Page 2 has visible text, a form field, a tag with alternative and actual
+// text, a named destination and a titled reading thread. qpdf drops the page's
+// own content and field when page 2 is left out, but keeps the document's tags,
+// named destinations and threads whole (the owner's decision of 13 Nov 2026).
+const tagged = await newDoc('A tagged file');
+const taggedFont = await tagged.embedFont(StandardFonts.Helvetica);
+const pageOne = tagged.addPage([300, 300]);
+pageOne.drawText('Page one text', { x: 30, y: 250, size: 14, font: taggedFont });
+const pageTwo = tagged.addPage([300, 300]);
+pageTwo.drawText('SECRET-PAGE-TWO-TEXT', { x: 30, y: 250, size: 14, font: taggedFont });
+tagged.getForm().createTextField('secretfield').addToPage(pageTwo, { x: 30, y: 150, width: 200, height: 24 });
+const tc = tagged.context;
+const structRoot = tc.nextRef();
+const element = tc.nextRef();
+tc.assign(element, tc.obj({ Type: 'StructElem', S: 'Figure', P: structRoot, Pg: pageTwo.ref, Alt: PDFString.of('SECRET-ALT-TEXT'), ActualText: PDFString.of('SECRET-ACTUAL-TEXT') }));
+tc.assign(structRoot, tc.obj({ Type: 'StructTreeRoot', K: [element] }));
+tagged.catalog.set(PDFName.of('StructTreeRoot'), structRoot);
+tagged.catalog.set(PDFName.of('MarkInfo'), tc.obj({ Marked: true }));
+tagged.catalog.set(PDFName.of('Dests'), tc.obj({ 'SECRET-DEST-NAME': [pageTwo.ref, 'Fit'] }));
+const thread = tc.nextRef();
+const bead = tc.nextRef();
+tc.assign(bead, tc.obj({ Type: 'Bead', T: thread, N: bead, V: bead, P: pageTwo.ref, R: [20, 20, 280, 280] }));
+tc.assign(thread, tc.obj({ Type: 'Thread', F: bead, I: tc.obj({ Title: PDFString.of('SECRET-THREAD-TITLE') }) }));
+tagged.catalog.set(PDFName.of('Threads'), tc.obj([thread]));
+pageTwo.node.set(PDFName.of('B'), tc.obj([bead]));
+save('tagged.pdf', await tagged.save({ useObjectStreams: false }));

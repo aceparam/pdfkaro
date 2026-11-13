@@ -16,8 +16,9 @@
 
 import { inspectPdf } from '../inspect';
 import { carriesAttachment, outlineUpdate, pageRange, readStructure, updateJson } from '../outline';
-import { finished, qpdfFrom, saidInvalidPassword, type Qpdf } from '../qpdf';
-import type { Engine, EngineTools, Inspector } from '../types';
+import { freshQpdf, passwordFrom, plainCopy } from '../plain';
+import { finished } from '../qpdf';
+import type { Engine, Inspector } from '../types';
 import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../widget/zip-limits';
 
 type Options = { passwords?: unknown; cuts?: unknown };
@@ -65,42 +66,15 @@ function cutsFrom(options: Options): number[] {
   return cuts;
 }
 
-function passwordFrom(options: Options): string | undefined {
-  const passwords = Array.isArray(options.passwords) ? options.passwords : [];
-  return typeof passwords[0] === 'string' ? passwords[0] : undefined;
-}
-
-// qpdf will not write JSON on an instance that has already written anything
-// else to standard output, so JSON is always read on an instance of its own.
-async function freshQpdf(tools: EngineTools, file: Uint8Array): Promise<Qpdf> {
-  const qpdf = await qpdfFrom(tools);
-  qpdf.write('/in.pdf', file);
-  return qpdf;
-}
-
 /** The engine, with the most bytes one zip can hold given; tests pass a small limit. */
 export function makeRun(maxBytes: (files: number) => number = zipMaxBytes): Engine<Options> {
   return async (files, options, onProgress, tools) => {
     const file = files[0];
     if (!file || files.length !== 1) throw new Error('Split takes one file.');
     const password = passwordFrom(options);
-    const passwordArgs = password === undefined ? [] : [`--password=${password}`];
     const cuts = cutsFrom(options);
 
-    // First, one plain copy: decrypted, by the owner's decision, and with no
-    // object streams, because qpdf's JSON update does not reach objects kept in
-    // an object stream. Every later step works on this copy, with no password.
-    const opener = await freshQpdf(tools, file);
-    const opened = opener.call([...passwordArgs, '--decrypt', '/in.pdf', '--object-streams=disable', '/plain.pdf']);
-    if (!finished(opened.code)) {
-      throw new Error(saidInvalidPassword(opened.printed) ? 'A password did not open the file.' : 'qpdf could not read the file.');
-    }
-    const plain = opener.read('/plain.pdf');
-
-    // Read once: the page count, then the catalog, outline and /Names.
-    const counted = (await freshQpdf(tools, plain)).call(['--show-npages', '/in.pdf']);
-    if (!finished(counted.code)) throw new Error('qpdf could not read the file.');
-    const pages = Number(counted.out.split('\n').find((line) => /^\d+$/.test(line.trim())));
+    const { plain, pages } = await plainCopy(tools, file, password);
     const total = partCount(pages, cuts);
     if (total > zipMaxFiles) throw new TooBigForZip('files');
     const list = parts(pages, cuts);
