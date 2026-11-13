@@ -26,6 +26,7 @@ const loadedLater = [
   { name: 'split-pdf', type: 'js', why: 'the Split PDF engine, which the worker loads' },
   { name: 'extract-pdf-pages', type: 'js', why: 'the Extract pages engine, which the worker loads' },
   { name: 'delete-pdf-pages', type: 'js', why: 'the Delete pages engine, which the worker loads' },
+  { name: 'rearrange-pdf-pages', type: 'js', why: 'the Reorder pages engine, which the worker loads' },
   { name: 'plain', type: 'js', why: 'the plain copy, outline and write steps (keepPages) the page engines share; the bundler gives them a file of their own' },
   { name: 'inspect', type: 'js', why: 'reads one PDF before a job; shared by the engines, so the bundler gives it a file of its own' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },

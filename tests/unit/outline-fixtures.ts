@@ -1,8 +1,9 @@
-// PDFs made in memory for the Split PDF engine's outline and attachment tests:
+// PDFs made in memory for the page engines' outline and attachment tests:
 // shapes the shared fixtures do not have. Made with pdf-lib, a test-only dependency.
 
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, StandardFonts } from '@cantoo/pdf-lib';
 
+/** A bookmark; `page: 0` is a heading that points to no page. */
 export type OutlineSpec = { title: string; page: number; kids?: OutlineSpec[] };
 
 async function pages(count: number) {
@@ -24,8 +25,8 @@ function writeOutline(doc: PDFDocument, specs: OutlineSpec[]) {
       const dict: Record<string, unknown> = {
         Title: PDFString.of(item.title),
         Parent: parent,
-        Dest: [pageRefs[item.page - 1]!, 'Fit'],
       };
+      if (item.page > 0) dict.Dest = [pageRefs[item.page - 1]!, 'Fit'];
       if (index > 0) dict.Prev = refs[index - 1];
       if (index < items.length - 1) dict.Next = refs[index + 1];
       if (item.kids?.length) {
@@ -98,5 +99,15 @@ export async function outlineAliasingCatalog(): Promise<Uint8Array> {
 export async function manyBookmarks(count: number, pageCount = 2): Promise<Uint8Array> {
   const doc = await pages(pageCount);
   writeOutline(doc, Array.from({ length: count }, (_, index) => ({ title: `Mark ${index + 1}`, page: (index % pageCount) + 1 })));
+  return doc.save({ useObjectStreams: false });
+}
+
+/** Three pages, with a heading that points to no page holding a bookmark to page 3, then one to page 1. */
+export async function headingWithoutPage(): Promise<Uint8Array> {
+  const doc = await pages(3);
+  writeOutline(doc, [
+    { title: 'Heading', page: 0, kids: [{ title: 'Third', page: 3 }] },
+    { title: 'First', page: 1 },
+  ]);
   return doc.save({ useObjectStreams: false });
 }

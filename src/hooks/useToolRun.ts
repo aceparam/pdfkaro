@@ -5,6 +5,7 @@ import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, stem } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
+import { orderToSend } from '../widget/order';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
@@ -28,6 +29,8 @@ export type ToolRun = {
   moveFile(id: string, to: number): void;
   /** Marks or clears the toggle on a page, such as a cut after it. */
   toggleMark(page: number): void;
+  /** Moves a page of the one file to a new place, counted from 0: Reorder pages. */
+  movePage(page: number, to: number): void;
   /** Shows the next batch of pages. */
   showMore(): void;
   start(): Promise<void>;
@@ -252,6 +255,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     return words.resultPages === 'none' ? undefined : listed;
   }, [words.itemToggle, words.resultPages]);
 
+  // What the engine is sent besides the files: the toggle kind's option, or, for a tool whose pages
+  // move, the order shown (every page in its place when none has moved).
+  const jobOption = useCallback((): Record<string, unknown> => {
+    // The toggle kind's option, from marks sorted as numbers: sorted as text, 10 would come before 9.
+    if (words.itemToggle) return toggleRules[words.itemToggle.kind].option([...stateRef.current.marks].sort((a, b) => a - b));
+    if (words.items === 'pages' && words.itemControls) return { order: orderToSend(stateRef.current.order, totals(stateRef.current).pages) };
+    return {};
+  }, [words.itemToggle, words.items, words.itemControls]);
+
   const start = useCallback(async () => {
     const listed = stateRef.current.files;
     const inputs = listed.map((entry) => files.current.get(entry.id)).filter((file): file is File => file !== undefined);
@@ -267,8 +279,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
-        // The toggle kind's option, from marks sorted as numbers: sorted as text, 10 would come before 9.
-        words.itemToggle ? toggleRules[words.itemToggle.kind].option([...stateRef.current.marks].sort((a, b) => a - b)) : {},
+        jobOption(),
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -295,9 +306,10 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.itemToggle, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
+  const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
 
   const cancel = useCallback(() => {
@@ -340,5 +352,5 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, showMore, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, showMore, start, cancel, backToFiles, clear };
 }

@@ -86,6 +86,39 @@ describe('PageGrid listing the pages of one file', () => {
   });
 });
 
+describe('PageGrid with pages that move', () => {
+  const pages = [3, 1, 2].map((page) => ({ id: `f1:${page}`, title: `Page ${page}`, detail: '' }));
+  const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} layout="grid" />);
+
+  it('gives each page Earlier and Later, stacked, named for the page, and no Remove', () => {
+    expect(html.match(/>Earlier</g)).toHaveLength(3);
+    expect(html.match(/>Later</g)).toHaveLength(3);
+    expect(html).toContain('aria-label="Move page 3 earlier"');
+    expect(html).toContain('aria-label="Move page 2 later"');
+    expect(html).toMatch(/class="[^"]*pageMoves/);
+    expect(html).not.toContain('Remove');
+    expect(html).not.toContain('Move up');
+  });
+
+  it('marks the first Earlier and the last Later unavailable', () => {
+    expect(html).toMatch(/aria-label="Move page 3 earlier" aria-disabled="true"/);
+    expect(html).toMatch(/aria-label="Move page 2 later" aria-disabled="true"/);
+    expect(html).not.toMatch(/aria-label="Move page 1 (earlier|later)" aria-disabled/);
+  });
+
+  it('takes the end from the whole file when only some pages are shown', () => {
+    const shown = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} layout="grid" total={900} />);
+    expect(shown).not.toMatch(/aria-label="Move page 2 later" aria-disabled/);
+  });
+
+  it('leaves a list of files with Move up, Move down and Remove', () => {
+    const rows = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} />);
+    expect(rows).toContain('>Move up<');
+    expect(rows).toContain('>Remove<');
+    expect(rows).not.toContain('>Earlier<');
+  });
+});
+
 describe('PageGrid with a toggle on each page', () => {
   const pages = Array.from({ length: 3 }, (_, index) => ({ id: `f1:${index + 1}`, title: `Page ${index + 1}`, detail: '' }));
   const toggle = {

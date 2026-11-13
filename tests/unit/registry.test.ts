@@ -57,11 +57,12 @@ describe('registry', () => {
     for (const { tool, page } of pages) {
       const words = `${page.sentence} ${page.description}`.toLowerCase();
       if (tool.runsIn === 'browser') {
-        expect(page.sentence.toLowerCase()).toContain('stay on your device');
+        // "Files stay" or, for a tool that takes one file, "Your file stays".
+        expect(page.sentence.toLowerCase()).toMatch(/stays? on your device/);
       } else {
         expect(page.sentence).toContain('uploaded');
         expect(page.sentence).toContain('deleted within an hour');
-        expect(words).not.toContain('stay on your device');
+        expect(words).not.toMatch(/stays? on your device/);
         expect(words).not.toContain('never leaves');
       }
     }
@@ -108,8 +109,8 @@ describe('registry', () => {
       if (!words) continue;
       if (words.items === 'pages') expect(words).toMatchObject({ multiple: false, minFiles: 1 });
       if (words.outputs === 'several') expect(words.partSuffix).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-      // Page items have no moves yet: Move up, Move down and Remove act on files.
-      if (words.items === 'pages') expect(words.itemControls).toBe(false);
+      // Page items move only in a tool with no toggle (Reorder pages); Remove acts on files only.
+      if (words.items === 'pages' && words.itemControls) expect(words.itemToggle).toBeUndefined();
       // A per-page toggle needs a list of pages.
       if (words.itemToggle) expect(words.items).toBe('pages');
     }
@@ -159,5 +160,23 @@ describe('Delete pages', () => {
     expect(words!.resultNotes.join(' ')).toMatch(/form fields, with what was typed in them/);
     const ids = tools.map((tool) => tool.id);
     expect(ids.indexOf('delete-pdf-pages')).toBe(ids.indexOf('extract-pdf-pages') + 1);
+  });
+});
+
+describe('Reorder pages', () => {
+  it('lists pages that move, with no toggle, and gives one file, after Delete', () => {
+    const words = tools.find((tool) => tool.id === 'rearrange-pdf-pages')?.widget;
+    expect(words).toMatchObject({ items: 'pages', itemControls: true, outputs: 'one', outputSuffix: 'reordered', resultPages: 'input', minFiles: 1, multiple: false });
+    expect(words!.itemToggle).toBeUndefined();
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+    expect(words!.resultNotes.join(' ')).toMatch(/keeps its order/);
+    const ids = tools.map((tool) => tool.id);
+    expect(ids.indexOf('rearrange-pdf-pages')).toBe(ids.indexOf('delete-pdf-pages') + 1);
+  });
+
+  it('no tool has both page moves and a toggle', () => {
+    for (const tool of tools) {
+      if (tool.widget?.items === 'pages' && tool.widget.itemControls) expect(tool.widget.itemToggle, tool.id).toBeUndefined();
+    }
   });
 });

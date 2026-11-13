@@ -6,6 +6,7 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
 import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems } from '../../widget/items';
+import { orderSummary } from '../../widget/order';
 import { number, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
@@ -182,7 +183,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
   const pages = words.items === 'pages';
-  const entries = useMemo(() => gridItems({ files: state.files }, words.items, state.shown), [state.files, words.items, state.shown]);
+  const entries = useMemo(() => gridItems({ files: state.files, order: state.order }, words.items, state.shown), [state.files, state.order, words.items, state.shown]);
   const items: GridItem[] = useMemo(() => {
     const byId = new Map(state.files.map((file) => [file.id, file]));
     return entries.map((entry) => {
@@ -245,6 +246,17 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           }
         : undefined,
     [itemToggle, rules, pressed, skip, marks, run, filePages, setAnnouncement],
+  );
+
+  // A tool whose pages move (Reorder pages): moves by the page, and the line that says whether the order changed.
+  const pageMoves = pages && words.itemControls;
+  const orderLine = useMemo(() => (pageMoves && filePages > 0 ? orderSummary(state.order, filePages) : null), [pageMoves, filePages, state.order]);
+  const onMove = useCallback(
+    (id: string, to: number) => {
+      if (!pageMoves) return run.moveFile(id, to);
+      run.movePage(Number(id.slice(id.lastIndexOf(':') + 1)), to);
+    },
+    [pageMoves, run],
   );
 
   // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
@@ -353,6 +365,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
           {rules && filePages > 0 ? <p className={styles.toggleSummary}>{rules.summary(filePages, marks)}</p> : null}
+          {orderLine ? <p className={styles.toggleSummary}>{orderLine}</p> : null}
 
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
@@ -373,7 +386,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               items={gridItemsDrawn}
               controls={words.itemControls}
               layout={pages ? 'grid' : 'rows'}
-              onMove={run.moveFile}
+              onMove={onMove}
+              total={pageMoves ? filePages : undefined}
               onRemove={run.removeFile}
               onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
               onVisible={run.showThumbnail}
