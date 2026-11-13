@@ -26,7 +26,10 @@ All Phase 0 code is built. **The owner accepted the Phase 0 gate on 12 Nov 2026*
 
 The multilingual test file is also still missing.
 
-**Phase 1, launch,** has started. Its tools are built in catalogue order, beginning with Split PDF. Its gate: every phase 1 tool passes "Definition of done", and the owner has written the About page.
+**Phase 1, launch,** has started. Its tools are built in catalogue order. Its gate: every phase 1 tool passes "Definition of done", and the owner has written the About page. Built so far:
+
+1. `add-page-items-and-zip`: page items for tools that work on one file's pages, one PDF.js document kept open across thumbnails, and several outputs zipped in the worker with `fflate`. Merged and archived (PR #8).
+2. `add-split-pdf`: Split PDF end to end. Merged and archived (PR #8, merged by the agent at the owner's request on 13 Nov 2026). Not yet done: its hand checks and page text review are in issue #7, and four owner questions are in PR #8.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
