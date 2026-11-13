@@ -36,7 +36,7 @@
 
 ## 8a. Review fix (stage 2)
 
-- [x] 8a.1 Add a tagged, filled field and a tagged note to page 2 of `tagged.pdf`; unit test that Delete and Extract keep them; say so in both tools' page text, notes shown with the result and specs; retake the screenshots that show the notes
+- [x] 8a.1 Add a tagged, filled field, a tagged note and a tagged web link to page 2 of `tagged.pdf`; unit test that Delete and Extract keep them; say so in both tools' page text, notes shown with the result and specs; retake Delete's screenshots, and take Extract's result screen (`extract-result-*.png`) into this change
 
 ## 9. Checks and review
 

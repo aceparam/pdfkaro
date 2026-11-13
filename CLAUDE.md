@@ -164,7 +164,7 @@ All but `developer` are read-only.
 
 - **Repair PDF link.** `SPEC.md` says a damaged file shows a link to Repair PDF. Repair PDF is a phase 2 tool, so for now the page offers to leave the file out, and shows the link only once Repair PDF is published (`add-tool-widget`). The owner may want it otherwise. Also, the WebAssembly build of qpdf does not rebuild a broken cross-reference table that desktop qpdf rebuilds, so Repair PDF may need more than this build.
 
-- **Tagged fields and notes of left-out pages.** Found at Delete pages' stage 2 (13 Nov 2026): keeping accessibility tags whole, as decided, also keeps the form fields (with what was typed in them) and notes that the tags point to, from pages that Extract leaves out or Delete deletes. Both pages now say so. Should the tools instead remove those references from the tags, keeping the rest of the tags whole?
+- **Tagged fields, notes and links of left-out pages.** Found at Delete pages' stage 2 (13 Nov 2026): keeping accessibility tags whole, as decided, also keeps the form fields (with what was typed in them), notes and links (with their web addresses) that the tags point to, from pages that Extract leaves out or Delete deletes. Both pages now say so. Should the tools instead remove those references from the tags, keeping the rest of the tags whole?
 
 - **Licence.** The assumed default was AGPL-3.0 because compression would use Ghostscript; the owner has since chosen no Ghostscript (13 Nov 2026). The repo's licence, and whether it is public, are still the owner's to decide ("Source code" in Open decisions). Add no `LICENSE` file until then.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.

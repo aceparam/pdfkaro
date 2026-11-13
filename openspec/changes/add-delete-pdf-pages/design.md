@@ -39,7 +39,7 @@ Delete pages is Extract with the marks turned round: the visitor marks the pages
             actionLabel: 'Delete and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-                          "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name the pages you deleted. In a file with accessibility tags, they can also keep those pages' form fields, with what was typed in them, and their notes.",
+                          "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name the pages you deleted. In a file with accessibility tags, they can also keep those pages' form fields, with what was typed in them, their notes, and their links with the web addresses they open.",
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 

@@ -168,8 +168,8 @@ describe('what stays from deleted pages (the owner decision of 13 Nov 2026)', ()
     const text = await plainText(output);
     expect(text).not.toContain('SECRET-PAGE-TWO-TEXT');
     expect(text).not.toContain('secretfield');
-    // The tags point to page 2's filled field and note, so they stay too, as the page says.
-    for (const kept of ['SECRET-TAGGED-FIELD', 'SECRET-TAGGED-VALUE', 'SECRET-NOTE']) expect(holds(text, kept), kept).toBe(true);
+    // The tags point to page 2's filled field, note and link, so they stay too, as the page says.
+    for (const kept of ['SECRET-TAGGED-FIELD', 'SECRET-TAGGED-VALUE', 'SECRET-NOTE', 'SECRET-LINK.example']) expect(holds(text, kept), kept).toBe(true);
     expect(holds(text, 'SECRET-NOT-IN-THE-FILE')).toBe(false);
     for (const kept of ['SECRET-ALT-TEXT', 'SECRET-ACTUAL-TEXT', 'SECRET-DEST-NAME', 'SECRET-THREAD-TITLE']) expect(text).toContain(kept);
   });

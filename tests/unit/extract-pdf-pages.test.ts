@@ -143,8 +143,8 @@ describe('what comes over from pages left out (the owner decision of 13 Nov 2026
     const text = new TextDecoder('latin1').decode(qpdf.read('/q.pdf'));
     expect(text).not.toContain('SECRET-PAGE-TWO-TEXT');
     expect(text).not.toContain('secretfield');
-    // The tags point to page 2's filled field and note, so they stay too, as the page says.
-    for (const kept of ['SECRET-TAGGED-FIELD', 'SECRET-TAGGED-VALUE', 'SECRET-NOTE']) expect(holds(text, kept), kept).toBe(true);
+    // The tags point to page 2's filled field, note and link, so they stay too, as the page says.
+    for (const kept of ['SECRET-TAGGED-FIELD', 'SECRET-TAGGED-VALUE', 'SECRET-NOTE', 'SECRET-LINK.example']) expect(holds(text, kept), kept).toBe(true);
     expect(text).toContain('SECRET-ALT-TEXT');
     expect(text).toContain('SECRET-ACTUAL-TEXT');
     expect(text).toContain('SECRET-DEST-NAME');

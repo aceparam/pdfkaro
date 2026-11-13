@@ -209,10 +209,10 @@ save('images.pdf', await pictures.save());
 // 13. A tagged file, for what a file with fewer pages keeps of pages left out.
 // Page 2 has visible text, a form field, a tag with alternative and actual
 // text, a named destination, a titled reading thread, and a filled field and a
-// note that the tags point to. qpdf drops the page's own content and its
+// note and a web link that the tags point to. qpdf drops the page's own content and its
 // untagged field when page 2 is left out, but keeps the document's tags, named
 // destinations and threads whole (the owner's decision of 13 Nov 2026), and with
-// the tags the tagged field, its value and the note.
+// the tags the tagged field, its value, the note and the link.
 const tagged = await newDoc('A tagged file');
 const taggedFont = await tagged.embedFont(StandardFonts.Helvetica);
 const pageOne = tagged.addPage([300, 300]);
@@ -224,7 +224,7 @@ const tc = tagged.context;
 const structRoot = tc.nextRef();
 const element = tc.nextRef();
 tc.assign(element, tc.obj({ Type: 'StructElem', S: 'Figure', P: structRoot, Pg: pageTwo.ref, Alt: PDFString.of('SECRET-ALT-TEXT'), ActualText: PDFString.of('SECRET-ACTUAL-TEXT') }));
-// A filled field and a note on page 2, each tagged through an object reference,
+// A filled field, a note and a web link on page 2, each tagged through an object reference,
 // as tagging tools do. The tags reach them, so they stay when page 2 is left out.
 const taggedField = tagged.getForm().createTextField('SECRET-TAGGED-FIELD');
 taggedField.setText('SECRET-TAGGED-VALUE');
@@ -233,11 +233,15 @@ const fieldWidget = taggedField.acroField.getWidgets()[0];
 const fieldWidgetRef = tc.getObjectRef(fieldWidget.dict);
 const note = tc.register(tc.obj({ Type: 'Annot', Subtype: 'Text', Rect: [250, 250, 270, 270], Contents: PDFString.of('SECRET-NOTE'), P: pageTwo.ref }));
 pageTwo.node.lookup(PDFName.of('Annots')).push(note);
+const tagLink = tc.register(tc.obj({ Type: 'Annot', Subtype: 'Link', Rect: [30, 50, 230, 70], Border: [0, 0, 0], P: pageTwo.ref, A: { Type: 'Action', S: 'URI', URI: PDFString.of('https://SECRET-LINK.example/') } }));
+pageTwo.node.lookup(PDFName.of('Annots')).push(tagLink);
+const linkElement = tc.nextRef();
+tc.assign(linkElement, tc.obj({ Type: 'StructElem', S: 'Link', P: structRoot, Pg: pageTwo.ref, K: tc.obj({ Type: 'OBJR', Obj: tagLink, Pg: pageTwo.ref }) }));
 const formElement = tc.nextRef();
 const noteElement = tc.nextRef();
 tc.assign(formElement, tc.obj({ Type: 'StructElem', S: 'Form', P: structRoot, Pg: pageTwo.ref, K: tc.obj({ Type: 'OBJR', Obj: fieldWidgetRef, Pg: pageTwo.ref }) }));
 tc.assign(noteElement, tc.obj({ Type: 'StructElem', S: 'Annot', P: structRoot, Pg: pageTwo.ref, K: tc.obj({ Type: 'OBJR', Obj: note, Pg: pageTwo.ref }) }));
-tc.assign(structRoot, tc.obj({ Type: 'StructTreeRoot', K: [element, formElement, noteElement] }));
+tc.assign(structRoot, tc.obj({ Type: 'StructTreeRoot', K: [element, formElement, noteElement, linkElement] }));
 tagged.catalog.set(PDFName.of('StructTreeRoot'), structRoot);
 tagged.catalog.set(PDFName.of('MarkInfo'), tc.obj({ Marked: true }));
 tagged.catalog.set(PDFName.of('Dests'), tc.obj({ 'SECRET-DEST-NAME': [pageTwo.ref, 'Fit'] }));

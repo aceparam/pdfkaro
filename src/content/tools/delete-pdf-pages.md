@@ -29,7 +29,7 @@ The new file keeps the bookmarks that point to the pages left, and drops the oth
 
 ### Does deleting a page remove everything about it?
 
-No. The page itself goes, with its text, and usually its form fields and notes. But some parts of a PDF belong to the whole document, and deleting a page does not remove them: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name the pages you deleted. In a file with accessibility tags, the tags can also keep the deleted pages' form fields, with what was typed in them, and their notes. If you are deleting pages to keep something private, check the new file before you share it.
+No. The page itself goes, with its text, and usually its form fields and notes. But some parts of a PDF belong to the whole document, and deleting a page does not remove them: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name the pages you deleted. In a file with accessibility tags, the tags can also keep the deleted pages' form fields, with what was typed in them, their notes, and their links with the web addresses they open. If you are deleting pages to keep something private, check the new file before you share it.
 
 ### Can I use a PDF that has a password?
 

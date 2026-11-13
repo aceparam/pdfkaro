@@ -25,7 +25,7 @@ The encrypted files come out different on each run, because encryption uses rand
 | `mixed.pdf` | Mixed page sizes and rotation: A4, Letter on its side, A5 turned a quarter, A4 upside down | 4 |
 | `rich.pdf` | Two bookmarks, a link and an attached file `note.txt` | 2 |
 | `images.pdf` | A JPEG 2000 image and text and shapes in CMYK colour, for PDF.js's decoders. The JPEG 2000 bytes were made once with Pillow and are kept in `make.mjs` | 1 |
-| `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field and a note that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
+| `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field, a note and a web link that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
 
 **Missing:** a file with a JBIG2 image, as no JBIG2 encoder runs on the build machine. PDF.js's JBIG2 decoder is in the same fixed helper data as the JPEG 2000 one, which `images.pdf` tests.
 
@@ -121,7 +121,7 @@ Each file was extracted in Node with the same qpdf the browser uses (`tests/unit
 | `mixed.pdf` | Pages 2 and 3 keep their size and rotation |
 | `rich.pdf` | Page 2 keeps "Chapter two" and `note.txt`; no bookmark points nowhere |
 | `images.pdf` | Taken; its JPEG 2000 image is kept as it was |
-| `tagged.pdf` | Page 1 taken: page 2's text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value and the tagged note stay, as the page says |
+| `tagged.pdf` | Page 1 taken: page 2's text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
 
 Files made in the test: a nested outline keeps the bookmarks of chosen pages, moved up past dropped parents, and a file of 3,000 bookmarks keeps the 1,500 of the chosen page. The file over 100 MB from `make-large.mjs` (one page, 110 MB) was run by hand in Node on 13 Nov 2026: its page was taken and the result written. It is not run in CI.
 
@@ -141,7 +141,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/delet
 | `form.pdf`, `images.pdf` | One page each, so deleting it would leave none: refused, and the page holds the main button back |
 | `mixed.pdf` | Pages 1 and 4 deleted: pages 2 and 3 keep their size and rotation |
 | `rich.pdf` | Page 1 deleted: "Chapter two" and `note.txt` kept, the link went with page 1, no bookmark points nowhere. Page 2 deleted: page 1 keeps its link |
-| `tagged.pdf` | Page 2 deleted: its text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value and the tagged note stay, as the page says |
+| `tagged.pdf` | Page 2 deleted: its text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
 
 Files made in the test: a nested outline keeps the bookmarks of the pages left, moved up past dropped parents; a 500-page file with 3,000 bookmarks keeps the 2,970 of the 495 pages left; and a two-page file of 3,000 bookmarks keeps the 1,500 of the page left.
 
