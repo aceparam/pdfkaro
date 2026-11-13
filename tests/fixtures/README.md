@@ -125,6 +125,28 @@ Each file was extracted in Node with the same qpdf the browser uses (`tests/unit
 
 Files made in the test: a nested outline keeps the bookmarks of chosen pages, moved up past dropped parents, and a file of 3,000 bookmarks keeps the 1,500 of the chosen page. The file over 100 MB from `make-large.mjs` (one page, 110 MB) was run by hand in Node on 13 Nov 2026: its page was taken and the result written. It is not run in CI.
 
+### Delete pages (`src/engines/tools/delete-pdf-pages.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/delete-pdf-pages.test.ts`). Every result passes `qpdf --check`, holds the pages left in page order, and is not encrypted. Bookmarks, attached files and hidden text follow the owner's decisions of 13 Nov 2026. Delete writes through the same `keepPages` step as Extract pages.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Page 2 deleted: pages 1 and 3 left, in order, with progress at 0 and 100. All three marked: refused |
+| `pages-500.pdf` | Every other page deleted: the 250 even pages left, in order |
+| `scanned.pdf` | Page 1 deleted |
+| `password.pdf` | Deleted when its password is given; the result has no password. Without the password the job fails |
+| `restricted.pdf` | Deleted; the result has no restrictions |
+| `warning.pdf` | Page 2 deleted; qpdf's warning does not stop the job |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | Not deleted: the job fails and hands back nothing |
+| `form.pdf`, `images.pdf` | One page each, so deleting it would leave none: refused, and the page holds the main button back |
+| `mixed.pdf` | Pages 1 and 4 deleted: pages 2 and 3 keep their size and rotation |
+| `rich.pdf` | Page 1 deleted: "Chapter two" and `note.txt` kept, the link went with page 1, no bookmark points nowhere. Page 2 deleted: page 1 keeps its link |
+| `tagged.pdf` | Page 2 deleted: its text and field are gone; its tag text, destination name and thread title stay, as the page says |
+
+Files made in the test: a nested outline keeps the bookmarks of the pages left, moved up past dropped parents, and a file of 3,000 bookmarks keeps the 1,500 of the page left.
+
+The file over 100 MB from `make-large.mjs` has one page, so Delete refuses it, as it refuses any one-page file; Extract's hand run covers reading that file. The 120,000-page file from `make-many-pages.mjs` with every other page marked, a page list of about 400 KB, did not finish within 10 minutes in Node when the security reviewer ran it at stage 1: the list reaches qpdf, but qpdf selects pages slowly from a file that large. The page warns above 20,000 pages, and Cancel ends the job. The multilingual file is still missing.
+
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
 Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 104 by 136 box (`tests/unit/thumbnail.test.ts`).
