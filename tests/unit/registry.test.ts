@@ -146,5 +146,18 @@ describe('Extract pages', () => {
     expect(words).toMatchObject({ items: 'pages', itemControls: false, itemToggle: { kind: 'take', label: 'Take' }, outputs: 'one', outputSuffix: 'extracted', minFiles: 1, multiple: false });
     expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
     expect(words!.resultNotes.join(' ')).toMatch(/accessibility tags/);
+    expect(words!.resultNotes.join(' ')).toMatch(/form fields, with what was typed in them/);
+  });
+});
+
+describe('Delete pages', () => {
+  it('lists pages with a drop toggle and gives one file, after Extract', () => {
+    const words = tools.find((tool) => tool.id === 'delete-pdf-pages')?.widget;
+    expect(words).toMatchObject({ items: 'pages', itemControls: false, itemToggle: { kind: 'drop', label: 'Delete' }, outputs: 'one', outputSuffix: 'pages-deleted', minFiles: 1, multiple: false });
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+    expect(words!.resultNotes.join(' ')).toMatch(/accessibility tags, the names of links inside it and reading threads/);
+    expect(words!.resultNotes.join(' ')).toMatch(/form fields, with what was typed in them/);
+    const ids = tools.map((tool) => tool.id);
+    expect(ids.indexOf('delete-pdf-pages')).toBe(ids.indexOf('extract-pdf-pages') + 1);
   });
 });

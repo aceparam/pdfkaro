@@ -30,6 +30,7 @@ The multilingual test file is also still missing.
 
 1. `add-page-items-and-zip`: page items for tools that work on one file's pages, one PDF.js document kept open across thumbnails, and several outputs zipped in the worker with `fflate`. Merged and archived (PR #8).
 2. `add-split-pdf`: Split PDF end to end. Merged and archived (PR #8, merged by the agent at the owner's request on 13 Nov 2026). Not yet done: its hand checks and page text review are in issue #7. PR #8's questions are answered (13 Nov 2026) except whether to keep the 65,535-file, 4 GB zip limit, which stays until the owner says otherwise.
+3. `add-extract-pdf-pages`: Extract pages end to end, with the shared page-engine steps moved into `src/engines/outline.ts` and `plain.ts` and the per-page toggle rules into `src/widget/toggles.ts`. Merged and archived (PR #9, merged by the agent on 13 Nov 2026). Not yet done: its hand checks and page text review are in issue #7, and, as for every tool, next steps after the result. Left for later from its review: a cap on bookmarks read, moving `callWithArgumentFile` into shared code when Delete pages needs it, and `check-worker.mjs` matching two fixed strings.
 
 A preview of the site is live at https://aceparam.github.io/pdfkaro/, published by `.github/workflows/pages.yml`. It is public, carries `noindex`, and shows the last push to `main` or a `claude/` branch that passed the checks.
 
@@ -162,6 +163,8 @@ All but `developer` are read-only.
 ## Questions waiting for the owner
 
 - **Repair PDF link.** `SPEC.md` says a damaged file shows a link to Repair PDF. Repair PDF is a phase 2 tool, so for now the page offers to leave the file out, and shows the link only once Repair PDF is published (`add-tool-widget`). The owner may want it otherwise. Also, the WebAssembly build of qpdf does not rebuild a broken cross-reference table that desktop qpdf rebuilds, so Repair PDF may need more than this build.
+
+- **Tagged fields, notes and links of left-out pages.** Found at Delete pages' stage 2 (13 Nov 2026): keeping accessibility tags whole, as decided, also keeps the form fields (with what was typed in them), notes and links (with their web addresses) that the tags point to, from pages that Extract leaves out or Delete deletes. Both pages now say so. Should the tools instead remove those references from the tags, keeping the rest of the tags whole?
 
 - **Licence.** The assumed default was AGPL-3.0 because compression would use Ghostscript; the owner has since chosen no Ghostscript (13 Nov 2026). The repo's licence, and whether it is public, are still the owner's to decide ("Source code" in Open decisions). Add no `LICENSE` file until then.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.

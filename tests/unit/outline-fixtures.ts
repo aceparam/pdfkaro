@@ -94,9 +94,9 @@ export async function outlineAliasingCatalog(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
-/** Two pages with a flat outline of `count` bookmarks, alternating between the two pages. */
-export async function manyBookmarks(count: number): Promise<Uint8Array> {
-  const doc = await pages(2);
-  writeOutline(doc, Array.from({ length: count }, (_, index) => ({ title: `Mark ${index + 1}`, page: (index % 2) + 1 })));
+/** `pageCount` pages (two unless given) with a flat outline of `count` bookmarks, spread over the pages in turn. */
+export async function manyBookmarks(count: number, pageCount = 2): Promise<Uint8Array> {
+  const doc = await pages(pageCount);
+  writeOutline(doc, Array.from({ length: count }, (_, index) => ({ title: `Mark ${index + 1}`, page: (index % pageCount) + 1 })));
   return doc.save({ useObjectStreams: false });
 }

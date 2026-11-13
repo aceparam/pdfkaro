@@ -29,7 +29,7 @@ The new file keeps the bookmarks that point to the pages you took, and drops the
 
 ### Does anything from the other pages come over?
 
-The pages you did not take are left out, with their text, form fields and notes. But some parts of a PDF belong to the whole document, and come over whole: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name pages you did not take. If that matters, check the new file before you share it.
+The pages you did not take are left out, with their text, and usually their form fields and notes. But some parts of a PDF belong to the whole document, and come over whole: its title, author and other details, its accessibility tags, the names of links inside it, and reading threads. These can still describe or name pages you did not take. In a file with accessibility tags, the tags can also bring along those pages' form fields, with what was typed in them, their notes, and their links with the web addresses they open. If that matters, check the new file before you share it.
 
 ### Can I use a PDF that has a password?
 
