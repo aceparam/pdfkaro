@@ -40,4 +40,4 @@
 - [x] 9.1 No `LICENSES.md` line: no dependency added
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [x] 9.3 Add Extract pages' hand checks to issue #7
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the many-taps limit on a phone, and the start with no pages chosen (the owner's decision)
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the many-taps limit on a phone, and the start with no pages chosen (the owner's decision)
