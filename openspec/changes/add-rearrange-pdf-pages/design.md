@@ -35,6 +35,7 @@
             actionLabel: 'Reorder and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps every page, and its bookmarks still point to the same pages, wherever they now are. Files attached to the document are kept.',
+                          'The list of bookmarks keeps its order. In a file with accessibility tags, a screen reader still reads the pages in their original order.',
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 
@@ -70,13 +71,14 @@
 - `useToolRun` sends `{ order: state.order }` for a tool whose page items move.
 - `src/engines/tools/rearrange-pdf-pages.ts`:
   1. `plainCopy`;
-  2. `pageOrder(pages, options.order)` checks that the order names every page from 1 to `pages` once, in one pass with a seen-array, and refuses anything else ("The page order is not valid.");
+  2. `pageOrder(pages, options.order)` checks that the order names every page from 1 to `pages` once, and refuses anything else ("The page order is not valid."). It checks `Array.isArray(order) && order.length === pages` first, so its loop is bounded by the file and not by what was sent; it tracks pages seen in a `Uint8Array(pages + 1)`; it refuses holes, `NaN`, fractions and strings; and it returns a copy;
   3. progress 0;
-  4. `keepPages(tools, plain, order)`;
+  4. `keepPages(tools, plain, order, { everyPage: true })`;
   5. progress 100.
+- **`keepPages` with every page kept** skips `readStructure` and the outline update: no page is left out, so no bookmark can be dropped, and a crafted file with a huge outline costs Reorder nothing (the security reviewer's suggestion at stage 1). It writes only `--pages . <list> --` through the argument file and runs `qpdf --check`. The comments on `keepPages` and `callWithArgumentFile` say the list may be in any order: a sorted, unique list from `chosenPages` or a permutation from `pageOrder`.
 - `pageOrder` lives in `src/engines/plain.ts` beside `chosenPages`, because Rotate PDF and later page tools may send a full order too. It has one caller now; if none comes, it can move into the engine.
 - `keepPages` keeps every page, so the outline update is empty and no bookmark is dropped. `pageList` joins ascending runs, so an order with one move is a few ranges: "3,1-2,4-12".
-- **Long orders.** A 120,000-page file with many scattered moves gives a long list, carried by the argument file. qpdf selects pages slowly from very large files, as the 20,000-page notice already warns.
+- **Long orders.** A 120,000-page file with many scattered moves gives a long list, carried by the argument file; a reversed order joins no runs, about 730 KB on one line, which qpdf reads from the argument file on its heap. qpdf selects pages slowly from very large files, as the 20,000-page notice already warns.
 
 ### Tests
 
@@ -100,6 +102,10 @@
   - the 20,000-page notice, with a move on the 120,000-page file blocking nothing for more than 100 ms;
   - no-upload with an exact allowlist, and the `rich.pdf` strings;
   - Merge PDF's e2e tests still pass.
+
+### What keeps its original order
+
+qpdf moves page objects, not the document's other structures. The outline lists bookmarks in their own order, and each still points to its page, so after a move the bookmark panel can list "Chapter one" first while its page is second. In a tagged file the structure tree, which sets the reading order for a screen reader, stays in the original order too. Rewriting either would go beyond "Leaves alone what it was not asked to change", so both stay, the page says so (a result note and an FAQ answer), and the pull request asks the owner whether the tags should follow the new order. Tests check the outline's order is unchanged and each bookmark points to its page.
 
 ## Risks and trade-offs
 

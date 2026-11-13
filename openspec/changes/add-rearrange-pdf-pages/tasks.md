@@ -6,12 +6,12 @@
 
 ## 2. Engine
 
-- [ ] 2.1 Add `pageOrder(pages, order)` to `src/engines/plain.ts` (every page from 1 to `pages` once, one pass) with unit tests in `tests/unit/plain.test.ts`
+- [ ] 2.1 Add `pageOrder(pages, order)` to `src/engines/plain.ts` (length checked first, a `Uint8Array` of pages seen, a copy returned) and an `everyPage` option to `keepPages` that skips the structure read; update the comments on `keepPages` and `callWithArgumentFile`; unit tests in `tests/unit/plain.test.ts`, refusing a missing, repeated, extra or out-of-range page, a hole (`[1, , 3]`), `NaN`, `1.5`, `'1'` and the wrong length
 - [ ] 2.2 Write `src/engines/tools/rearrange-pdf-pages.ts`: `run` through `plainCopy`, `pageOrder` and `keepPages`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Unit test `run` on every file in `tests/fixtures/`: page order through the uncompressed result, the unchanged order, `rich.pdf` swapped with each bookmark pointing to its chapter's page and `note.txt` and the link kept, `mixed.pdf` shapes following their pages, `tagged.pdf` keeping everything, `password.pdf` with its password, `restricted.pdf`, damaged files, and refusals of orders that leave out, repeat or add a page; record each outcome in the fixtures README, and that the multilingual file is still missing (`make-large.mjs` has one page, so its only order is unchanged; run it by hand)
+- [ ] 3.1 Unit test `run` on every file in `tests/fixtures/`: page order through the uncompressed result, the unchanged order, `rich.pdf` swapped with each bookmark pointing to its chapter's page, the outline's own order unchanged, and `note.txt` and the link kept, `mixed.pdf` shapes following their pages, `tagged.pdf` keeping everything, a fully reversed order of `pages-500.pdf` through the argument file with its page order checked, a file whose structure read would fail still reordered (showing `everyPage` skips it), `password.pdf` with its password, `restricted.pdf`, damaged files, and refusals of orders that leave out, repeat or add a page; record each outcome in the fixtures README, and that the multilingual file is still missing (`make-large.mjs` has one page, so its only order is unchanged; run it by hand)
 
 ## 4. State and items
 
@@ -41,4 +41,4 @@
 - [ ] 9.1 No `LICENSES.md` line: no dependency added
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add Reorder pages' hand checks to issue #7, including the many-taps limit on a phone
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, the many-taps limit, and the agent's choices ("Up"/"Down" labels, the button working with the order unchanged, `-reordered`); it does not call the tool done
+- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, the many-taps limit, and the agent's choices ("Up"/"Down" labels, the button working with the order unchanged, `-reordered`, "Your file stays on your device." ahead of the cross-tool fix, drag as a drop onto a cell with no drop line, the bookmark list and tag reading order kept); it asks the owner whether a tagged file's reading order should follow the new page order; it does not call the tool done

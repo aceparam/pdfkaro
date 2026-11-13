@@ -12,7 +12,7 @@ Reorder pages is fifth in the catalogue ("Organise pages", Phase 1), after Merge
   - A line above the pages says what will happen: "Pages in their original order." or "The order has changed. 3 pages are in a new place."
   - A page moved down past the last page shown brings the next batch into view, so it never moves out of sight.
 - **The main button, "Reorder and download",** gives one PDF of every page, in the order shown, named `report-reordered.pdf`. With the order unchanged it still works and gives the same pages in the same order, so the main button works from the start ("Defaults are set so the main button works").
-- **What the new file keeps:** every page, with its text, links, form fields and notes; every bookmark, still pointing to its page wherever the page now sits; the files attached to the document; and the document's details, tags, named destinations and threads. It has no password and no restrictions, by the owner's decision of 13 Nov 2026 that names Reorder pages. The page says so.
+- **What the new file keeps:** every page, with its text, links, form fields and notes; every bookmark, still pointing to its page wherever the page now sits; the files attached to the document; and the document's details, tags, named destinations and threads. It has no password and no restrictions, by the owner's decision of 13 Nov 2026 that names Reorder pages. The page says so. Two things keep their original order, as the agent's reading of "Leaves alone what it was not asked to change": the list of bookmarks (each still points to its page), and, in a file with accessibility tags, the reading order a screen reader follows. The page says so too.
 - **Shared code:**
   - **The page order** is part of the widget's state, for a tool whose page items can move: a list of page numbers, made when the file is read and forgotten when the file is removed or replaced. Moves keep through Cancel and failure.
   - **`PageGrid`** shows "Up" and "Down" on each page when the tool's page items have controls; it has no Remove for a page.
@@ -63,7 +63,7 @@ No open decision needs more than its assumed default.
 
 ### Modified Capabilities
 
-None. Moving items by drag and by move up and move down is already a requirement of the shared page; this change applies it to pages.
+- `tool-page`: a new requirement, "Pages that a tool lets move", for what every tool whose pages move inherits (the buttons and their names, the ends, the announcement, showing the next batch). The tool's own words stay in `rearrange-pdf-pages`.
 
 ## Impact
 
