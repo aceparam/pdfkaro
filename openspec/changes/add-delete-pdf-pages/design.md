@@ -59,14 +59,14 @@ Delete pages is Extract with the marks turned round: the visitor marks the pages
   - more: "12 pages will be deleted. 88 pages will be left."
   - "1 page will be left." when one is left, and "No pages will be left." when none is.
 - **announce:** "Page 3 marked to delete, 4 in all." / "Page 3 no longer marked, 3 in all." / "Page 3 no longer marked. No pages marked." When the mark leaves no page unmarked, it says so, because the main button has just become unavailable: "Page 3 marked to delete. Every page is marked, so no pages will be left."
-- **blocked(marks, pages):**
+- **blocked(pages, marks):**
   - no marks: "Mark at least one page to delete.";
   - every page marked: "A PDF needs at least one page. Leave one or more pages unmarked.";
   - otherwise null.
 - **resultPages:** `pages - marks.length`.
 - **drawsCut:** false.
 
-`blocked` gains the page count as a second argument, which `take` and `cut-after` ignore. `ToolWorkspace` passes the file's page count, which it already holds; it still asks only once pages are shown.
+`blocked` gains the page count as its first argument, in the same order as `summary`, `announce` and `resultPages`; `take` and `cut-after` ignore it. `ToolWorkspace` passes the file's page count, which it already holds; it still asks only once pages are shown.
 
 A marked page looks like a pressed "Take" button (2px edge, bold), with no other mark on the thumbnail. A dimmed or crossed-out thumbnail was considered and left out as the busier option; the summary line says what will be deleted.
 
@@ -91,9 +91,12 @@ export const inspect = inspectPdf;
 - **`pagesLeft`** refuses a list that marks every page with "Every page was marked; a PDF needs at least one page." The page never sends one, because the main button is unavailable, but the engine does not trust the page.
 - **`keepPages(tools, plain, keep)`** in `plain.ts` holds the steps Extract wrote inline:
   1. `readStructure` on fresh instances;
-  2. `outlineUpdate(structure, page => keep has page, { dropAttachments: false })`;
+  2. `outlineUpdate(structure, page => kept.has(page), { dropAttachments: false })`, with `kept = new Set(keep)` built once, because Delete can keep 119,999 pages and the check runs once per bookmark;
   3. one write through the argument file, with the update if any and `pageList(keep)`;
   4. `qpdf --check`.
+
+  The tests of the moved functions (`chosenPages`, `pageList`, the 64 KB argument-file case) move from `extract-pdf-pages.test.ts` to a new `tests/unit/plain.test.ts`, with the same cases and expectations. `chosenPages`'s first refusal becomes "No pages were given.", which fits both tools; engine errors are never shown to visitors.
+- The comment at the top of `plain.ts` says it holds the shared first and last steps of a one-file page engine. `check-worker.mjs` scans the sentences of `plain.ts` and `outline.ts` as well as `src/engines/tools/*.ts`, so the shared steps are checked by their own words, not two fixed strings. If the bundler renames the shared chunk, `page-weight.mjs` gets the exact new name; its pattern is not widened.
 
   Extract's `run` becomes `plainCopy`, `chosenPages`, progress 0, `keepPages`, progress 100. Its tests keep their cases and expectations; only imports change.
 - `plain.ts` then imports `outline.ts`. The bundler already puts both in one chunk (`plain-*.js`, PR #9), which Merge does not load. `check-worker.mjs` keeps checking that the shared steps are not in the worker file.

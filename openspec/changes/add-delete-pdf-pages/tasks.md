@@ -6,7 +6,7 @@
 
 ## 2. Engine
 
-- [ ] 2.1 Move `chosenPages`, `pageList` and `callWithArgumentFile` from `extract-pdf-pages.ts` into `src/engines/plain.ts`, and add `keepPages(tools, plain, keep)` there with the structure read, outline update, argument-file write and `qpdf --check`; Extract's `run` calls it, and Extract's tests keep their cases and expectations with only imports changed
+- [ ] 2.1 Move `chosenPages`, `pageList` and `callWithArgumentFile` from `extract-pdf-pages.ts` into `src/engines/plain.ts`, and add `keepPages(tools, plain, keep)` there with the structure read, outline update, argument-file write and `qpdf --check`; Extract's `run` calls it, building `new Set(keep)` once; Extract's tests keep their cases and expectations with only imports changed, and the moved functions' cases move to `tests/unit/plain.test.ts`; `chosenPages` says "No pages were given."; update the comment at the top of `plain.ts`
 - [ ] 2.2 Write `src/engines/tools/delete-pdf-pages.ts`: `pagesLeft` (checked by `chosenPages`, refusing every page) and `run` through `plainCopy` and `keepPages`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
@@ -15,7 +15,7 @@
 
 ## 4. Worker wiring
 
-- [ ] 4.1 Name `delete-pdf-pages` in `page-weight.mjs`; check `check-worker.mjs` finds the engine and keeps the shared steps out of the worker file
+- [ ] 4.1 Name `delete-pdf-pages` in `page-weight.mjs`; make `check-worker.mjs` scan the sentences of `plain.ts` and `outline.ts` too, and check it finds the engine and keeps the shared steps out of the worker file; if the shared chunk is renamed, name it exactly in `page-weight.mjs`
 
 ## 5. Page and page text
 

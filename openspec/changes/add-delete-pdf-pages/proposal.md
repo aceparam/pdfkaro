@@ -88,7 +88,7 @@ None. The 20,000-page notice in `tool-page` already covers every tool that lists
   - `tests/e2e/delete-pdf-pages.spec.ts`.
 - **Changed code:**
   - the registry and `catalogue.ts`, with the entry and a new toggle kind, `drop`;
-  - `src/widget/toggles.ts`, with `drop`, and `blocked(marks, pages)`;
+  - `src/widget/toggles.ts`, with `drop`, and `blocked(pages, marks)`;
   - `ToolWorkspace`, which passes the page count to `blocked`;
   - `src/engines/plain.ts`, which takes `chosenPages`, `pageList`, `callWithArgumentFile` and `keepPages`;
   - `src/engines/tools/extract-pdf-pages.ts`, which calls `keepPages`;
