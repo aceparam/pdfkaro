@@ -36,3 +36,14 @@ export function looksAccepted(firstBytes: Uint8Array, accepts: string[]): boolea
     return check ? check(firstBytes) : true;
   });
 }
+
+/**
+ * Which accepted files a tool takes. A tool that takes several takes them all.
+ * A tool that takes one file takes only the first, which replaces any file
+ * already listed; the rest are left out. A drop or paste can bring several
+ * files at once, so the picker's `multiple` alone does not settle this.
+ */
+export function chooseFiles<T>(accepted: T[], listed: string[], multiple: boolean): { take: T[]; leftOut: T[]; replace: string[] } {
+  if (multiple || accepted.length === 0) return { take: accepted, leftOut: [], replace: [] };
+  return { take: accepted.slice(0, 1), leftOut: accepted.slice(1), replace: listed };
+}

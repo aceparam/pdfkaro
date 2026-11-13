@@ -4,7 +4,10 @@
 
 import type { InspectOutcome, Progress } from '../engines/types';
 import type { FailureKind } from '../widget/state';
-import { isFromWorker, type ThumbnailBox, type ToWorker } from './messages';
+import { isFromWorker, type ThumbnailBox, type ToWorker, type ZipNaming } from './messages';
+
+/** What a job gives back: its files, or one zip holding `parts` files. */
+export type RunResult = { outputs: Uint8Array[]; parts?: number };
 
 /** The parts of a Worker the client uses, so tests can pass a made-up one. */
 export type WorkerLike = {
@@ -50,8 +53,8 @@ export class ToolClient {
    * longer than the limit, the worker is ended, which stops PDF.js too; the
    * page asks for thumbnails only when nothing else is waiting on the worker.
    */
-  async thumbnail(file: Blob, password: string | undefined, page: number, box: ThumbnailBox): Promise<Uint8Array | null> {
-    const reply = this.send<Uint8Array | null>({ type: 'thumbnail', requestId: 0, toolId: this.toolId, file, password, page, box });
+  async thumbnail(file: Blob, password: string | undefined, page: number, box: ThumbnailBox, documentKey: string): Promise<Uint8Array | null> {
+    const reply = this.send<Uint8Array | null>({ type: 'thumbnail', requestId: 0, toolId: this.toolId, file, password, page, box, documentKey });
     reply.catch(() => {});
     let timer: ReturnType<typeof setTimeout> | undefined;
     const limit = new Promise<null>((resolve) => {
@@ -69,16 +72,22 @@ export class ToolClient {
     }
   }
 
+  /** Asks the worker to close the document it keeps open for thumbnails. Nothing happens when no worker is running. */
+  closeDocument(): void {
+    this.worker?.postMessage({ type: 'close', requestId: this.nextId++, toolId: this.toolId });
+  }
+
   /** Runs the tool on the files in order. The worker is ended when the job ends, whatever the outcome. */
   async run(
     files: Blob[],
     passwords: (string | undefined)[],
     options: Record<string, unknown>,
     onProgress: (progress: Progress) => void,
-  ): Promise<Uint8Array[]> {
+    zip?: ZipNaming,
+  ): Promise<RunResult> {
     try {
-      return await this.send<Uint8Array[]>(
-        { type: 'run', requestId: 0, toolId: this.toolId, files, passwords, options },
+      return await this.send<RunResult>(
+        { type: 'run', requestId: 0, toolId: this.toolId, files, passwords, options, ...(zip ? { zip } : {}) },
         onProgress,
       );
     } finally {
@@ -132,7 +141,7 @@ export class ToolClient {
         return;
       case 'done':
         this.pending.delete(data.requestId);
-        request.resolve(data.outputs);
+        request.resolve({ outputs: data.outputs, parts: data.parts } satisfies RunResult);
         return;
       case 'thumbnail':
         this.pending.delete(data.requestId);

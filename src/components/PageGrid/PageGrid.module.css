@@ -70,3 +70,58 @@
     flex-basis: 100%;
   }
 }
+
+/* The pages of one file: a wrapping grid of thumbnails, each with "Page N" under it. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: 1rem 0.75rem;
+  margin: 0;
+  padding: 0.875rem 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+}
+.caption {
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* A toggle under a page, such as "Cut after". As wide as its cell, its text may wrap, so it never
+   overflows at any width or text size. Pressed shows by a thicker border and bold text, never a fill:
+   only the main button is filled. The unpressed one has 1px more padding, so pressing moves nothing. */
+.toggle {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--control);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.pressed {
+  padding: calc(0.25rem - 1px) calc(0.375rem - 1px);
+  border: 2px solid var(--text);
+  font-weight: 700;
+}
+/* A cut after this page: a 2px line on the cell's trailing edge. Every cell keeps room for it, so marking a cut moves nothing. */
+.cell {
+  padding-inline-end: 0.25rem;
+  border-inline-end: 2px solid transparent;
+}
+.cut {
+  border-inline-end-color: var(--text);
+}

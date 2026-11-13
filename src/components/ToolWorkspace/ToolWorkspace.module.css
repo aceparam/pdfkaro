@@ -25,3 +25,41 @@
   margin: 0;
   font-weight: 700;
 }
+/* A tool that lists pages: its one file on a line of its own, with Remove. */
+.fileLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.625rem;
+}
+.fileName {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.fileLine .name {
+  font-weight: 700;
+}
+.small {
+  min-height: 2.75rem;
+}
+.fileName:focus-visible {
+  outline-offset: 4px;
+}
+/* Always shown, so a phone user can jump past many pages too. */
+.skip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  margin: 0 0 0.25rem;
+}
+/* What the main button will give, for a tool with cut toggles. */
+.cutSummary {
+  margin: 0 0 0.625rem;
+  /* Never shorter than two lines, so the pages below do not jump when a cut is marked or cleared. */
+  min-height: calc(2 * 1.55em);
+}
+.more {
+  margin-top: 1rem;
+}

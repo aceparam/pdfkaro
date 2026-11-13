@@ -2,11 +2,12 @@
 // real engine: every state, the keyboard, and the promise that nothing about a
 // file leaves the device.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type BrowserContext, type FileChooser, type Page, type Request } from '@playwright/test';
+import { expect, test, type FileChooser, type Page } from '@playwright/test';
+import { builtFiles, violations, watch } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -263,49 +264,11 @@ test.describe('problems', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** The site's own files that may load after a pick, by exact name, read from the build. */
-function filesAfterPick(): string[] {
-  const names = readdirSync(join(here, '../../dist/_astro'));
-  const allowed = names.filter((name) =>
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|merge-pdf-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js)$/.test(name),
+/** Merge PDF's own files that may load after a pick, by exact name, read from the build. */
+const filesAfterPick = () =>
+  builtFiles(
+    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|merge-pdf-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js)$/,
   );
-  return allowed.map((name) => `/_astro/${name}`);
-}
-
-type Seen = { url: string; method: string; body: string | null; origin: string };
-
-/** Watches every request from the page and its workers, and every WebSocket. */
-function watch(context: BrowserContext, page: Page) {
-  const seen: Seen[] = [];
-  const record = (request: Request) =>
-    seen.push({ url: request.url(), method: request.method(), body: request.postData(), origin: new URL(request.url()).origin });
-  context.on('request', record);
-  page.on('websocket', (socket) => seen.push({ url: socket.url(), method: 'WEBSOCKET', body: null, origin: new URL(socket.url()).origin }));
-  return seen;
-}
-
-/** Everything wrong with the requests made after a pick. Empty when nothing broke the promise. */
-function violations(seen: Seen[], siteOrigin: string, secrets: string[]): string[] {
-  const allowed = new Set(filesAfterPick());
-  const problems: string[] = [];
-  for (const request of seen) {
-    // A thumbnail is shown through a blob: address, which never leaves the browser. Only those of the site's own origin pass.
-    if (request.url.startsWith('blob:')) {
-      if (new URL(request.url.slice('blob:'.length)).origin !== siteOrigin) problems.push(`a blob: address of another origin: ${request.url}`);
-      if (request.method !== 'GET' || request.body) problems.push(`a blob: address used to send: ${request.url}`);
-      continue;
-    }
-    const url = new URL(request.url, siteOrigin);
-    const where = decodeURIComponent(request.url);
-    if (request.origin !== siteOrigin) problems.push(`another origin: ${request.url}`);
-    if (request.method !== 'GET') problems.push(`${request.method} ${request.url}`);
-    if (request.body) problems.push(`a body: ${request.url}`);
-    if (url.search) problems.push(`data in the address: ${request.url}`);
-    if (!allowed.has(url.pathname)) problems.push(`not on the list: ${request.url}`);
-    for (const secret of secrets) if (where.includes(secret)) problems.push(`"${secret}" in ${request.url}`);
-  }
-  return problems;
-}
 
 test.describe('nothing is uploaded', () => {
   test('picks, types a password, merges and downloads, with only the listed files fetched and nothing kept', async ({ page, context, baseURL }) => {
@@ -323,7 +286,7 @@ test.describe('nothing is uploaded', () => {
     await mergeAndDownload(page);
 
     const secrets = ['text.pdf', 'password.pdf', 'rich.pdf', 'images.pdf', password];
-    expect(violations(seen, new URL(baseURL!).origin, secrets)).toEqual([]);
+    expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     // The workers' own requests are watched too: qpdf's WebAssembly is fetched from the tool worker, and
     // PDF.js's own worker and its helper data from it, after the thumbnails were asked for.
     expect(seen.some((request) => request.url.endsWith('.wasm'))).toBe(true);
@@ -354,77 +317,6 @@ test.describe('nothing is uploaded', () => {
     }
   });
 
-  test('the watcher catches a POST, a beacon, an image address with a file name, and a fetch from a worker', async ({ page, context, baseURL }) => {
-    const origin = new URL(baseURL!).origin;
-    await open(page);
-    // Each plant goes to its own address, and the test checks that very request was seen and judged wrong.
-    const plants: [string, string, (page: Page) => Promise<unknown>][] = [
-      ['a POST', '/planted-post', (p) => p.evaluate(() => fetch('/planted-post', { method: 'POST', body: 'x' }).catch(() => {}))],
-      ['a beacon', '/planted-beacon', (p) => p.evaluate(() => navigator.sendBeacon('/planted-beacon', 'text.pdf'))],
-      [
-        'an image address',
-        '/text.pdf.png',
-        (p) =>
-          p.evaluate(
-            () =>
-              new Promise<void>((done) => {
-                const image = new Image();
-                image.onload = image.onerror = () => done();
-                image.src = '/text.pdf.png';
-              }),
-          ),
-      ],
-      [
-        'a fetch from a worker',
-        '/planted-worker',
-        (p) =>
-          p.evaluate(
-            (site) =>
-              new Promise<void>((done) => {
-                // A worker made from a blob has no address of its own to resolve "/planted-worker" against, so the full address is given.
-                const source = `fetch(${JSON.stringify(`${site}/planted-worker`)}).catch(() => {}).finally(() => postMessage('done'))`;
-                const worker = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
-                worker.onmessage = () => done();
-              }),
-            origin,
-          ),
-      ],
-      [
-        'a fetch from a worker inside a worker',
-        '/planted-nested',
-        (p) =>
-          p.evaluate(
-            (site) =>
-              new Promise<void>((done) => {
-                // As PDF.js's own worker is started by the tool worker, this worker starts one of its own, which fetches.
-                const inner = `fetch(${JSON.stringify(`${site}/planted-nested`)}).catch(() => {}).finally(() => postMessage('done'))`;
-                const outer = `const nested = new Worker(URL.createObjectURL(new Blob([${JSON.stringify(inner)}], { type: 'text/javascript' }))); nested.onmessage = () => postMessage('done');`;
-                const worker = new Worker(URL.createObjectURL(new Blob([outer], { type: 'text/javascript' })));
-                worker.onmessage = () => done();
-              }),
-            origin,
-          ),
-      ],
-      [
-        'a blob: address of another origin',
-        '/planted-blob',
-        // A made-up record: a page cannot make a blob: address of another origin, so the watcher is handed one.
-        async () => undefined,
-      ],
-    ];
-    for (const [what, path, plant] of plants) {
-      if (path === '/planted-blob') {
-        const forged = [{ url: 'blob:https://example.org/planted-blob', method: 'GET', body: null, origin: 'https://example.org' }];
-        expect(violations(forged, origin, []).length, what).toBeGreaterThan(0);
-        continue;
-      }
-      const seen = watch(context, page);
-      await plant(page);
-      await expect.poll(() => seen.some((request) => new URL(request.url).pathname === path), { message: `${what} was seen` }).toBe(true);
-      const planted = seen.filter((request) => new URL(request.url).pathname === path);
-      expect(violations(planted, origin, ['text.pdf']).length, what).toBeGreaterThan(0);
-    }
-  });
 });
 
 test.describe('leaving the page', () => {

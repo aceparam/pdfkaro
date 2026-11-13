@@ -74,6 +74,35 @@ Each readable file was merged both before and after `text.pdf`. Each result pass
 | `mixed.pdf` | Merged; each page keeps its size and rotation, in order |
 | `rich.pdf` | First: its bookmarks, link and attachment are kept. Later: its pages and link are kept, but its bookmarks and attachment are not, by the owner's decision of 11 Nov 2026 |
 
+### Split PDF (`src/engines/tools/split-pdf.ts`)
+
+Each file was split in Node with the same qpdf the browser uses (`tests/unit/split-pdf.test.ts`). Every part passes `qpdf --check`, has the right pages, and is not encrypted. Bookmarks and attached files follow the owner's decisions of 12 Nov 2026.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | No cuts: three one-page parts, with progress after each |
+| `pages-500.pdf` | No cuts: 500 one-page parts, each passing `qpdf --check`. Cuts after pages 9 and 10: parts of 9, 1 and 490 pages |
+| `scanned.pdf` | Split, one page each |
+| `password.pdf` | Split when its password is given; the parts have no password. Without the password the job fails |
+| `restricted.pdf` | Split; the parts have no restrictions |
+| `warning.pdf` | Split; qpdf's warning does not stop the job |
+| `damaged-xref.pdf` | Not split: the job fails and hands back nothing. The page never asks, as qpdf cannot read it |
+| `damaged-cut.pdf` | Not split: the job fails and hands back nothing |
+| `not-a-pdf.pdf` | Not split: the job fails and hands back nothing |
+| `form.pdf` | One page, so one part, which keeps both fields |
+| `mixed.pdf` | Each part keeps its page's size and rotation |
+| `rich.pdf` | Part 1 keeps "Chapter one", the link and `note.txt`. Part 2 keeps "Chapter two", and holds neither the attached file's bytes, nor `/EmbeddedFile`, nor `/AF` |
+| `images.pdf` | Split; its JPEG 2000 image is kept as it was |
+
+Files made in the test, for shapes the shared set lacks (`tests/unit/outline-fixtures.ts`):
+
+| File | Outcome |
+| --- | --- |
+| A nested outline across four pages | Each part keeps only its own bookmarks; a kept child of a dropped parent moves up; no bookmark points nowhere |
+| An outline 100 levels deep, past where qpdf's JSON stops | Nothing below qpdf's cut survives into a part, so no bookmark points into another part |
+| An outline item that is also the catalog | The whole outline is dropped from every part |
+| An attached file reached through a separate `/Names` object and the catalog's `/AF` | In part 1 only; part 2 holds none of its bytes and no `/AF` |
+
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
 Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 104 by 136 box (`tests/unit/thumbnail.test.ts`).
@@ -93,3 +122,23 @@ Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 1
 | `mixed.pdf` | Page 1 drawn upright; page 2, on its side, drawn wide |
 | `rich.pdf` | Drawn |
 | `images.pdf` | Drawn. PDF.js takes `openjpeg.wasm` from the fixed helper data for the JPEG 2000 image |
+
+### One open document across pages (`openDocument` in `src/engines/thumbnail.ts`)
+
+Each file was opened once, then its first, second and last pages were drawn from that one open document inside a 104 by 136 box, in Node through the real PDF.js. After `close`, called twice, every file refused to draw again.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Opened, 3 pages; all drawn |
+| `pages-500.pdf` | Opened, 500 pages; pages 1, 2 and 500 drawn from the one document |
+| `scanned.pdf` | Opened, 2 pages; both drawn |
+| `password.pdf` | Refused without a password or with a wrong one (PDF.js's password error); opened with `open-sesame`, 3 pages drawn |
+| `restricted.pdf` | Opened with no password, 3 pages drawn |
+| `warning.pdf` | Opened, 3 pages drawn |
+| `damaged-xref.pdf` | Opened and drawn, as for one-off thumbnails: PDF.js repairs it. The page never asks, as qpdf cannot read it |
+| `damaged-cut.pdf` | Refused (invalid PDF structure) |
+| `not-a-pdf.pdf` | Refused (invalid PDF structure) |
+| `form.pdf` | Opened, 1 page drawn |
+| `mixed.pdf` | Opened, 4 pages; page 1 drawn upright, page 2 on its side drawn wide (104 by 80), page 4 drawn |
+| `rich.pdf` | Opened, 2 pages drawn |
+| `images.pdf` | Opened, 1 page drawn, with the JPEG 2000 image |

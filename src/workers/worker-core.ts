@@ -3,15 +3,28 @@
 
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FailureKind } from '../widget/state';
+import { partName } from '../widget/format';
+import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
 import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
+
+/** A document kept open so that several pages can be drawn without reading the file again. */
+export type KeptDocument = {
+  render(page: number, box: ThumbnailBox): Promise<Uint8Array>;
+  close(): Promise<void>;
+};
+
+/** The one zip function used, from fflate. */
+export type ZipSync = (entries: Record<string, Uint8Array>, options: { level: 0 }) => Uint8Array;
 
 export type WorkerDeps = {
   /** Loads a tool's engine by its id, or gives undefined when there is none. */
   loadEngine(toolId: string): Promise<EngineModule | undefined>;
   tools: EngineTools;
   post(message: FromWorker, transfer?: Transferable[]): void;
-  /** Draws one page as PNG bytes. Loaded late by the worker, so its code and PDF.js stay out of the worker file. */
-  renderPage?(file: Uint8Array, page: number, box: ThumbnailBox, password: string | undefined, tools: EngineTools): Promise<Uint8Array>;
+  /** Opens a PDF for drawing thumbnails. Loaded late by the worker, so its code and PDF.js stay out of the worker file. */
+  openDocument?(file: Uint8Array, password: string | undefined, tools: EngineTools): Promise<KeptDocument>;
+  /** Loads fflate's zipSync. Loaded late by the worker, at the start of every run that may give several files. */
+  loadZip?(): Promise<ZipSync>;
 };
 
 class EngineLoadError extends Error {}
@@ -19,9 +32,13 @@ class EngineLoadError extends Error {}
 /** Sorts a thrown error into the kinds the page can explain. No message or stack leaves the worker. */
 export function failureKind(error: unknown): FailureKind {
   if (error instanceof EngineLoadError) return 'engine-load';
+  // An engine's files would not fit in one zip. Known by name, so engines need not import worker code.
+  if (error instanceof Error && error.name === 'TooBigForZip') {
+    return (error as Error & { reason?: unknown }).reason === 'files' ? 'too-many-files' : 'zip-too-large';
+  }
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
-  if (/out of memory|\boom\b|cannot enlarge memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
+  if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
     return 'memory';
   }
   return 'engine';
@@ -63,14 +80,59 @@ export function createHandler(deps: WorkerDeps) {
     return engine;
   }
 
+  async function zipFor(): Promise<ZipSync> {
+    if (!deps.loadZip) throw new EngineLoadError();
+    try {
+      return await deps.loadZip();
+    } catch {
+      throw new EngineLoadError();
+    }
+  }
+
+  // At most one document is kept open, for drawing thumbnails of one file's pages.
+  let kept: { key: string; doc: Promise<KeptDocument> } | null = null;
+  // Messages are handled side by side, so every close goes on one chain, and whatever opens a
+  // document, reads or runs waits for it: PDF.js must never open one while it tears another down.
+  let closing: Promise<void> = Promise.resolve();
+  function closeKept(): Promise<void> {
+    const leaving = kept;
+    kept = null;
+    if (leaving) {
+      closing = closing.then(async () => {
+        try {
+          await (await leaving.doc).close();
+        } catch {
+          // A document that never opened has nothing to close.
+        }
+      });
+    }
+    return closing;
+  }
+
   return async function handle(data: unknown): Promise<void> {
     if (!isToWorker(data)) return;
     const { requestId } = data;
+    if (data.type === 'close') {
+      await closeKept();
+      return;
+    }
     if (data.type === 'thumbnail') {
       // A thumbnail never fails the tool: any problem gives no picture.
       let image: Uint8Array | null = null;
       try {
-        if (deps.renderPage) image = await deps.renderPage(await bytesOf(data.file), data.page, data.box, data.password, deps.tools);
+        if (deps.openDocument) {
+          if (kept?.key !== data.documentKey) {
+            await closeKept();
+            const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools);
+            kept = { key: data.documentKey, doc: opening };
+            // A file that cannot be opened is not kept, so it is tried afresh if asked for again.
+            opening.catch(() => {
+              if (kept?.doc === opening) kept = null;
+            });
+          }
+          const current = kept;
+          if (current) image = await (await current.doc).render(data.page, data.box);
+        }
       } catch {
         image = null;
       }
@@ -82,7 +144,12 @@ export function createHandler(deps: WorkerDeps) {
       deps.post({ type: 'thumbnail', requestId, image: moved.outputs[0]! }, moved.transfer);
       return;
     }
+    // A job or a read never runs beside a kept copy of a file.
+    await closeKept();
     try {
+      // For a tool that can give several files, the zip code is fetched before the engine has given anything,
+      // so the request is the same whatever the file gives.
+      const zipSync = data.type === 'run' && data.zip ? await zipFor() : undefined;
       const engine = await engineFor(data.toolId);
       if (data.type === 'inspect') {
         if (!engine.inspect) {
@@ -103,6 +170,28 @@ export function createHandler(deps: WorkerDeps) {
       );
       // The worker's copies of the inputs are dropped here; only the results go back, moved, not copied.
       files.length = 0;
+      const zip = data.type === 'run' ? data.zip : undefined;
+      if (outputs.length > 1 && zip) {
+        if (!zipSync) throw new EngineLoadError();
+        const total = outputs.length;
+        // The engine has finished; say the files are being put together, so the line does not sit on the last file.
+        deps.post({ type: 'progress', requestId, progress: { stage: 'writing', percent: 100 } });
+        const entries: Record<string, Uint8Array> = {};
+        outputs.forEach((output, index) => {
+          entries[partName(zip.stem, zip.partSuffix, index + 1, total)] = output;
+        });
+        // zipSync writes no ZIP64 and does not check: past its limits it would write a broken zip.
+        const fit = fitsInOneZip(Object.keys(entries), outputs.map((output) => output.byteLength));
+        if (!fit.fits) throw new TooBigForZip(fit.reason);
+        // PDFs are already compressed, so the files are stored, which is fast and keeps memory low.
+        const zipped = zipSync(entries, { level: 0 });
+        // The parts and the zip have to exist together while it is made; the parts are let go here.
+        outputs.length = 0;
+        for (const name of Object.keys(entries)) delete entries[name];
+        const moved = ownBuffers([zipped]);
+        deps.post({ type: 'done', requestId, outputs: moved.outputs, parts: total }, moved.transfer);
+        return;
+      }
       const moved = ownBuffers(outputs);
       deps.post({ type: 'done', requestId, outputs: moved.outputs }, moved.transfer);
     } catch (error) {

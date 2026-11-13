@@ -114,3 +114,116 @@ describe('ownBuffers', () => {
     expect(() => structuredClone(outputs, { transfer })).not.toThrow();
   });
 });
+
+describe('several outputs, zipped in the worker', async () => {
+  const { unzipSync, zipSync } = await import('fflate');
+  // A made-up engine that gives back as many files as its first input says.
+  const splitter: EngineModule = {
+    run: async (files) => {
+      const count = Number(new TextDecoder().decode(files[0]));
+      return Array.from({ length: count }, (_, index) => new TextEncoder().encode(`part ${index + 1}`));
+    },
+  };
+  function zipSetup() {
+    const posted: { message: FromWorker; transfer?: Transferable[] }[] = [];
+    const log: string[] = [];
+    const handle = createHandler({
+      loadEngine: async () => {
+        log.push('engine');
+        return splitter;
+      },
+      tools: {},
+      post: (message, transfer) => posted.push({ message, transfer }),
+      loadZip: async () => {
+        log.push('fflate');
+        return zipSync;
+      },
+    });
+    return { handle, posted, log };
+  }
+  const zip = { stem: 'report', partSuffix: 'part' };
+
+  it('gives three files back as one zip, numbered so they sort, with how many it holds', async () => {
+    const { handle, posted, log } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('3')], passwords: [undefined], options: {}, zip });
+    expect(log).toEqual(['fflate', 'engine']);
+    const done = posted.at(-1)!;
+    if (done.message.type !== 'done') throw new Error(`expected done, got ${done.message.type}`);
+    expect(done.message.parts).toBe(3);
+    expect(done.message.outputs).toHaveLength(1);
+    expect(done.transfer).toEqual([done.message.outputs[0]!.buffer]);
+    const entries = unzipSync(done.message.outputs[0]!);
+    expect(Object.keys(entries)).toEqual(['report-part-1.pdf', 'report-part-2.pdf', 'report-part-3.pdf']);
+    expect(new TextDecoder().decode(entries['report-part-2.pdf'])).toBe('part 2');
+  });
+
+  it('pads the numbers to the count, so 12 parts sort as 01 to 12', async () => {
+    const { handle, posted } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('12')], passwords: [undefined], options: {}, zip });
+    const done = posted.at(-1)!;
+    if (done.message.type !== 'done') throw new Error('expected done');
+    const names = Object.keys(unzipSync(done.message.outputs[0]!));
+    expect(names[0]).toBe('report-part-01.pdf');
+    expect(names[11]).toBe('report-part-12.pdf');
+  });
+
+  it('loads fflate even when the run gives one file, and gives that file back as it is', async () => {
+    const { handle, posted, log } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('1')], passwords: [undefined], options: {}, zip });
+    expect(log).toEqual(['fflate', 'engine']);
+    const done = posted.at(-1)!;
+    if (done.message.type !== 'done') throw new Error('expected done');
+    expect(done.message.parts).toBeUndefined();
+    expect(new TextDecoder().decode(done.message.outputs[0])).toBe('part 1');
+  });
+
+  it('does not load fflate for a run with no zip naming', async () => {
+    const { handle, posted, log } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('2')], passwords: [undefined], options: {} });
+    expect(log).toEqual(['engine']);
+    const done = posted.at(-1)!;
+    if (done.message.type !== 'done') throw new Error('expected done');
+    expect(done.message.outputs).toHaveLength(2);
+  });
+
+  it('says the tool could not be loaded when fflate fails to load', async () => {
+    const posted: FromWorker[] = [];
+    const handle = createHandler({
+      loadEngine: async () => splitter,
+      tools: {},
+      post: (message) => posted.push(message),
+      loadZip: async () => {
+        throw new Error('network');
+      },
+    });
+    await handle({ type: 'run', requestId: 4, toolId: 'split-pdf', files: [blob('3')], passwords: [undefined], options: {}, zip });
+    expect(posted).toEqual([{ type: 'failed', requestId: 4, kind: 'engine-load' }]);
+  });
+});
+
+describe('putting several files into one zip, as the worker does it', async () => {
+  const { zipSync } = await import('fflate');
+  const engine = (count: number, size = 1): EngineModule => ({ run: async () => Array.from({ length: count }, () => new Uint8Array(size)) });
+  const handler = (count: number) => {
+    const posted: FromWorker[] = [];
+    const handle = createHandler({ loadEngine: async () => engine(count), tools: {}, post: (message) => posted.push(message), loadZip: async () => zipSync });
+    return { handle, posted };
+  };
+  const zip = { stem: 'report', partSuffix: 'part' };
+
+  it('says it is writing before it zips several files, and not for one', async () => {
+    const several = handler(3);
+    await several.handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(several.posted.map((message) => message.type)).toEqual(['progress', 'done']);
+    expect(several.posted[0]).toEqual({ type: 'progress', requestId: 1, progress: { stage: 'writing', percent: 100 } });
+    const one = handler(1);
+    await one.handle({ type: 'run', requestId: 2, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(one.posted.map((message) => message.type)).toEqual(['done']);
+  });
+
+  it('refuses to zip more files than one zip can hold, whatever the engine checked', async () => {
+    const { handle, posted } = handler(65_536);
+    await handle({ type: 'run', requestId: 3, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
+    expect(posted.at(-1)).toEqual({ type: 'failed', requestId: 3, kind: 'too-many-files' });
+  });
+});

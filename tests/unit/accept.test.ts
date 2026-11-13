@@ -28,3 +28,23 @@ describe('looksAccepted', () => {
     expect(looksAccepted(text('anything'), ['image/heic'])).toBe(true);
   });
 });
+
+describe('which files a tool takes', async () => {
+  const { chooseFiles } = await import('../../src/widget/accept');
+
+  it('takes every file when the tool takes several', () => {
+    expect(chooseFiles(['a', 'b'], ['f1'], true)).toEqual({ take: ['a', 'b'], leftOut: [], replace: [] });
+  });
+
+  it('takes only the first of a two-file drop when the tool takes one, and leaves the other out', () => {
+    expect(chooseFiles(['a', 'b'], [], false)).toEqual({ take: ['a'], leftOut: ['b'], replace: [] });
+  });
+
+  it('replaces the listed file when one is pasted in its place', () => {
+    expect(chooseFiles(['c'], ['f1'], false)).toEqual({ take: ['c'], leftOut: [], replace: ['f1'] });
+  });
+
+  it('keeps the listed file when nothing new was accepted', () => {
+    expect(chooseFiles([], ['f1'], false)).toEqual({ take: [], leftOut: [], replace: [] });
+  });
+});

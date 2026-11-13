@@ -64,18 +64,20 @@ async function need<T>(tools: EngineTools, name: string): Promise<T> {
   return (await make()) as T;
 }
 
+/** An open PDF, kept so that several pages can be drawn without reading the file again. */
+export type OpenDocument = {
+  pages: number;
+  /** Draws page `page` (1-based) to fit inside `box`, keeping its shape, as PNG bytes. */
+  render(page: number, box: { width: number; height: number }): Promise<Uint8Array>;
+  /** Closes the document and lets go of its copy of the file. Safe to call twice. */
+  close(): Promise<void>;
+};
+
 /**
- * Draws page `page` (1-based) to fit inside `box`, keeping the page's shape,
- * and gives back PNG bytes. The document is closed every time. `file` is
- * handed to PDF.js, which takes it over: the caller must not use it after.
+ * Opens a PDF for drawing. `file` is handed to PDF.js, which takes it over:
+ * the caller must not use it after. Close the result when done with it.
  */
-export async function renderPage(
-  file: Uint8Array,
-  page: number,
-  box: { width: number; height: number },
-  password: string | undefined,
-  tools: EngineTools,
-): Promise<Uint8Array> {
+export async function openDocument(file: Uint8Array, password: string | undefined, tools: EngineTools): Promise<OpenDocument> {
   const pdfjs = await need<PdfjsModule>(tools, 'pdfjs');
   const canvases = await need<CanvasMaker>(tools, 'canvas');
   const data = await need<HelperData>(tools, 'pdfjsData');
@@ -151,23 +153,58 @@ export async function renderPage(
     FilterFactory,
     BinaryDataFactory,
   });
-  try {
-    const doc = await task.promise;
-    if (!Number.isInteger(page) || page < 1 || page > doc.numPages) throw new Error('No such page.');
-    const pdfPage = await doc.getPage(page);
-    const natural = pdfPage.getViewport({ scale: 1 });
-    const scale = Math.min(box.width / natural.width, box.height / natural.height);
-    const viewport = pdfPage.getViewport({ scale });
-    const width = Math.max(1, Math.round(viewport.width));
-    const height = Math.max(1, Math.round(viewport.height));
-    const { canvas, context } = canvases.create(width, height);
-    try {
-      await pdfPage.render({ canvas, canvasContext: context, viewport, background: '#ffffff' }).promise;
-      return await canvases.png(canvas);
-    } finally {
-      canvases.release(canvas);
-    }
-  } finally {
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
     await task.destroy();
+  };
+  let doc;
+  try {
+    doc = await task.promise;
+  } catch (error) {
+    await close();
+    throw error;
+  }
+  return {
+    pages: doc.numPages,
+    close,
+    async render(page, box) {
+      if (closed) throw new Error('The document is closed.');
+      if (!Number.isInteger(page) || page < 1 || page > doc.numPages) throw new Error('No such page.');
+      const pdfPage = await doc.getPage(page);
+      const natural = pdfPage.getViewport({ scale: 1 });
+      const scale = Math.min(box.width / natural.width, box.height / natural.height);
+      const viewport = pdfPage.getViewport({ scale });
+      const width = Math.max(1, Math.round(viewport.width));
+      const height = Math.max(1, Math.round(viewport.height));
+      const { canvas, context } = canvases.create(width, height);
+      try {
+        await pdfPage.render({ canvas, canvasContext: context, viewport, background: '#ffffff' }).promise;
+        return await canvases.png(canvas);
+      } finally {
+        canvases.release(canvas);
+      }
+    },
+  };
+}
+
+/**
+ * Draws one page of a PDF to fit inside `box`, keeping its shape, and gives
+ * back PNG bytes, closing the document after. `file` is handed to PDF.js,
+ * which takes it over: the caller must not use it after.
+ */
+export async function renderPage(
+  file: Uint8Array,
+  page: number,
+  box: { width: number; height: number },
+  password: string | undefined,
+  tools: EngineTools,
+): Promise<Uint8Array> {
+  const doc = await openDocument(file, password, tools);
+  try {
+    return await doc.render(page, box);
+  } finally {
+    await doc.close();
   }
 }

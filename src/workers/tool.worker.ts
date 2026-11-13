@@ -66,10 +66,12 @@ const handle = createHandler({
   },
   tools,
   post: (message, transfer) => scope.postMessage(message, { transfer: transfer ?? [] }),
-  renderPage: async (file, page, box, password, given) => {
-    const { renderPage } = await import('../engines/thumbnail');
-    return pdfjsLoader.guard(renderPage(file, page, box, password, given));
+  openDocument: async (file, password, given) => {
+    const { openDocument } = await import('../engines/thumbnail');
+    const doc = await pdfjsLoader.guard(openDocument(file, password, given));
+    return { render: (page, box) => pdfjsLoader.guard(doc.render(page, box)), close: () => doc.close() };
   },
+  loadZip: async () => (await import('fflate')).zipSync,
 });
 
 scope.onmessage = (event) => {

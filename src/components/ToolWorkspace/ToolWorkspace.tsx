@@ -4,7 +4,10 @@ import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
-import { allReady, canRun, currentProblem, isLarge, totals, type FileEntry } from '../../widget/state';
+import { failureSentence, workingLine } from '../../widget/failures';
+import { gridItems } from '../../widget/items';
+import { cutAnnouncement, cutSummary, showMoreLabel, shownAnnouncement } from '../../widget/cuts';
+import { allReady, canRun, currentProblem, isLarge, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -26,14 +29,12 @@ type Props = {
   onEmpty(message?: string): void;
 };
 
+/** How many pages are put on the page first (about a screenful), and how many are added each frame after. */
+const drawFirst = 30;
+const drawStep = 100;
+
 const createWorker = (): WorkerLike =>
   new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
-
-const failureText = {
-  memory: 'Your browser ran out of memory. Try fewer or smaller files.',
-  'engine-load': 'The tool could not be loaded. Check your connection and try again.',
-  engine: 'Something went wrong. Try again.',
-} as const;
 
 function detailFor(file: FileEntry): string {
   if (file.checking) return 'Trying the password';
@@ -88,20 +89,28 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     (names: string[]) => names.map((name) => `${name} is not ${words.acceptsName}, so it was not added.`).join(' '),
     [words.acceptsName],
   );
+  // A tool that takes one file keeps the first of several dropped or pasted, and says so.
+  const [leftOut, setLeftOut] = useState<string[]>([]);
+  const leftOutText = useCallback(
+    (names: string[]) => (names.length === 0 ? '' : `This tool takes one file, so ${names.join(', ')} ${names.length === 1 ? 'was' : 'were'} not added.`),
+    [],
+  );
   // Tell the widget when the last file has gone. Not before the first files have
   // arrived: on the first render the list is still empty.
   const hadFiles = useRef(false);
 
   const add = useCallback(
     (files: File[]) => {
-      void run.addFiles(files).then(({ added, refused }) => {
-        if (refused.length === 0) return;
+      void run.addFiles(files).then(({ added, refused, leftOut }) => {
+        setLeftOut(leftOut);
+        const said = [refused.length > 0 ? refusedText(refused) : '', leftOutText(leftOut)].filter(Boolean).join(' ');
+        if (!said) return;
         // Nothing was added and nothing was listed before: back to the picker, which says why.
-        if (added === 0 && !hadFiles.current) onEmpty(refusedText(refused));
-        else setAnnouncement(refusedText(refused));
+        if (added === 0 && !hadFiles.current) onEmpty(said);
+        else setAnnouncement(said);
       });
     },
-    [run, refusedText, onEmpty, setAnnouncement],
+    [run, refusedText, leftOutText, onEmpty, setAnnouncement],
   );
 
   const started = useRef(false);
@@ -173,17 +182,91 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const tooFew = state.files.length < words.minFiles;
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
-  const items: GridItem[] = useMemo(
-    () => state.files.map((file) => ({ id: file.id, title: file.name, detail: detailFor(file), thumbnail: thumbnails[file.id] })),
-    [state.files, thumbnails],
+  const pages = words.items === 'pages';
+  const entries = useMemo(() => gridItems({ files: state.files }, words.items, state.shown), [state.files, words.items, state.shown]);
+  const items: GridItem[] = useMemo(() => {
+    const byId = new Map(state.files.map((file) => [file.id, file]));
+    return entries.map((entry) => {
+      const file = byId.get(entry.fileId);
+      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file), thumbnail: thumbnails[entry.id] };
+    });
+  }, [entries, state.files, thumbnails, pages]);
+  // A tool that lists pages has one file, shown on its own line above them.
+  const onlyFile = pages ? state.files[0] : undefined;
+
+  // Pages are put on the page a screenful first, then 100 a frame, so that 500 at once never
+  // block the page for more than 100 ms on a slow phone. A list of files is drawn whole.
+  const [drawn, setDrawn] = useState(drawFirst);
+  const drawnFor = useRef<string | undefined>(undefined);
+  if (drawnFor.current !== onlyFile?.id) {
+    drawnFor.current = onlyFile?.id;
+    if (drawn !== drawFirst) setDrawn(drawFirst);
+  }
+  useEffect(() => {
+    if (!pages || drawn >= items.length) return;
+    const frame = requestAnimationFrame(() => setDrawn((count) => count + drawStep));
+    return () => cancelAnimationFrame(frame);
+  }, [pages, drawn, items.length]);
+  const gridItemsDrawn = useMemo(() => (pages ? items.slice(0, drawn) : items), [pages, items, drawn]);
+
+  // When that file has been read and its pages appear, say what the line now says.
+  const onlyReady = onlyFile && onlyFile.status === 'ready' && !onlyFile.checking ? `${onlyFile.id}:${detailFor(onlyFile)}` : '';
+  const announcedReady = useRef('');
+  useEffect(() => {
+    if (!onlyReady || !onlyFile || announcedReady.current === onlyReady) return;
+    announcedReady.current = onlyReady;
+    setAnnouncement(`${onlyFile.name}, ${detailFor(onlyFile)}.`);
+  }, [onlyReady, onlyFile, setAnnouncement]);
+
+  // Split's cuts: a toggle after every page but the last. The words are Split's own, from cuts.ts.
+  const cutAfter = words.itemToggle?.kind === 'cut-after' ? words.itemToggle : undefined;
+  const filePages = onlyFile?.status === 'ready' ? (onlyFile.pages ?? 0) : 0;
+  const marks = state.marks;
+  const pressed = useMemo(() => new Set(onlyFile ? marks.map((page) => `${onlyFile.id}:${page}`) : []), [marks, onlyFile]);
+  const skip = useMemo(() => new Set(onlyFile ? [`${onlyFile.id}:${filePages}`] : []), [onlyFile, filePages]);
+  const toggle = useMemo(
+    () =>
+      cutAfter
+        ? {
+            label: cutAfter.label,
+            name: (title: string) => `${cutAfter.label} ${title.toLowerCase()}`,
+            pressed,
+            skip,
+            onToggle: (id: string) => {
+              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              const marked = !marks.includes(page);
+              const next = marked ? [...marks, page].sort((a, b) => a - b) : marks.filter((each) => each !== page);
+              run.toggleMark(page);
+              setAnnouncement(cutAnnouncement(filePages, next, page, marked));
+            },
+          }
+        : undefined,
+    [cutAfter, pressed, skip, marks, run, filePages, setAnnouncement],
   );
+
+  // More pages: focus goes to the first new page, which sits where the button was.
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const moreToShow = pages && onlyFile && filePages > state.shown;
+  const showMore = () => {
+    if (!onlyFile) return;
+    setFocusId(`${onlyFile.id}:${state.shown + 1}`);
+    run.showMore();
+    setAnnouncement(shownAnnouncement(state.shown + pageBatch, filePages));
+  };
 
   const others = state.files.length - 1;
   const everyReady = allReady(state);
   const anyReady = state.files.some((file) => file.status === 'ready');
 
   if (state.step === 'done' && state.result && result) {
-    const detail = [formatSize(state.result.size), state.result.pages ? pageCount(state.result.pages) : null].filter(Boolean).join(', ');
+    // A zip says how many files it holds; a PDF, how many pages.
+    const detail = [
+      state.result.parts ? fileCount(state.result.parts) : null,
+      formatSize(state.result.size),
+      state.result.pages ? pageCount(state.result.pages) : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
     return (
       <Result
         heading={words.doneHeading}
@@ -205,7 +288,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>
-          <p>{failureText[state.failure]}</p>
+          <p>{failureSentence(state.failure, words)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
               Go back to your files
@@ -217,7 +300,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       {state.step === 'working' ? (
         <div className={styles.working}>
           <p className={styles.progressLine}>
-            {state.progress ? progressLine(state.progress, words.writingLabel) : `Starting on ${fileCount(state.files.length)}`}
+            {workingLine(state.progress, words, state.files.length)}
           </p>
           <ProgressBar fraction={state.fraction} label={words.actionLabel} />
           <div className="actions">
@@ -230,25 +313,74 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
       {state.step === 'listing' ? (
         <>
-          <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
-            {fileCount(count.files)}
-            {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
-            {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
-          </p>
+          {onlyFile ? (
+            <div className={styles.fileLine}>
+              <p ref={summaryRef} tabIndex={-1} className={styles.fileName}>
+                <span className={styles.name}>{onlyFile.name}</span>
+                <span className="muted">, {detailFor(onlyFile)}</span>
+              </p>
+              <button
+                type="button"
+                className={`button-secondary ${styles.small}`}
+                aria-label={`Remove ${onlyFile.name}`}
+                onClick={() => run.removeFile(onlyFile.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
+              {fileCount(count.files)}
+              {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
+              {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
+            </p>
+          )}
 
           {state.refused.length > 0 && (
             <p className={styles.refused}>
               {refusedText(state.refused)}
             </p>
           )}
+          {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
-          <PageGrid
-            items={items}
-            onMove={run.moveFile}
-            onRemove={run.removeFile}
-            onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
-            onVisible={run.showThumbnail}
-          />
+          {cutAfter && filePages > 0 ? <p className={styles.cutSummary}>{cutSummary(filePages, marks)}</p> : null}
+
+          {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
+            <a
+              href={`#${toolId}-main`}
+              className={styles.skip}
+              onClick={(event) => {
+                event.preventDefault();
+                mainRef.current?.focus({ preventScroll: true });
+                mainRef.current?.scrollIntoView({ block: 'center' });
+              }}
+            >
+              Skip to the main button
+            </a>
+          ) : null}
+
+          {items.length > 0 ? (
+            <PageGrid
+              items={gridItemsDrawn}
+              controls={words.itemControls}
+              layout={pages ? 'grid' : 'rows'}
+              onMove={run.moveFile}
+              onRemove={run.removeFile}
+              onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${place} of ${of}.`)}
+              onVisible={run.showThumbnail}
+              toggle={toggle}
+              focusId={focusId}
+              onFocused={() => setFocusId(null)}
+            />
+          ) : null}
+
+          {moreToShow ? (
+            <div className={styles.more}>
+              <button type="button" className="button-secondary" onClick={showMore}>
+                {showMoreLabel(state.shown, filePages, pageBatch)}
+              </button>
+            </div>
+          ) : null}
 
           {askingPassword && problem ? (
             <PasswordField
@@ -261,6 +393,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 summaryRef.current?.focus();
               }}
               inputRef={passwordRef}
+              leaveLabel={others > 0 ? 'Leave this file out' : 'Choose another file'}
             />
           ) : null}
 
@@ -282,16 +415,19 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ) : null}
 
           {isLarge(state) && !askingPassword ? (
-            <Notice heading="These files add up to more than 100 MB">
+            <Notice heading={pages ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
               <p>The job may be slow, and a phone may run out of memory. You can still go ahead.</p>
             </Notice>
           ) : null}
 
           {!askingPassword && problem?.status !== 'damaged' ? (
             <div className={`actions ${styles.apart}`}>
-              <FilePicker label={words.addLabel} accepts={accepts} multiple={words.multiple} onFiles={add} look="secondary" inputRef={addRef} />
+              {pages ? null : (
+                <FilePicker label={words.addLabel} accepts={accepts} multiple={words.multiple} onFiles={add} look="secondary" inputRef={addRef} />
+              )}
               <button
                 ref={mainRef}
+                id={`${toolId}-main`}
                 type="button"
                 className="button"
                 aria-disabled={ready ? undefined : true}

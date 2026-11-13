@@ -92,9 +92,11 @@ test.describe('tool page', () => {
     expect(html).toContain('Combine several PDFs into one. Files stay on your device.');
   });
 
-  test('shows no related tools heading while none is published', async ({ page }) => {
+  test('links only to related tools that are published', async ({ page }) => {
     await page.goto('/merge-pdf');
-    await expect(page.getByRole('heading', { name: 'Related tools' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Related tools' })).toHaveCount(1);
+    const related = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('link');
+    await expect(related).toHaveText(['Split PDF']);
   });
 });
 

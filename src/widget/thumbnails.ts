@@ -25,15 +25,17 @@ export function want(queue: ThumbnailQueue, id: string): ThumbnailQueue {
 }
 
 /**
- * The next item to draw, in list order, or none. Nothing is drawn while
+ * The next item to draw, in list order, or none. An item is a file or a page
+ * of one; it is drawn once its file has been read. Nothing is drawn while
  * another is, while any file is being read, or outside the list of files,
  * so a thumbnail never stands in the way of reading or of the job.
  */
-export function next(queue: ThumbnailQueue, state: Pick<State, 'step' | 'files'>): string | undefined {
+export function next(queue: ThumbnailQueue, state: Pick<State, 'step' | 'files'>, items: readonly { id: string; fileId: string }[]): string | undefined {
   if (queue.drawing !== null || state.step !== 'listing') return undefined;
   if (state.files.some((file) => file.status === 'reading' || file.checking)) return undefined;
-  return state.files.find(
-    (file) => file.status === 'ready' && queue.wanted.has(file.id) && !queue.drawn.has(file.id) && !queue.failed.has(file.id),
+  const ready = new Set(state.files.filter((file) => file.status === 'ready').map((file) => file.id));
+  return items.find(
+    (item) => ready.has(item.fileId) && queue.wanted.has(item.id) && !queue.drawn.has(item.id) && !queue.failed.has(item.id),
   )?.id;
 }
 

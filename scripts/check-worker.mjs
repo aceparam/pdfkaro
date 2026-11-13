@@ -57,6 +57,15 @@ for (const [what, found] of [['PDF.js', pdfjsDisplay], ["PDF.js's worker", pdfjs
 if (worker.includes('Invalid factory url') || worker.includes('pdfjsVersion')) problems.push('The worker file holds code from PDF.js.');
 if (worker.includes('data:application/octet-stream;base64') || worker.includes('data:font/')) problems.push("The worker file holds PDF.js's helper data.");
 
+// fflate's zip step loads late, from a file of its own, never inside the worker file.
+const fflate = files.filter((name) => /^fflate-[A-Za-z0-9_-]{8}\.js$/.test(name));
+if (fflate.length !== 1) problems.push(`Expected fflate as one file of its own in ${assets}, found ${fflate.length}.`);
+else if (!worker.includes(`import(\`./${fflate[0]}\`)`) && !worker.includes(`import("./${fflate[0]}")`)) {
+  problems.push(`The worker does not load ${fflate[0]} with import(), so it is not loaded late.`);
+}
+// Lookup tables from fflate's deflate code: present only if fflate itself is in the file.
+if (worker.includes('[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]')) problems.push("The worker file holds fflate's code.");
+
 // The native canvas package used by tests in Node must never be shipped. PDF.js names it,
 // for Node only, in its own script; nothing else may.
 for (const name of files.filter((each) => /\.m?js$/.test(each) && !pdfjsDisplay.includes(each))) {
@@ -71,4 +80,4 @@ for (const name of [...pdfjsDisplay, ...pdfjsWorker]) {
 }
 
 if (problems.length > 0) fail(problems.join('\n'));
-console.log(`${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js and its helper data in files of their own.`);
+console.log(`${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js, its helper data and fflate in files of their own.`);

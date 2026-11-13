@@ -15,6 +15,7 @@ The project's own licence is not set yet. It waits on the owner's decision under
 | PDF.js's standard fonts, from `pdfjs-dist` | Foxit fonts: BSD-style (PDFium). Liberation Sans: **GPL v2 with a font exception** | Drawn into thumbnails of PDFs that do not embed a font. Shipped unchanged, bundled as data with their licence texts in `src/workers/pdfjs-data.ts`, by the owner's decision of 11 Nov 2026. Shipping them as separate data does not bind the project's licence |
 | PDF.js's JBIG2 and JPEG 2000 decoders, from `pdfjs-dist` | BSD-style (PDFium JBIG2, OpenJPEG) and Apache-2.0 (PDF.js's wrappers) | Draw scanned images in thumbnails. Bundled as data with their licence texts in `src/workers/pdfjs-data.ts` |
 | `@neslinesli93/qpdf-wasm` | ISC (the wrapper); qpdf itself is Apache-2.0 | qpdf compiled to WebAssembly, the library `SPEC.md` names for page structure. Merges, counts pages and opens protected files. Fetched only after a file is picked. Pinned to an exact version: it is a prebuilt binary from one maintainer. Last release Nov 2026 |
+| `fflate` | MIT | Joins several results into one zip, in the tool worker, by the owner's decision of 12 Nov 2026. Fetched only when a tool that can give several files runs. Pinned to an exact version. Last release Jul 2026 |
 
 ## Used to build and test only
 
