@@ -73,7 +73,7 @@ A line above the pages SHALL say whether the order has changed and how many page
 
 ### Requirement: Reordering
 
-The main button SHALL read "Reorder and download" and SHALL work with the order unchanged. Pressing it SHALL write one PDF of every page in the order shown, which MUST pass `qpdf --check` and SHALL keep everything in the file: pages with their text, links, fields and notes, bookmarks pointing to their pages, attachments, details and tags. It SHALL have no password and no restrictions, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; the owner's decision of 13 Nov 2026)
+The main button SHALL read "Reorder and download" and SHALL work with the order unchanged. Pressing it SHALL write one PDF of every page in the order shown, which MUST pass `qpdf --check` and SHALL keep everything else in the file as it was, bookmarks pointing to their pages. It SHALL have no password and no restrictions, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; the owner's decision of 13 Nov 2026)
 
 #### Scenario: Pages are reordered
 
