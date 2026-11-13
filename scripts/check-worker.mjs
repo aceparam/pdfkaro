@@ -38,12 +38,19 @@ for (const id of engineIds) {
   }
 }
 
-// A sentence from each engine's own source must not be found in the worker file.
-for (const id of engineIds) {
-  const source = readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8');
-  const sentences = [...source.matchAll(/'([A-Z][^'\n]{15,})'/g)].map((match) => match[1]);
+// A sentence from each engine's own source, and from the page engines' shared
+// steps, must not be found in the worker file.
+const lateSources = [
+  ...engineIds.map((id) => ({ what: `the ${id} engine`, path: join('src', 'engines', 'tools', `${id}.ts`) })),
+  { what: "the page engines' shared steps (plain.ts)", path: join('src', 'engines', 'plain.ts') },
+  { what: "the page engines' shared steps (outline.ts)", path: join('src', 'engines', 'outline.ts') },
+];
+for (const { what, path } of lateSources) {
+  const source = readFileSync(path, 'utf8');
+  const sentences = [...source.matchAll(/['"`]([A-Z][^'"`\n$]{15,})['"`]/g)].map((match) => match[1]);
+  if (sentences.length === 0) problems.push(`No sentence was found in ${path} to look for in the worker file.`);
   for (const sentence of sentences) {
-    if (worker.includes(sentence)) problems.push(`The worker file holds code from the ${id} engine ("${sentence}").`);
+    if (worker.includes(sentence)) problems.push(`The worker file holds code from ${what} ("${sentence}").`);
   }
 }
 
@@ -63,8 +70,8 @@ if (fflate.length !== 1) problems.push(`Expected fflate as one file of its own i
 else if (!worker.includes(`import(\`./${fflate[0]}\`)`) && !worker.includes(`import("./${fflate[0]}")`)) {
   problems.push(`The worker does not load ${fflate[0]} with import(), so it is not loaded late.`);
 }
-// The page engines' shared steps (src/engines/plain.ts and outline.ts) load late, never inside the worker file.
-if (worker.includes('A bookmark could not be read.') || worker.includes('--object-streams=disable')) problems.push("The worker file holds the page engines' shared steps.");
+// The page engines' shared steps load late: besides their sentences, above, qpdf's option for the plain copy.
+if (worker.includes('--object-streams=disable')) problems.push("The worker file holds the page engines' shared steps.");
 
 // Lookup tables from fflate's deflate code: present only if fflate itself is in the file.
 if (worker.includes('[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]')) problems.push("The worker file holds fflate's code.");

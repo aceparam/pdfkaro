@@ -18,7 +18,7 @@ export type ToggleRules = {
   /** What the status region says after `page` is marked or cleared; `marks` is the new list. */
   announce(pages: number, marks: readonly number[], page: number, marked: boolean): string;
   /** The sentence tied to the main button when it cannot run yet, or null when it can. */
-  blocked(marks: readonly number[]): string | null;
+  blocked(pages: number, marks: readonly number[]): string | null;
   /** How many pages the one result has, when the kind knows. */
   resultPages?(pages: number, marks: readonly number[]): number;
   /** Whether a pressed toggle draws a cut line on its page. */
@@ -51,8 +51,34 @@ export const toggleRules: Record<ToggleKind, ToggleRules> = {
       if (marks.length === 0) return `Page ${number(page)} no longer chosen. No pages chosen.`;
       return `Page ${number(page)} no longer chosen, ${number(marks.length)} in all.`;
     },
-    blocked: (marks) => (marks.length === 0 ? 'Choose at least one page for the new file.' : null),
+    blocked: (_pages, marks) => (marks.length === 0 ? 'Choose at least one page for the new file.' : null),
     resultPages: (_pages, marks) => marks.length,
+    drawsCut: false,
+  },
+  drop: {
+    skip: () => [],
+    option: (marks) => ({ pages: [...marks] }),
+    summary: (pages, marks) => {
+      if (marks.length === 0) return 'No pages marked. Press “Delete” under each page you want to delete.';
+      const left = pages - marks.length;
+      const leftLine = left === 0 ? 'No pages will be left.' : left === 1 ? '1 page will be left.' : `${number(left)} pages will be left.`;
+      if (marks.length === 1) return `Page ${number(marks[0]!)} will be deleted. ${leftLine}`;
+      if (marks.length <= namedPages) return `Pages ${list(marks)} will be deleted. ${leftLine}`;
+      return `${number(marks.length)} pages will be deleted. ${leftLine}`;
+    },
+    announce: (pages, marks, page, marked) => {
+      // Marking the last unmarked page makes the main button unavailable, so it is said.
+      if (marked && marks.length >= pages) return `Page ${number(page)} marked to delete. Every page is marked, so no pages will be left.`;
+      if (marked) return `Page ${number(page)} marked to delete, ${number(marks.length)} in all.`;
+      if (marks.length === 0) return `Page ${number(page)} no longer marked. No pages marked.`;
+      return `Page ${number(page)} no longer marked, ${number(marks.length)} in all.`;
+    },
+    blocked: (pages, marks) => {
+      if (marks.length === 0) return 'Mark at least one page to delete.';
+      if (marks.length >= pages) return 'A PDF needs at least one page. Leave one or more pages unmarked.';
+      return null;
+    },
+    resultPages: (pages, marks) => pages - marks.length,
     drawsCut: false,
   },
 };

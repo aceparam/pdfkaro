@@ -33,7 +33,7 @@ export type ToolPage = {
 };
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
-export type ToggleKind = 'cut-after' | 'take';
+export type ToggleKind = 'cut-after' | 'take' | 'drop';
 
 /**
  * The words and rules a tool's widget uses. Everything here is plain text or
@@ -265,6 +265,51 @@ export const tools: Tool[] = [
       resultNotes: [
         'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
         "It also keeps the document's details, accessibility tags, link names and reading threads whole, which can describe or name pages you did not take.",
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    id: 'delete-pdf-pages',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['extract-pdf-pages', 'split-pdf', 'rearrange-pdf-pages', 'rotate-pdf', 'merge-pdf'],
+    pages: [
+      {
+        slug: 'delete-pdf-pages',
+        name: 'Delete pages',
+        summary: 'Remove chosen pages from a PDF.',
+        title: 'Delete pages from a PDF in your browser - PDFkaro',
+        description: 'Remove the pages you choose from a PDF. The file stays on your device and is not uploaded.',
+        heading: 'Delete pages from a PDF',
+        sentence: 'Remove the pages you choose from a PDF. Files stay on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Delete and download',
+      writingLabel: 'Writing the new file',
+      doneHeading: 'Your new file is ready',
+      failedHeading: 'The new file was not made.',
+      tooFewFiles: 'Choose a PDF file to delete pages from.',
+      outputSuffix: 'pages-deleted',
+      minFiles: 1,
+      multiple: false,
+      // The result's page count comes from the drop toggle (src/widget/toggles.ts), not from here.
+      resultPages: 'none',
+      items: 'pages',
+      itemControls: false,
+      itemToggle: { kind: 'drop', label: 'Delete' },
+      outputs: 'one',
+      // The owner's decisions of 13 Nov 2026.
+      resultNotes: [
+        'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
+        "It also keeps the document's details, accessibility tags, link names and reading threads whole, which can describe or name the pages you deleted.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },

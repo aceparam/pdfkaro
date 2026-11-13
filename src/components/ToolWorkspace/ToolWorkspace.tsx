@@ -249,7 +249,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
   // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
   const tooFew = state.files.length < words.minFiles;
-  const blocked = rules && filePages > 0 ? rules.blocked(marks) : null;
+  const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : null;
   const ready = canRun(state, words.minFiles, blocked === null);
   const tiedSentence = tooFew ? words.tooFewFiles : blocked;
 
