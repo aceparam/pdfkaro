@@ -318,3 +318,39 @@ describe('the PDF.js loader', () => {
     expect(started).toHaveLength(1);
   });
 });
+
+describe('closing and opening documents in the worker', () => {
+  it('never opens a document while the last one is still closing', async () => {
+    const log: string[] = [];
+    let closing = 0;
+    let overlapped = false;
+    const handle = createHandler({
+      loadEngine: async () => undefined,
+      tools: {},
+      post: () => {},
+      openDocument: async () => {
+        if (closing > 0) overlapped = true;
+        log.push('open');
+        return {
+          render: async () => new Uint8Array([1]),
+          close: async () => {
+            closing++;
+            log.push('close start');
+            // PDF.js tears a document down over a few turns of the event loop.
+            await new Promise((done) => setTimeout(done, 20));
+            log.push('close end');
+            closing--;
+          },
+        };
+      },
+    });
+    const thumb = (documentKey: string, requestId: number): ToWorker => ({ type: 'thumbnail', requestId, toolId: 'merge-pdf', file, page: 1, box, documentKey });
+    await handle(thumb('f1', 1));
+    // What the page does for a list of files: close, then at once ask for the next file, without waiting.
+    const closed = handle({ type: 'close', requestId: 2, toolId: 'merge-pdf' });
+    const next = handle(thumb('f2', 3));
+    await Promise.all([closed, next]);
+    expect(overlapped).toBe(false);
+    expect(log).toEqual(['open', 'close start', 'close end', 'open']);
+  });
+});

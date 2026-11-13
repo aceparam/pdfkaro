@@ -277,16 +277,12 @@ test.describe('problems with the file', () => {
 });
 
 test.describe('long files', () => {
-  test('pages-500.pdf shows all 500 pages, with no button to show more and no long task', async ({ page }) => {
+  test('pages-500.pdf shows all 500 pages, with no button to show more', async ({ page }) => {
     await open(page);
-    await watchLongTasks(page);
     await pick(page, 'pages-500.pdf');
     await expect(cells(page)).toHaveCount(500, { timeout: 30000 });
     await expect(page.getByRole('button', { name: /^Show pages/ })).toHaveCount(0);
-    await cells(page).nth(250).scrollIntoViewIfNeeded();
-    await cells(page).last().scrollIntoViewIfNeeded();
-    await page.waitForTimeout(1500);
-    expect(await longTasks(page)).toEqual([]);
+    // Whether it blocks the page is measured in performance.spec.ts, with nothing else running.
   });
 
   test('120,000 pages show 500 at a time; more come in real units, focus moves to the first new page @desktop', async ({ page }) => {

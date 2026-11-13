@@ -91,15 +91,22 @@ export function createHandler(deps: WorkerDeps) {
 
   // At most one document is kept open, for drawing thumbnails of one file's pages.
   let kept: { key: string; doc: Promise<KeptDocument> } | null = null;
-  async function closeKept() {
-    const closing = kept;
+  // Messages are handled side by side, so every close goes on one chain, and whatever opens a
+  // document, reads or runs waits for it: PDF.js must never open one while it tears another down.
+  let closing: Promise<void> = Promise.resolve();
+  function closeKept(): Promise<void> {
+    const leaving = kept;
     kept = null;
-    if (!closing) return;
-    try {
-      await (await closing.doc).close();
-    } catch {
-      // A document that never opened has nothing to close.
+    if (leaving) {
+      closing = closing.then(async () => {
+        try {
+          await (await leaving.doc).close();
+        } catch {
+          // A document that never opened has nothing to close.
+        }
+      });
     }
+    return closing;
   }
 
   return async function handle(data: unknown): Promise<void> {
