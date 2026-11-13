@@ -11,7 +11,7 @@
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping its tag text but not its content, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; run the `make-large.mjs` file by hand; record each outcome in the fixtures README
+- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping its tag text but not its content, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
 
 ## 4. Worker wiring
 
@@ -39,4 +39,4 @@
 - [ ] 9.1 No `LICENSES.md` line: no dependency added
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add Delete pages' hand checks to issue #7
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, and the start with nothing marked and the refusal of every page as the agent's reading
+- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the start with nothing marked, the refusal of every page and the output name `-pages-deleted` as the agent's choices; it does not call the tool done
