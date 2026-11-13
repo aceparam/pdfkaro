@@ -3,14 +3,9 @@
 // only for a tool whose registry entry has a 'cut-after' toggle. Plain
 // functions, tested in Node.
 
-const number = (value: number) => value.toLocaleString('en-GB');
-const files = (count: number) => (count === 1 ? '1 file' : `${number(count)} files`);
+import { list, number } from './format';
 
-/** "3 and 7", "3, 7 and 9". */
-function list(pages: readonly number[]): string {
-  const shown = pages.map(number);
-  return shown.length === 1 ? shown[0]! : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}`;
-}
+const files = (count: number) => (count === 1 ? '1 file' : `${number(count)} files`);
 
 /** Up to this many cuts are named; past it the line gives a count. */
 export const namedCuts = 5;
@@ -29,14 +24,4 @@ export function cutAnnouncement(pages: number, cuts: readonly number[], page: nu
   if (!marked) return `Cut after page ${number(page)} cleared. ${summary}`;
   // The summary names the cut unless it only counts them.
   return cuts.length > namedCuts ? `Cut after page ${number(page)}. ${summary}` : summary;
-}
-
-/** The button that shows the next batch of pages, in real units. */
-export function showMoreLabel(shown: number, pages: number, batch: number): string {
-  return `Show pages ${number(shown + 1)} to ${number(Math.min(pages, shown + batch))}`;
-}
-
-/** What the status region says after more pages are shown. */
-export function shownAnnouncement(shown: number, pages: number): string {
-  return `Showing ${number(Math.min(shown, pages))} of ${number(pages)} pages`;
 }

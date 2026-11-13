@@ -36,6 +36,9 @@ export type ToolPage = {
  * The words and rules a tool's widget uses. Everything here is plain text or
  * numbers, because it is passed from the page to the widget island.
  */
+/** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
+export type ToggleKind = 'cut-after' | 'take';
+
 export type ToolWidgetWords = {
   /** The picker button: "Choose PDF files". */
   pickerLabel: string;
@@ -78,7 +81,7 @@ export type ToolWidgetWords = {
    * none and the line that says what the main button will give. `label` is its
    * visible text. Only one kind exists so far.
    */
-  itemToggle?: { kind: 'cut-after'; label: string };
+  itemToggle?: { kind: ToggleKind; label: string };
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
   /** What the list shows: one item per file, or the pages of one file. */
@@ -217,6 +220,50 @@ export const tools: Tool[] = [
       resultNotes: [
         'Each file keeps the bookmarks that point to its own pages. Files attached to the document go with the first file only.',
         'The new files have no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    id: 'extract-pdf-pages',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['split-pdf', 'delete-pdf-pages', 'merge-pdf', 'rearrange-pdf-pages', 'rotate-pdf'],
+    pages: [
+      {
+        slug: 'extract-pdf-pages',
+        name: 'Extract pages',
+        summary: 'Copy chosen pages into a new PDF.',
+        title: 'Extract pages from a PDF in your browser - PDFkaro',
+        description: 'Copy the pages you choose from a PDF into a new file. The file stays on your device and is not uploaded.',
+        heading: 'Extract pages from a PDF',
+        sentence: 'Copy the pages you choose into a new PDF. Files stay on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Extract and download',
+      writingLabel: 'Writing the new file',
+      doneHeading: 'Your new file is ready',
+      failedHeading: 'The extract did not finish.',
+      tooFewFiles: 'Choose a PDF file to take pages from.',
+      outputSuffix: 'extracted',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'none',
+      items: 'pages',
+      itemControls: false,
+      itemToggle: { kind: 'take', label: 'Take' },
+      outputs: 'one',
+      // The owner's decisions of 13 Nov 2026.
+      resultNotes: [
+        'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
+        "It also keeps the document's details and accessibility tags whole, which can describe pages you did not take.",
+        'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },
   },

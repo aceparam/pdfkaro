@@ -33,6 +33,8 @@ type Props = {
     name(title: string): string;
     pressed: ReadonlySet<string>;
     skip?: ReadonlySet<string>;
+    /** Whether a pressed toggle draws a cut line on its page, as Split PDF's does. */
+    drawsCut?: boolean;
     onToggle(id: string, title: string): void;
   };
   /** An item to move focus to when it appears: its toggle, or the item itself. Asked once; `onFocused` says it is done. */
@@ -63,13 +65,15 @@ type ItemProps = GridItem & {
   toggleLabel?: string;
   toggleName?: string;
   pressed: boolean;
+  /** Whether a pressed toggle draws the cut line. */
+  drawsCut: boolean;
 };
 
 /**
  * One item. Memoised, with plain props and stable callbacks, so that a
  * thumbnail arriving draws only its own item again, even in a list of 500 pages.
  */
-const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, last, controls, grid, actions, toggleLabel, toggleName, pressed }: ItemProps) {
+const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, last, controls, grid, actions, toggleLabel, toggleName, pressed, drawsCut }: ItemProps) {
   const item = { id, title, detail, thumbnail };
   const rowRef = useCallback((element: HTMLLIElement | null) => actions.setRow(id, element), [actions, id]);
   return (
@@ -78,7 +82,7 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
       data-id={item.id}
       // A page can take focus from code, when more pages are shown and it has no control of its own.
       tabIndex={grid && !toggleLabel ? -1 : undefined}
-      className={`${grid ? styles.cell : styles.item}${pressed ? ` ${styles.cut}` : ''}`}
+      className={`${grid ? styles.cell : styles.item}${pressed && drawsCut ? ` ${styles.cut}` : ''}`}
       draggable={controls && !(first && last)}
       onDragStart={controls ? (event) => actions.dragStart(item.id, item.title, event) : undefined}
       onDragOver={controls ? actions.dragOver : undefined}
@@ -286,6 +290,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
           toggleLabel={toggle && !toggle.skip?.has(item.id) ? toggle.label : undefined}
           toggleName={toggle && !toggle.skip?.has(item.id) ? toggle.name(item.title) : undefined}
           pressed={toggle?.pressed.has(item.id) ?? false}
+          drawsCut={toggle?.drawsCut ?? false}
         />
       ))}
     </ol>

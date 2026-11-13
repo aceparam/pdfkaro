@@ -63,6 +63,9 @@ if (fflate.length !== 1) problems.push(`Expected fflate as one file of its own i
 else if (!worker.includes(`import(\`./${fflate[0]}\`)`) && !worker.includes(`import("./${fflate[0]}")`)) {
   problems.push(`The worker does not load ${fflate[0]} with import(), so it is not loaded late.`);
 }
+// The page engines' shared steps (src/engines/plain.ts and outline.ts) load late, never inside the worker file.
+if (worker.includes('A bookmark could not be read.') || worker.includes('--object-streams=disable')) problems.push("The worker file holds the page engines' shared steps.");
+
 // Lookup tables from fflate's deflate code: present only if fflate itself is in the file.
 if (worker.includes('[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]')) problems.push("The worker file holds fflate's code.");
 

@@ -6,8 +6,9 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
 import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems } from '../../widget/items';
-import { cutAnnouncement, cutSummary, showMoreLabel, shownAnnouncement } from '../../widget/cuts';
-import { allReady, canRun, currentProblem, isLarge, pageBatch, totals, type FileEntry } from '../../widget/state';
+import { showMoreLabel, shownAnnouncement } from '../../widget/format';
+import { toggledMarks, toggleRules } from '../../widget/toggles';
+import { allReady, canRun, currentProblem, isLarge, isManyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -178,8 +179,6 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   }, [problem, problemKey, state.files, setAnnouncement]);
 
   const count = totals(state);
-  const ready = canRun(state, words.minFiles);
-  const tooFew = state.files.length < words.minFiles;
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
 
   const pages = words.items === 'pages';
@@ -218,31 +217,41 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     setAnnouncement(`${onlyFile.name}, ${detailFor(onlyFile)}.`);
   }, [onlyReady, onlyFile, setAnnouncement]);
 
-  // Split's cuts: a toggle after every page but the last. The words are Split's own, from cuts.ts.
-  const cutAfter = words.itemToggle?.kind === 'cut-after' ? words.itemToggle : undefined;
-  const filePages = onlyFile?.status === 'ready' ? (onlyFile.pages ?? 0) : 0;
+  // A toggle on each page, such as Split's cuts or Extract's choice. What it means comes from toggles.ts.
+  const itemToggle = words.itemToggle;
+  const rules = itemToggle ? toggleRules[itemToggle.kind] : undefined;
+  const filePages = onlyFile?.status === 'ready' && !onlyFile.checking ? (onlyFile.pages ?? 0) : 0;
   const marks = state.marks;
   const pressed = useMemo(() => new Set(onlyFile ? marks.map((page) => `${onlyFile.id}:${page}`) : []), [marks, onlyFile]);
-  const skip = useMemo(() => new Set(onlyFile ? [`${onlyFile.id}:${filePages}`] : []), [onlyFile, filePages]);
+  const skip = useMemo(
+    () => new Set(onlyFile && rules ? rules.skip(filePages).map((page) => `${onlyFile.id}:${page}`) : []),
+    [onlyFile, rules, filePages],
+  );
   const toggle = useMemo(
     () =>
-      cutAfter
+      itemToggle && rules
         ? {
-            label: cutAfter.label,
-            name: (title: string) => `${cutAfter.label} ${title.toLowerCase()}`,
+            label: itemToggle.label,
+            name: (title: string) => `${itemToggle.label} ${title.toLowerCase()}`,
             pressed,
             skip,
+            drawsCut: rules.drawsCut,
             onToggle: (id: string) => {
               const page = Number(id.slice(id.lastIndexOf(':') + 1));
               const marked = !marks.includes(page);
-              const next = marked ? [...marks, page].sort((a, b) => a - b) : marks.filter((each) => each !== page);
               run.toggleMark(page);
-              setAnnouncement(cutAnnouncement(filePages, next, page, marked));
+              setAnnouncement(rules.announce(filePages, toggledMarks(marks, page), page, marked));
             },
           }
         : undefined,
-    [cutAfter, pressed, skip, marks, run, filePages, setAnnouncement],
+    [itemToggle, rules, pressed, skip, marks, run, filePages, setAnnouncement],
   );
+
+  // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
+  const tooFew = state.files.length < words.minFiles;
+  const blocked = rules && filePages > 0 ? rules.blocked(marks) : null;
+  const ready = canRun(state, words.minFiles, blocked === null);
+  const tiedSentence = tooFew ? words.tooFewFiles : blocked;
 
   // More pages: focus goes to the first new page, which sits where the button was.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -343,7 +352,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           )}
           {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
-          {cutAfter && filePages > 0 ? <p className={styles.cutSummary}>{cutSummary(filePages, marks)}</p> : null}
+          {rules && filePages > 0 ? <p className={styles.cutSummary}>{rules.summary(filePages, marks)}</p> : null}
 
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
@@ -414,6 +423,12 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </Notice>
           ) : null}
 
+          {pages && isManyPages(state) ? (
+            <Notice heading="This file has more than 20,000 pages">
+              <p>The job may take a long time. You can still go ahead.</p>
+            </Notice>
+          ) : null}
+
           {isLarge(state) && !askingPassword ? (
             <Notice heading={pages ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
               <p>The job may be slow, and a phone may run out of memory. You can still go ahead.</p>
@@ -431,16 +446,16 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 type="button"
                 className="button"
                 aria-disabled={ready ? undefined : true}
-                aria-describedby={tooFew ? `${toolId}-too-few` : undefined}
+                aria-describedby={tiedSentence ? `${toolId}-too-few` : undefined}
                 onClick={() => {
                   if (ready) void run.start();
                 }}
               >
                 {words.actionLabel}
               </button>
-              {tooFew ? (
+              {tiedSentence ? (
                 <p id={`${toolId}-too-few`} className={styles.tooFew}>
-                  {words.tooFewFiles}
+                  {tiedSentence}
                 </p>
               ) : null}
             </div>
