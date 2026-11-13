@@ -264,7 +264,7 @@ export const tools: Tool[] = [
       // The owner's decisions of 13 Nov 2026.
       resultNotes: [
         'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-        "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name pages you did not take, and in a file with accessibility tags can bring along their form fields, with what was typed in them, and notes.",
+        "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name pages you did not take. In a file with accessibility tags, they can also bring along those pages' form fields, with what was typed in them, and their notes.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },
@@ -309,7 +309,7 @@ export const tools: Tool[] = [
       // The owner's decisions of 13 Nov 2026.
       resultNotes: [
         'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-        "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name the pages you deleted, and in a file with accessibility tags can keep their form fields, with what was typed in them, and notes.",
+        "It also keeps the document's details, accessibility tags, the names of links inside it and reading threads whole. These can describe or name the pages you deleted. In a file with accessibility tags, they can also keep those pages' form fields, with what was typed in them, and their notes.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },
