@@ -65,6 +65,12 @@ Update this section when a phase gate is passed.
 - **Split PDF: attached files go with the first part only (12 Nov 2026).** The page says so.
 - **Split PDF: parts have no password and no restrictions (12 Nov 2026),** as for Merge PDF. The page says so.
 - **A zip result shows no next steps for now (12 Nov 2026).** No tool opens a zip, so "Tool page anatomy" part 6 cannot be met for a zip until one does.
+- **Compress PDF uses our own recompression, not Ghostscript (13 Nov 2026).** The owner chose this over adding Ghostscript under AGPL-3.0. Compression is written on top of qpdf and PDF.js; no Ghostscript and no `LICENSE` file are added for it.
+- **Image to PDF is one tool with three pages (13 Nov 2026):** one images-to-PDF tool that takes JPG and PNG, served at `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf`, each page worded for its search. `/image2pdf` is dropped.
+- **The agent may merge each tool's pull request (13 Nov 2026)** once CI is green and all six reviewers approve. Owner questions still wait for the owner, and hand checks stay in issue #7.
+- **The Privacy page is drafted by the agent (13 Nov 2026)** from what the code does, marked as a draft for the owner's review.
+- **Page tools drop passwords and restrictions (13 Nov 2026).** Extract pages, Delete pages, Reorder pages, Rotate PDF, Add page numbers, Watermark and Sign PDF give back a file with no password and no restrictions, as Merge and Split do, and each page says so.
+- **Tools that give back one file with fewer pages keep what still applies (13 Nov 2026).** Extract pages and Delete pages keep the bookmarks that point to a kept page and drop the rest; files attached to the document are kept.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
@@ -153,8 +159,7 @@ All but `developer` are read-only.
 
 - **Repair PDF link.** `SPEC.md` says a damaged file shows a link to Repair PDF. Repair PDF is a phase 2 tool, so for now the page offers to leave the file out, and shows the link only once Repair PDF is published (`add-tool-widget`). The owner may want it otherwise. Also, the WebAssembly build of qpdf does not rebuild a broken cross-reference table that desktop qpdf rebuilds, so Repair PDF may need more than this build.
 
-- **Image to PDF (`/image2pdf`).** The owner added this tool to the catalogue. It overlaps JPG to PDF and PNG to PDF, and its URL does not follow the hyphenated pattern the SEO section sets (`/image-to-pdf` would). Ask the owner how the three should relate, and which URL to use, before building it.
-- **Licence.** The assumed default is AGPL-3.0 with a public repo, because compression uses Ghostscript. Confirm with the owner before adding Ghostscript or a `LICENSE` file.
+- **Licence.** The assumed default was AGPL-3.0 because compression would use Ghostscript; the owner has since chosen no Ghostscript (13 Nov 2026). The repo's licence, and whether it is public, are still the owner's to decide ("Source code" in Open decisions). Add no `LICENSE` file until then.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
 - **Which pushes publish to the preview.** The owner switched Pages on, on 10 Nov 2026. Should every push to `main` or a `claude/` branch publish, as built, or only chosen branches? The branch rule is under Settings > Environments > github-pages.
 - **Pages for previews only, or for launch too?** Hosting on GitHub Pages means GitHub serves every page and logs each visitor's IP address, and the address shows the owner's account name. The Privacy page will have to say so if the site launches there.
