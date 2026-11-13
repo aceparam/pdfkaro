@@ -32,6 +32,7 @@ Delete pages is Extract with the marks turned round: the visitor marks the pages
             heading: 'Delete pages from a PDF',
             sentence: 'Remove the pages you choose from a PDF. Files stay on your device.' }],
   widget: { pickerLabel: 'Choose a PDF file', addLabel: 'Choose another file', multiple: false, minFiles: 1,
+            dropHint: 'You can also drop a file anywhere on this page, or paste it.', acceptsName: 'a PDF',
             tooFewFiles: 'Choose a PDF file to delete pages from.',
             items: 'pages', itemControls: false, itemToggle: { kind: 'drop', label: 'Delete' },
             outputs: 'one', outputSuffix: 'pages-deleted', resultPages: 'none',
@@ -52,14 +53,14 @@ Delete pages is Extract with the marks turned round: the visitor marks the pages
 - **skip:** none. Every page has a "Delete" button, named "Delete page N".
 - **option:** `{ pages: marks }`, the pages to delete.
 - **summary(pages, marks):**
-  - none: "No pages marked. Press “Delete” under each page you want to remove."
+  - none: "No pages marked. Press “Delete” under each page you want to delete."
   - one: "Page 3 will be deleted. 11 pages will be left."
   - up to five: "Pages 1, 3 and 7 will be deleted. 9 pages will be left."
   - more: "12 pages will be deleted. 88 pages will be left."
   - "1 page will be left." when one is left, and "No pages will be left." when none is.
-- **announce:** "Page 3 marked to delete, 4 in all." / "Page 3 no longer marked, 3 in all." / "Page 3 no longer marked. No pages marked."
+- **announce:** "Page 3 marked to delete, 4 in all." / "Page 3 no longer marked, 3 in all." / "Page 3 no longer marked. No pages marked." When the mark leaves no page unmarked, it says so, because the main button has just become unavailable: "Page 3 marked to delete. Every page is marked, so no pages will be left."
 - **blocked(marks, pages):**
-  - no marks: "Choose at least one page to delete.";
+  - no marks: "Mark at least one page to delete.";
   - every page marked: "A PDF needs at least one page. Leave one or more pages unmarked.";
   - otherwise null.
 - **resultPages:** `pages - marks.length`.

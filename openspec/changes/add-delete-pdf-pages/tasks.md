@@ -19,7 +19,7 @@
 
 ## 5. Page and page text
 
-- [ ] 5.1 Add `drop` to `src/widget/toggles.ts` and give `blocked` the page count; `ToolWorkspace` passes it; unit tests for `drop`'s words (none, one, up to five, more, one left, none left), skips, option, blocked (none, some, all), resultPages and drawsCut, and that `take` and `cut-after` are unchanged
+- [ ] 5.1 Add `drop` to `src/widget/toggles.ts` and give `blocked` the page count; `ToolWorkspace` passes it; unit tests for `drop`'s words (none, one, up to five, more, one left, none left) and announcements (including the one when every page becomes marked), skips, option, blocked (none, some, all), resultPages and drawsCut, and that `take` and `cut-after` are unchanged
 - [ ] 5.2 Write `src/content/tools/delete-pdf-pages.md`, 250 to 500 words, marked as a draft; check against "Banned patterns"
 
 ## 6. End-to-end test

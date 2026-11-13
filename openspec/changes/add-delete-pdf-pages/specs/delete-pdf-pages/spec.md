@@ -64,12 +64,12 @@ Every page SHALL have a "Delete" toggle button, named "Delete page N", marked as
 
 ### Requirement: When the main button cannot run
 
-Once pages are shown, the main button SHALL be unavailable but focusable while no page is marked, with "Choose at least one page to delete." tied to it, and while every page is marked, with "A PDF needs at least one page. Leave one or more pages unmarked." tied to it. (SPEC.md: Tool page anatomy, 5)
+Once pages are shown, the main button SHALL be unavailable but focusable while no page is marked, with "Mark at least one page to delete." tied to it, and while every page is marked, with "A PDF needs at least one page. Leave one or more pages unmarked." tied to it. (SPEC.md: Tool page anatomy, 5)
 
 #### Scenario: No page is marked
 
 - **WHEN** a 12-page file has been read
-- **THEN** the line reads "No pages marked. Press “Delete” under each page you want to remove.", and the main button is unavailable with "Choose at least one page to delete." tied to it
+- **THEN** the line reads "No pages marked. Press “Delete” under each page you want to delete.", and the main button is unavailable with "Mark at least one page to delete." tied to it
 
 #### Scenario: The last mark is cleared
 
@@ -78,8 +78,8 @@ Once pages are shown, the main button SHALL be unavailable but focusable while n
 
 #### Scenario: Every page is marked
 
-- **WHEN** all three pages of a 3-page file are marked
-- **THEN** the line reads "Pages 1, 2 and 3 will be deleted. No pages will be left.", and the main button is unavailable with "A PDF needs at least one page. Leave one or more pages unmarked." tied to it
+- **WHEN** pages 1 and 2 of a 3-page file are marked and the visitor then marks page 3
+- **THEN** the status region says "Page 3 marked to delete. Every page is marked, so no pages will be left.", the line reads "Pages 1, 2 and 3 will be deleted. No pages will be left.", and the main button is unavailable with "A PDF needs at least one page. Leave one or more pages unmarked." tied to it
 
 #### Scenario: The file is still getting ready
 

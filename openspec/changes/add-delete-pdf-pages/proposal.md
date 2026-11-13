@@ -8,8 +8,8 @@ Delete pages is fourth in the catalogue ("Organise pages", Phase 1), after Merge
 
 - **A new page, `/delete-pdf-pages`,** from a new registry entry. The visitor picks one PDF and sees every page as a thumbnail.
 - **Marking pages.** Each page has a "Delete" toggle button, named "Delete page 3" for screen readers, which works with the keyboard and on a touch screen. Every page has one, the last included. A marked page draws no cut line.
-  - A line above the pages says what will happen: "No pages marked. Press “Delete” under each page you want to remove.", "Page 3 will be deleted. 11 pages will be left.", "Pages 1, 3 and 7 will be deleted. 9 pages will be left." or "12 pages will be deleted. 88 pages will be left."
-  - With no page marked, the main button is marked unavailable, stays focusable, and "Choose at least one page to delete." is tied to it.
+  - A line above the pages says what will happen: "No pages marked. Press “Delete” under each page you want to delete.", "Page 3 will be deleted. 11 pages will be left.", "Pages 1, 3 and 7 will be deleted. 9 pages will be left." or "12 pages will be deleted. 88 pages will be left."
+  - With no page marked, the main button is marked unavailable, stays focusable, and "Mark at least one page to delete." is tied to it.
   - With every page marked, the main button is unavailable in the same way, with "A PDF needs at least one page. Leave one or more pages unmarked." tied to it.
 - **The main button, "Delete and download",** gives one PDF of the pages left, in page order, named `report-pages-deleted.pdf`.
 - **What the new file keeps,** by the owner's decisions of 13 Nov 2026 for tools that give back one file with fewer pages, the same as Extract pages:
