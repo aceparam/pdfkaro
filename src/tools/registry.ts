@@ -32,13 +32,13 @@ export type ToolPage = {
   preset?: Record<string, string | number | boolean>;
 };
 
+/** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
+export type ToggleKind = 'cut-after' | 'take';
+
 /**
  * The words and rules a tool's widget uses. Everything here is plain text or
  * numbers, because it is passed from the page to the widget island.
  */
-/** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
-export type ToggleKind = 'cut-after' | 'take';
-
 export type ToolWidgetWords = {
   /** The picker button: "Choose PDF files". */
   pickerLabel: string;
@@ -79,7 +79,8 @@ export type ToolWidgetWords = {
    * A toggle on each page, for a tool that lists pages. `kind` says what the
    * toggles mean, which decides the option sent to the engine, which pages have
    * none and the line that says what the main button will give. `label` is its
-   * visible text. Only one kind exists so far.
+   * visible text. What each kind means, including when it holds the main
+   * button back and how many pages the result has, is in src/widget/toggles.ts.
    */
   itemToggle?: { kind: ToggleKind; label: string };
   /** Plain notes shown with the result, such as what was not carried over. */
@@ -249,11 +250,12 @@ export const tools: Tool[] = [
       actionLabel: 'Extract and download',
       writingLabel: 'Writing the new file',
       doneHeading: 'Your new file is ready',
-      failedHeading: 'The extract did not finish.',
+      failedHeading: 'The new file was not made.',
       tooFewFiles: 'Choose a PDF file to take pages from.',
       outputSuffix: 'extracted',
       minFiles: 1,
       multiple: false,
+      // The result's page count comes from the take toggle (src/widget/toggles.ts), not from here.
       resultPages: 'none',
       items: 'pages',
       itemControls: false,
@@ -262,7 +264,7 @@ export const tools: Tool[] = [
       // The owner's decisions of 13 Nov 2026.
       resultNotes: [
         'The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
-        "It also keeps the document's details and accessibility tags whole, which can describe pages you did not take.",
+        "It also keeps the document's details, accessibility tags, link names and reading threads whole, which can describe or name pages you did not take.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },

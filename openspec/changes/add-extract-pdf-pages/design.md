@@ -49,7 +49,7 @@
             items: 'pages', itemControls: false, itemToggle: { kind: 'take', label: 'Take' },
             outputs: 'one', outputSuffix: 'extracted', resultPages: 'none',
             actionLabel: 'Extract and download', writingLabel: 'Writing the new file',
-            doneHeading: 'Your new file is ready', failedHeading: 'The extract did not finish.',
+            doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps the bookmarks that point to its pages, and the files attached to the document.',
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
@@ -84,14 +84,14 @@ export function toggledMarks(marks: number[], page: number): number[]; // shared
   - option: `{ pages: marks }`;
   - drawsCut: false;
   - summary:
-    - "No pages chosen. Press "Take" under each page you want."
+    - "No pages chosen. Press “Take” under each page you want."
     - "Pages 1, 3 and 7 chosen." (up to five pages named)
     - "12 pages chosen." (past five)
   - announce, which never repeats the list:
     - "Page 3 chosen, 4 in all."
     - "Page 3 no longer chosen, 3 in all."
     - "Page 3 no longer chosen. No pages chosen."
-  - blocked: "Choose at least one page to take out." when no page is chosen, otherwise null;
+  - blocked: "Choose at least one page for the new file." when no page is chosen, otherwise null;
   - resultPages: the number chosen.
 - **Shared words.** Numbers have thousands separators everywhere. The `number` and `list` helpers move from `cuts.ts` into `format.ts`. `showMoreLabel` and `shownAnnouncement` are page-list words, not Split's, so they move there too.
 - **`ToolWorkspace`, `useToolRun` and `PageGrid`** ask `toggleRules[kind]` and name no kind.

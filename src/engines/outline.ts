@@ -77,7 +77,6 @@ function shown(items: readonly OutlineItem[]): number {
   return items.reduce((sum, item) => sum + 1 + (item.open ? shown(item.kids) : 0), 0);
 }
 
-
 /** What is read once from the input to build each part's update. */
 export type Structure = {
   maxObjectId: number;

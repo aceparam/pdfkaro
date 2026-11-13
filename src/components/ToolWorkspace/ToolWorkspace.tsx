@@ -6,9 +6,9 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
 import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems } from '../../widget/items';
-import { showMoreLabel, shownAnnouncement } from '../../widget/format';
+import { number, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
-import { allReady, canRun, currentProblem, isLarge, isManyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
+import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -352,7 +352,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           )}
           {leftOut.length > 0 && <p className={styles.refused}>{leftOutText(leftOut)}</p>}
 
-          {rules && filePages > 0 ? <p className={styles.cutSummary}>{rules.summary(filePages, marks)}</p> : null}
+          {rules && filePages > 0 ? <p className={styles.toggleSummary}>{rules.summary(filePages, marks)}</p> : null}
 
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
@@ -424,7 +424,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ) : null}
 
           {pages && isManyPages(state) ? (
-            <Notice heading="This file has more than 20,000 pages">
+            <Notice heading={`This file has more than ${number(manyPages)} pages`}>
               <p>The job may take a long time. You can still go ahead.</p>
             </Notice>
           ) : null}
@@ -446,7 +446,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 type="button"
                 className="button"
                 aria-disabled={ready ? undefined : true}
-                aria-describedby={tiedSentence ? `${toolId}-too-few` : undefined}
+                aria-describedby={tiedSentence ? `${toolId}-why-not` : undefined}
                 onClick={() => {
                   if (ready) void run.start();
                 }}
@@ -454,7 +454,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 {words.actionLabel}
               </button>
               {tiedSentence ? (
-                <p id={`${toolId}-too-few`} className={styles.tooFew}>
+                <p id={`${toolId}-why-not`} className={styles.tooFew}>
                   {tiedSentence}
                 </p>
               ) : null}

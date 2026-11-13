@@ -8,8 +8,8 @@ Extract pages is third in the catalogue ("Organise pages", Phase 1), after Merge
 
 - **A new page, `/extract-pdf-pages`,** from a new registry entry. The visitor picks one PDF and sees every page as a thumbnail.
 - **Choosing pages.** Each page has a "Take" toggle button, named "Take page 3" for screen readers, which works with the keyboard and on a touch screen. Every page has one, the last included.
-  - A line above the pages says what is chosen: "No pages chosen. Press "Take" under each page you want.", "Pages 1, 3 and 7 chosen." or "12 pages chosen."
-  - With no page chosen, the main button is marked unavailable, stays focusable, and "Choose at least one page to take out." is tied to it, as Merge PDF does with too few files. The owner chose this start on 13 Nov 2026: the pages chosen are the job's input, not an option.
+  - A line above the pages says what is chosen: "No pages chosen. Press “Take” under each page you want.", "Pages 1, 3 and 7 chosen." or "12 pages chosen."
+  - With no page chosen, the main button is marked unavailable, stays focusable, and "Choose at least one page for the new file." is tied to it, as Merge PDF does with too few files. The owner chose this start on 13 Nov 2026: the pages chosen are the job's input, not an option.
 - **The main button, "Extract and download",** gives one PDF of the chosen pages, in page order, named `report-extracted.pdf`.
 - **What the new file keeps** (the owner's decisions of 13 Nov 2026):
   - the bookmarks that point to a chosen page, with kept children of a dropped bookmark moved up;

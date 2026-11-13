@@ -41,7 +41,7 @@ export const toggleRules: Record<ToggleKind, ToggleRules> = {
     skip: () => [],
     option: (marks) => ({ pages: [...marks] }),
     summary: (_pages, marks) => {
-      if (marks.length === 0) return 'No pages chosen. Press "Take" under each page you want.';
+      if (marks.length === 0) return 'No pages chosen. Press “Take” under each page you want.';
       if (marks.length === 1) return `Page ${number(marks[0]!)} chosen.`;
       if (marks.length <= namedPages) return `Pages ${list(marks)} chosen.`;
       return `${number(marks.length)} pages chosen.`;
@@ -51,7 +51,7 @@ export const toggleRules: Record<ToggleKind, ToggleRules> = {
       if (marks.length === 0) return `Page ${number(page)} no longer chosen. No pages chosen.`;
       return `Page ${number(page)} no longer chosen, ${number(marks.length)} in all.`;
     },
-    blocked: (marks) => (marks.length === 0 ? 'Choose at least one page to take out.' : null),
+    blocked: (marks) => (marks.length === 0 ? 'Choose at least one page for the new file.' : null),
     resultPages: (_pages, marks) => marks.length,
     drawsCut: false,
   },

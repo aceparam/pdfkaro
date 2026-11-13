@@ -18,11 +18,11 @@ const password = 'open-sesame';
 const picker = (page: Page) => page.locator('input[type=file]').first();
 const mainButton = (page: Page) => page.getByRole('button', { name: 'Extract and download' });
 const fileLine = (page: Page) => page.locator('p[tabindex="-1"]');
-const chosenLine = (page: Page) => page.locator('p[class*=cutSummary]');
+const chosenLine = (page: Page) => page.locator('p[class*=toggleSummary]');
 const cells = (page: Page) => page.locator('astro-island ol > li');
 const take = (page: Page, n: number) => page.getByRole('button', { name: `Take page ${n}`, exact: true });
 const status = (page: Page) => page.locator('[role=status]').first();
-const blockedSentence = (page: Page) => page.locator('p:not([role=status])', { hasText: 'Choose at least one page to take out.' });
+const blockedSentence = (page: Page) => page.locator('p:not([role=status])', { hasText: 'Choose at least one page for the new file.' });
 
 async function open(page: Page) {
   await page.goto('/extract-pdf-pages');
@@ -60,11 +60,11 @@ test.describe('choosing pages and extracting', () => {
     await expect(fileLine(page)).toContainText('text.pdf, 3 pages');
     await expect(cells(page)).toHaveCount(3);
     await expect(take(page, 3)).toBeVisible();
-    await expect(chosenLine(page)).toHaveText('No pages chosen. Press "Take" under each page you want.');
+    await expect(chosenLine(page)).toHaveText('No pages chosen. Press “Take” under each page you want.');
     await expect(mainButton(page)).toHaveAttribute('aria-disabled', 'true');
     await expect(blockedSentence(page)).toBeVisible();
     const describedBy = await mainButton(page).getAttribute('aria-describedby');
-    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText('Choose at least one page to take out.');
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText('Choose at least one page for the new file.');
   });
 
   test('chooses pages by mouse and keyboard, draws no cut line, and extracts them in order', async ({ page }) => {
@@ -162,7 +162,7 @@ test.describe('problems with the file', () => {
     await context.route(/\/_astro\/extract-pdf-pages-/, (route) => route.abort());
     await open(page);
     await pick(page, 'text.pdf');
-    await expect(page.getByRole('heading', { name: 'The extract did not finish.' })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'The new file was not made.' })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('The tool could not be loaded. Check your connection and try again.')).toBeVisible();
   });
 });
@@ -229,5 +229,18 @@ test.describe('nothing is uploaded', () => {
     await extractAndDownload(page);
     expect(violations(seen, new URL(baseURL!).origin, ['Chapter one', 'Chapter two', 'note.txt'], filesAfterPick())).toEqual([]);
     for (const line of consoleText) expect(line).not.toMatch(/Chapter (one|two)|note\.txt/);
+  });
+
+  test('the tag text, link names and thread title of a page left out reach no request and no console line', async ({ page, context, baseURL }) => {
+    const consoleText: string[] = [];
+    page.on('console', (message) => consoleText.push(message.text()));
+    await open(page);
+    const seen = watch(context, page);
+    await pick(page, 'tagged.pdf');
+    await take(page, 1).click();
+    await extractAndDownload(page);
+    const secrets = ['SECRET-ALT-TEXT', 'SECRET-ACTUAL-TEXT', 'SECRET-DEST-NAME', 'SECRET-THREAD-TITLE', 'SECRET-PAGE-TWO-TEXT'];
+    expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
+    for (const line of consoleText) for (const secret of secrets) expect(line).not.toContain(secret);
   });
 });

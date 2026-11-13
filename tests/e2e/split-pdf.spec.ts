@@ -19,7 +19,7 @@ const password = 'open-sesame';
 const picker = (page: Page) => page.locator('input[type=file]').first();
 const mainButton = (page: Page) => page.getByRole('button', { name: 'Split and download' });
 const fileLine = (page: Page) => page.locator('p[tabindex="-1"]');
-const cutLine = (page: Page) => page.locator('p[class*=cutSummary]');
+const cutLine = (page: Page) => page.locator('p[class*=toggleSummary]');
 const cells = (page: Page) => page.locator('astro-island ol > li');
 const cut = (page: Page, n: number) => page.getByRole('button', { name: `Cut after page ${n}`, exact: true });
 const status = (page: Page) => page.locator('[role=status]').first();

@@ -55,7 +55,7 @@
   margin: 0 0 0.25rem;
 }
 /* What the main button will give, for a tool with cut toggles. */
-.cutSummary {
+.toggleSummary {
   margin: 0 0 0.625rem;
   /* Never shorter than two lines, so the pages below do not jump when a cut is marked or cleared. */
   min-height: calc(2 * 1.55em);

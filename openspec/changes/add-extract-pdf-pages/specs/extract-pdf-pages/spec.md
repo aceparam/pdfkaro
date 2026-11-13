@@ -35,12 +35,12 @@ While the engine loads, the file's line SHALL show "Getting ready". Once read, i
 
 ### Requirement: Choosing the pages to take out
 
-Every page SHALL have a "Take" toggle button, named "Take page N", marked as pressed or not, drawing no cut line. A line above the pages SHALL say what is chosen. Once pages are shown and none is chosen, the main button SHALL be unavailable but focusable, with "Choose at least one page to take out." tied to it. Choices SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4 and 5; owner, 13 Nov 2026)
+Every page SHALL have a "Take" toggle button, named "Take page N", marked as pressed or not, drawing no cut line. A line above the pages SHALL say what is chosen. Once pages are shown and none is chosen, the main button SHALL be unavailable but focusable, with "Choose at least one page for the new file." tied to it. Choices SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4 and 5; owner, 13 Nov 2026)
 
 #### Scenario: No page is chosen
 
 - **WHEN** a 12-page file has been read
-- **THEN** the line reads "No pages chosen. Press "Take" under each page you want.", and the main button is unavailable with "Choose at least one page to take out." tied to it
+- **THEN** the line reads "No pages chosen. Press “Take” under each page you want.", and the main button is unavailable with "Choose at least one page for the new file." tied to it
 
 #### Scenario: Pages are chosen
 
@@ -65,7 +65,7 @@ Every page SHALL have a "Take" toggle button, named "Take page N", marked as pre
 #### Scenario: The file is still getting ready
 
 - **WHEN** the file is still being read, or asks for a password
-- **THEN** the sentence "Choose at least one page to take out." is not shown
+- **THEN** the sentence "Choose at least one page for the new file." is not shown
 
 #### Scenario: The last page
 

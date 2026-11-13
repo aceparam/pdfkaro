@@ -23,7 +23,7 @@ describe('the take toggle (Extract pages)', () => {
   });
 
   it('says what is chosen, naming up to five pages, then a count, with thousands separators', () => {
-    expect(rules.summary(12, [])).toBe('No pages chosen. Press "Take" under each page you want.');
+    expect(rules.summary(12, [])).toBe('No pages chosen. Press “Take” under each page you want.');
     expect(rules.summary(12, [3])).toBe('Page 3 chosen.');
     expect(rules.summary(12, [1, 3, 7])).toBe('Pages 1, 3 and 7 chosen.');
     expect(rules.summary(30, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe('12 pages chosen.');
@@ -38,7 +38,7 @@ describe('the take toggle (Extract pages)', () => {
   });
 
   it('blocks the main button until a page is chosen, and counts the result pages', () => {
-    expect(rules.blocked([])).toBe('Choose at least one page to take out.');
+    expect(rules.blocked([])).toBe('Choose at least one page for the new file.');
     expect(rules.blocked([2])).toBeNull();
     expect(rules.resultPages?.(12, [1, 3, 7])).toBe(3);
   });
