@@ -26,7 +26,7 @@
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/rearrange-pdf-pages.spec.ts` at 360px and 1280px: moving by keyboard with announcement and focus, drag, unavailable ends, moving past the pages shown (focus on the moved page's "Later", announcement "of 900"), a one-page file's line, reorder and check the download's page order (`mixed.pdf` sizes), password, damaged, not-a-PDF, two-file drop, Cancel keeps the order, engine-load failure, skip link, and the 20,000-page notice with a move on the generated file blocking nothing for more than 100 ms; Merge's, Split's, Extract's and Delete's e2e tests still pass
+- [ ] 6.1 `tests/e2e/rearrange-pdf-pages.spec.ts` at 360px and 1280px: moving by keyboard with announcement and focus, drag (and that pressing the last page's unavailable "Later" moves nothing), unavailable ends, moving past the pages shown (focus on the moved page's "Later", announcement "of 900"), a one-page file's line, reorder and check the download's page order (`mixed.pdf` sizes), password, damaged, not-a-PDF, two-file drop, Cancel keeps the order, engine-load failure, skip link, and the 20,000-page notice with a move on the generated file blocking nothing for more than 100 ms; Merge's, Split's, Extract's and Delete's e2e tests still pass
 
 ## 7. No-upload test
 

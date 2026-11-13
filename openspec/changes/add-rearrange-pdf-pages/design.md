@@ -5,7 +5,7 @@
 - **Page tools so far** (Split, Extract, Delete) list one file's pages as a grid in `PageGrid`, with a toggle on each page and no moves.
 - **Merge PDF** lists files as rows that move by "Move up", "Move down" and drag. The widget keeps that order as the order of `state.files`.
 - **Reorder pages** needs Merge's moves on Split's page grid, and an order for pages, which the state does not hold yet.
-- **The engine side is ready.** `keepPages` in `src/engines/plain.ts` writes the pages it is given, in the order given, through the argument file. qpdf's `--pages . 3,1,2 --` puts the pages in that order. Bookmarks point to page objects, so they follow their pages.
+- **The engine side is nearly ready.** `keepPages` in `src/engines/plain.ts` ends by writing the pages it is given, in the order given, through the argument file; that tail becomes `writePages`, which Reorder calls without `keepPages`'s bookmark rewrite. qpdf's `--pages . 3,1,2 --` puts the pages in that order. Bookmarks point to page objects, so they follow their pages.
 
 ## Goals and non-goals
 
@@ -35,7 +35,7 @@
             actionLabel: 'Reorder and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
             resultNotes: ['The new file keeps every page, and its bookmarks still point to the same pages, wherever they now are. Files attached to the document are kept.',
-                          'The list of bookmarks keeps its order. In a file with accessibility tags, a screen reader still reads the pages in their original order.',
+                          'The list of bookmarks keeps its order. In a file with accessibility tags, a screen reader may still read the pages in their original order.',
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 

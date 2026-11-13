@@ -54,7 +54,7 @@ Every page SHALL have "Earlier" and "Later" buttons, named "Move page N earlier"
 
 #### Scenario: Moving past the pages shown
 
-- **WHEN** the last page shown of a 900-page file, place 500, is moved down
+- **WHEN** the "Later" of the last page shown of a 900-page file, place 500, is pressed
 - **THEN** the next batch is shown, the page is at place 501 in view with focus on its "Later" button, and the status region says "Page 500 moved to place 501 of 900."
 
 ### Requirement: What the line above the pages says
@@ -166,7 +166,7 @@ There SHALL be no fixed size limit. When the file is over 100 MB the page SHALL 
 
 #### Scenario: A file of 120,000 pages
 
-- **WHEN** a file of 120,000 pages has been read and its first page is moved down
+- **WHEN** a file of 120,000 pages has been read and its first page's "Later" is pressed
 - **THEN** "This file has more than 20,000 pages" is shown, the move blocks the page for no more than 100 ms, and the main button can be used
 
 ### Requirement: Nothing is uploaded
