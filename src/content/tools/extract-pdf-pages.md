@@ -5,7 +5,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 ## How to extract pages from a PDF
 
 1. Choose the PDF file you want pages from. You can also drop it anywhere on this page, or paste it.
-2. Each page is shown. Press "Take" under each page you want. Press it again to leave the page out.
+2. Each page is shown. Press “Take” under each page you want. Press it again to leave the page out.
 3. Press Extract and download.
 4. When the new file is ready, press Download.
 
