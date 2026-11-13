@@ -11,7 +11,7 @@
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping its tag text but not its content, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
+- [ ] 3.1 Unit test `pagesLeft` and `run` on every file in `tests/fixtures/`: page order and absent pages through the uncompressed result, `mixed.pdf` shapes, `rich.pdf` page 1 deleted keeping "Chapter two", `note.txt`, the link-free page and no dead bookmark, `tagged.pdf` page 2 deleted keeping `SECRET-ALT-TEXT`, `SECRET-ACTUAL-TEXT`, `SECRET-DEST-NAME` and `SECRET-THREAD-TITLE` while `SECRET-PAGE-TWO-TEXT` and the field `secretfield` are gone, `password.pdf` with its password, damaged files, a nested outline, a 3,000-bookmark file, every other page of `pages-500.pdf`, and a refusal of every page; run the `make-large.mjs` file by hand; record each outcome in the fixtures README, and that the multilingual file is still missing
 
 ## 4. Worker wiring
 
@@ -20,7 +20,7 @@
 ## 5. Page and page text
 
 - [ ] 5.1 Add `drop` to `src/widget/toggles.ts` and give `blocked` the page count; `ToolWorkspace` passes it; unit tests for `drop`'s words (none, one, up to five, more, one left, none left) and announcements (including the one when every page becomes marked), skips, option, blocked (none, some, all), resultPages and drawsCut, and that `take` and `cut-after` are unchanged
-- [ ] 5.2 Write `src/content/tools/delete-pdf-pages.md`, 250 to 500 words, marked as a draft; check against "Banned patterns"
+- [ ] 5.2 Write `src/content/tools/delete-pdf-pages.md`, 250 to 500 words, marked as a draft; its answer on what stays from deleted pages says plainly that deleting a page does not remove the document-wide parts, and to check the new file before sharing it; check against "Banned patterns"
 
 ## 6. End-to-end test
 
@@ -28,7 +28,7 @@
 
 ## 7. No-upload test
 
-- [ ] 7.1 Delete's no-upload test: its exact allowlist (with the engine and shared chunks, no `fflate`), positive checks that the engine was fetched and `fflate`, Split, Merge and Extract were not, `qz7report.pdf`, its stem and the password as secrets, and `rich.pdf` and `tagged.pdf` strings as secrets for requests and the console, storage and traces
+- [ ] 7.1 Delete's no-upload test: its exact allowlist (with the engine and shared chunks, no `fflate`), positive checks that the engine was fetched and `fflate`, Split, Merge and Extract were not, `qz7report.pdf`, its stem and the password as secrets, and, in separate runs, `rich.pdf`'s bookmark titles and attachment name and `tagged.pdf`'s marked strings as secrets for requests and the console; storage and traces
 
 ## 8. Screenshots
 
