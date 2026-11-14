@@ -7,11 +7,11 @@
 ## 2. Engine
 
 - [ ] 2.1 Add `writeTurned(tools, plain, groups)` to `src/engines/plain.ts` (one qpdf call through the argument file with `--rotate=+90/+180/+270:<list>` for each group that has pages, then `qpdf --check`); unit tests in `tests/unit/plain.test.ts`
-- [ ] 2.2 Write `src/engines/tools/rotate-pdf.ts`: `pageTurns(pages, turns)` (exported for its test; refusing a page out of range, repeated or out of order, quarters of 0, 4, a fraction or a string, a list longer than the file, `all` out of range, not an object; grouping pages by their final turn in one pass) and `run` through `plainCopy`, `pageTurns` and `writeTurned`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
+- [ ] 2.2 Write `src/engines/tools/rotate-pdf.ts`: `pageTurns(pages, turns)` (exported for its test; refusing a page out of range, repeated or out of order, quarters of 0, 4, a fraction or a string, an entry that is not an array of exactly two items, a list longer than the file, `all` out of range, not an object; grouping pages by their final turn in one pass) and `run` through `plainCopy`, `pageTurns` and `writeTurned`, with writing progress at 0 and 100; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Unit test `run` on every file in `tests/fixtures/`, checking each page's `/Rotate` through qpdf's JSON: single pages, every page, `mixed.pdf`'s already-turned pages adding to their turn, text unchanged, `rich.pdf`'s bookmarks, link and `note.txt` kept, `tagged.pdf` keeping everything, `password.pdf` with its password and `restricted.pdf` unprotected, nothing turned, damaged files, and bad turns; record each outcome in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s one page turned by hand
+- [ ] 3.1 Unit test `run` on every file in `tests/fixtures/`, checking each page's `/Rotate` through qpdf's JSON: single pages, every page, `mixed.pdf`'s already-turned pages adding to their turn, text unchanged, `rich.pdf`'s bookmarks, link and `note.txt` kept, `tagged.pdf` keeping everything, `password.pdf` with its password and `restricted.pdf` unprotected, nothing turned, damaged files, bad turns, and pages made in the test whose `/Rotate` is 45, -90, 450 or inherited from a `/Pages` node, recording whether each result matches the turned thumbnail; record each outcome in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s one page turned by hand
 
 ## 4. State and turns
 
@@ -41,4 +41,4 @@
 - [ ] 9.1 No `LICENSES.md` line: no dependency added
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add Rotate PDF's hand checks to issue #7
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Left"/"Right" and "Turn all", the button working with nothing turned, `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done
+- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Left"/"Right" and "Turn all", the button working with nothing turned (which gives back an unprotected copy, by the owner's decision on passwords), `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done

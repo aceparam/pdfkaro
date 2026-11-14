@@ -11,7 +11,7 @@ Rotate PDF is sixth in the catalogue ("Organise pages", Phase 1), after Merge, S
   - Each page has "Left" and "Right" buttons, stacked under its thumbnail as Reorder's are, named "Turn page 3 left" and "Turn page 3 right". Each press turns the page a quarter.
   - Above the pages, "Turn all left" and "Turn all right" turn every page a quarter, including pages not shown yet.
   - The thumbnail is drawn turned, scaled to fit its slot, so the visitor sees the result.
-  - A turn is announced with where the page now points: "Page 3 turned right. It is now a quarter turn to the right." / "… It is now upside down." / "… It is back the way it was."; for all pages: "Every page turned right."
+  - A turn is announced with where the page now points: "Page 3 turned right. It is now a quarter turn right of how it was." / "… It is now half a turn from how it was." / "… It is back the way it was."; for all pages: "Every page turned right."
   - A line above the pages says what will happen: "No pages will be turned. Press “Left” or “Right” under a page to turn it, or turn them all.", "3 pages will be turned." or "Every page will be turned."
 - **The main button, "Turn and download",** gives one PDF with every page, each turned as shown, named `report-rotated.pdf`. With nothing turned it still works and gives the pages as they were, so the main button works from the start.
 - **What the new file keeps:** every page and everything on it, untouched; only each page's turn changes (its `/Rotate`), so text, links, form fields, notes, bookmarks, attachments, details and tags stay as they were. It has no password and no restrictions, by the owner's decision of 13 Nov 2026 that names Rotate PDF. The page says so.
@@ -77,5 +77,5 @@ No open decision needs more than its assumed default.
   - `src/widget/state.ts`, with the turns and their actions;
   - `PageGrid` (a turn pair under each page, a turned thumbnail), `ToolWorkspace` and `useToolRun` (turning, the "Turn all" buttons, the line above the pages, the turns sent to the engine);
   - `src/engines/plain.ts`, with `writeTurned`;
-  - `page-weight.mjs`, which names the new engine.
+  - `page-weight.mjs`, which names the new engine, and `check-worker.mjs`, which checks `writeTurned` stays out of the worker file.
 - **Merge, Split, Extract, Delete and Reorder:** no change in behaviour.

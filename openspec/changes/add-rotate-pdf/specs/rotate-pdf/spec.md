@@ -53,17 +53,17 @@ While the engine loads, the file's line SHALL show "Getting ready". Once read, i
 
 ### Requirement: Turning a page
 
-Every page SHALL have "Left" and "Right" buttons, named "Turn page N left" and "Turn page N right", each turning the page a quarter. The page's thumbnail SHALL be drawn turned, scaled to fit its slot. A turn SHALL be announced with where the page now points, and focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; SEO, Specific jobs)
+Every page SHALL have "Left" and "Right" buttons, named "Turn page N left" and "Turn page N right", each turning the page a quarter. The page's thumbnail SHALL be drawn turned, scaled to fit its slot. A turn SHALL be announced with how far the page now is from how it was in the file, and focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; SEO, Specific jobs)
 
 #### Scenario: A page is turned right
 
 - **WHEN** a keyboard user presses "Turn page 3 right" in a 12-page file
-- **THEN** page 3's thumbnail is drawn a quarter turned to the right, the status region says "Page 3 turned right. It is now a quarter turn to the right.", and focus stays on "Turn page 3 right"
+- **THEN** page 3's thumbnail is drawn a quarter turned to the right, the status region says "Page 3 turned right. It is now a quarter turn right of how it was.", and focus stays on "Turn page 3 right"
 
 #### Scenario: A page is turned twice
 
 - **WHEN** "Turn page 3 right" is pressed twice
-- **THEN** the thumbnail is upside down and the status region says "Page 3 turned right. It is now upside down."
+- **THEN** the thumbnail is turned half round from how it was and the status region says "Page 3 turned right. It is now half a turn from how it was."
 
 #### Scenario: A page is turned back
 
@@ -110,7 +110,7 @@ The main button SHALL read "Turn and download" and SHALL work with nothing turne
 #### Scenario: Pages are turned
 
 - **WHEN** page 2 of a 3-page file is turned right and page 3 turned twice, and the job runs
-- **THEN** page 1 is as it was, page 2 is a quarter turn more to the right, and page 3 is upside down
+- **THEN** page 1 is as it was, page 2 is a quarter turn more to the right, and page 3 is turned half round
 
 #### Scenario: A page that was already turned
 
