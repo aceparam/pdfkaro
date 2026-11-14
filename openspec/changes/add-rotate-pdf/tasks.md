@@ -19,7 +19,7 @@
 
 ## 5. Page and page text
 
-- [ ] 5.1 `PageGrid`: a `turns` prop giving each grid cell "Turn left" and "Turn right" stacked full-width, named "Turn page N left/right", no Remove, never unavailable; the picture (and blank paper) drawn turned, scaled to fit the slot for a quarter turn; component tests
+- [ ] 5.1 `PageGrid`: a `turns` prop giving each grid cell "Turn left" and "Turn right" stacked full-width, named "Turn page N left/right", no Remove, never unavailable; the caption from `turnCaption` ("Page 3, turned right"), with two lines reserved in cells that turn; the picture and blank paper drawn turned by `turn1`, `turn2` and `turn3` classes, quarter turns swapping the limits to 68 wide and 52 tall before rotating, with no fixed scale and no transition; component tests that a landscape page turned a quarter keeps its full size, that the caption reads "Page 3, turned right", and that rows and Reorder's moves are unchanged
 - [ ] 5.2 `ToolWorkspace` and `useToolRun`: turning a page and announcing it, "Turn every page left" and "Turn every page right" between the line and the skip link (not for one page), the line above the pages memoised on the turns, the main button unavailable with its tied sentence while nothing will be turned, and `{ turns }` sent to the engine
 - [ ] 5.3 Write `src/content/tools/rotate-pdf.md`, 250 to 500 words, marked as a draft, covering turning one page or all; that only quarter turns are made, so a crooked scan is not straightened; that everything else in the original file stays in the new one, including hidden text and the document's details (it is not cleaned), and only each page's turn changes; the original file; that the password and restrictions are removed; and that the page forgets the file and the turns when you press Start again or leave the page; check against "Banned patterns"
 - [ ] 5.4 Name `rotate-pdf` in `page-weight.mjs`; check `check-worker.mjs` finds the engine and keeps `writeTurned` out of the worker file
@@ -34,7 +34,7 @@
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/rotate-pdf` at 360px and 1280px, light and dark: empty, pages as they are, some pages turned (with focus on a button), every page turned, result, password, damaged; check the buttons are stacked and fit a cell at both widths and at 200% text size, and that turned thumbnails stay inside their slots
+- [ ] 8.1 Screenshots of `/rotate-pdf` at 360px and 1280px, light and dark: empty, pages as they are (the main button unavailable with "Turn a page to make a new file."), some pages turned (with focus on a button), every page turned, result, password, damaged; check the buttons are stacked and fit a cell at both widths and at 200% text size, and that turned thumbnails stay inside their slots
 
 ## 9. Checks and review
 

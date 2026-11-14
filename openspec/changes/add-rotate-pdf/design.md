@@ -106,5 +106,5 @@ qpdf adds a quarter to whatever `/Rotate` a page has. A crafted file can carry a
 ## Risks and trade-offs
 
 - **Two kinds of turn.** "Turn every page" adds to every page's own turn: turning page 3 right and then all pages left leaves page 3 as it was. The thumbnails show this, and every announcement says how far a page is from how it was in the file, never which way it points, because a page the file already turns (such as `mixed.pdf`'s upside-down page) would otherwise be described wrongly. The summary counts the pages whose final turn is not 0.
-- **The scaled thumbnail** of a page turned a quarter is about three quarters of its size. It keeps the grid still; the turn is still plain to see.
+- **Turned pictures at their own shape.** A portrait page turned a quarter is drawn within 52 by 68, so it is smaller than an unturned landscape page beside it; nothing is scaled beyond that, and the grid never moves.
 - **Many taps.** Turning a single page three quarters left takes one press of "Turn left"; there is no case that takes more than two presses. Turning many single pages takes a press each; "Turn every page" covers the common case of a whole sideways scan.
