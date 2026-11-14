@@ -122,7 +122,7 @@ describe('PageGrid with pages that move', () => {
 describe('PageGrid with pages that turn', () => {
   const pages = [1, 2, 3].map((page) => ({ id: `f1:${page}`, title: `Page ${page}`, detail: '', thumbnail: `blob:http://localhost/${page}` }));
   const turnsOf: Record<string, number> = { 'f1:3': 1, 'f1:2': 2 };
-  const turns = { of: (id: string) => turnsOf[id] ?? 0, caption: (title: string, turn: number) => (turn ? `${title}, turned ${['', 'right', 'half round', 'left'][turn]}` : title), onTurn: noop };
+  const turns = { of: (id: string) => turnsOf[id] ?? 0, caption: (title: string, turn: number) => (turn ? `${title}, turned ${['', 'right', 'half round', 'left'][turn]}` : title), onTurn: noop, stamp: () => 'one' };
   const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" turns={turns} />);
 
   it('gives each page Turn left and Turn right, named for the page, never unavailable, and no Remove', () => {

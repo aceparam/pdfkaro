@@ -87,6 +87,12 @@
   flex-direction: column;
   align-items: center;
   gap: 0.375rem;
+  /* A change inside one page (a caption, a turned picture) lays out that page only, not the whole grid,
+     and pages far off screen are not laid out or painted until they come near. The browser keeps each
+     page's last size, so the grid does not move as they do. */
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 5rem auto 10rem;
 }
 .caption {
   /* "Page 120,000" may wrap rather than overflow a narrow cell. */
@@ -142,7 +148,8 @@
 /* A page that turns: its caption keeps two lines, so a caption that wraps never moves the grid or the
    button that has focus. */
 .turnCaption {
-  min-height: 2.6em;
+  min-height: 3.2em;
+  min-height: 2lh;
 }
 /* A turned picture, at its own shape within the slot. For a quarter turn its limits are swapped
    before it turns, so once turned it is at most 52 wide and 68 tall. No transition. */

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styles from './PageGrid.module.css';
 
 export type GridItem = {
@@ -45,6 +45,12 @@ type Props = {
     of(id: string): number;
     caption(title: string, turn: number): string;
     onTurn(id: string, title: string, by: 1 | -1): void;
+    /**
+     * A value that changes whenever the turn of an item from `firstId` to `lastId` may have
+     * changed. The pages are drawn in chunks, and a chunk whose stamp is unchanged is not drawn
+     * again, so turning every page of a long file one chunk a frame keeps each frame short.
+     */
+    stamp(firstId: string, lastId: string): string;
   };
   /**
    * How many items the whole list has, when only some are given: the pages of a long file, shown in
@@ -216,6 +222,32 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
   );
 });
 
+/** How many pages a chunk holds, for pages that turn. */
+const chunkSize = 50;
+
+type ChunkProps = {
+  items: GridItem[];
+  start: number;
+  count: number;
+  stamp: string;
+  itemProps(item: GridItem, index: number): ItemProps & { key: string };
+};
+
+/** A run of pages drawn together; drawn again only when its items, the list's length or its stamp change. */
+const Chunk = memo(
+  function Chunk({ items, start, itemProps }: ChunkProps) {
+    return (
+      <>
+        {items.map((item, index) => {
+          const { key, ...props } = itemProps(item, start + index);
+          return <PageItem key={key} {...props} />;
+        })}
+      </>
+    );
+  },
+  (before, after) => before.items === after.items && before.start === after.start && before.count === after.count && before.stamp === after.stamp,
+);
+
 /**
  * The items of the working area, in order. When the tool gives them controls,
  * they move by Move up and Move down, which work with the keyboard and on a
@@ -363,28 +395,44 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
   }));
 
   const grid = layout === 'grid';
+  const itemProps = (item: GridItem, index: number) => ({
+    key: item.id,
+    id: item.id,
+    title: item.title,
+    detail: item.detail,
+    thumbnail: item.thumbnail,
+    first: index === 0,
+    last: index === count - 1,
+    controls,
+    grid,
+    actions,
+    toggleLabel: toggle && !toggle.skip?.has(item.id) ? toggle.label : undefined,
+    toggleName: toggle && !toggle.skip?.has(item.id) ? toggle.name(item.title) : undefined,
+    pressed: toggle?.pressed.has(item.id) ?? false,
+    drawsCut: toggle?.drawsCut ?? false,
+    turn: turns ? turns.of(item.id) : undefined,
+    turnCaption: turns ? turns.caption(item.title, turns.of(item.id)) : undefined,
+  });
+
+  // Pages that turn are drawn in chunks: a chunk whose stamp has not changed is not drawn again.
+  const chunked = turns !== undefined;
+  const chunks = useMemo(() => {
+    if (!chunked) return [];
+    const list: GridItem[][] = [];
+    for (let start = 0; start < items.length; start += chunkSize) list.push(items.slice(start, start + chunkSize));
+    return list;
+  }, [chunked, items]);
+
   return (
     <ol className={grid ? styles.grid : styles.list}>
-      {items.map((item, index) => (
-        <PageItem
-          key={item.id}
-          id={item.id}
-          title={item.title}
-          detail={item.detail}
-          thumbnail={item.thumbnail}
-          first={index === 0}
-          last={index === count - 1}
-          controls={controls}
-          grid={grid}
-          actions={actions}
-          toggleLabel={toggle && !toggle.skip?.has(item.id) ? toggle.label : undefined}
-          toggleName={toggle && !toggle.skip?.has(item.id) ? toggle.name(item.title) : undefined}
-          pressed={toggle?.pressed.has(item.id) ?? false}
-          drawsCut={toggle?.drawsCut ?? false}
-          turn={turns ? turns.of(item.id) : undefined}
-          turnCaption={turns ? turns.caption(item.title, turns.of(item.id)) : undefined}
-        />
-      ))}
+      {turns
+        ? chunks.map((chunk, index) => (
+            <Chunk key={index} items={chunk} start={index * chunkSize} count={count} stamp={turns.stamp(chunk[0]!.id, chunk[chunk.length - 1]!.id)} itemProps={itemProps} />
+          ))
+        : items.map((item, index) => {
+            const { key, ...props } = itemProps(item, index);
+            return <PageItem key={key} {...props} />;
+          })}
     </ol>
   );
 }

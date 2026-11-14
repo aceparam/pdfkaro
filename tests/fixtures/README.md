@@ -168,6 +168,27 @@ Files made in the test: a nested outline keeps every bookmark, each pointing to 
 
 The file over 100 MB from `make-large.mjs` has one page, so its only order is the one it has; Extract's hand run covers reading it. The multilingual file is still missing.
 
+### Rotate PDF (`src/engines/tools/rotate-pdf.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/rotate-pdf.test.ts`). Every result passes `qpdf --check`, keeps every page, and is not encrypted. Turns are read back through the page tree and normalised as PDF.js draws them. Only each page's `/Rotate` changes.
+
+| File | Outcome |
+| --- | --- |
+| `text.pdf` | Page 2 a quarter right and page 3 half round, its text unchanged, with progress at 0 and 100. Every page left: 270 each |
+| `pages-500.pdf` | Every other page a quarter right; the result is no bigger than the input |
+| `scanned.pdf`, `warning.pdf`, `images.pdf` | Turned; qpdf's warning does not stop the job |
+| `password.pdf` | Turned when its password is given; the result has no password. Without the password the job fails |
+| `restricted.pdf` | With nothing turned: the pages as they were, with no restrictions (the page holds the main button back in this case) |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | Not turned: the job fails and hands back nothing |
+| `form.pdf` | Turned; its field kept |
+| `mixed.pdf` | A turn adds to the one each page already has: every page right gives 90, 90, 180, 270; page 4 half round brings it upright |
+| `rich.pdf` | Page 1 turned: bookmarks, link and `note.txt` kept |
+| `tagged.pdf` | Every page half round: everything kept |
+
+Files made in the test, for turns already in a file (the security reviewer, stage 1): pages whose `/Rotate` is 45, -90, 450 and 135 read as 0, 270, 90 and 0, as PDF.js draws them, and turned right give 90, 0, 180 and 90; a turn inherited from the page tree is added to. Each result matches the turned thumbnail. Orders that are not valid are refused.
+
+The file over 100 MB from `make-large.mjs` has one page; turning it was not run by hand, as Extract's hand run covers reading it and the job writes only that page's turn. The multilingual file is still missing.
+
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
 Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 104 by 136 box (`tests/unit/thumbnail.test.ts`).
