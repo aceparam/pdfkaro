@@ -120,7 +120,7 @@ A line above the pages SHALL say how many pages will be turned, or that none wil
 
 ### Requirement: When the main button cannot run
 
-Once pages are shown and no page will be turned, the main button SHALL be unavailable but focusable, with "Turn a page to make a new file." tied to it, so the page never offers a "rotated" file that is not turned. (SPEC.md: Tool page anatomy, 5; Honest about limits)
+Once pages are shown and no page will be turned, the main button SHALL be unavailable but focusable, with "Turn a page to make a new file." tied to it, so the page never offers a "rotated" file that is not turned. The turns are the job's input, not an option, so this does not break "Defaults are set so the main button works", as for Extract pages. (SPEC.md: Tool page anatomy, 4 and 5; Honest about limits; the agent's reading, after the owner's decision for Extract of 13 Nov 2026)
 
 #### Scenario: Nothing is turned
 
