@@ -15,18 +15,18 @@
 
 ## 4. State and turns
 
-- [ ] 4.1 `State.turns` (`null` for nothing turned): `page-turned { page, by }` and `all-turned { by }`, back to `null` on replace, remove and reset, kept through Cancel and failure; `src/widget/turns.ts` with `turnOf`, `turnedCount`, `turnSummary`, `turnAnnouncement`, `allAnnouncement` and `turnsToSend`; unit tests for each, including `turnedCount` on 120,000 pages with `all` set
+- [ ] 4.1 `State.turns` (`null` for nothing turned): `page-turned { page, by }` and `all-turned { by }`, back to `null` on replace, remove and reset, kept through Cancel and failure; `src/widget/turns.ts` with `turnOf`, `turnedCount`, `turnSummary`, `turnCaption`, `turnAnnouncement`, `allAnnouncement`, `turnsBlocked` and `turnsToSend`; unit tests for each, including `turnedCount` on 120,000 pages with `all` set
 
 ## 5. Page and page text
 
-- [ ] 5.1 `PageGrid`: a `turns` prop giving each grid cell "Left" and "Right" stacked full-width, named "Turn page N left/right", no Remove, never unavailable; the picture (and blank paper) drawn turned, scaled to fit the slot for a quarter turn; component tests
-- [ ] 5.2 `ToolWorkspace` and `useToolRun`: turning a page and announcing it, "Turn all left" and "Turn all right" above the pages, the line above the pages memoised on the turns, and `{ turns }` sent to the engine
-- [ ] 5.3 Write `src/content/tools/rotate-pdf.md`, 250 to 500 words, marked as a draft, covering turning one page or all; that everything else in the original file stays in the new one, including hidden text and the document's details (it is not cleaned), and only each page's turn changes; the original file; that the password and restrictions are removed; and that the page forgets the file and the turns when you press Start again or leave the page; check against "Banned patterns"
+- [ ] 5.1 `PageGrid`: a `turns` prop giving each grid cell "Turn left" and "Turn right" stacked full-width, named "Turn page N left/right", no Remove, never unavailable; the picture (and blank paper) drawn turned, scaled to fit the slot for a quarter turn; component tests
+- [ ] 5.2 `ToolWorkspace` and `useToolRun`: turning a page and announcing it, "Turn every page left" and "Turn every page right" between the line and the skip link (not for one page), the line above the pages memoised on the turns, the main button unavailable with its tied sentence while nothing will be turned, and `{ turns }` sent to the engine
+- [ ] 5.3 Write `src/content/tools/rotate-pdf.md`, 250 to 500 words, marked as a draft, covering turning one page or all; that only quarter turns are made, so a crooked scan is not straightened; that everything else in the original file stays in the new one, including hidden text and the document's details (it is not cleaned), and only each page's turn changes; the original file; that the password and restrictions are removed; and that the page forgets the file and the turns when you press Start again or leave the page; check against "Banned patterns"
 - [ ] 5.4 Name `rotate-pdf` in `page-weight.mjs`; check `check-worker.mjs` finds the engine and keeps `writeTurned` out of the worker file
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/rotate-pdf.spec.ts` at 360px and 1280px: turning by keyboard with announcement and focus, turning back, "Turn all right" with the next batch of a 900-page file drawn turned, turn and check each page's turn in the download (`mixed.pdf`), password, damaged, not-a-PDF, two-file drop, Cancel keeps the turns, engine-load failure, skip link, and the 20,000-page notice with "Turn all right" and a page's "Right" on the generated file blocking nothing for more than 100 ms; the other tools' e2e tests still pass
+- [ ] 6.1 `tests/e2e/rotate-pdf.spec.ts` at 360px and 1280px: turning by keyboard with announcement, caption and focus, turning back, the main button unavailable with nothing turned and usable after a turn, "Turn every page right" with the next batch of a 900-page file drawn turned, turn and check each page's turn in the download (`mixed.pdf`), password, damaged, not-a-PDF, two-file drop, Cancel keeps the turns, engine-load failure, skip link, and the 20,000-page notice with "Turn every page right" and a page's "Turn right" on the generated file blocking nothing for more than 100 ms; the other tools' e2e tests still pass
 
 ## 7. No-upload test
 
@@ -41,4 +41,4 @@
 - [ ] 9.1 No `LICENSES.md` line: no dependency added
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add Rotate PDF's hand checks to issue #7
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Left"/"Right" and "Turn all", the button working with nothing turned (which gives back an unprotected copy, by the owner's decision on passwords), `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done
+- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Turn left"/"Turn right" and "Turn every page", the main button waiting for a turn, unlike Reorder's, as an owner question, `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done

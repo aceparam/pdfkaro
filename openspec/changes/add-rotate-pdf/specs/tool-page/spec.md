@@ -2,12 +2,12 @@
 
 ### Requirement: Pages that a tool lets turn
 
-When a tool lets the pages of one file turn, each page SHALL have "Left" and "Right" buttons, stacked and named "Turn page N left" and "Turn page N right", and no Remove; its thumbnail SHALL be drawn turned, scaled to fit its slot. A turn SHALL be announced with how far the page now is from how it was, and focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; Works on a phone)
+When a tool lets the pages of one file turn, each page SHALL have "Turn left" and "Turn right" buttons, stacked and named "Turn page N left" and "Turn page N right", and no Remove; its thumbnail SHALL be drawn turned within its slot, and its caption SHALL say how far it is turned from how it was. Focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; Works on a phone)
 
 #### Scenario: A page is turned
 
 - **WHEN** a keyboard user presses "Turn page 3 right"
-- **THEN** page 3's thumbnail is drawn a quarter turned to the right within its slot, the turn is announced, and focus stays on the button
+- **THEN** page 3's thumbnail is drawn a quarter turned to the right within its slot, its caption reads "Page 3, turned right", the turn is announced, and focus stays on the button
 
 #### Scenario: The buttons at phone width
 

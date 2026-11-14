@@ -53,59 +53,88 @@ While the engine loads, the file's line SHALL show "Getting ready". Once read, i
 
 ### Requirement: Turning a page
 
-Every page SHALL have "Left" and "Right" buttons, named "Turn page N left" and "Turn page N right", each turning the page a quarter. The page's thumbnail SHALL be drawn turned, scaled to fit its slot. A turn SHALL be announced with how far the page now is from how it was in the file, and focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; SEO, Specific jobs)
+Every page SHALL have "Turn left" and "Turn right" buttons, named "Turn page N left" and "Turn page N right", each turning the page a quarter. The page's thumbnail SHALL be drawn turned, within its slot, and its caption SHALL say in words how far it is turned from how it was in the file. A turn SHALL be announced in the same words, and focus SHALL stay on the button pressed. (SPEC.md: Tool page anatomy, 4; Definition of done, keyboard and screen reader; SEO, Specific jobs)
 
 #### Scenario: A page is turned right
 
 - **WHEN** a keyboard user presses "Turn page 3 right" in a 12-page file
-- **THEN** page 3's thumbnail is drawn a quarter turned to the right, the status region says "Page 3 turned right. It is now a quarter turn right of how it was.", and focus stays on "Turn page 3 right"
+- **THEN** page 3's thumbnail is drawn a quarter turned to the right, its caption reads "Page 3, turned right", the status region says "Page 3 is now turned right.", and focus stays on "Turn page 3 right"
 
 #### Scenario: A page is turned twice
 
 - **WHEN** "Turn page 3 right" is pressed twice
-- **THEN** the thumbnail is turned half round from how it was and the status region says "Page 3 turned right. It is now half a turn from how it was."
+- **THEN** the thumbnail is turned half round from how it was, the caption reads "Page 3, turned half round", and the status region says "Page 3 is now turned half round."
 
 #### Scenario: A page is turned back
 
 - **WHEN** "Turn page 3 right" then "Turn page 3 left" are pressed
-- **THEN** the thumbnail is drawn as it was and the status region says "Page 3 turned left. It is back the way it was."
+- **THEN** the thumbnail is drawn as it was, the caption reads "Page 3", and the status region says "Page 3 is back the way it was."
+
+#### Scenario: A page the file already turns
+
+- **WHEN** a page the file already shows upside down is turned right twice
+- **THEN** its caption reads "Page N, turned half round", saying how far it moved from how it was, not which way it now points
 
 ### Requirement: Turning every page
 
-Above the pages, "Turn all left" and "Turn all right" SHALL turn every page of the file a quarter, including pages not shown yet, on top of any page's own turns. The turn SHALL be announced. (SPEC.md: Tool page anatomy, 4)
+Above the pages, "Turn every page left" and "Turn every page right" SHALL turn every page of the file a quarter, including pages not shown yet, on top of any page's own turns. The turn SHALL be announced. A one-page file SHALL not show them. (SPEC.md: Tool page anatomy, 4)
 
 #### Scenario: Every page is turned
 
-- **WHEN** the visitor presses "Turn all right" on a 12-page file
-- **THEN** every thumbnail is drawn a quarter turned to the right, and the status region says "Every page turned right."
+- **WHEN** the visitor presses "Turn every page right" on a 12-page file with no page turned on its own
+- **THEN** every thumbnail is drawn a quarter turned to the right, every caption says "turned right", and the status region says "Every page is now turned right."
+
+#### Scenario: Every page, with some turned on their own
+
+- **WHEN** page 3 has been turned left and the visitor presses "Turn every page right"
+- **THEN** the status region says "Every page turned right.", and page 3's caption reads "Page 3"
 
 #### Scenario: Every page of a long file
 
-- **WHEN** the visitor presses "Turn all right" on a 900-page file showing 500 pages, then shows the next batch
+- **WHEN** the visitor presses "Turn every page right" on a 900-page file showing 500 pages, then shows the next batch
 - **THEN** the pages of the next batch are drawn turned too
+
+#### Scenario: A one-page file
+
+- **WHEN** a one-page file has been read
+- **THEN** only the page's own "Turn left" and "Turn right" are shown
 
 ### Requirement: What the line above the pages says
 
-A line above the pages SHALL say how many pages will be turned, or that none will, and how to turn a page. The turns SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4)
+A line above the pages SHALL say how many pages will be turned, or that none will, and always how to turn a page. The turns SHALL be forgotten on remove or replace, and kept through Cancel and failure. (SPEC.md: Tool page anatomy, 4)
 
 #### Scenario: Nothing is turned
 
 - **WHEN** a file has been read, or every page has been turned back
-- **THEN** the line reads "No pages will be turned. Press “Left” or “Right” under a page to turn it, or turn them all."
+- **THEN** the line reads "No pages will be turned. Press “Turn left” or “Turn right” under a page to turn it, or turn every page at once."
 
 #### Scenario: Some pages are turned
 
 - **WHEN** pages 2, 5 and 9 of a 12-page file are turned
-- **THEN** the line reads "3 pages will be turned."
+- **THEN** the line reads "3 pages will be turned. Press “Turn left” or “Turn right” under a page to turn it, or turn every page at once."
 
 #### Scenario: Every page is turned
 
-- **WHEN** every page of a 12-page file is turned the same way
-- **THEN** the line reads "Every page will be turned."
+- **WHEN** every page of a 12-page file is turned
+- **THEN** the line begins "Every page will be turned."
+
+### Requirement: When the main button cannot run
+
+Once pages are shown and no page will be turned, the main button SHALL be unavailable but focusable, with "Turn a page to make a new file." tied to it, so the page never offers a "rotated" file that is not turned. (SPEC.md: Tool page anatomy, 5; Honest about limits)
+
+#### Scenario: Nothing is turned
+
+- **WHEN** a file has been read and nothing is turned
+- **THEN** the main button is unavailable with "Turn a page to make a new file." tied to it
+
+#### Scenario: A turn and its undoing
+
+- **WHEN** a page is turned right, then left again
+- **THEN** the main button is usable after the first press and unavailable again after the second
 
 ### Requirement: Turning the file
 
-The main button SHALL read "Turn and download" and SHALL work with nothing turned. Pressing it SHALL write one PDF of every page, each turned as shown, which MUST pass `qpdf --check` and SHALL change nothing else in the file. It SHALL have no password and no restrictions, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; the owner's decision of 13 Nov 2026)
+The main button SHALL read "Turn and download". Pressing it SHALL write one PDF of every page, each turned as shown, which MUST pass `qpdf --check` and SHALL change nothing else in the file. It SHALL have no password and no restrictions, and the page SHALL say so. (SPEC.md: Tool page anatomy, 5; Definition of done; the owner's decision of 13 Nov 2026)
 
 #### Scenario: Pages are turned
 
@@ -165,7 +194,7 @@ There SHALL be no fixed size limit. When the file is over 100 MB the page SHALL 
 
 #### Scenario: A file of 120,000 pages
 
-- **WHEN** a file of 120,000 pages has been read and "Turn all right" and one page's "Right" are pressed
+- **WHEN** a file of 120,000 pages has been read and "Turn every page right" and one page's "Turn right" are pressed
 - **THEN** "This file has more than 20,000 pages" is shown, neither press blocks the page for more than 100 ms, and the main button can be used
 
 ### Requirement: Nothing is uploaded
@@ -184,7 +213,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, turning one page or all, that everything else in the file stays (it is not cleaned), the original file, passwords, and that the page forgets the file and the turns. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, turning one page or all, that only quarter turns are made (a crooked scan is not straightened), that everything else in the file stays (it is not cleaned), the original file, passwords, and that the page forgets the file and the turns. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
 
 #### Scenario: The text is in the served page
 

@@ -8,12 +8,12 @@ Rotate PDF is sixth in the catalogue ("Organise pages", Phase 1), after Merge, S
 
 - **A new page, `/rotate-pdf`,** from a new registry entry. The visitor picks one PDF and sees every page as a thumbnail, in batches of 500.
 - **Turning pages.**
-  - Each page has "Left" and "Right" buttons, stacked under its thumbnail as Reorder's are, named "Turn page 3 left" and "Turn page 3 right". Each press turns the page a quarter.
-  - Above the pages, "Turn all left" and "Turn all right" turn every page a quarter, including pages not shown yet.
-  - The thumbnail is drawn turned, scaled to fit its slot, so the visitor sees the result.
-  - A turn is announced with where the page now points: "Page 3 turned right. It is now a quarter turn right of how it was." / "… It is now half a turn from how it was." / "… It is back the way it was."; for all pages: "Every page turned right."
-  - A line above the pages says what will happen: "No pages will be turned. Press “Left” or “Right” under a page to turn it, or turn them all.", "3 pages will be turned." or "Every page will be turned."
-- **The main button, "Turn and download",** gives one PDF with every page, each turned as shown, named `report-rotated.pdf`. With nothing turned it still works and gives the pages as they were, so the main button works from the start.
+  - Each page has "Turn left" and "Turn right" buttons, stacked under its thumbnail as Reorder's are, named "Turn page 3 left" and "Turn page 3 right". Each press turns the page a quarter.
+  - Above the pages, "Turn every page left" and "Turn every page right" turn every page a quarter, including pages not shown yet.
+  - The thumbnail is drawn turned, at its own shape within its slot, and the caption says the turn in words ("Page 3, turned right"), for screen readers and for blank paper not yet drawn.
+  - A turn is announced in the caption's words: "Page 3 is now turned right.", "… turned half round.", "… turned left." or "Page 3 is back the way it was."; for every page, where every page now is, or "Every page turned right." when some are turned on their own.
+  - A line above the pages says what will happen: "No pages will be turned. Press “Turn left” or “Turn right” under a page to turn it, or turn every page at once.", "3 pages will be turned." or "Every page will be turned."
+- **The main button, "Turn and download",** gives one PDF with every page, each turned as shown, named `report-rotated.pdf`. While no page will be turned it is unavailable but focusable, with "Turn a page to make a new file." tied to it, as Extract does with no page chosen, so the page never offers a "rotated" file that is not turned.
 - **What the new file keeps:** every page and everything on it, untouched; only each page's turn changes (its `/Rotate`), so text, links, form fields, notes, bookmarks, attachments, details and tags stay as they were. It has no password and no restrictions, by the owner's decision of 13 Nov 2026 that names Rotate PDF. The page says so.
 - **Shared code:**
   - **Page turns in the widget's state:** a turn for every page (`all`, 0 to 3 quarters) and a turn for single pages on top of it, so turning all pages of a 120,000-page file is one number, not 120,000. Forgotten when the file is removed or replaced; kept through Cancel and failure.
@@ -50,7 +50,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **Bookmarks, attachments, tags:** every page is kept and only its turn changes, so all of them stay, as "Leaves alone what it was not asked to change" asks.
 - **20,000 pages:** the notice is shown, by the owner's decision of 13 Nov 2026.
 - **Repair PDF link:** as for the other tools, no link until Repair PDF is published.
-- **The agent's own choices,** named in the pull request: "Left" and "Right" stacked under each page, with "Turn all left" and "Turn all right" above the pages; the main button working with nothing turned; the output name `-rotated`, after the tool's name and the search it answers.
+- **The agent's own choices,** named in the pull request: "Turn left" and "Turn right" stacked under each page, with "Turn every page left" and "Turn every page right" above the pages; the main button waiting for a turn, unlike Reorder's (an owner question too); the output name `-rotated`, after the tool's name and the search it answers.
 
 No open decision needs more than its assumed default.
 
@@ -75,7 +75,7 @@ No open decision needs more than its assumed default.
 - **Changed code:**
   - the registry, with the entry and a way to say a tool's pages turn;
   - `src/widget/state.ts`, with the turns and their actions;
-  - `PageGrid` (a turn pair under each page, a turned thumbnail), `ToolWorkspace` and `useToolRun` (turning, the "Turn all" buttons, the line above the pages, the turns sent to the engine);
+  - `PageGrid` (a turn pair under each page, a turned thumbnail), `ToolWorkspace` and `useToolRun` (turning, the "Turn every page" buttons, the line above the pages, the turns sent to the engine);
   - `src/engines/plain.ts`, with `writeTurned`;
   - `page-weight.mjs`, which names the new engine, and `check-worker.mjs`, which checks `writeTurned` stays out of the worker file.
 - **Merge, Split, Extract, Delete and Reorder:** no change in behaviour.
