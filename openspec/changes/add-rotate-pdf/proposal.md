@@ -78,4 +78,5 @@ No open decision needs more than its assumed default.
   - `PageGrid` (a turn pair under each page, a turned thumbnail), `ToolWorkspace` and `useToolRun` (turning, the "Turn every page" buttons, the line above the pages, the turns sent to the engine);
   - `src/engines/plain.ts`, with `writeTurned`;
   - `page-weight.mjs`, which names the new engine, and `check-worker.mjs`, which checks `writeTurned` stays out of the worker file.
+- **Every page grid (Split, Extract, Delete, Reorder and Rotate):** each cell gets `contain: layout style` and `content-visibility: auto`, so a change inside one page lays out that page only and pages far off screen are not drawn until they come near; and pages that turn are drawn in memoised chunks of 50. Both were added when the slowed-CPU test of "Turn every page" failed (see the design). Nothing on screen changes; tests read captions by their text, as text off screen is not rendered.
 - **Merge, Split, Extract, Delete and Reorder:** no change in behaviour.

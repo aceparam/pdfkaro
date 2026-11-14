@@ -185,9 +185,9 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/rotat
 | `rich.pdf` | Page 1 turned: bookmarks, link and `note.txt` kept |
 | `tagged.pdf` | Every page half round: everything kept |
 
-Files made in the test, for turns already in a file (the security reviewer, stage 1): pages whose `/Rotate` is 45, -90, 450 and 135 read as 0, 270, 90 and 0, as PDF.js draws them, and turned right give 90, 0, 180 and 90; a turn inherited from the page tree is added to. Each result matches the turned thumbnail. Orders that are not valid are refused.
+Files made in the test, for turns already in a file (the security reviewer, stage 1): pages whose `/Rotate` is 45, -90, 450 and 135 read as 0, 270, 90 and 0, as PDF.js draws them, and turned right give 90, 0, 180 and 90; a turn inherited from the page tree is added to. Each result matches the turned thumbnail. Turns that are not valid are refused.
 
-The file over 100 MB from `make-large.mjs` has one page; turning it was not run by hand, as Extract's hand run covers reading it and the job writes only that page's turn. The multilingual file is still missing.
+The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was turned a quarter by hand in Node on 14 Nov 2026: 110,124,059 bytes out, in about 2.2 seconds. The multilingual file is still missing.
 
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
