@@ -83,6 +83,8 @@ export type ToolWidgetWords = {
    * button back and how many pages the result has, is in src/widget/toggles.ts.
    */
   itemToggle?: { kind: ToggleKind; label: string };
+  /** For a tool that lists pages: each page turns, by "Turn left" and "Turn right" under it (Rotate PDF). */
+  itemTurns?: true;
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
   /** What the list shows: one item per file, or the pages of one file. */
@@ -354,6 +356,49 @@ export const tools: Tool[] = [
       resultNotes: [
         'The new file keeps every page, and its bookmarks still point to the same pages, wherever they now are. Files attached to the document are kept.',
         'The list of bookmarks keeps its order. In a file with accessibility tags, a screen reader may still read the pages in their original order.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    id: 'rotate-pdf',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['rearrange-pdf-pages', 'delete-pdf-pages', 'extract-pdf-pages', 'split-pdf', 'merge-pdf'],
+    pages: [
+      {
+        slug: 'rotate-pdf',
+        name: 'Rotate PDF',
+        summary: 'Turn the pages of a PDF.',
+        title: 'Rotate PDF pages in your browser - PDFkaro',
+        description: 'Turn one page or every page of a PDF. The file stays on your device and is not uploaded.',
+        heading: 'Rotate PDF pages',
+        sentence: 'Turn one page or every page of a PDF. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Turn and download',
+      writingLabel: 'Writing the new file',
+      doneHeading: 'Your new file is ready',
+      failedHeading: 'The new file was not made.',
+      tooFewFiles: 'Choose a PDF file to turn its pages.',
+      outputSuffix: 'rotated',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      items: 'pages',
+      itemControls: false,
+      itemTurns: true,
+      outputs: 'one',
+      // The owner's decision of 13 Nov 2026 on passwords; only each page's turn changes.
+      resultNotes: [
+        "Apart from the password, nothing changes but the way pages face: text, links, form fields, bookmarks, attached files, hidden text and the document's details are as they were.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },

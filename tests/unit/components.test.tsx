@@ -119,6 +119,32 @@ describe('PageGrid with pages that move', () => {
   });
 });
 
+describe('PageGrid with pages that turn', () => {
+  const pages = [1, 2, 3].map((page) => ({ id: `f1:${page}`, title: `Page ${page}`, detail: '', thumbnail: `blob:http://localhost/${page}` }));
+  const turnsOf: Record<string, number> = { 'f1:3': 1, 'f1:2': 2 };
+  const turns = { of: (id: string) => turnsOf[id] ?? 0, caption: (title: string, turn: number) => (turn ? `${title}, turned ${['', 'right', 'half round', 'left'][turn]}` : title), onTurn: noop };
+  const html = renderToStaticMarkup(<PageGrid items={pages} onMove={noop} onRemove={noop} controls={false} layout="grid" turns={turns} />);
+
+  it('gives each page Turn left and Turn right, named for the page, never unavailable, and no Remove', () => {
+    expect(html.match(/>Turn left</g)).toHaveLength(3);
+    expect(html.match(/>Turn right</g)).toHaveLength(3);
+    expect(html).toContain('aria-label="Turn page 1 left"');
+    expect(html).toContain('aria-label="Turn page 3 right"');
+    expect(html).not.toContain('aria-disabled');
+    expect(html).not.toContain('Remove');
+  });
+
+  it('says the turn in the caption, and turns the picture by a class at its own shape', () => {
+    expect(html).toContain('Page 3, turned right</div>');
+    expect(html).toContain('Page 2, turned half round</div>');
+    expect(html).toContain('Page 1</div>');
+    expect(html).toMatch(/src="blob:http:\/\/localhost\/3"/);
+    expect(html).toMatch(/class="[^"]*turn1[^"]*" src="blob:http:\/\/localhost\/3"/);
+    expect(html).toMatch(/class="[^"]*turn2[^"]*" src="blob:http:\/\/localhost\/2"/);
+    expect(html).not.toMatch(/style="[^"]*rotate/);
+  });
+});
+
 describe('PageGrid with a toggle on each page', () => {
   const pages = Array.from({ length: 3 }, (_, index) => ({ id: `f1:${index + 1}`, title: `Page ${index + 1}`, detail: '' }));
   const toggle = {

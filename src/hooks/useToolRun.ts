@@ -6,6 +6,7 @@ import { outputName, stem } from '../widget/format';
 import { initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
 import { orderToSend } from '../widget/order';
+import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
@@ -31,6 +32,10 @@ export type ToolRun = {
   toggleMark(page: number): void;
   /** Moves a page of the one file to a new place, counted from 0: Reorder pages. */
   movePage(page: number, to: number): void;
+  /** Turns a page of the one file a quarter, right (1) or left (-1): Rotate PDF. */
+  turnPage(page: number, by: 1 | -1): void;
+  /** Turns every page of the one file a quarter. */
+  turnAll(by: 1 | -1): void;
   /** Shows the next batch of pages. */
   showMore(): void;
   start(): Promise<void>;
@@ -261,8 +266,9 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     // The toggle kind's option, from marks sorted as numbers: sorted as text, 10 would come before 9.
     if (words.itemToggle) return toggleRules[words.itemToggle.kind].option([...stateRef.current.marks].sort((a, b) => a - b));
     if (words.items === 'pages' && words.itemControls) return { order: orderToSend(stateRef.current.order, totals(stateRef.current).pages) };
+    if (words.itemTurns) return turnRules.option(stateRef.current.turns, totals(stateRef.current).pages);
     return {};
-  }, [words.itemToggle, words.items, words.itemControls]);
+  }, [words.itemToggle, words.items, words.itemControls, words.itemTurns]);
 
   const start = useCallback(async () => {
     const listed = stateRef.current.files;
@@ -310,6 +316,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
+  const turnPage = useCallback((page: number, by: 1 | -1) => dispatch({ type: 'page-turned', page, by }), []);
+  const turnAll = useCallback((by: 1 | -1) => dispatch({ type: 'all-turned', by }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
 
   const cancel = useCallback(() => {
@@ -352,5 +360,5 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, showMore, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, start, cancel, backToFiles, clear };
 }

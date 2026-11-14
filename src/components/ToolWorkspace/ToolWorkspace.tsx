@@ -7,6 +7,7 @@ import { fileCount, formatSize, pageCount, progressLine } from '../../widget/for
 import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems } from '../../widget/items';
 import { orderSummary } from '../../widget/order';
+import { allAnnouncement, turnAnnouncement, turnCaption, turnedAll, turnedPage, turnOf, turnRules } from '../../widget/turns';
 import { number, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
@@ -259,9 +260,34 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     [pageMoves, run],
   );
 
+  // A tool whose pages turn (Rotate PDF): each page's turn, read by PageGrid inside its map so a turn
+  // draws only the cells it changes, and the line that says how many pages will be turned.
+  const pageTurns = pages && words.itemTurns === true;
+  const turnLine = useMemo(() => (pageTurns && filePages > 0 ? turnRules.summary(state.turns, filePages) : null), [pageTurns, filePages, state.turns]);
+  const turnsBlocked = pageTurns && filePages > 0 ? turnRules.blocked(state.turns, filePages) : null;
+  const turns = useMemo(
+    () =>
+      pageTurns
+        ? {
+            of: (id: string) => turnOf(state.turns, Number(id.slice(id.lastIndexOf(':') + 1))),
+            caption: turnCaption,
+            onTurn: (id: string, _title: string, by: 1 | -1) => {
+              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              run.turnPage(page, by);
+              setAnnouncement(turnAnnouncement(page, turnOf(turnedPage(state.turns, page, by), page)));
+            },
+          }
+        : undefined,
+    [pageTurns, state.turns, run, setAnnouncement],
+  );
+  const turnEveryPage = (by: 1 | -1) => {
+    run.turnAll(by);
+    setAnnouncement(allAnnouncement(turnedAll(state.turns, by), by));
+  };
+
   // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
   const tooFew = state.files.length < words.minFiles;
-  const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : null;
+  const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
   const ready = canRun(state, words.minFiles, blocked === null);
   const tiedSentence = tooFew ? words.tooFewFiles : blocked;
 
@@ -366,6 +392,17 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
           {rules && filePages > 0 ? <p className={styles.toggleSummary}>{rules.summary(filePages, marks)}</p> : null}
           {orderLine ? <p className={styles.toggleSummary}>{orderLine}</p> : null}
+          {turnLine ? <p className={styles.toggleSummary}>{turnLine}</p> : null}
+          {turnLine && filePages > 1 ? (
+            <div className={styles.turnAll}>
+              <button type="button" className="button-secondary" onClick={() => turnEveryPage(-1)}>
+                Turn every page left
+              </button>
+              <button type="button" className="button-secondary" onClick={() => turnEveryPage(1)}>
+                Turn every page right
+              </button>
+            </div>
+          ) : null}
 
           {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
             <a
@@ -388,6 +425,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               layout={pages ? 'grid' : 'rows'}
               onMove={onMove}
               total={pageMoves ? filePages : undefined}
+              turns={turns}
               onRemove={run.removeFile}
               onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${number(place)} of ${number(of)}.`)}
               onVisible={run.showThumbnail}

@@ -138,3 +138,30 @@
   width: 100%;
   padding: 0.25rem 0.375rem;
 }
+
+/* A page that turns: its caption keeps two lines, so a caption that wraps never moves the grid or the
+   button that has focus. */
+.turnCaption {
+  min-height: 2.6em;
+}
+/* A turned picture, at its own shape within the slot. For a quarter turn its limits are swapped
+   before it turns, so once turned it is at most 52 wide and 68 tall. No transition. */
+.turn2 {
+  transform: rotate(180deg);
+}
+.turn1,
+.turn3 {
+  max-width: 68px;
+  max-height: 52px;
+}
+.turn1 {
+  transform: rotate(90deg);
+}
+.turn3 {
+  transform: rotate(270deg);
+}
+.blank.turn1,
+.blank.turn3 {
+  width: 68px;
+  height: 52px;
+}

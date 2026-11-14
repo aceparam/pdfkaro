@@ -174,9 +174,22 @@ describe('Reorder pages', () => {
     expect(ids.indexOf('rearrange-pdf-pages')).toBe(ids.indexOf('delete-pdf-pages') + 1);
   });
 
-  it('no tool has both page moves and a toggle', () => {
+  it('a tool has at most one of page moves, page turns and a toggle', () => {
     for (const tool of tools) {
-      if (tool.widget?.items === 'pages' && tool.widget.itemControls) expect(tool.widget.itemToggle, tool.id).toBeUndefined();
+      const words = tool.widget;
+      if (words?.items !== 'pages') continue;
+      expect([words.itemControls, words.itemTurns === true, words.itemToggle !== undefined].filter(Boolean).length, tool.id).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('Rotate PDF', () => {
+  it('lists pages that turn, with no moves or toggle, and gives one file, after Reorder', () => {
+    const words = tools.find((tool) => tool.id === 'rotate-pdf')?.widget;
+    expect(words).toMatchObject({ items: 'pages', itemControls: false, itemTurns: true, outputs: 'one', outputSuffix: 'rotated', resultPages: 'input', minFiles: 1, multiple: false });
+    expect(words!.itemToggle).toBeUndefined();
+    expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
+    const ids = tools.map((tool) => tool.id);
+    expect(ids.indexOf('rotate-pdf')).toBe(ids.indexOf('rearrange-pdf-pages') + 1);
   });
 });
