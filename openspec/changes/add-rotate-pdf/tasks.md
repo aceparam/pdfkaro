@@ -21,7 +21,7 @@
 
 - [ ] 5.1 `PageGrid`: a `turns` prop giving each grid cell "Left" and "Right" stacked full-width, named "Turn page N left/right", no Remove, never unavailable; the picture (and blank paper) drawn turned, scaled to fit the slot for a quarter turn; component tests
 - [ ] 5.2 `ToolWorkspace` and `useToolRun`: turning a page and announcing it, "Turn all left" and "Turn all right" above the pages, the line above the pages memoised on the turns, and `{ turns }` sent to the engine
-- [ ] 5.3 Write `src/content/tools/rotate-pdf.md`, 250 to 500 words, marked as a draft, covering turning one page or all, that nothing else changes, the original file, passwords, and that the page forgets the file and the turns; check against "Banned patterns"
+- [ ] 5.3 Write `src/content/tools/rotate-pdf.md`, 250 to 500 words, marked as a draft, covering turning one page or all; that everything else in the original file stays in the new one, including hidden text and the document's details (it is not cleaned), and only each page's turn changes; the original file; that the password and restrictions are removed; and that the page forgets the file and the turns when you press Start again or leave the page; check against "Banned patterns"
 - [ ] 5.4 Name `rotate-pdf` in `page-weight.mjs`; check `check-worker.mjs` finds the engine and keeps `writeTurned` out of the worker file
 
 ## 6. End-to-end test
@@ -30,7 +30,7 @@
 
 ## 7. No-upload test
 
-- [ ] 7.1 Rotate's no-upload test: its exact allowlist (with the engine and shared chunks, no `fflate`), positive checks that the engine was fetched and `fflate` and the other engines were not, `qz7report.pdf`, its stem and the password as secrets; `rich.pdf`'s bookmark titles and attachment name, and `tagged.pdf`'s marked strings, as secrets for requests and the console; storage and traces; and the address with no query and no hash
+- [ ] 7.1 Rotate's no-upload test: its exact allowlist (with the engine and shared chunks, no `fflate`), positive checks that the engine was fetched and `fflate`, `split-pdf`, `merge-pdf`, `extract-pdf-pages`, `delete-pdf-pages` and `rearrange-pdf-pages` were not, `qz7report.pdf`, its stem and the password as secrets; `rich.pdf`'s bookmark titles, attachment name and document title ("Bookmarks, a link and an attachment"), and `tagged.pdf`'s marked strings, as secrets for requests, the console and the page title; storage and traces; and the address with no query and no hash
 
 ## 8. Screenshots
 

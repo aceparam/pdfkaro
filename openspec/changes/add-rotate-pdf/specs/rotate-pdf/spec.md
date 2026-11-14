@@ -184,7 +184,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, turning one page or all of them, that nothing else in the file changes, the original file, passwords, and that the page forgets the file and the turns. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them. The questions SHALL cover uploading, turning one page or all, that everything else in the file stays (it is not cleaned), the original file, passwords, and that the page forgets the file and the turns. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
 
 #### Scenario: The text is in the served page
 

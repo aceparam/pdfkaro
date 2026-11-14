@@ -33,7 +33,7 @@
             items: 'pages', itemControls: false, itemTurns: true, outputs: 'one', outputSuffix: 'rotated', resultPages: 'input',
             actionLabel: 'Turn and download', writingLabel: 'Writing the new file',
             doneHeading: 'Your new file is ready', failedHeading: 'The new file was not made.',
-            resultNotes: ['Nothing changes but the way pages face: text, links, form fields, bookmarks and attached files are as they were.',
+            resultNotes: ['Apart from the password, nothing changes but the way pages face: text, links, form fields, bookmarks, attached files, hidden text and the document's details are as they were.',
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 
