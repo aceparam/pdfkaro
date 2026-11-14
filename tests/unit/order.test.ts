@@ -80,8 +80,8 @@ describe('items from the order', () => {
 
 describe('the line above the pages', () => {
   it('says whether the order changed, and how to move a page, with no count', () => {
-    expect(orderSummary(null, 12)).toBe('Pages in their original order. Press “Earlier” or “Later” under a page to move it.');
-    expect(orderSummary([1, 2, 3], 3)).toBe('Pages in their original order. Press “Earlier” or “Later” under a page to move it.');
+    expect(orderSummary(null, 12)).toBe('The pages are in their original order. Press “Earlier” or “Later” under a page to move it.');
+    expect(orderSummary([1, 2, 3], 3)).toBe('The pages are in their original order. Press “Earlier” or “Later” under a page to move it.');
     expect(orderSummary([3, 1, 2], 3)).toBe('The order has changed. Press “Earlier” or “Later” under a page to move it.');
     expect(orderSummary(null, 1)).toBe('This file has one page, so there is nothing to move.');
   });

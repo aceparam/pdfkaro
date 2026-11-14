@@ -19,11 +19,11 @@ export type GridEntry = {
  * lists pages gets nothing until its one file has been read, then one item per
  * page, up to `limit`; until then the file's own line shows its state.
  */
-export function gridItems(state: Pick<State, 'files'> & { order?: State['order'] }, items: 'files' | 'pages', limit = Number.POSITIVE_INFINITY): GridEntry[] {
+export function gridItems(state: Pick<State, 'files' | 'order'>, items: 'files' | 'pages', limit = Number.POSITIVE_INFINITY): GridEntry[] {
   if (items === 'files') return state.files.map((file) => ({ id: file.id, title: file.name, fileId: file.id, page: 1 }));
   const file = state.files[0];
   if (!file || file.status !== 'ready' || file.checking || !file.pages) return [];
-  const order = state.order ?? null;
+  const order = state.order;
   // Only the pages shown are made, so a file of 120,000 pages costs no more than its first batch.
   // A page keeps its id and its name wherever it moves, so its thumbnail follows it.
   return Array.from({ length: Math.min(file.pages, limit) }, (_, index) => {
@@ -33,6 +33,6 @@ export function gridItems(state: Pick<State, 'files'> & { order?: State['order']
 }
 
 /** The items a list shows now: for a list of pages, only the batches shown. The thumbnail queue walks these. */
-export function shownItems(state: Pick<State, 'files' | 'shown'> & { order?: State['order'] }, items: 'files' | 'pages'): GridEntry[] {
+export function shownItems(state: Pick<State, 'files' | 'shown' | 'order'>, items: 'files' | 'pages'): GridEntry[] {
   return gridItems(state, items, state.shown);
 }

@@ -238,6 +238,11 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
   useEffect(() => {
     const target = focusNext.current;
     if (!target) return;
+    // The list emptied before the moved page was drawn (a job started, or the file went): the request is stale.
+    if (items.length === 0) {
+      focusNext.current = null;
+      return;
+    }
     const button = buttons.current.get(`${target.id}:${target.button}`);
     if (!button) return;
     focusNext.current = null;

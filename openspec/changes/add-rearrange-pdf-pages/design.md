@@ -52,7 +52,7 @@
 - `gridItems` and `shownItems` take `Pick<State, 'files' | 'order'>`: item `i` is page `order[i]` (or `i + 1` when `order` is `null`), with id `${fileId}:${page}` and title "Page N". Ids and titles stay with the page, so thumbnails, keyed by page, follow it. `ToolWorkspace`'s items memo is keyed on `state.order` too.
 - **`orderSummary(order, pages)`** in a new `src/widget/order.ts`, memoised on `state.order` in `ToolWorkspace` (it renders again on every thumbnail):
   - "This file has one page, so there is nothing to move." for one page;
-  - "Pages in their original order. Press “Earlier” or “Later” under a page to move it." when `order` is `null` or every page is in its place;
+  - "The pages are in their original order. Press “Earlier” or “Later” under a page to move it." when `order` is `null` or every page is in its place;
   - otherwise "The order has changed. Press “Earlier” or “Later” under a page to move it."
 
   It gives no count: after moving one page, "3 pages are in a new place" reads as a mistake (the UX reviewer, stage 1). It stops at the first page out of place. The line is not a live region; the move announcement covers that.

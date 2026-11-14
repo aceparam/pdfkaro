@@ -11,7 +11,7 @@ const howToMove = 'Press “Earlier” or “Later” under a page to move it.';
 export function orderSummary(order: readonly number[] | null, pages: number): string {
   if (pages === 1) return 'This file has one page, so there is nothing to move.';
   const changed = order !== null && order.some((page, index) => page !== index + 1);
-  return changed ? `The order has changed. ${howToMove}` : `Pages in their original order. ${howToMove}`;
+  return changed ? `The order has changed. ${howToMove}` : `The pages are in their original order. ${howToMove}`;
 }
 
 /** The order to send the engine: the one shown, or every page in its place. */

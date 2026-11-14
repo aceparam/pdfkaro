@@ -64,7 +64,7 @@ A line above the pages SHALL say whether the order has changed and how to move a
 #### Scenario: The order is unchanged
 
 - **WHEN** a file of several pages has been read, or its pages have been moved back to where they were
-- **THEN** the line reads "Pages in their original order. Press “Earlier” or “Later” under a page to move it."
+- **THEN** the line reads "The pages are in their original order. Press “Earlier” or “Later” under a page to move it."
 
 #### Scenario: Pages have moved
 

@@ -24,7 +24,7 @@ const earlier = (page: Page, n: number) => page.getByRole('button', { name: `Mov
 const later = (page: Page, n: number) => page.getByRole('button', { name: `Move page ${n} later`, exact: true });
 const captions = (page: Page) => page.locator('astro-island ol > li > div:nth-child(2)').allInnerTexts();
 const status = (page: Page) => page.locator('[role=status]').first();
-const original = 'Pages in their original order. Press “Earlier” or “Later” under a page to move it.';
+const original = 'The pages are in their original order. Press “Earlier” or “Later” under a page to move it.';
 const changed = 'The order has changed. Press “Earlier” or “Later” under a page to move it.';
 
 async function open(page: Page) {
