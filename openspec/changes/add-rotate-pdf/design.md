@@ -100,9 +100,9 @@
   - engine-load failure;
   - skip link;
   - the 20,000-page notice, with "Turn every page right" and a page's "Turn right" on the 120,000-page file blocking nothing for more than 100 ms;
-- **Performance** (`tests/e2e/performance.spec.ts`, run alone after the others): with the CPU slowed four times (Chromium's `Emulation.setCPUThrottlingRate`), "Turn every page right" with 500 pages drawn, and again with 1,000 shown, makes no task longer than 100 ms. "Turn every page" changes every drawn cell at once, unlike any other action, so this is where a slow phone would show it (the architect, stage 1). If it fails, the fallback is to apply the new turns to the drawn cells in batches per frame, as the grid is drawn; the design is updated before that is built.
   - no-upload with an exact allowlist; `rich.pdf` and `tagged.pdf` strings in requests and the console; the address with no query and no hash;
   - Merge, Split, Extract, Delete and Reorder e2e tests still pass.
+- **Performance** (`tests/e2e/performance.spec.ts`, run alone after the others): with the CPU slowed four times (Chromium's `Emulation.setCPUThrottlingRate`), "Turn every page right" with 500 pages drawn, and again with 1,000 shown, makes no task longer than 100 ms. "Turn every page" changes every drawn cell at once, unlike any other action, so this is where a slow phone would show it (the architect, stage 1). If it fails, the fallback is to apply the new turns to the drawn cells in batches per frame, as the grid is drawn; the design is updated before that is built.
 
 ### Odd turns already in a file
 
