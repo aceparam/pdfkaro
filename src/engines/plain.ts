@@ -6,9 +6,10 @@
 // later step works on this copy, with no password.
 //
 // The tools that give back one file with fewer pages (Extract and Delete) also
-// share the last step, `keepPages`: the kept pages, in page order, with the
-// bookmarks that still apply and the files attached to the document, written
-// through an argument file and checked by qpdf.
+// share `keepPages`: the kept pages, in page order, with the bookmarks that
+// still apply and the files attached to the document. Its last step,
+// `writePages`, writes any list of pages in any order through an argument file
+// and checks the result; a tool that keeps every page (Reorder) calls it alone.
 
 import { outlineUpdate, readStructure, updateJson } from './outline';
 import { finished, qpdfFrom, saidInvalidPassword, type Qpdf } from './qpdf';
@@ -81,8 +82,8 @@ export function pageList(pages: readonly number[]): string {
 /**
  * Runs qpdf with its arguments in an argument file, one per line, because qpdf
  * copies command-line arguments onto its small stack and a long page list
- * would overflow it. Every argument is a made-up path, an option or a checked
- * page list, so none holds a line break.
+ * would overflow it. Every argument is a made-up path, an option or a page
+ * list built from checked page numbers, in any order, so none holds a line break.
  */
 export function callWithArgumentFile(qpdf: Qpdf, args: readonly string[]): { code: number } {
   if (args.some((arg) => /[\r\n]/.test(arg))) throw new Error('An argument held a line break.');
@@ -91,26 +92,38 @@ export function callWithArgumentFile(qpdf: Qpdf, args: readonly string[]): { cod
 }
 
 /**
+ * Writes the pages in `list` from the plain copy as one new file, in the order
+ * given, and checks it with qpdf. The list may be in any order: a sorted, unique
+ * list from `chosenPages`, or every page once from a tool that reorders them.
+ * `update`, when given, is a qpdf JSON update written first (`keepPages` gives
+ * its outline update; a tool that keeps every page gives none, so the file's
+ * bookmarks and other document-level parts are left exactly as they were).
+ */
+export async function writePages(tools: EngineTools, plain: Uint8Array, list: readonly number[], update?: string): Promise<Uint8Array> {
+  const qpdf = await freshQpdf(tools, plain);
+  const args = ['/in.pdf'];
+  if (update !== undefined) {
+    qpdf.write('/u.json', new TextEncoder().encode(update));
+    args.push('--update-from-json=/u.json');
+  }
+  args.push('--pages', '.', pageList(list), '--', '/out.pdf');
+  const written = callWithArgumentFile(qpdf, args);
+  if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
+  if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
+  return qpdf.read('/out.pdf');
+}
+
+/**
  * One new file of the pages in `keep` (sorted, unique, in range), in page
- * order, from the plain copy. It keeps the bookmarks that point to a kept page,
- * with kept children of a dropped bookmark moved up, and the files attached to
- * the document; it must pass qpdf's check. Bookmark titles never go into an error.
+ * order, from the plain copy, for a tool that leaves pages out. It keeps the
+ * bookmarks that point to a kept page, with kept children of a dropped bookmark
+ * moved up, and the files attached to the document; it must pass qpdf's check.
+ * Bookmark titles never go into an error.
  */
 export async function keepPages(tools: EngineTools, plain: Uint8Array, keep: readonly number[]): Promise<Uint8Array> {
   const structure = await readStructure(() => freshQpdf(tools, plain), []);
   // Delete can keep almost every page of a long file, and the check runs once per bookmark.
   const kept = new Set(keep);
   const update = outlineUpdate(structure, (page) => kept.has(page), { dropAttachments: false });
-
-  const qpdf = await freshQpdf(tools, plain);
-  const args = ['/in.pdf'];
-  if (update.size > 0) {
-    qpdf.write('/u.json', new TextEncoder().encode(updateJson(structure.maxObjectId, update)));
-    args.push('--update-from-json=/u.json');
-  }
-  args.push('--pages', '.', pageList(keep), '--', '/out.pdf');
-  const written = callWithArgumentFile(qpdf, args);
-  if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
-  if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
-  return qpdf.read('/out.pdf');
+  return writePages(tools, plain, keep, update.size > 0 ? updateJson(structure.maxObjectId, update) : undefined);
 }

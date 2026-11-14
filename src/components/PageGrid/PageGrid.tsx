@@ -37,6 +37,11 @@ type Props = {
     drawsCut?: boolean;
     onToggle(id: string, title: string): void;
   };
+  /**
+   * How many items the whole list has, when only some are given: the pages of a long file, shown in
+   * batches. It sets the last item's end, how far an item can move, and the count a move announces.
+   */
+  total?: number;
   /** An item to move focus to when it appears: its toggle, or the item itself. Asked once; `onFocused` says it is done. */
   focusId?: string | null;
   onFocused?(): void;
@@ -109,7 +114,32 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
           {toggleLabel}
         </button>
       )}
-      {controls && (
+      {controls && grid && (
+        // A page in a grid moves earlier or later in the order; in a wrapping grid "up" would usually move it sideways.
+        <div className={styles.pageMoves}>
+          <button
+            ref={(element) => actions.setButton(`${item.id}:up`, element)}
+            type="button"
+            className={styles.small}
+            aria-label={`Move ${item.title.toLowerCase()} earlier`}
+            aria-disabled={first ? true : undefined}
+            onClick={() => actions.move(item.id, -1, 'up')}
+          >
+            Earlier
+          </button>
+          <button
+            ref={(element) => actions.setButton(`${item.id}:down`, element)}
+            type="button"
+            className={styles.small}
+            aria-label={`Move ${item.title.toLowerCase()} later`}
+            aria-disabled={last ? true : undefined}
+            onClick={() => actions.move(item.id, 1, 'down')}
+          >
+            Later
+          </button>
+        </div>
+      )}
+      {controls && !grid && (
         <div className={styles.moves}>
           <button
             ref={(element) => actions.setButton(`${item.id}:up`, element)}
@@ -152,7 +182,7 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
  * touch screen, and by mouse drag. A button that cannot be used stays
  * focusable and is marked unavailable.
  */
-export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows', toggle, focusId, onFocused }: Props) {
+export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls = true, layout = 'rows', toggle, total, focusId, onFocused }: Props) {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const rows = useRef(new Map<string, HTMLLIElement>());
   const reported = useRef(new Set<string>());
@@ -160,9 +190,10 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
   const dragging = useRef<string | null>(null);
 
   // The latest props, read by the stable callbacks below.
-  const latest = useRef({ items, onMove, onRemove, onMoved, onVisible, toggle, onFocused });
+  const count = total ?? items.length;
+  const latest = useRef({ items, count, onMove, onRemove, onMoved, onVisible, toggle, onFocused });
   useEffect(() => {
-    latest.current = { items, onMove, onRemove, onMoved, onVisible, toggle, onFocused };
+    latest.current = { items, count, onMove, onRemove, onMoved, onVisible, toggle, onFocused };
   });
 
   // When asked, move focus to an item as soon as it is on the page: its toggle, or the item itself.
@@ -202,12 +233,20 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
     };
   }, []);
 
-  // After a move or a removal the list has changed; put focus where it was asked for.
+  // After a move or a removal the list has changed; put focus where it was asked for. A page moved
+  // into the next batch is not drawn yet; then the request waits, and setButton moves focus when it is.
   useEffect(() => {
     const target = focusNext.current;
     if (!target) return;
+    // The list emptied before the moved page was drawn (a job started, or the file went): the request is stale.
+    if (items.length === 0) {
+      focusNext.current = null;
+      return;
+    }
+    const button = buttons.current.get(`${target.id}:${target.button}`);
+    if (!button) return;
     focusNext.current = null;
-    buttons.current.get(`${target.id}:${target.button}`)?.focus();
+    button.focus();
   }, [items]);
 
   // Made once, so every item keeps the same callbacks; they read the latest props through refs.
@@ -225,18 +264,26 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
       }
     },
     setButton(key, element) {
-      if (element) buttons.current.set(key, element);
-      else buttons.current.delete(key);
+      if (!element) {
+        buttons.current.delete(key);
+        return;
+      }
+      buttons.current.set(key, element);
+      const target = focusNext.current;
+      if (target && key === `${target.id}:${target.button}`) {
+        focusNext.current = null;
+        element.focus();
+      }
     },
     move(id, by, button) {
-      const { items: list, onMove: moveTo, onMoved: moved } = latest.current;
+      const { items: list, count: whole, onMove: moveTo, onMoved: moved } = latest.current;
       const index = list.findIndex((entry) => entry.id === id);
       const to = index + by;
-      if (index < 0 || to < 0 || to >= list.length) return;
+      if (index < 0 || to < 0 || to >= whole) return;
       moveTo(id, to);
-      moved?.(list[index]!.title, to + 1, list.length);
+      moved?.(list[index]!.title, to + 1, whole);
       // Keep focus on the same button, unless it can no longer be used; then the other one.
-      const stillUsable = button === 'up' ? to > 0 : to < list.length - 1;
+      const stillUsable = button === 'up' ? to > 0 : to < whole - 1;
       focusNext.current = { id, button: stillUsable ? button : button === 'up' ? 'down' : 'up' };
     },
     remove(id) {
@@ -265,7 +312,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
       event.preventDefault();
       moveTo(from, index);
       const dragged = list.find((entry) => entry.id === from);
-      if (dragged) moved?.(dragged.title, index + 1, list.length);
+      if (dragged) moved?.(dragged.title, index + 1, latest.current.count);
     },
     dragEnd() {
       dragging.current = null;
@@ -283,7 +330,7 @@ export function PageGrid({ items, onMove, onRemove, onMoved, onVisible, controls
           detail={item.detail}
           thumbnail={item.thumbnail}
           first={index === 0}
-          last={index === items.length - 1}
+          last={index === count - 1}
           controls={controls}
           grid={grid}
           actions={actions}

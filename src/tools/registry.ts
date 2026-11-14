@@ -314,4 +314,48 @@ export const tools: Tool[] = [
       ],
     },
   },
+  {
+    id: 'rearrange-pdf-pages',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['delete-pdf-pages', 'extract-pdf-pages', 'rotate-pdf', 'split-pdf', 'merge-pdf'],
+    pages: [
+      {
+        slug: 'rearrange-pdf-pages',
+        name: 'Reorder pages',
+        summary: 'Put the pages of a PDF in a new order.',
+        title: 'Reorder the pages of a PDF in your browser - PDFkaro',
+        description: 'Put the pages of a PDF in the order you want. The file stays on your device and is not uploaded.',
+        heading: 'Reorder the pages of a PDF',
+        sentence: 'Put the pages of a PDF in the order you want. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Reorder and download',
+      writingLabel: 'Writing the new file',
+      doneHeading: 'Your new file is ready',
+      failedHeading: 'The new file was not made.',
+      tooFewFiles: 'Choose a PDF file to reorder.',
+      outputSuffix: 'reordered',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      items: 'pages',
+      // The pages move: "Earlier" and "Later" under each, and drag.
+      itemControls: true,
+      outputs: 'one',
+      // The owner's decision of 13 Nov 2026 on passwords; the rest is left as it was.
+      resultNotes: [
+        'The new file keeps every page, and its bookmarks still point to the same pages, wherever they now are. Files attached to the document are kept.',
+        'The list of bookmarks keeps its order. In a file with accessibility tags, a screen reader may still read the pages in their original order.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
 ];

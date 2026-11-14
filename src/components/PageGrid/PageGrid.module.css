@@ -89,7 +89,8 @@
   gap: 0.375rem;
 }
 .caption {
-  white-space: nowrap;
+  /* "Page 120,000" may wrap rather than overflow a narrow cell. */
+  overflow-wrap: anywhere;
   font-size: 0.9375rem;
   color: var(--muted);
   text-align: center;
@@ -124,4 +125,16 @@
 }
 .cut {
   border-inline-end-color: var(--text);
+}
+
+/* Moves under a page, for a tool whose pages move: "Earlier" over "Later", each as wide as the cell. */
+.pageMoves {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+}
+.pageMoves .small {
+  width: 100%;
+  padding: 0.25rem 0.375rem;
 }

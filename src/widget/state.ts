@@ -39,6 +39,12 @@ export type State = {
   marks: number[];
   /** How many pages of a page list are shown; more are shown in batches. */
   shown: number;
+  /**
+   * The pages of the one file in the order shown, for a tool whose pages move:
+   * Reorder pages. `null` is the original order, for every tool, so a file that
+   * is never moved holds no list.
+   */
+  order: number[] | null;
 };
 
 /** How many pages a page list shows at first, and adds each time. */
@@ -58,6 +64,7 @@ export type Action =
   | { type: 'back-to-files' }
   | { type: 'toggled'; page: number }
   | { type: 'shown-more' }
+  | { type: 'page-moved'; page: number; to: number }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -70,6 +77,7 @@ export const initialState: State = {
   failure: null,
   marks: [],
   shown: pageBatch,
+  order: null,
 };
 
 const statusFor: Record<InspectOutcome['kind'], FileStatus> = {
@@ -142,6 +150,19 @@ export function reducer(state: State, action: Action): State {
     }
     case 'shown-more':
       return { ...state, shown: state.shown + pageBatch };
+    case 'page-moved': {
+      const pages = state.files[0]?.pages ?? 0;
+      if (state.step !== 'listing' || pages < 1 || !Number.isInteger(action.page) || !Number.isInteger(action.to)) return state;
+      const order = state.order ? [...state.order] : Array.from({ length: pages }, (_, index) => index + 1);
+      const from = order.indexOf(action.page);
+      const to = Math.max(0, Math.min(pages - 1, action.to));
+      if (from < 0 || from === to) return state;
+      order.splice(from, 1);
+      order.splice(to, 0, action.page);
+      // A page moved past the pages shown brings the next batch into view, so it stays in sight.
+      const shown = to >= state.shown ? state.shown + pageBatch : state.shown;
+      return { ...state, order, shown };
+    }
     case 'reset':
       return initialState;
   }

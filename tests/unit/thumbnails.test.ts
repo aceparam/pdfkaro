@@ -7,7 +7,7 @@ const file = (id: string, status: FileEntry['status'] = 'ready', checking = fals
 const listing = (...files: FileEntry[]): Pick<State, 'step' | 'files'> => ({ step: 'listing', files });
 
 const nextOf = (queue: ThumbnailQueue, state: Pick<State, 'step' | 'files'>, items: 'files' | 'pages' = 'files') =>
-  next(queue, state, gridItems(state, items));
+  next(queue, state, gridItems({ ...state, order: null }, items));
 const withPages = (entry: FileEntry, pages: number): FileEntry => ({ ...entry, pages });
 
 describe('the thumbnail queue', () => {
