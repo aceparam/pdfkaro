@@ -489,6 +489,9 @@ describe("a PNG's image data, counted against its header", () => {
     const interlaced = new Uint8Array([...png.subarray(0, 8), ...chunk('IHDR', new Uint8Array([0, 0, 0, 8, 0, 0, 0, 8, 8, 2, 0, 0, 1])), ...chunk('IDAT', data), ...chunk('IEND', new Uint8Array(0))]);
     expect(readPicture(interlaced)).toMatchObject({ kind: 'ok' });
     expect(pngDataFits(interlaced, fflate)).toBe(true);
+    // The same picture with its data cut off before the stream ends is damaged.
+    const cut = new Uint8Array([...png.subarray(0, 8), ...chunk('IHDR', new Uint8Array([0, 0, 0, 8, 0, 0, 0, 8, 8, 2, 0, 0, 1])), ...chunk('IDAT', data.subarray(0, 6)), ...chunk('IEND', new Uint8Array(0))]);
+    expect(pngDataFits(cut, fflate)).toBe(false);
   });
 
   it('refuses image data that inflates past the header, counting without keeping it and stopping early', () => {

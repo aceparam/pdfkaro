@@ -127,7 +127,8 @@ export function createHandler(deps: WorkerDeps) {
         if (deps.openDocument) {
           if (kept?.key !== data.documentKey) {
             // The tool's engine says how its files are drawn; it is already loaded by the read before. It is asked
-            // before the close, so nothing waits between closing the last document and keeping the new one.
+            // before the close, so the wait between closing the last document and keeping the new one is no longer
+            // than before. The page asks for one thumbnail at a time, so no second request lands in that wait.
             const kind = (await engineFor(data.toolId)).thumbnails;
             await closeKept();
             const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools, kind);

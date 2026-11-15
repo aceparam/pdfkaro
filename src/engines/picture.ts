@@ -395,7 +395,8 @@ export function pngDataFits(bytes: Uint8Array, fflate: { Inflate: InflateClass }
   } catch {
     return false;
   }
-  return true;
+  // Data that stops before its stream ends is damaged, as pdf-lib could not read it either.
+  return ended;
 }
 
 /** fflate's streaming inflater, the one part of fflate used here. */

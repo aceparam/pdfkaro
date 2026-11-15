@@ -22,7 +22,6 @@ export type PictureDecoder = {
 /** A canvas maker that can also draw a decoded picture on its canvas. */
 type DrawingContext = { drawImage(image: unknown, x: number, y: number, width: number, height: number): void; fillStyle: unknown; fillRect(x: number, y: number, width: number, height: number): void };
 
-
 async function need<T>(tools: EngineTools, name: string): Promise<T> {
   const make = tools[name];
   if (!make) throw new Error(`${name} was not given to the thumbnail.`);
