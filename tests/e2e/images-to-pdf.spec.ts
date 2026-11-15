@@ -133,13 +133,6 @@ test.describe('the three pages', () => {
     expect(image).toContain('Can I add HEIC, WebP or TIFF pictures?');
   });
 
-  test('the Reorder pages link in the image page text leads to that page', async ({ page }) => {
-    await page.goto('/image-to-pdf');
-    await page.locator('a[href="rearrange-pdf-pages"]').click();
-    await expect(page).toHaveURL(/\/rearrange-pdf-pages$/);
-    await expect(page.locator('h1')).toHaveText('Reorder the pages of a PDF');
-  });
-
   test('the home page lists the three under Convert to PDF', async ({ page }) => {
     await page.goto('/');
     const group = page.locator('section, div').filter({ has: page.getByRole('heading', { name: 'Convert to PDF', exact: true }) }).last();

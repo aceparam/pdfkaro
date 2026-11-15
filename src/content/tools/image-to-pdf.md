@@ -37,4 +37,4 @@ No. The camera, the date, the place a photo was taken and any notes stored in th
 
 ### Can I change the order after converting?
 
-Press Start again and choose the pictures again, or reorder the pages of the PDF with [Reorder pages](rearrange-pdf-pages).
+Press Start again and choose the pictures again, or reorder the pages of the PDF with Reorder pages.

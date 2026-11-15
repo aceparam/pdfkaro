@@ -401,11 +401,12 @@ test.describe('nothing is uploaded', () => {
     await page.evaluate((address) => fetch(address, { method: 'POST', body: 'x' }).catch(() => {}), path);
     await expect.poll(() => posted.some((request) => request.method === 'POST')).toBe(true);
     const post = posted.filter((request) => request.method === 'POST');
-    // A body brings a content-type header, which the watcher refuses too: the site's own requests carry no body.
+    // A body brings content-type and content-length headers, which the watcher refuses too: the site's own requests carry no body.
     expect(violations(post, origin, [], filesAfterPick())).toEqual([
       `POST ${origin}${path}`,
       `a body: ${origin}${path}`,
       `a header the browser does not send itself, content-type: ${origin}${path}`,
+      `a header the browser does not send itself, content-length: ${origin}${path}`,
     ]);
   });
 
