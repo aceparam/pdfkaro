@@ -17,7 +17,7 @@ No. The PDF is made in your browser, on your device, and nothing is sent anywher
 
 ### Will my screenshots stay sharp?
 
-Yes. A PNG is stored in the PDF without loss: every pixel is kept as it was. A small screenshot is not stretched to fill the page, so text in it stays crisp. It is placed in the middle of an A4 page at its own size.
+Yes. A PNG with 8 bits per colour, as screenshots are, is stored in the PDF without loss: every pixel is kept as it was. For 16-bit pictures, see below. A small screenshot is not stretched to fill the page, so text in it stays crisp. It is placed in the middle of an A4 page at its own size.
 
 ### What happens to see-through parts?
 

@@ -154,6 +154,15 @@ A JPG SHALL be stored as its own compressed picture data, not compressed again. 
 - **WHEN** a JPG in CMYK colours with an Adobe segment is converted
 - **THEN** its image is CMYK with its colour values read the way the Adobe segment says, and drawn by PDF.js it is close to the browser's own drawing
 
+### Requirement: Only what draws a PNG reaches pdf-lib
+
+A PNG SHALL be given to pdf-lib rebuilt from its IHDR, PLTE, tRNS, IDAT and IEND chunks only, so pdf-lib never reads a text chunk, an animation chunk or a colour profile. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: A bomb in a text chunk
+
+- **WHEN** a 1 by 1 PNG whose `zTXt` chunk inflates to 20 MB is converted
+- **THEN** pdf-lib is given the picture without that chunk, and the PDF passes `qpdf --check`
+
 ### Requirement: Picture details are not copied
 
 The PDF SHALL NOT carry the pictures' details. From a JPG, only the parts needed to draw it SHALL be kept; every other segment, wherever it appears, and everything after the first end-of-image marker SHALL be left out. From a PNG, only the decoded pixels SHALL be kept. No document information, XMP or `/Metadata` SHALL be written. The result note SHALL say the details are not copied. (SPEC.md: Privacy, limits and security)
@@ -179,12 +188,17 @@ From a picture's colour profile, only its colour data SHALL be kept: its date, d
 
 ### Requirement: Pictures that cannot be converted
 
-A picture SHALL be refused, naming the file, with a way to leave it out or choose another, when it is damaged or coded in an unusual way, found from its bytes before anything is decoded. (SPEC.md: States every tool handles, "Damaged file"; Definition of done, "a clear message saying why it cannot")
+A picture SHALL be refused, naming the file, with a way to leave it out or choose another, when it is damaged or coded in an unusual way, found from its bytes before anything is decoded. A PNG whose image data inflates to more than its header implies SHALL be damaged, found before the main button by counting the inflated data without keeping it. (SPEC.md: States every tool handles, "Damaged file"; Definition of done, "a clear message saying why it cannot")
 
 #### Scenario: A damaged picture is chosen with others
 
 - **WHEN** a PNG with a broken chunk, or a picture whose width or height is 0, is listed with two good pictures
-- **THEN** the page says "broken.png is damaged and cannot be read." and offers "Leave this file out"
+- **THEN** the page says "broken.png is damaged and cannot be read." and "Open it in a photo app, save a copy, and add the copy.", and offers "Leave this file out"
+
+#### Scenario: A small PNG whose data would fill memory
+
+- **WHEN** a 1 by 1 PNG of 20 KB whose image data inflates to 20 MB is listed
+- **THEN** the page says it is damaged before the main button, and nothing of it reaches pdf-lib
 
 #### Scenario: A damaged picture is chosen on its own
 
@@ -194,7 +208,7 @@ A picture SHALL be refused, naming the file, with a way to leave it out or choos
 #### Scenario: A JPG coded in an unusual way
 
 - **WHEN** a JPG with arithmetic coding, 12-bit samples, lossless or hierarchical coding is listed
-- **THEN** the page says "odd.jpg is saved in a way this tool cannot read. Open it and save it again as a JPG, then add it again."
+- **THEN** the page says "odd.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy as a JPG, and add the copy."
 
 ### Requirement: Very large pictures
 
@@ -209,6 +223,15 @@ A PNG of more than 50 million pixels SHALL be listed with a notice that names it
 
 - **WHEN** that PNG is converted and the worker runs out of memory
 - **THEN** the page says "Your browser ran out of memory. Try fewer pictures, or smaller ones." and the list is as it was
+
+### Requirement: No thumbnail of a very large picture
+
+No picture of more than 50 million pixels, JPG or PNG, SHALL be decoded for its thumbnail. Only a PNG gets the notice, as the job never decodes a JPG. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: A JPG of very many pixels
+
+- **WHEN** a JPG that claims 16,000 by 16,000 pixels is listed
+- **THEN** it keeps its blank box, nothing is decoded for it, and no notice is shown
 
 ### Requirement: Progress and cancel
 

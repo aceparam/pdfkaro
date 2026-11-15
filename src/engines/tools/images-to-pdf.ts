@@ -12,7 +12,7 @@
 // is written.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
-import { isHuge, jpegForPdf, pngFirstFrame, pngProfile, profileColourOnly, readPicture, shownSize, type InflateClass, type Orientation } from '../picture';
+import { isHuge, jpegForPdf, pngDataFits, pngForPdf, pngProfile, profileColourOnly, readPicture, shownSize, type InflateClass, type Orientation } from '../picture';
 import type { Engine, EngineTools, Inspector } from '../types';
 
 /** An A4 page, upright, in points. */
@@ -93,7 +93,10 @@ export const run: Engine<Record<string, unknown>> = async (files, _options, onPr
       components = picture.components;
       adobe = cleaned.adobe;
     } else {
-      image = await doc.embedPng(pngFirstFrame(file));
+      // Its image data must inflate to no more than its header says, and only the chunks needed to draw it reach pdf-lib.
+      const forPdf = pngDataFits(file, fflate) ? pngForPdf(file) : undefined;
+      if (!forPdf) throw new Error('A picture cannot be read.');
+      image = await doc.embedPng(forPdf);
       // pdf-lib stores every PNG as RGB, so only an RGB profile fits.
       profile = pngProfile(file, fflate);
       components = 3;
@@ -120,9 +123,11 @@ export const run: Engine<Record<string, unknown>> = async (files, _options, onPr
   return [bytes];
 };
 
-export const inspect: Inspector = async (file) => {
+export const inspect: Inspector = async (file, _password, tools) => {
   const read = readPicture(file);
   if (read.kind !== 'ok') return read;
+  // A PNG whose image data would inflate past what its header says is damaged, before the main button.
+  if (read.picture.type === 'png' && !pngDataFits(file, await need<{ Inflate: InflateClass }>(tools, 'fflate'))) return { kind: 'damaged' };
   return isHuge(read.picture) ? { kind: 'ready', pages: 1, pixels: read.picture.width * read.picture.height } : { kind: 'ready', pages: 1 };
 };
 

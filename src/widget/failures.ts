@@ -35,10 +35,19 @@ export function refusedSentence(names: readonly string[], words: Pick<ToolWidget
   return [...said, ...(words.refusedAdvice ? [words.refusedAdvice] : [])].join(' ');
 }
 
-/** The heading and the one thing to try for a file that cannot be read: damaged, or saved in a way the tool cannot read. */
-export function unreadableNotice(name: string, status: 'damaged' | 'unsupported'): { heading: string; advice?: string } {
-  if (status === 'damaged') return { heading: `${name} is damaged and cannot be read.` };
-  return { heading: `${name} is saved in a way this tool cannot read.`, advice: 'Open it and save it again as a JPG, then add it again.' };
+/**
+ * The heading, the one thing to try, and the words a screen reader hears, for a file that cannot be read:
+ * damaged, or saved in a way the tool cannot read. The advice is the tool's own, from the registry; a tool
+ * with none (the PDF tools) says the heading alone, as it always did.
+ */
+export function unreadableNotice(
+  name: string,
+  status: 'damaged' | 'unsupported',
+  words: Pick<ToolWidgetWords, 'damagedAdvice' | 'unsupportedAdvice'>,
+): { heading: string; advice?: string; announcement: string } {
+  const heading = status === 'damaged' ? `${name} is damaged and cannot be read.` : `${name} is saved in a way this tool cannot read.`;
+  const advice = status === 'damaged' ? words.damagedAdvice : words.unsupportedAdvice;
+  return advice ? { heading, advice, announcement: `${heading} ${advice}` } : { heading, announcement: heading };
 }
 
 /** The heading of the notice for a very large picture, with its pixels in millions, rounded down: "huge.png has 256 million pixels". */

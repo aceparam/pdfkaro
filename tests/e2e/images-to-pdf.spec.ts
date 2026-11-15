@@ -133,6 +133,13 @@ test.describe('the three pages', () => {
     expect(image).toContain('Can I add HEIC, WebP or TIFF pictures?');
   });
 
+  test('the Reorder pages link in the image page text leads to that page', async ({ page }) => {
+    await page.goto('/image-to-pdf');
+    await page.locator('a[href="rearrange-pdf-pages"]').click();
+    await expect(page).toHaveURL(/\/rearrange-pdf-pages$/);
+    await expect(page.locator('h1')).toHaveText('Reorder the pages of a PDF');
+  });
+
   test('the home page lists the three under Convert to PDF', async ({ page }) => {
     await page.goto('/');
     const group = page.locator('section, div').filter({ has: page.getByRole('heading', { name: 'Convert to PDF', exact: true }) }).last();
@@ -176,7 +183,7 @@ test.describe('converting', () => {
     expect(name).toBe('screenshot.pdf');
     expect(focusOnResult).toBe('Your PDF is ready');
     await expect(page.getByText(/, 2 pages$/)).toBeVisible();
-    await expect(page.getByText("The pictures' details, such as the camera, the date and the place, are not copied into the PDF.")).toBeVisible();
+    await expect(page.getByText('The pictures’ details, such as the camera, the date and the place, are not copied into the PDF.')).toBeVisible();
     expect(await pageSizes(bytes)).toEqual(['842x595', '595x842']);
     expect(await imageWidths(bytes)).toEqual([1280, 1500]);
     expect(await checked(bytes)).toBe(0);
@@ -287,6 +294,7 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['tall.jpg', 'small.png', 'broken.png']);
     await expect(page.getByRole('heading', { name: 'broken.png is damaged and cannot be read.' })).toBeVisible();
+    await expect(shown(page, 'Open it in a photo app, save a copy, and add the copy.')).toBeVisible();
     await expect(mainButton(page)).toHaveCount(0);
     await noSidewaysScroll(page);
     await page.getByRole('button', { name: 'Leave this file out' }).click();
@@ -298,6 +306,25 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['tall.jpg', 'zero-size.png']);
     await expect(page.getByRole('heading', { name: 'zero-size.png is damaged and cannot be read.' })).toBeVisible();
+  });
+
+  test('a small PNG whose data would fill memory is damaged before the main button; one with a bomb in a text chunk converts', async ({ page }) => {
+    await open(page, '/png-to-pdf');
+    await pick(page, ['small.png', 'data-bomb.png']);
+    await expect(page.getByRole('heading', { name: 'data-bomb.png is damaged and cannot be read.' })).toBeVisible();
+    await page.getByRole('button', { name: 'Leave this file out' }).click();
+    await pick(page, ['text-bomb.png']);
+    const { bytes } = await convertAndDownload(page);
+    expect(await pageSizes(bytes)).toEqual(['842x595', '595x842']);
+  });
+
+  test('a JPG header of 256 million pixels gets no thumbnail and no notice', async ({ page }) => {
+    await open(page);
+    await pick(page, ['small.png', 'huge.jpg']);
+    await expect(items(page).nth(0).locator('img')).toHaveCount(1, { timeout: 20000 });
+    await page.waitForTimeout(500);
+    await expect(items(page).nth(1).locator('img')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /million pixels/ })).toHaveCount(0);
   });
 
   test('a damaged picture on its own offers to choose another', async ({ page }) => {
@@ -313,7 +340,8 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['tall.jpg', named('odd.jpg', 'arithmetic.jpg')]);
     await expect(page.getByRole('heading', { name: 'odd.jpg is saved in a way this tool cannot read.' })).toBeVisible();
-    await expect(page.getByText('Open it and save it again as a JPG, then add it again.')).toBeVisible();
+    await expect(shown(page, 'Open it in a photo app, save a copy as a JPG, and add the copy.')).toBeVisible();
+    await expect(status(page)).toHaveText('odd.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy as a JPG, and add the copy.');
     await expect(items(page).filter({ hasText: 'Saved in a way this tool cannot read' })).toHaveCount(1);
     await expect(mainButton(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Leave this file out' }).click();

@@ -55,7 +55,7 @@ Image to PDF is the next Phase 1 tool in catalogue order: it is the last row of 
 
 ## Where files are processed, and new requests
 
-Everything happens in the visitor's browser, in the tool worker. No request carries file contents, a file name or a password. After a pick, the page fetches only the site's own files: the worker, the workspace chunk, the engine, and the shared `picture` and `picture-thumbnail` files; at the main button, pdf-lib's file and `fflate`'s file, which pdf-lib uses. qpdf, PDF.js and its data are not fetched. The shared no-upload watcher also gains a check on request headers.
+Everything happens in the visitor's browser, in the tool worker. No request carries file contents, a file name or a password. After a pick, the page fetches only the site's own files: the worker, the workspace chunk, the engine, and the shared `picture` and `picture-thumbnail` files, with `fflate`'s file when a PNG is read; at the main button, pdf-lib's file. qpdf, PDF.js and its data are not fetched. The shared no-upload watcher also gains a check on request headers.
 
 ## Open decisions and owner questions touched
 

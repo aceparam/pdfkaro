@@ -200,8 +200,8 @@ export function isUnreadable(file: FileEntry | undefined): boolean {
 }
 
 /** The listed files that have been read and are so large the page warns about them, in list order. */
-export function hugeFiles(state: Pick<State, 'files'>): FileEntry[] {
-  return state.files.filter((file) => file.status === 'ready' && file.pixels !== undefined);
+export function hugeFiles(state: Pick<State, 'files'>): (FileEntry & { pixels: number })[] {
+  return state.files.filter((file): file is FileEntry & { pixels: number } => file.status === 'ready' && file.pixels !== undefined);
 }
 
 /** Whether every listed file has been read and enough are listed to run the tool. */

@@ -98,6 +98,16 @@ test.describe('the no-upload watcher', () => {
   });
 });
 
+test.describe('records the watcher is handed', () => {
+  test('a cookie and a malformed escape are reported, not thrown', ({ baseURL }) => {
+    const origin = new URL(baseURL!).origin;
+    const cookie = [{ url: `${origin}/merge-pdf`, method: 'GET', body: null, origin, headers: { cookie: 'a=1' } }];
+    expect(violations(cookie, origin, [], ['/merge-pdf'])).toEqual([`a cookie, which the site never sets: ${origin}/merge-pdf`]);
+    const malformed = [{ url: `${origin}/merge-pdf`, method: 'GET', body: null, origin, headers: { accept: '%E0%A4%A' } }];
+    expect(violations(malformed, origin, ['x'], ['/merge-pdf'])).toEqual([`a malformed percent escape in the accept header of ${origin}/merge-pdf`]);
+  });
+});
+
 test.describe('the headers a page sends by itself', () => {
   test('pass the watcher, while the site loads', async ({ page, context, baseURL }) => {
     const seen = watch(context, page);

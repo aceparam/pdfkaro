@@ -41,9 +41,11 @@ describe('drawing a picture', () => {
     expect(seen.height).toBe(65);
   });
 
-  it('never decodes a PNG over 50 million pixels', async () => {
-    const doc = await openPicture(picture('huge.png'), tools);
-    await expect(doc.render(1, box)).rejects.toThrow();
+  it('never decodes a picture over 50 million pixels, PNG or JPG', async () => {
+    for (const name of ['huge.png', 'huge.jpg']) {
+      const doc = await openPicture(picture(name), tools);
+      await expect(doc.render(1, box), name).rejects.toThrow();
+    }
     expect(pictureDecoder.calls).toBe(0);
   });
 

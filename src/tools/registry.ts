@@ -50,6 +50,10 @@ export type ToolWidgetWords = {
   acceptsName: string;
   /** Said once after the names of refused files: "To add a picture of another kind, save it as a JPG or PNG first." */
   refusedAdvice?: string;
+  /** Said under "… is saved in a way this tool cannot read.": what to do with such a file. Without it, only leaving it out is offered. */
+  unsupportedAdvice?: string;
+  /** Said under "… is damaged and cannot be read.": what to try with such a file. Without it, only leaving it out is offered. */
+  damagedAdvice?: string;
   /** Under the summary of listed files, if the order matters: "They will be joined in this order." */
   listNote?: string;
   /**
@@ -455,6 +459,8 @@ export const tools: Tool[] = [
       dropHint: 'You can also drop pictures anywhere on this page, or paste them.',
       acceptsName: 'a JPG or PNG picture',
       refusedAdvice: 'To add a picture of another kind, save it as a JPG or PNG first.',
+      unsupportedAdvice: 'Open it in a photo app, save a copy as a JPG, and add the copy.',
+      damagedAdvice: 'Open it in a photo app, save a copy, and add the copy.',
       listNote: 'Each picture becomes one page, in this order.',
       listPages: false,
       actionLabel: 'Convert and download',
@@ -471,7 +477,7 @@ export const tools: Tool[] = [
       items: 'files',
       itemControls: true,
       outputs: 'one',
-      resultNotes: ["The pictures' details, such as the camera, the date and the place, are not copied into the PDF."],
+      resultNotes: ['The pictures’ details, such as the camera, the date and the place, are not copied into the PDF.'],
     },
   },
 ];

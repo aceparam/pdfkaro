@@ -68,15 +68,26 @@ describe('files turned away for their type', () => {
 });
 
 describe('a file that cannot be read', () => {
-  it('says a damaged file is damaged, with nothing more to try than leaving it out', () => {
-    expect(unreadableNotice('broken.png', 'damaged')).toEqual({ heading: 'broken.png is damaged and cannot be read.' });
+  const pictures = { damagedAdvice: 'Open it in a photo app, save a copy, and add the copy.', unsupportedAdvice: 'Open it in a photo app, save a copy as a JPG, and add the copy.' };
+
+  it('says a damaged file is damaged, with the tool advice, heard together', () => {
+    expect(unreadableNotice('broken.png', 'damaged', pictures)).toEqual({
+      heading: 'broken.png is damaged and cannot be read.',
+      advice: 'Open it in a photo app, save a copy, and add the copy.',
+      announcement: 'broken.png is damaged and cannot be read. Open it in a photo app, save a copy, and add the copy.',
+    });
   });
 
   it('says how to save an unsupported file again', () => {
-    expect(unreadableNotice('odd.jpg', 'unsupported')).toEqual({
+    expect(unreadableNotice('odd.jpg', 'unsupported', pictures)).toEqual({
       heading: 'odd.jpg is saved in a way this tool cannot read.',
-      advice: 'Open it and save it again as a JPG, then add it again.',
+      advice: 'Open it in a photo app, save a copy as a JPG, and add the copy.',
+      announcement: 'odd.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy as a JPG, and add the copy.',
     });
+  });
+
+  it('says the heading alone for a tool with no advice, as the PDF tools always did', () => {
+    expect(unreadableNotice('report.pdf', 'damaged', {})).toEqual({ heading: 'report.pdf is damaged and cannot be read.', announcement: 'report.pdf is damaged and cannot be read.' });
   });
 });
 

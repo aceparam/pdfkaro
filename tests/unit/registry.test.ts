@@ -244,6 +244,8 @@ describe('Images to PDF', () => {
       dropHint: 'You can also drop pictures anywhere on this page, or paste them.',
       acceptsName: 'a JPG or PNG picture',
       refusedAdvice: 'To add a picture of another kind, save it as a JPG or PNG first.',
+      unsupportedAdvice: 'Open it in a photo app, save a copy as a JPG, and add the copy.',
+      damagedAdvice: 'Open it in a photo app, save a copy, and add the copy.',
       listNote: 'Each picture becomes one page, in this order.',
       listPages: false,
       actionLabel: 'Convert and download',
@@ -259,7 +261,7 @@ describe('Images to PDF', () => {
       resultPages: 'sum',
       memoryAdvice: 'Try fewer pictures, or smaller ones.',
     });
-    expect(tool.widget!.resultNotes).toEqual(["The pictures' details, such as the camera, the date and the place, are not copied into the PDF."]);
+    expect(tool.widget!.resultNotes).toEqual(['The pictures’ details, such as the camera, the date and the place, are not copied into the PDF.']);
   });
 
   it('leaves the other tools without the new words, so they are unchanged', () => {
@@ -267,6 +269,8 @@ describe('Images to PDF', () => {
       if (each.id === 'images-to-pdf') continue;
       expect(each.widget?.refusedAdvice).toBeUndefined();
       expect(each.widget?.listPages).toBeUndefined();
+      expect(each.widget?.unsupportedAdvice).toBeUndefined();
+      expect(each.widget?.damagedAdvice).toBeUndefined();
     }
   });
 });

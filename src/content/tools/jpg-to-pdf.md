@@ -41,4 +41,4 @@ An iPhone turns a photo into a JPG when a page asks for one, so choosing photos 
 
 ### Why was my photo refused?
 
-A file that is not a JPG or a PNG is not added. A JPG that is damaged, or saved in an unusual way that many PDF readers cannot show, is named with what to do: open it and save it again as a JPG.
+A file that is not a JPG or a PNG is not added. A JPG that is damaged, or saved in an unusual way that many PDF readers cannot show, stays in the list with a note saying what to do: open it in a photo app and save a copy as a JPG.

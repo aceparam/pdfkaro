@@ -68,6 +68,9 @@ g.save('progressive.jpg', 'JPEG', quality=90, progressive=True)
 | `details.png` | Marker texts in `tEXt`, `iTXt`, `zTXt` and `eXIf` (camera and GPS) |
 | `small.png` | 300 by 200 |
 | `huge.png` | Claims 16,000 by 16,000 pixels of grey, all zero; 243 KB |
+| `huge.jpg` | A JPG header that claims 16,000 by 16,000 pixels, with no real picture data |
+| `text-bomb.png` | A 1 by 1 PNG of 20 KB whose `zTXt` chunk inflates to 20 MB |
+| `data-bomb.png` | A 1 by 1 PNG of 20 KB whose image data (IDAT) inflates to 20 MB |
 | `arithmetic.jpg` | An arithmetic-coded JPG header (SOF9) |
 | `broken.jpg`, `broken.png`, `zero-size.png` | A JPG cut off half way, a PNG with a chunk longer than the file, and a PNG whose width is 0 |
 
@@ -294,7 +297,10 @@ Each picture was converted in Node with the same pdf-lib the browser gets (`test
 | `palette.png` | Stored as RGB, exact |
 | `grey16.png` | Stored as 8-bit RGB: the high byte of each value |
 | `animated.png` | Its default (red) picture only |
-| `huge.png` | Read as ready, one page, with its 256 million pixels for the notice; never decoded by the tests or for a thumbnail |
+| `huge.png` | Read as ready, one page, with its 256 million pixels for the notice; its image data is counted (it fits its header) but never decoded by the tests or for a thumbnail |
+| `huge.jpg` | Read as ready, one page, with no notice; never decoded for a thumbnail. Not converted in the tests, as it holds no real picture data |
+| `text-bomb.png` | Ready; converted, and pdf-lib is given the picture with no `zTXt` chunk |
+| `data-bomb.png` | Damaged before the job: its image data passes what its header allows after the first few kilobytes, and counting stops there. The job fails without pdf-lib being given it |
 | `arithmetic.jpg` | Unsupported before the job; the job fails if it is run |
 | `broken.jpg`, `broken.png`, `zero-size.png` | Damaged before the job; the job fails if it is run |
 | Every PDF in the test set | Damaged if read; on the page each is turned away by its first bytes before that ("… is not a JPG or PNG picture") |
@@ -309,5 +315,5 @@ Drawn in Node with `@napi-rs/canvas` in place of the worker's `createImageBitmap
 | --- | --- |
 | `tall.jpg`, `wide.jpg`, `alpha.png`, `palette.png`, `cmyk.jpg`, `p3.jpg`, `screenshot.png` | Drawn inside the box, decoded once |
 | `turn-6.jpg` | Sized from its shown size: 104 by 65 |
-| `huge.png` | Not drawn, and never decoded |
+| `huge.png`, `huge.jpg` | Not drawn, and never decoded |
 | `broken.jpg`, `broken.png`, `zero-size.png`, `arithmetic.jpg` | Not drawn, and never decoded |

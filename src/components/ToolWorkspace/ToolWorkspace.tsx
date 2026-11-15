@@ -148,6 +148,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   // stays the problem until the answer comes back.
   const problem = currentProblem(state);
   const problemKey = problem ? `${problem.id}:${problem.status}${problem.checking ? ':checking' : ''}` : '';
+  // A file that cannot be read: its heading and the tool's advice, worked out once per render.
+  const unreadableWords = problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? unreadableNotice(problem.name, problem.status, words) : undefined;
+  const unreadableSaid = unreadableWords?.announcement;
   const previousProblem = useRef('');
   useEffect(() => {
     const before = previousProblem.current;
@@ -179,8 +182,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       damagedRef.current?.focus();
       return;
     }
-    if (problem.status === 'damaged' || problem.status === 'unsupported') setAnnouncement(unreadableNotice(problem.name, problem.status).heading);
-  }, [problem, problemKey, state.files, setAnnouncement]);
+    // The heading and the advice are said together.
+    if (unreadableSaid) setAnnouncement(unreadableSaid);
+  }, [problem, problemKey, state.files, setAnnouncement, unreadableSaid]);
 
   const count = totals(state);
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
@@ -494,9 +498,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             />
           ) : null}
 
-          {problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? (
-            <Notice heading={unreadableNotice(problem.name, problem.status).heading} headingRef={damagedRef}>
-              {unreadableNotice(problem.name, problem.status).advice ? <p>{unreadableNotice(problem.name, problem.status).advice}</p> : null}
+          {problem && unreadableWords ? (
+            <Notice heading={unreadableWords.heading} headingRef={damagedRef}>
+              {unreadableWords.advice ? <p>{unreadableWords.advice}</p> : null}
               <div>
                 <button
                   type="button"
@@ -520,7 +524,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
           {huge.map((file) => (
             <div key={file.id} id={hugeId(file)}>
-              <Notice heading={pixelsHeading(file.name, file.pixels!)}>
+              <Notice heading={pixelsHeading(file.name, file.pixels)}>
                 <p>{pixelsAdvice}</p>
               </Notice>
             </div>

@@ -5,9 +5,9 @@
 // can run it.
 //
 // A picture is read with `readPicture` first, and drawn only when it passes;
-// a PNG above `maxPngPixels` is never decoded for a thumbnail.
+// a picture above `maxPngPixels`, JPG or PNG, is never decoded for a thumbnail.
 
-import { isHuge, readPicture, shownSize } from './picture';
+import { maxPngPixels, readPicture, shownSize } from './picture';
 import type { CanvasMaker } from './thumbnail';
 import type { EngineTools } from './types';
 
@@ -21,6 +21,7 @@ export type PictureDecoder = {
 
 /** A canvas maker that can also draw a decoded picture on its canvas. */
 type DrawingContext = { drawImage(image: unknown, x: number, y: number, width: number, height: number): void; fillStyle: unknown; fillRect(x: number, y: number, width: number, height: number): void };
+
 
 async function need<T>(tools: EngineTools, name: string): Promise<T> {
   const make = tools[name];
@@ -38,7 +39,7 @@ export function thumbnailSize(shown: { width: number; height: number }, box: { w
  * Opens a picture for drawing, with the same shape as an open PDF: `render`
  * ignores the page number, as a picture has one. Nothing is decoded until
  * `render` is called, and nothing at all for a picture `readPicture` does not
- * pass or one above `maxPngPixels`.
+ * pass or one above `maxPngPixels`, whatever its kind.
  */
 export async function openPicture(file: Uint8Array, tools: EngineTools) {
   let closed = false;
@@ -48,7 +49,8 @@ export async function openPicture(file: Uint8Array, tools: EngineTools) {
       if (closed) throw new Error('The picture is closed.');
       const read = readPicture(file);
       if (read.kind !== 'ok') throw new Error('The picture cannot be read.');
-      if (isHuge(read.picture)) throw new Error('The picture is too large to draw small.');
+      // Any kind of picture: a JPG is never decoded by the engine, but the browser would decode it here.
+      if (read.picture.width * read.picture.height > maxPngPixels) throw new Error('The picture is too large to draw small.');
       const { width, height } = thumbnailSize(shownSize(read.picture), box);
       const decoder = await need<PictureDecoder>(tools, 'decodePicture');
       const canvases = await need<CanvasMaker>(tools, 'canvas');

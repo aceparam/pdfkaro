@@ -126,9 +126,10 @@ export function createHandler(deps: WorkerDeps) {
       try {
         if (deps.openDocument) {
           if (kept?.key !== data.documentKey) {
-            await closeKept();
-            // The tool's engine says how its files are drawn; it is already loaded by the read before.
+            // The tool's engine says how its files are drawn; it is already loaded by the read before. It is asked
+            // before the close, so nothing waits between closing the last document and keeping the new one.
             const kind = (await engineFor(data.toolId)).thumbnails;
+            await closeKept();
             const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools, kind);
             kept = { key: data.documentKey, doc: opening };
             // A file that cannot be opened is not kept, so it is tried afresh if asked for again.

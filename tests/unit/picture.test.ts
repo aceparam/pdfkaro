@@ -12,7 +12,9 @@ import {
   jpegForPdf,
   maxPngPixels,
   maxProfileBytes,
-  pngFirstFrame,
+  pngDataFits,
+  pngDataSize,
+  pngForPdf,
   pngProfile,
   profileColourOnly,
   profileFits,
@@ -53,6 +55,12 @@ describe('the size, colours and camera turn of a picture', () => {
     const read = readPicture(picture(name));
     expect(read.kind).toBe('ok');
     if (read.kind === 'ok') expect(read.picture).toMatchObject(wanted);
+  });
+
+  it('reads the camera turn only before the first scan, as browsers do', () => {
+    const exif = (orientation: number) => segment(0xe1, [...Buffer.from('Exif\0\0', 'latin1'), 0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation, 0, 0, 0, 0, 0, 0]);
+    expect(readPicture(jpg(exif(6), frame(0xc0), scan))).toMatchObject({ kind: 'ok', picture: { orientation: 6 } });
+    expect(readPicture(jpg(frame(0xc0), scan, exif(6), scan))).toMatchObject({ kind: 'ok', picture: { orientation: 1 } });
   });
 
   it('reads every camera turn, 1 to 8, and swaps the shown size for 5 to 8', () => {
@@ -211,6 +219,25 @@ describe('the parts of a JPG kept for the PDF', () => {
     expect(latin1(jpegForPdf(picture('details-progressive.jpg'))!.bytes)).not.toContain('SECRET-BETWEEN-SCANS');
   });
 
+  it('keeps an Adobe segment as its standard 12-byte body only, whatever length it claims', () => {
+    const body = [...Buffer.from('Adobe', 'latin1'), 0, 100, 0, 0, 0, 0, 2];
+    const padded = jpg(segment(0xee, [...body, ...Buffer.from('SECRET-IN-ADOBE', 'latin1')]), frame(0xc0, { components: 4 }), scan);
+    const cleaned = jpegForPdf(padded)!;
+    expect(cleaned.adobe).toBe(true);
+    const text = latin1(cleaned.bytes);
+    expect(text).not.toContain('SECRET');
+    const at = text.indexOf('\xff\xee');
+    expect([...cleaned.bytes.subarray(at, at + 16)]).toEqual([0xff, 0xee, 0, 14, ...body]);
+    // One too short to hold the body is left out.
+    const short = jpegForPdf(jpg(segment(0xee, [...Buffer.from('Adobe', 'latin1'), 0, 100]), frame(0xc0, { components: 4 }), scan))!;
+    expect(short.adobe).toBe(false);
+    expect(latin1(short.bytes)).not.toContain('Adobe');
+    // The fixture's own segment is already the standard length, so it is kept as it was.
+    const cmyk = picture('cmyk.jpg');
+    const own = latin1(cmyk).indexOf('\xff\xeeAdobe'.slice(0, 2));
+    expect(latin1(jpegForPdf(cmyk)!.bytes)).toContain(latin1(cmyk.subarray(own, own + 16)));
+  });
+
   it('says whether an Adobe segment is there', () => {
     expect(jpegForPdf(picture('cmyk.jpg'))!.adobe).toBe(true);
     expect(jpegForPdf(picture('tall.jpg'))!.adobe).toBe(false);
@@ -274,6 +301,13 @@ describe('colour profiles', () => {
     expect(pngProfile(picture('bomb-profile.png'), fflate)).toBeUndefined();
     expect(pngProfile(picture('grey-profile.png'), fflate)).toBeUndefined();
     expect(pngProfile(picture('small.png'), fflate)).toBeUndefined();
+    // An RGB profile in a grey or grey-and-alpha PNG is left out by its colour type.
+    const grey = Uint8Array.from(picture('profile.png'));
+    for (const type of [0, 4]) {
+      grey[25] = type;
+      grey[24] = 8;
+      expect(pngProfile(grey, fflate), `colour type ${type}`).toBeUndefined();
+    }
   });
 
   it('stops inflating as soon as the output passes the limit', async () => {
@@ -325,18 +359,40 @@ describe('only the colour data of a profile', () => {
     expect(latin1(clean)).not.toMatch(/SECRET|SMKR|SMDL|SCRT/);
   });
 
-  it('clears the date, device, attributes, creator and profile ID, and sets the new size', () => {
+  it('clears the preferred CMM, date, platform, device, attributes, creator and profile ID, and sets the new size', () => {
+    expect(latin1(p3.subarray(4, 8))).toBe('SCMM');
+    expect(latin1(p3.subarray(40, 44))).toBe('APPL');
     const clean = profileColourOnly(p3)!;
     const view = new DataView(clean.buffer, clean.byteOffset, clean.byteLength);
     expect(view.getUint32(0)).toBe(clean.length);
+    expect([...clean.subarray(4, 8)].every((byte) => byte === 0)).toBe(true);
+    expect([...clean.subarray(40, 44)].every((byte) => byte === 0)).toBe(true);
     expect([...clean.subarray(24, 36)].every((byte) => byte === 0)).toBe(true);
     expect([...clean.subarray(48, 64)].every((byte) => byte === 0)).toBe(true);
     expect([...clean.subarray(80, 128)].every((byte) => byte === 0)).toBe(true);
+    expect(latin1(clean)).not.toMatch(/SCMM|APPL/);
     // The rest of the header is kept: version, class, colour space, signature and white point.
     expect(Buffer.from(clean.subarray(8, 24)).equals(Buffer.from(p3.subarray(8, 24)))).toBe(true);
     expect(latin1(clean.subarray(36, 40))).toBe('acsp');
     expect(Buffer.from(clean.subarray(68, 80)).equals(Buffer.from(p3.subarray(68, 80)))).toBe(true);
     expect(profileFits(clean, 3)).toBe(true);
+  });
+
+  it('gives nothing when the colour data would come to more than 4 MB, as tags pointing into one another could make it', () => {
+    // A 3 MB profile whose three curves point at three overlapping blocks of nearly all of it: copied once each, 9 MB.
+    const size = 3 * 1024 * 1024;
+    const big = new Uint8Array(size);
+    big.set(p3.subarray(0, 128));
+    const view = new DataView(big.buffer);
+    view.setUint32(0, size);
+    view.setUint32(128, 3);
+    ['rTRC', 'gTRC', 'bTRC'].forEach((signature, index) => {
+      big.set(Buffer.from(signature, 'latin1'), 132 + index * 12);
+      view.setUint32(132 + index * 12 + 4, 200 + index * 4);
+      view.setUint32(132 + index * 12 + 8, size - 300);
+    });
+    expect(profileFits(big, 3)).toBe(true);
+    expect(profileColourOnly(big)).toBeUndefined();
   });
 
   it('writes the version 2 text types for a version 2 profile', () => {
@@ -366,17 +422,99 @@ describe('only the colour data of a profile', () => {
   });
 });
 
-describe('an animated PNG', () => {
-  it('loses its animation chunks and keeps its default picture', () => {
-    const first = pngFirstFrame(picture('animated.png'));
+describe('the PNG pdf-lib is given', () => {
+  /** The chunk types of a PNG, in order. */
+  const chunkTypes = (bytes: Uint8Array) => {
+    const types: string[] = [];
+    for (let at = 8; at + 8 <= bytes.length; ) {
+      const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(at);
+      types.push(latin1(bytes.subarray(at + 4, at + 8)));
+      at += 12 + length;
+    }
+    return types;
+  };
+
+  it('holds only IHDR, PLTE, tRNS, IDAT and IEND', () => {
+    for (const name of ['details.png', 'profile.png', 'animated.png', 'palette.png', 'alpha.png', 'turn-6.png', 'text-bomb.png', 'bomb-profile.png']) {
+      const types = chunkTypes(pngForPdf(picture(name))!);
+      expect(types[0], name).toBe('IHDR');
+      expect(types.at(-1), name).toBe('IEND');
+      for (const type of types) expect(['IHDR', 'PLTE', 'tRNS', 'IDAT', 'IEND'], `${name}: ${type}`).toContain(type);
+    }
+    expect(latin1(pngForPdf(picture('details.png'))!)).not.toContain('SECRET');
+    expect(chunkTypes(pngForPdf(picture('palette.png'))!)).toEqual(['IHDR', 'PLTE', 'IDAT', 'IEND']);
+  });
+
+  it('gives an animated PNG its default picture only', () => {
+    const first = pngForPdf(picture('animated.png'))!;
     expect(latin1(first)).not.toMatch(/acTL|fcTL|fdAT/);
-    expect(latin1(first)).toContain('IDAT');
     expect(readPicture(first)).toMatchObject({ kind: 'ok', picture: { width: 60, height: 40, animated: false } });
   });
 
-  it('leaves any other PNG as it is', () => {
-    const small = picture('small.png');
-    expect(pngFirstFrame(small)).toBe(small);
+  it('gives nothing for a PNG that is not passed', () => {
+    expect(pngForPdf(picture('broken.png'))).toBeUndefined();
+    expect(pngForPdf(picture('tall.jpg'))).toBeUndefined();
+  });
+});
+
+describe("a PNG's image data, counted against its header", () => {
+  it('works out the size from the header, with Adam7 passes when interlaced', () => {
+    expect(pngDataSize(1, 1, 2, 8, false)).toBe(4);
+    expect(pngDataSize(300, 200, 6, 8, false)).toBe((300 * 4 + 1) * 200);
+    expect(pngDataSize(10, 3, 0, 1, false)).toBe((2 + 1) * 3);
+    expect(pngDataSize(128, 64, 0, 16, false)).toBe((256 + 1) * 64);
+    // 1 by 1 interlaced: only the first pass holds a pixel.
+    expect(pngDataSize(1, 1, 2, 8, true)).toBe(4);
+    // 8 by 8 RGB interlaced: passes of 1x1, 1x1, 2x1, 2x2, 4x2, 4x4, 8x4 pixels.
+    const rows = (w: number, h: number) => (w * 3 + 1) * h;
+    expect(pngDataSize(8, 8, 2, 8, true)).toBe(rows(1, 1) + rows(1, 1) + rows(2, 1) + rows(2, 2) + rows(4, 2) + rows(4, 4) + rows(8, 4));
+  });
+
+  it('passes every good PNG in the test set, interlaced too', async () => {
+    for (const name of ['alpha.png', 'palette.png', 'grey16.png', 'animated.png', 'details.png', 'profile.png', 'small.png', 'screenshot.png', 'turn-6.png', 'grey-profile.png', 'bomb-profile.png', 'text-bomb.png']) {
+      expect(pngDataFits(picture(name), fflate), name).toBe(true);
+    }
+    const { deflateSync } = await import('node:zlib');
+    const png = Uint8Array.from(picture('small.png'));
+    // An interlaced 8 by 8 RGB picture with exactly its data.
+    const rows = (w: number, h: number) => (w * 3 + 1) * h;
+    const data = deflateSync(Buffer.alloc(rows(1, 1) * 2 + rows(2, 1) + rows(2, 2) + rows(4, 2) + rows(4, 4) + rows(8, 4)));
+    const chunk = (type: string, body: Uint8Array) => {
+      const out = new Uint8Array(12 + body.length);
+      new DataView(out.buffer).setUint32(0, body.length);
+      out.set(Buffer.from(type, 'latin1'), 4);
+      out.set(body, 8);
+      return out;
+    };
+    const interlaced = new Uint8Array([...png.subarray(0, 8), ...chunk('IHDR', new Uint8Array([0, 0, 0, 8, 0, 0, 0, 8, 8, 2, 0, 0, 1])), ...chunk('IDAT', data), ...chunk('IEND', new Uint8Array(0))]);
+    expect(readPicture(interlaced)).toMatchObject({ kind: 'ok' });
+    expect(pngDataFits(interlaced, fflate)).toBe(true);
+  });
+
+  it('refuses image data that inflates past the header, counting without keeping it and stopping early', () => {
+    let pushed = 0;
+    class Counting extends Inflate {
+      push(chunk: Uint8Array, final?: boolean) {
+        pushed += chunk.length;
+        super.push(chunk, final);
+      }
+    }
+    const bomb = picture('data-bomb.png');
+    expect(readPicture(bomb)).toMatchObject({ kind: 'ok', picture: { width: 1, height: 1 } });
+    expect(pngDataFits(bomb, { Inflate: Counting })).toBe(false);
+    // It stopped after the first few kilobytes, not after reading all 20 KB of data (20 MB inflated).
+    expect(pushed).toBeLessThan(4096);
+  });
+
+  it('refuses image data that is not zlib, or does not inflate', () => {
+    const broken = Uint8Array.from(picture('small.png'));
+    const idat = latin1(broken).indexOf('IDAT') + 4;
+    broken[idat] = 0x00;
+    expect(pngDataFits(broken, fflate)).toBe(false);
+    const garbled = Uint8Array.from(picture('small.png'));
+    garbled.fill(0xff, idat + 2, idat + 40);
+    expect(pngDataFits(garbled, fflate)).toBe(false);
+    expect(pngDataFits(picture('broken.png'), fflate)).toBe(false);
   });
 });
 
@@ -385,7 +523,8 @@ describe('hostile pictures', () => {
     const read = readPicture(bytes);
     expect(['ok', 'damaged', 'unsupported']).toContain(read.kind);
     jpegForPdf(bytes);
-    pngFirstFrame(bytes);
+    pngForPdf(bytes);
+    pngDataFits(bytes, fflate);
     pngProfile(bytes, fflate);
     return read;
   };

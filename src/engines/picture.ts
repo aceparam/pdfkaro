@@ -184,7 +184,9 @@ function readJpeg(bytes: Uint8Array): PictureRead {
   const walk = walkJpeg(bytes);
   if (walk.kind !== 'ok') return walk;
   let orientation: Orientation = 1;
+  // Only segments before the first scan, as browsers read them.
   for (const segment of walk.segments) {
+    if (segment.marker === 0xda) break;
     if (segment.marker === 0xe1 && startsWith(bytes, segment.data, 'Exif\0\0')) {
       orientation = readOrientation(bytes.subarray(segment.data + 6, segment.end));
       break;
@@ -193,6 +195,9 @@ function readJpeg(bytes: Uint8Array): PictureRead {
   const { width, height, components } = walk.frame;
   return { kind: 'ok', picture: { type: 'jpeg', width, height, components, orientation, animated: false } };
 }
+
+/** The length of an Adobe segment's standard body: "Adobe", version, flags0, flags1, transform. */
+const adobeBody = 12;
 
 /** The markers whose segments are kept: tables, the frame, scans and the end. Every other segment is left out. */
 const keptJpegMarkers = new Set([0xd8, 0xdb, 0xc4, 0xcc, 0xdd, 0xc0, 0xc1, 0xc2, 0xda, 0xd9]);
@@ -217,24 +222,25 @@ export type JpegForPdf = {
 export function jpegForPdf(bytes: Uint8Array): JpegForPdf | undefined {
   const walk = walkJpeg(bytes);
   if (walk.kind !== 'ok') return undefined;
-  const kept: Segment[] = [];
+  const kept: Uint8Array[] = [];
   const chunks: { sequence: number; total: number; data: Uint8Array }[] = [];
   let adobe = false;
   for (const segment of walk.segments) {
-    if (keptJpegMarkers.has(segment.marker)) kept.push(segment);
-    else if (segment.marker === 0xee && startsWith(bytes, segment.data, 'Adobe')) {
-      kept.push(segment);
+    if (keptJpegMarkers.has(segment.marker)) kept.push(bytes.subarray(segment.start, segment.end));
+    else if (segment.marker === 0xee && !adobe && startsWith(bytes, segment.data, 'Adobe') && segment.data + adobeBody <= segment.end) {
+      // Only the standard body: "Adobe", the version, two flag words and the transform. Whatever more it claims is left out.
+      kept.push(new Uint8Array([0xff, 0xee, 0x00, adobeBody + 2, ...bytes.subarray(segment.data, segment.data + adobeBody)]));
       adobe = true;
     } else if (segment.marker === 0xe2 && startsWith(bytes, segment.data, 'ICC_PROFILE\0') && segment.data + 14 <= segment.end) {
       chunks.push({ sequence: bytes[segment.data + 12]!, total: bytes[segment.data + 13]!, data: bytes.subarray(segment.data + 14, segment.end) });
     }
   }
-  const size = kept.reduce((sum, segment) => sum + segment.end - segment.start, 0);
+  const size = kept.reduce((sum, part) => sum + part.length, 0);
   const out = new Uint8Array(size);
   let at = 0;
-  for (const segment of kept) {
-    out.set(bytes.subarray(segment.start, segment.end), at);
-    at += segment.end - segment.start;
+  for (const part of kept) {
+    out.set(part, at);
+    at += part.length;
   }
   const profile = joinProfile(chunks, walk.frame.components);
   return profile ? { bytes: out, profile, adobe } : { bytes: out, adobe };
@@ -269,7 +275,7 @@ type PngChunk = { type: string; start: number; data: number; length: number };
 
 const validDepths: Record<number, number[]> = { 0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16] };
 
-type PngWalk = { kind: 'ok'; chunks: PngChunk[]; width: number; height: number; colourType: number } | { kind: 'damaged' };
+type PngWalk = { kind: 'ok'; chunks: PngChunk[]; width: number; height: number; colourType: number; depth: number; interlaced: boolean } | { kind: 'damaged' };
 
 /** Walks a PNG's chunks from IHDR to IEND. CRCs are not checked, as browsers do not refuse on them. */
 function walkPng(bytes: Uint8Array): PngWalk {
@@ -294,7 +300,7 @@ function walkPng(bytes: Uint8Array): PngWalk {
     if (type === 'IEND') {
       if (!chunks.some((chunk) => chunk.type === 'IDAT')) return { kind: 'damaged' };
       if (colourType === 3 && !chunks.some((chunk) => chunk.type === 'PLTE')) return { kind: 'damaged' };
-      return { kind: 'ok', chunks, width, height, colourType };
+      return { kind: 'ok', chunks, width, height, colourType, depth, interlaced: bytes[28] === 1 };
     }
   }
   return { kind: 'damaged' };
@@ -310,16 +316,22 @@ function readPng(bytes: Uint8Array): PictureRead {
   return { kind: 'ok', picture: { type: 'png', width: walk.width, height: walk.height, components, orientation, animated } };
 }
 
+class TooLong extends Error {}
+
+/** The chunks pdf-lib's PNG decoder is given. Text, profiles, animation and every other chunk are left out, so it never reads them. */
+const pdfPngChunks = new Set(['IHDR', 'PLTE', 'tRNS', 'IDAT', 'IEND']);
+
 /**
- * An animated PNG with its animation chunks taken out, leaving its default
- * picture; any other PNG as it is. pdf-lib refuses animated PNGs otherwise.
+ * A PNG rebuilt from its IHDR, PLTE, tRNS, IDAT and IEND chunks only, for
+ * pdf-lib. pdf-lib's decoder inflates every text chunk with no limit, and
+ * refuses animated PNGs, so nothing else reaches it; an animated PNG gives its
+ * default picture. The colour profile is read on its own, by `pngProfile`.
+ * Gives undefined for a PNG that `readPicture` does not pass.
  */
-export function pngFirstFrame(bytes: Uint8Array): Uint8Array {
+export function pngForPdf(bytes: Uint8Array): Uint8Array | undefined {
   const walk = walkPng(bytes);
-  if (walk.kind !== 'ok') return bytes;
-  const dropped = new Set(['acTL', 'fcTL', 'fdAT']);
-  if (!walk.chunks.some((chunk) => dropped.has(chunk.type))) return bytes;
-  const kept = walk.chunks.filter((chunk) => !dropped.has(chunk.type));
+  if (walk.kind !== 'ok') return undefined;
+  const kept = walk.chunks.filter((chunk) => pdfPngChunks.has(chunk.type));
   const out = new Uint8Array(8 + kept.reduce((sum, chunk) => sum + 12 + chunk.length, 0));
   out.set(bytes.subarray(0, 8));
   let at = 8;
@@ -328,6 +340,62 @@ export function pngFirstFrame(bytes: Uint8Array): Uint8Array {
     at += 12 + chunk.length;
   }
   return out;
+}
+
+const channelsFor: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/** How many bytes a PNG's image data inflates to, from its header: each row's bytes and its filter byte, for every Adam7 pass when interlaced. */
+export function pngDataSize(width: number, height: number, colourType: number, depth: number, interlaced: boolean): number {
+  const bitsPerPixel = channelsFor[colourType]! * depth;
+  const rows = (w: number, h: number) => (w === 0 || h === 0 ? 0 : (Math.ceil((w * bitsPerPixel) / 8) + 1) * h);
+  if (!interlaced) return rows(width, height);
+  // The seven Adam7 passes: start column, start row, column step, row step.
+  const passes = [
+    [0, 0, 8, 8],
+    [4, 0, 8, 8],
+    [0, 4, 4, 8],
+    [2, 0, 4, 4],
+    [0, 2, 2, 4],
+    [1, 0, 2, 2],
+    [0, 1, 1, 2],
+  ];
+  return passes.reduce((sum, [x, y, dx, dy]) => sum + rows(Math.ceil((width - x!) / dx!), Math.ceil((height - y!) / dy!)), 0);
+}
+
+/** Bytes allowed past the size the header implies, for encoders that add a little. */
+const pngDataMargin = 1024;
+
+/**
+ * Whether a PNG's image data inflates to no more than its header says it
+ * should. The data is inflated in small pieces and counted, keeping nothing; it
+ * stops as soon as the count passes the limit. A PNG over it is damaged: a
+ * small file whose data would fill all memory must never reach pdf-lib.
+ */
+export function pngDataFits(bytes: Uint8Array, fflate: { Inflate: InflateClass }): boolean {
+  const walk = walkPng(bytes);
+  if (walk.kind !== 'ok') return false;
+  const limit = pngDataSize(walk.width, walk.height, walk.colourType, walk.depth, walk.interlaced) + pngDataMargin;
+  const idat = walk.chunks.filter((chunk) => chunk.type === 'IDAT');
+  const first = idat[0]!;
+  if (first.length < 2 || (bytes[first.data]! & 0x0f) !== 8 || ((bytes[first.data]! << 8) | bytes[first.data + 1]!) % 31 !== 0) return false;
+  let size = 0;
+  let ended = false;
+  const inflater = new fflate.Inflate((chunk, final) => {
+    size += chunk.length;
+    if (size > limit) throw new TooLong();
+    if (final) ended = true;
+  });
+  const piece = 1024;
+  try {
+    idat.forEach((chunk, index) => {
+      const data = bytes.subarray(chunk.data + (index === 0 ? 2 : 0), chunk.data + chunk.length);
+      const last = index === idat.length - 1;
+      for (let at = 0; at < data.length && !ended; at += piece) inflater.push(data.subarray(at, at + piece), last && at + piece >= data.length);
+    });
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 /** fflate's streaming inflater, the one part of fflate used here. */
@@ -340,7 +408,8 @@ export type InflateClass = new (ondata: (chunk: Uint8Array, final: boolean) => v
  */
 export function pngProfile(bytes: Uint8Array, fflate: { Inflate: InflateClass }): Uint8Array | undefined {
   const walk = walkPng(bytes);
-  if (walk.kind !== 'ok') return undefined;
+  // Only a colour PNG: pdf-lib stores grey ones as RGB too, but their profile is grey.
+  if (walk.kind !== 'ok' || ![2, 3, 6].includes(walk.colourType)) return undefined;
   const chunk = walk.chunks.find((each) => each.type === 'iCCP');
   if (!chunk || chunk.length > maxProfileBytes) return undefined;
   const data = bytes.subarray(chunk.data, chunk.data + chunk.length);
@@ -352,8 +421,6 @@ export function pngProfile(bytes: Uint8Array, fflate: { Inflate: InflateClass })
   const inflated = inflateLimited(zlib.subarray(2), fflate.Inflate, maxProfileBytes);
   return inflated && profileFits(inflated, 3) ? inflated : undefined;
 }
-
-class TooLong extends Error {}
 
 /**
  * Inflates raw deflate data, pushing it in small pieces so no one piece can
@@ -439,8 +506,8 @@ function requiredTexts(major: number): { desc: Uint8Array; cprt: Uint8Array } {
 
 /**
  * Rebuilds a profile with only its colour data: a tag table holding only colour
- * tags, each data block copied once, and the header's date, device maker and
- * model, attributes, creator and profile ID cleared. A fixed description and an
+ * tags, each data block copied once, and the header's preferred CMM, date,
+ * platform, device maker and model, attributes, creator and profile ID cleared. A fixed description and an
  * empty copyright are written in their place. Gives undefined for a profile
  * that cannot be read or has no colour tags.
  */
@@ -478,12 +545,16 @@ export function profileColourOnly(profile: Uint8Array): Uint8Array | undefined {
     placed.set(key, at);
     at = pad(at + data.length);
   }
+  if (at > maxProfileBytes) return undefined;
   const out = new Uint8Array(at);
   const view = new DataView(out.buffer);
   out.set(profile.subarray(0, 128));
   view.setUint32(0, out.length);
-  // Cleared: date and time, device maker and model, attributes, creator, profile ID, and the reserved bytes.
+  // Cleared: the preferred CMM, date and time, primary platform, device maker and model, attributes,
+  // creator, profile ID, and the reserved bytes.
+  out.fill(0, 4, 8);
   out.fill(0, 24, 36);
+  out.fill(0, 40, 44);
   out.fill(0, 48, 64);
   out.fill(0, 80, 128);
   view.setUint32(128, allTags.length);

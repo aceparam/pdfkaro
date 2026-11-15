@@ -663,6 +663,26 @@ savePicture('small.png', plainPng(300, 200));
   savePicture('huge.png', Buffer.concat([pngSignature, ihdr(width, width, 8, 0), pngChunk('IDAT', deflateSync(rows, { level: 9 })), pngChunk('IEND', Buffer.alloc(0))]));
 }
 
+// Two small PNGs whose compressed data inflates far past what a 1 by 1 picture needs:
+// one in a zTXt chunk, which pdf-lib's decoder would inflate with no limit, and one in IDAT.
+{
+  const onePixel = deflateSync(Buffer.from([0, 255, 0, 0]));
+  const bomb = deflateSync(Buffer.alloc(20 * 1024 * 1024), { level: 9 });
+  savePicture('text-bomb.png', Buffer.concat([pngSignature, ihdr(1, 1, 8, 2), pngChunk('zTXt', Buffer.concat([ascii('Comment\0\0'), bomb])), pngChunk('IDAT', onePixel), pngChunk('IEND', Buffer.alloc(0))]));
+  savePicture('data-bomb.png', Buffer.concat([pngSignature, ihdr(1, 1, 8, 2), pngChunk('IDAT', bomb), pngChunk('IEND', Buffer.alloc(0))]));
+}
+// A JPG header that claims 16,000 by 16,000 pixels: never decoded for a thumbnail.
+savePicture(
+  'huge.jpg',
+  Buffer.concat([
+    Buffer.from([0xff, 0xd8]),
+    segment(0xc0, Buffer.concat([Buffer.from([8]), be16(16_000), be16(16_000), Buffer.from([1, 1, 0x11, 0])])),
+    segment(0xda, Buffer.from([1, 1, 0, 0, 63, 0])),
+    Buffer.from([0x12, 0x34, 0x56]),
+    Buffer.from([0xff, 0xd9]),
+  ]),
+);
+
 // 14f. Pictures that cannot be converted. An arithmetic-coded JPG header (SOF9),
 // which many PDF readers cannot draw: the start, a frame, a scan and the end.
 savePicture(

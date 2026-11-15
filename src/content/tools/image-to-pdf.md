@@ -17,7 +17,7 @@ No. The PDF is made in your browser, on your device, and nothing is sent anywher
 
 ### Can I mix JPG and PNG pictures in one PDF?
 
-Yes. Each picture becomes one page, whatever its kind, in the order shown in the list. A JPG is kept exactly as it was compressed, and a PNG is kept without loss, so neither is made worse.
+Yes. Each picture becomes one page, whatever its kind, in the order shown in the list. A JPG is kept exactly as it was compressed, and a PNG with 8 bits per colour, as most are, is kept without loss. A 16-bit PNG is stored at 8 bits per colour, which rounds the finest steps between shades.
 
 ### How are the pictures fitted to the pages?
 
@@ -37,4 +37,4 @@ No. The camera, the date, the place a photo was taken and any notes stored in th
 
 ### Can I change the order after converting?
 
-Press Start again and choose the pictures again, or reorder the pages of the PDF with Reorder pages.
+Press Start again and choose the pictures again, or reorder the pages of the PDF with [Reorder pages](rearrange-pdf-pages).

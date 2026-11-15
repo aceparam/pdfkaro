@@ -215,7 +215,8 @@ describe('where a picture sits on its page', () => {
 
 describe('converting', () => {
   const allPictures = readdirSync(picturesDir).filter((name) => /\.(jpg|png)$/.test(name));
-  const convertible = allPictures.filter((name) => !['arithmetic.jpg', 'broken.jpg', 'broken.png', 'zero-size.png', 'huge.png'].includes(name));
+  // huge.jpg is a header with no real picture data, kept for the thumbnail cap.
+  const convertible = allPictures.filter((name) => !['arithmetic.jpg', 'broken.jpg', 'broken.png', 'zero-size.png', 'huge.png', 'data-bomb.png', 'huge.jpg'].includes(name));
 
   it.each(convertible)('%s gives one A4 page with its picture, which passes qpdf --check, with no details', async (name) => {
     const { output } = await convert([name]);
@@ -366,6 +367,39 @@ describe('converting', () => {
     await expect(run([pdfFixture('text.pdf')], {}, () => {}, tools)).rejects.toThrow();
   });
 
+  it('gives pdf-lib no text chunk and no image data past its header: neither bomb reaches it', async () => {
+    const given: Uint8Array[] = [];
+    const watching: EngineTools = {
+      ...tools,
+      pdflib: async () => {
+        const pdflib = (await tools.pdflib!()) as typeof import('@cantoo/pdf-lib');
+        const create = pdflib.PDFDocument.create.bind(pdflib.PDFDocument);
+        return {
+          ...pdflib,
+          PDFDocument: {
+            create: async (options: object) => {
+              const doc = await create(options);
+              const embedPng = doc.embedPng.bind(doc);
+              doc.embedPng = async (png: Uint8Array | ArrayBuffer | string) => {
+                given.push(png as Uint8Array);
+                return embedPng(png);
+              };
+              return doc;
+            },
+          },
+        };
+      },
+    };
+    const [output] = await run([picture('text-bomb.png')], {}, () => {}, watching);
+    expect(given).toHaveLength(1);
+    expect(given[0]!.length).toBeLessThan(200);
+    expect(latin1(given[0]!)).not.toContain('zTXt');
+    expect((await qpdfOn(output!, ['--check'])).code).toBe(0);
+    given.length = 0;
+    await expect(run([picture('data-bomb.png')], {}, () => {}, watching)).rejects.toThrow();
+    expect(given).toHaveLength(0);
+  });
+
   it('asks for pdf-lib and fflate only through its tools', async () => {
     await expect(run([picture('small.png')], {}, () => {}, { fflate: tools.fflate! })).rejects.toThrow(/pdflib/);
   });
@@ -425,6 +459,12 @@ describe('reading a file before the job', () => {
       ['broken.jpg', { kind: 'damaged' }],
       ['broken.png', { kind: 'damaged' }],
       ['zero-size.png', { kind: 'damaged' }],
+      // Image data that would inflate past what a 1 by 1 picture needs: damaged before the main button.
+      ['data-bomb.png', { kind: 'damaged' }],
+      // A bomb in a text chunk is never read: the picture itself is fine.
+      ['text-bomb.png', { kind: 'ready', pages: 1 }],
+      // A JPG header of 256 million pixels: the engine never decodes a JPG, so it gets no notice.
+      ['huge.jpg', { kind: 'ready', pages: 1 }],
     ];
     for (const [name, outcome] of expected) await expect(inspect(picture(name), undefined, tools), name).resolves.toEqual(outcome);
   });
