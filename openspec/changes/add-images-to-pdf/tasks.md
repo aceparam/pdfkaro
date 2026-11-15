@@ -43,6 +43,6 @@
 ## 9. Checks and review
 
 - [x] 9.1 `LICENSES.md`: `@cantoo/pdf-lib` and its three new packages as shipped
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
+- [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add the tool's hand checks to issue #7: the PDF opened in Chrome, Firefox, Adobe Reader and macOS Preview, including a JPG with a colour profile opening without warnings; the pages tried in Firefox, Safari and Edge and on Android Chrome and iOS Safari at phone size, including thumbnails of a sideways photo, a PNG with `eXIf` and a Display P3 photo in Firefox and Safari; a real phone photo from Android and from an iPhone, including a HEIC photo picked on an iPhone
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap and the agent's choices (A4 with no margin and no options, 96 pixels to the inch, the name with no word added, both types on every page, all three under "Convert to PDF", the colour data of profiles kept, the 50 million pixel notice), and asks the owner about a page size and margin choice, about picture details, about the group, and whether very large PNGs should be refused; it does not call the tool done; after merge, these questions go in CLAUDE.md
