@@ -39,6 +39,11 @@ export default defineConfig(
           'importScripts',
           'postMessage',
         ].map((name) => ({ name, message: 'Engines use no page and no network. What they need comes in through `tools`.' })),
+        // Pictures are decoded only through `tools.decodePicture`, so the picture code stays pure.
+        ...['createImageBitmap', 'OffscreenCanvas', 'Blob', 'Image', 'ImageDecoder'].map((name) => ({
+          name,
+          message: 'Engines decode no picture themselves. The worker gives a decoder and a canvas through `tools`.',
+        })),
       ],
     },
   },

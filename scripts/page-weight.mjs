@@ -18,16 +18,15 @@ const budgetBytes = 100 * 1024;
 // Files that load only after the visitor picks a file. Each is named by the
 // base name the bundler gives it, followed only by its content hash, so a
 // new file cannot slip in under a broad pattern. Each has a reason.
+// Every engine in src/engines/tools/, by its tool id, so a new engine cannot be forgotten.
+const engineIds = readdirSync(join('src', 'engines', 'tools'))
+  .filter((name) => name.endsWith('.ts'))
+  .map((name) => name.replace(/\.ts$/, ''));
+
 const loadedLater = [
   { name: 'ToolWorkspace', type: 'js', why: 'the tool widget after a pick: the list, problems, progress and the result' },
   { name: 'FilePicker', type: 'css', why: "a copy of the picker's styles, which the workspace chunk links; the page already has them" },
   { name: 'tool.worker', type: 'js', why: 'the one tool worker, started after a pick' },
-  { name: 'merge-pdf', type: 'js', why: 'the Merge PDF engine, which the worker loads' },
-  { name: 'split-pdf', type: 'js', why: 'the Split PDF engine, which the worker loads' },
-  { name: 'extract-pdf-pages', type: 'js', why: 'the Extract pages engine, which the worker loads' },
-  { name: 'delete-pdf-pages', type: 'js', why: 'the Delete pages engine, which the worker loads' },
-  { name: 'rearrange-pdf-pages', type: 'js', why: 'the Reorder pages engine, which the worker loads' },
-  { name: 'rotate-pdf', type: 'js', why: 'the Rotate PDF engine, which the worker loads' },
   { name: 'plain', type: 'js', why: 'the plain copy, outline and write steps (keepPages, writePages, writeTurned) the page engines share; the bundler gives them a file of their own' },
   { name: 'inspect', type: 'js', why: 'reads one PDF before a job; shared by the engines, so the bundler gives it a file of its own' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
@@ -35,7 +34,11 @@ const loadedLater = [
   { name: 'pdf', type: 'js', why: 'PDF.js, which the worker loads when the first thumbnail is asked for' },
   { name: 'pdf.worker.min', type: 'mjs', why: "PDF.js's own worker, started by the tool worker for thumbnails" },
   { name: 'pdfjs-data', type: 'js', why: "PDF.js's fonts and decoders, one fixed set, loaded with PDF.js" },
-  { name: 'fflate', type: 'js', why: "fflate's zip step, which the worker loads at the start of every run of a tool that can give several files" },
+  { name: 'fflate', type: 'js', why: "fflate's zip step, which the worker loads at the start of every run of a tool that can give several files, and which pdf-lib imports" },
+  { name: 'picture', type: 'js', why: 'reads a JPG or PNG without decoding it, for Image to PDF; shared by its engine and its thumbnails' },
+  { name: 'picture-thumbnail', type: 'js', why: "draws a picture's thumbnail with the browser's image decoder, which the worker loads for Image to PDF only" },
+  { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads when Image to PDF runs, at the main button' },
+  ...engineIds.map((id) => ({ name: id, type: 'js', why: `the ${id} engine, which the worker loads` })),
 ].map((entry) => ({ ...entry, pattern: new RegExp(`^_astro/${entry.name.replaceAll('.', '\\.')}[.-][A-Za-z0-9_-]{8}\\.${entry.type}$`) }));
 
 function walk(dir) {

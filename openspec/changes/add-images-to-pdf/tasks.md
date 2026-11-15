@@ -21,7 +21,7 @@
 ## 4. Worker wiring and thumbnails
 
 - [x] 4.1 Write `src/engines/picture-thumbnail.ts` (`openPicture` through `tools.decodePicture` and `tools.canvas`, sized from the shown size, refusing what `readPicture` does not pass, closing the decoded picture); `worker-core` passes the engine's `thumbnails` kind to `openDocument`, and `tool.worker.ts` uses the picture drawer only for it, with `decodePicture` from `createImageBitmap` with `imageOrientation: 'from-image'` and resize options; unit tests with `@napi-rs/canvas`, including that `decodePicture` is never called for a PNG over 50 million pixels, and a worker-core test that a PDF tool never uses the picture drawer; a worker-core test that a typed-array length `RangeError` is sorted as running out of memory, and the worker is still ended after a failure and on Cancel
-- [ ] 4.2 `page-weight.mjs`: build the engine list from `src/engines/tools/` and list `picture`, `picture-thumbnail` and `pdflib`; `check-worker.mjs`: pdf-lib is one file loaded late, its code in neither the worker nor the engine file, the picture code not in the worker file, and whether `node-html-better-parser` is in pdf-lib's file; lint forbids `createImageBitmap`, `OffscreenCanvas`, `Blob` and `Image` in `src/engines/`
+- [x] 4.2 `page-weight.mjs`: build the engine list from `src/engines/tools/` and list `picture`, `picture-thumbnail` and `pdflib`; `check-worker.mjs`: pdf-lib is one file loaded late, its code in neither the worker nor the engine file, the picture code not in the worker file, and whether `node-html-better-parser` is in pdf-lib's file; lint forbids `createImageBitmap`, `OffscreenCanvas`, `Blob` and `Image` in `src/engines/`
 
 ## 5. Page and page text
 
