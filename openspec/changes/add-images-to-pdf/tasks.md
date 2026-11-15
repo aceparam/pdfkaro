@@ -4,7 +4,7 @@
 
 - [ ] 1.1 Add the `images-to-pdf` entry with its three pages to `src/tools/registry.ts`, with the new optional widget words `refusedAdvice` and `listPages`; add `image-to-pdf` to `catalogue.ts` and drop `image2pdf`, with the catalogue test naming both as owner changes since the export and the order test counting the entry at `/image2pdf`'s place; the registry test checks the entry's words, sentences and descriptions
 - [ ] 1.2 `outputName(input, '')` gives `stem.pdf`; a test in `format.test.ts`
-- [ ] 1.3 The `unsupported` outcome (`InspectOutcome`, `isFromWorker`, the file status in `state.ts`, its sentence in `failures.ts`, shown and announced in `ToolWorkspace` where `damaged` is, holding the main button back) and `pixels` on `ready` with its notice; `refusedAdvice` after the refused names and `listPages: false` in the rows and summary; unit and component tests, and PDF tools unchanged
+- [ ] 1.3 The `unsupported` outcome (`InspectOutcome`, `isFromWorker`, the file status in `state.ts`, its sentence in `failures.ts`, shown and announced in `ToolWorkspace` where `damaged` is, holding the main button back) and `pixels` on `ready` with its notice, shown as soon as the file is read and tied to the main button by `aria-describedby`; `refusedAdvice` after the refused names and `listPages: false` in the rows and summary; unit and component tests, and PDF tools unchanged
 
 ## 2. Engine
 
@@ -20,7 +20,7 @@
 
 ## 4. Worker wiring and thumbnails
 
-- [ ] 4.1 Write `src/engines/picture-thumbnail.ts` (`openPicture` through `tools.decodePicture` and `tools.canvas`, sized from the shown size, refusing what `readPicture` does not pass, closing the decoded picture); `worker-core` passes the engine's `thumbnails` kind to `openDocument`, and `tool.worker.ts` uses the picture drawer only for it, with `decodePicture` from `createImageBitmap` with `imageOrientation: 'from-image'` and resize options; unit tests with `@napi-rs/canvas`, and a worker-core test that a PDF tool never uses the picture drawer
+- [ ] 4.1 Write `src/engines/picture-thumbnail.ts` (`openPicture` through `tools.decodePicture` and `tools.canvas`, sized from the shown size, refusing what `readPicture` does not pass, closing the decoded picture); `worker-core` passes the engine's `thumbnails` kind to `openDocument`, and `tool.worker.ts` uses the picture drawer only for it, with `decodePicture` from `createImageBitmap` with `imageOrientation: 'from-image'` and resize options; unit tests with `@napi-rs/canvas`, including that `decodePicture` is never called for a PNG over 50 million pixels, and a worker-core test that a PDF tool never uses the picture drawer; a worker-core test that a typed-array length `RangeError` is sorted as running out of memory, and the worker is still ended after a failure and on Cancel
 - [ ] 4.2 `page-weight.mjs`: build the engine list from `src/engines/tools/` and list `picture`, `picture-thumbnail` and `pdflib`; `check-worker.mjs`: pdf-lib is one file loaded late, its code in neither the worker nor the engine file, the picture code not in the worker file, and whether `node-html-better-parser` is in pdf-lib's file; lint forbids `createImageBitmap`, `OffscreenCanvas`, `Blob` and `Image` in `src/engines/`
 
 ## 5. Page and page text
