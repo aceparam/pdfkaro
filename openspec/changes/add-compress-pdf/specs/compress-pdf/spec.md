@@ -59,12 +59,22 @@ A picture stored without loss (`/FlateDecode`, grey or RGB, 8 bits) larger than 
 
 ### Requirement: Pictures that are left alone
 
-Pictures in other colour spaces (CMYK, indexed, Lab, separations), image masks and soft masks, 1-bit scans (CCITT, JBIG2), JPEG 2000, pictures with a `/Decode` array or a `/ColorTransform` setting, pictures of more than 50 million pixels, and inline pictures SHALL be left exactly as they were. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
+Every picture that is not a candidate SHALL be left exactly as it was: other colour spaces (CMYK, indexed, Lab, separations, grey with a colour profile), masks and soft masks, colour-key masks and soft masks with `/Matte`, 1-bit scans, JPEG 2000, unusual dictionary entries or decode settings, JPGs whose own header disagrees with their dictionary, more than 50 million pixels, and inline pictures. The design lists the exact rules. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
 
 #### Scenario: A CMYK picture and a 1-bit scan
 
 - **WHEN** a file with a CMYK JPG and a CCITT scan is compressed
 - **THEN** both streams are byte for byte as they were
+
+#### Scenario: A soft mask
+
+- **WHEN** a large RGB picture with a soft mask is compressed
+- **THEN** the picture is made smaller and its soft mask is byte for byte as it was
+
+#### Scenario: A JPG whose header disagrees
+
+- **WHEN** a picture's dictionary says 100 by 100 RGB but its JPG header says 20,000 by 20,000, or four components
+- **THEN** it is never decoded, and it is left as it was
 
 ### Requirement: The file is written again without loss
 
@@ -82,7 +92,7 @@ After the pictures, the file SHALL be written by qpdf with object streams, every
 
 ### Requirement: Passwords and restrictions are kept
 
-A file opened with its password SHALL be written with the same password and restrictions, and a file with restrictions but no password to open it SHALL keep its restrictions. The page SHALL say so. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change"; Privacy, limits and security, "Passwords typed into Protect and Unlock stay in the browser")
+A file opened with its password SHALL be written with the same password and restrictions, and a file with restrictions but no password to open it SHALL keep its restrictions. The page SHALL say so. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
 
 #### Scenario: A protected file
 
@@ -96,7 +106,7 @@ A file opened with its password SHALL be written with the same password and rest
 
 ### Requirement: The result
 
-When the file is smaller by at least 1%, the result SHALL show its name (`report-compressed.pdf`), its size beside the old size and its pages, a Download button, "Start again", and notes that say pictures may be slightly less sharp up close and that a digital signature stops being valid. Nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When the file is smaller by at least 1%, and its size reads differently from the old size, the result SHALL show its name (`report-compressed.pdf`), its size beside the old size and its pages, a Download button, "Start again", and notes that say pictures may be slightly less sharp up close and that a digital signature stops being valid. Nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A file is made smaller
 
@@ -105,21 +115,26 @@ When the file is smaller by at least 1%, the result SHALL show its name (`report
 
 ### Requirement: A file that cannot be made smaller
 
-When the file cannot be made at least 1% smaller, the page SHALL say "This file could not be made smaller." with "Start again" and no Download button. (SPEC.md: How the words should read; Definition of done, "a clear message saying why it cannot")
+Otherwise the page SHALL say "This file could not be made smaller." and "It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.", with "Start again" and no Download button. (SPEC.md: How the words should read; Definition of done, "a clear message saying why it cannot")
 
 #### Scenario: A file cannot be made smaller
 
 - **WHEN** a file is already as small as this tool can make it
-- **THEN** the page says "This file could not be made smaller.", offers "Start again" and shows no Download button, and the screen reader announces it
+- **THEN** the page says "This file could not be made smaller." and "It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.", offers "Start again" and shows no Download button, and the screen reader announces both sentences
+
+#### Scenario: A change too small to show
+
+- **WHEN** a 5.02 MB file comes out at 4.97 MB, which both read as "5.0 MB"
+- **THEN** the page says the file could not be made smaller
 
 ### Requirement: Progress and cancel
 
-While the job runs the page SHALL show progress in real units with a Cancel button: "Picture 3 of 40" while pictures are made smaller, then "Writing the compressed file". Cancel SHALL stop the work and return to the file. The page MUST stay responsive. (SPEC.md: States every tool handles; Rules for the code, 3)
+While the job runs the page SHALL show progress in real units with a Cancel button: "Reading the file", then "Picture 3 of 40" while pictures are made smaller, then "Writing the compressed file", with the bar short of full until the file is written. Cancel SHALL stop the work and return to the file. The page MUST stay responsive. (SPEC.md: States every tool handles; Rules for the code, 3)
 
 #### Scenario: A job is running
 
 - **WHEN** a file with 40 pictures is compressed
-- **THEN** the page shows "Picture 3 of 40", then "Writing the compressed file", a bar that never goes back, and Cancel
+- **THEN** the page shows "Reading the file", "Picture 3 of 40", then "Writing the compressed file", a bar that never goes back and is not full while writing, and Cancel
 
 #### Scenario: Cancel is pressed
 
@@ -128,7 +143,7 @@ While the job runs the page SHALL show progress in real units with a Cancel butt
 
 ### Requirement: A file that needs a password
 
-A protected file SHALL show a password field with a note that the password stays in the browser; a wrong password SHALL say so; the file can be left out. (SPEC.md: States every tool handles)
+A protected file SHALL show a password field with a note that the password stays in the browser; a wrong password SHALL say so; "Choose another file" replaces it. (SPEC.md: States every tool handles)
 
 #### Scenario: The password is right
 
@@ -174,7 +189,17 @@ No request that leaves the page SHALL carry the file's contents, its name or its
 #### Scenario: The no-upload test
 
 - **WHEN** the no-upload test picks `rich.pdf` under a telling name, and `password.pdf` with its password, compresses and downloads
-- **THEN** every request is to the site's own files on an exact list taken from the build, with no pdf-lib and no `fflate` unless the build shows the engine needs it; no request, header, console line or page title holds the file name, its stem, the password, a bookmark title, the attachment's name or the document's title
+- **THEN** every request is to the site's own files on an exact list taken from the build, which includes the engine, `qpdf-json`, `picture`, `resample` and `fflate` and no pdf-lib; no request, header, console line or page title holds the file name, its stem, the password, a bookmark title, the attachment's name or the document's title
+
+#### Scenario: The picture path is watched
+
+- **WHEN** the no-upload test compresses, under a telling name, a file where a JPG picture carrying the camera and place markers of `pictures/details.jpg` and a lossless picture are both made smaller, and downloads the result
+- **THEN** a download happened, the engine, `picture`, `resample` and `fflate` were fetched, and no request, header, console line or page title holds the file name, its stem or the markers
+
+#### Scenario: Hidden text and form values
+
+- **WHEN** the no-upload test compresses `tagged.pdf` and `form.pdf`, one of them ending in "could not be made smaller"
+- **THEN** no request, header, console line or page title holds `tagged.pdf`'s `SECRET-` markers, either document's title or `form.pdf`'s field values
 
 #### Scenario: The visitor starts again or leaves
 

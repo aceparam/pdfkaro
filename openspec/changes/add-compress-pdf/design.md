@@ -2,100 +2,208 @@
 
 ## Context
 
-Seven tools are built. qpdf 12.2 (WebAssembly) reads and writes every PDF; PDF.js draws thumbnails; the worker can decode pictures with the browser's own decoder and draw on an `OffscreenCanvas` (built for Image to PDF). `src/engines/picture.ts` already rebuilds a JPG from the parts needed to draw it. The owner chose our own recompression over Ghostscript (13 Nov 2026). There is no shared options control, and target sizes are phase 2.
+Seven tools are built. qpdf 12.2 (WebAssembly) reads and writes every PDF. PDF.js draws thumbnails. The worker can decode pictures with the browser's own decoder and draw on an `OffscreenCanvas`; this was built for Image to PDF. `src/engines/picture.ts` already checks a JPG's structure (`walkJpeg`), rebuilds it from the parts needed to draw it (`jpegForPdf`), and inflates with an output limit (`inflateLimited`). `src/engines/outline.ts` already reads objects through qpdf's JSON in batches and builds update JSON; `plain.ts` has the argument-file call. The owner chose our own recompression over Ghostscript (13 Nov 2026). There is no shared options control, and target sizes are phase 2.
 
-qpdf 12 can write a whole PDF as JSON (version 2) with each stream's data in a file (`--json-stream-data=file`), decoded to the level asked (`--decode-level=generalized` undoes Flate, LZW, ASCII filters, not DCT), and can apply a JSON update to a PDF (`--update-from-json`), replacing a stream's dictionary and data. That is the base of this design.
+qpdf 12 can:
+- write a PDF's objects as JSON (version 2), with or without stream data, for the whole file or for chosen objects (`--json-object`);
+- give a stream's raw data in a file (`--decode-level=none --json-stream-data=file`);
+- apply a JSON update that replaces a stream's dictionary and data (`--update-from-json`), keeping the file's encryption when given the password.
+
+Checked while writing this design on `password.pdf`, `restricted.pdf` and `images.pdf`: the update applied, the encryption and restrictions stayed, and `qpdf --check` passed.
 
 ## Goals and non-goals
 
-- **Goals:** a smaller file with no visible loss on screen or in normal printing; nothing else in the file changed; never a "compressed" file that is not smaller; all in the worker, no new library.
+- **Goals:**
+  - a smaller file with no visible loss on screen;
+  - nothing else in the file changed;
+  - never a "compressed" file that is not smaller;
+  - bounded memory, even for hostile files;
+  - all in the worker, with no new library.
 - **Non-goals:** levels or target sizes, grayscale, font subsetting, CMYK or JPEG 2000 pictures, inline pictures.
 
 ## Decisions
 
 ### 1. The registry entry
 
-`compress-pdf`, group `smaller`, phase 1, `accepts: ['application/pdf']`, one page, as the spec gives it. Description: "Make a PDF file smaller by shrinking its pictures and packing its data. The file stays on your device and is not uploaded."
+`compress-pdf`, group `smaller`, phase 1, `accepts: ['application/pdf']`, one page, as the spec gives it. Description: "Make a PDF file smaller by shrinking its pictures. The file stays on your device and is not uploaded."
 
-Widget words: `pickerLabel: 'Choose a PDF file'`, `items: 'files'`, `itemControls: false`, `multiple: false`, `minFiles: 1`, `tooFewFiles: 'Choose a PDF file to compress.'`, `actionLabel: 'Compress and download'`, `writingLabel: 'Writing the compressed file'`, `doneHeading: 'Your compressed file is ready'`, `failedHeading: 'The compression did not finish.'`, `outputSuffix: 'compressed'`, `outputs: 'one'`, `resultPages: 'input'`, `memoryAdvice: 'Try on a computer, or split the file first and compress the parts.'`, and two new optional words:
-- `resultWas: true`: the result's detail starts with the new size and then "was" and the input's size, "4.2 MB, was 11.8 MB, 64 pages".
-- `noSmaller: 'This file could not be made smaller.'`: the heading shown when the engine gives no file.
+The widget words:
+- **Picker and list:**
+  - `pickerLabel: 'Choose a PDF file'`, `addLabel: 'Choose another file'`;
+  - `dropHint: 'You can also drop a file anywhere on this page, or paste it.'`;
+  - `acceptsName: 'a PDF'`;
+  - `items: 'files'`, `itemControls: false`, `multiple: false`, `minFiles: 1`;
+  - `tooFewFiles: 'Choose a PDF file to compress.'`.
+- **The job:**
+  - `actionLabel: 'Compress and download'`, `writingLabel: 'Writing the compressed file'`;
+  - `doneHeading: 'Your compressed file is ready'`, `failedHeading: 'The compression did not finish.'`;
+  - `outputSuffix: 'compressed'`, `outputs: 'one'`, `resultPages: 'input'`;
+  - `memoryAdvice: 'Try on a computer, or split the file first and compress the parts.'`.
+- **Two new optional words:**
+  - `resultWas: true`: the result's detail reads "4.2 MB, was 11.8 MB, 64 pages".
+  - `noSmaller: { heading: 'This file could not be made smaller.', advice: 'It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.' }`: shown when the engine gives no file.
 
-`resultNotes`: "Pictures that were made smaller can look slightly less sharp up close." and "Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid." and "A password or restrictions on the file are kept." `related`: `merge-pdf`, `split-pdf`, `delete-pdf-pages`, `jpg-to-pdf`, `pdf-to-jpg`.
+`resultNotes`:
+- "Pictures that were made smaller can look slightly less sharp up close."
+- "Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid."
+- "If the file had a password or restrictions, it still has them."
 
-### 2. A run that gives no file
+`related`: `merge-pdf`, `split-pdf`, `delete-pdf-pages`, `jpg-to-pdf`, `pdf-to-jpg`.
 
-`Engine` may return an empty array. `worker-core` passes `outputs: []` on; `isFromWorker` accepts an empty `outputs` array; the hook finishes with `result: { kind: 'no-smaller' }`-style state (a `ResultInfo` with no name, size or href), and `ToolWorkspace` shows the `noSmaller` heading, its announcement and focus as for a result, "Start again", and no Download button. A tool without `noSmaller` that gets no file shows the engine failure, so no other tool changes. Tests cover both.
+With one file listed and `multiple: false`, the summary line above the row is left out, so the file is not described twice. That holds for every one-file tool that lists its file as a row, of which this is the first.
 
-### 3. Progress in pictures
+### 2. A run that gives no file (`tool-engines`, `tool-page`)
 
-`Progress`'s `unit` gains `'picture'`; `progressLine` gives "Picture 3 of 40". The bar fills as for pages. Writing is a percentage as now.
+- **Engine and worker:** an engine may return an empty array, meaning "no smaller file". `worker-core` passes `outputs: []` on, and `isFromWorker` accepts it.
+- **Page:** the state holds a result with no name, size or link. `ToolWorkspace` shows `noSmaller`'s heading and advice, with focus and announcement as for a result, "Start again", and no Download button.
+- **Other tools:** a tool without `noSmaller` that gets no file shows the engine failure, so no other tool changes.
+- **Counting as smaller:** the engine gives `[]` unless the output is at most 99% of the input. The page also treats a result as no smaller when its size and the input's would read the same (`formatSize`), so "5.0 MB, was 5.0 MB" is never shown.
+- **Tests** cover all of this.
 
-### 4. Reading and writing through qpdf's JSON: `src/engines/qpdf-json.ts`
+### 3. Progress
 
-A shared step, used by this engine and open to later tools:
+- **Pictures:** `Progress`'s `unit` gains `'picture'`; `progressLine` gives "Picture 3 of 40". `progressFraction` fills 0.2 to 0.8 for pictures, leaving the last fifth for writing.
+- **Writing:** this engine reports writing from 75% to 100%, so the bar does not sit full while qpdf writes (`0.2 + 0.8 × 0.75 = 0.8`).
+- **Reading:** a reading progress of `done: 0, total: 1` reads "Reading the file". The engine sends it before the first qpdf call, so the line never sits on "Starting".
+- **Other tools:** they do not send `total: 1` readings with `done: 0`; tests check their lines are unchanged.
 
-- `readObjects(qpdf, input, password)` runs `qpdf --json=2 --json-key=qpdf --json-stream-data=file --json-stream-prefix=/s/x --decode-level=generalized` and returns the objects and, for a stream, the path of its data file and whether qpdf could decode it. It also returns each page's MediaBox, found from the page tree by `--json-key=pages`.
-- `writeUpdate(qpdf, input, password, update, outPath)` writes an update JSON (`{ "qpdf": [ {"jsonversion": 2}, { "obj:N G R": { "stream": { "dict": {...}, "datafile": "/u/N" } } } ] }`) and runs `qpdf --password=… --update-from-json=/update.json` with the lossless options below, into `outPath`.
-- Object keys, dictionaries and file paths are made by our code; nothing from the file names a path. A password goes only inside `--password=` through the argument file, as `plain.ts` does.
-- The JSON is read with `JSON.parse` after a size check; a JSON larger than 512 MB is not parsed and the pictures step is skipped (the lossless step still runs).
+### 4. The qpdf JSON steps: `src/engines/qpdf-json.ts`
 
-### 5. The engine: `src/engines/tools/compress-pdf.ts`
+The general helpers move from `outline.ts` and `plain.ts` into this file, unchanged and with their tests:
+- `json()`, `objects()`, `objectArg`, `objectsPerCall`;
+- `updateJson()`;
+- `callWithArgumentFile()`.
+
+`outline.ts` and `plain.ts` import them from here. `check-worker.mjs`'s shared-step sentences follow them.
+
+Added:
+- **`readDictionaries(qpdf, passwordArgs)`:**
+  - runs `--json=2 --json-key=qpdf --json-stream-data=none` with qpdf writing to a file in its own memory, not standard output;
+  - reads that file's length first, and does not parse a JSON of more than 64 MB (the pictures step is then skipped; the lossless step still runs);
+  - any failure to read or parse also skips the pictures step;
+  - gives every object's dictionary, with no stream data.
+- **`readRawStreams(fresh, passwordArgs, ids)`:**
+  - for chosen candidates, in batches, runs `--json=2 --json-key=qpdf --decode-level=none --json-stream-data=file --json-object=…`;
+  - uses a fresh qpdf for each batch, as `plain.ts` records that one qpdf writes JSON only once;
+  - a batch holds candidates whose compressed data adds up to at most 32 MB, or one candidate;
+  - each data file is read, handed over, and removed (`Qpdf` gains `remove(path)`).
+- **`writeUpdate(fresh, input, passwordArgs, update)`:**
+  - uses a fresh qpdf, after the reading ones are let go;
+  - writes the update with `JSON.stringify`, and the data files under paths our code makes;
+  - runs `--update-from-json=/update.json` with the lossless options, through the argument file;
+  - then runs `qpdf --check`, with the password, through the argument file.
+
+Object keys are accepted only in the form `^obj:\d+ \d+ R$`. A password goes only inside `--password=`, in the in-memory argument list or the argument file. The argument file holds one argument per line, and a password with a line break is passed in the argument list instead.
+
+### 5. Which pictures are candidates
+
+`canShrink(id, dict, all)` is exported and tested. It reads dictionaries only, and a picture is a candidate only when all of these hold:
+- **Dictionary:**
+  - `/Subtype /Image` and `/BitsPerComponent 8`;
+  - no keys other than `Type`, `Subtype`, `Width`, `Height`, `ColorSpace`, `BitsPerComponent`, `Filter`, `DecodeParms`, `Length`, `Interpolate`, `Intent`, `Metadata`, `StructParent`, `ID`, `Name`, `OC` and `SMask`. Anything else (`/Mask`, `/Decode`, `/ImageMask`, `/Alternates`, `/OPI`, `/SMaskInData`, …) means it is left alone.
+- **Size:** `/Width` and `/Height` positive integers, with at most 50 million pixels.
+- **Colours:** `/ColorSpace` is `/DeviceGray`, `/DeviceRGB`, or `[/ICCBased ref]` whose stream has `/N 3`. Grey ICC pictures are left alone, so their tone does not change.
+- **Filter:** exactly `/DCTDecode` with no `/DecodeParms`, or exactly `/FlateDecode` with no `/DecodeParms` or with a PNG predictor (10 to 15) whose `/Colors`, `/BitsPerComponent` and `/Columns` match the picture.
+- **Soft masks:** it is not itself named as another image's `/SMask` or `/Mask`, so soft masks are never scaled. Its own `/SMask`, if any, has no `/Matte`, which would tie the two sizes together.
+
+### 6. The engine: `src/engines/tools/compress-pdf.ts`
 
 ```
 run([file], { passwords }, onProgress, tools):
-  qpdf = await tools.qpdf()
-  objects, pages = readObjects(qpdf, file, password)
-  largest = the longest side of the largest MediaBox, in points
-  limit = ceil(largest / 72 * 150)                       // pixels on any side
-  candidates = image XObject streams that pass `canShrink`
-  for each candidate i:
-    onProgress({ stage: 'working', unit: 'picture', done: i + 1, total })
-    replacement = shrinkJpeg or shrinkLossless (below), or none
-    if replacement: update[obj] = replacement
-  onProgress({ stage: 'writing', percent: 0 })
-  out = writeUpdate(qpdf, file, password, update, '/out.pdf')
-  qpdf --check out
+  onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 })
+  dicts = readDictionaries(fresh qpdf, passwordArgs)            // or none: skip pictures
+  limit = pixel limit from the largest page box (below)
+  candidates = ids passing canShrink
+  for each batch of readRawStreams(candidates):
+    for each candidate i:
+      onProgress({ stage: 'working', unit: 'picture', done: i + 1, total })
+      replacement = shrinkJpeg or shrinkLossless, or none
+  onProgress({ stage: 'writing', percent: 75 })
+  out = writeUpdate(fresh qpdf, file, passwordArgs, update)     // includes qpdf --check
   onProgress({ stage: 'writing', percent: 100 })
   return out.length <= file.length * 0.99 ? [out] : []
 inspect = inspectPdf
 ```
 
-- **`canShrink(dict)`** (exported, tested): `/Subtype /Image`; not `/ImageMask true`; `/BitsPerComponent 8`; `/ColorSpace` is `/DeviceGray`, `/DeviceRGB`, or `[/ICCBased ref]` whose stream has `/N` 1 or 3; no `/Decode`; no `/Alternates`, `/OPI` or `/Intent`-changing entries that matter; filter exactly `/DCTDecode` (with no `/DecodeParms` `/ColorTransform`) or a filter qpdf decoded at the generalized level; width × height at most 50 million. Soft masks are left as they are; an image keeps its `/SMask` reference (a soft mask may differ in size from its image).
-- **`shrinkJpeg`**: the JPG bytes go through `jpegForPdf` (so EXIF and its camera turn, and the colour profile, cannot change how the browser decodes it); `tools.decodePicture` decodes them with `imageOrientation: 'none'`, `colorSpaceConversion: 'none'`, at the target size (the limit, or the full size when not too large); `tools.canvas` draws and encodes JPG at quality 0.75. A grey picture comes back as an RGB JPG from the canvas, so its `/ColorSpace` becomes `/DeviceRGB` (a grey ICC profile is dropped, as an RGB stream cannot use it); an RGB ICC profile is kept. The new stream replaces the old only when the picture was too large, or when it is at least 10% smaller.
-- **`shrinkLossless`**: only when too large. The decoded samples (grey or RGB, 8 bits, exactly width × height × components bytes, checked) are scaled by `src/engines/resample.ts` (area averaging, pure, tested) and deflated through `tools.fflate` at level 9; `/Filter /FlateDecode`, no `/DecodeParms`. Used only when smaller than the original stream.
-- **The new dictionary** keeps every entry of the old one except `/Width`, `/Height`, `/Filter`, `/DecodeParms`, `/Length` and, for a grey JPG, `/ColorSpace`. So `/SMask`, `/Interpolate`, `/Metadata`, `/StructParent` and the rest stay.
-- **The lossless options**: `--object-streams=generate --compress-streams=y --recompress-flate --compression-level=9 --remove-unreferenced-resources=yes`. qpdf keeps encryption by default when given the password, so a protected file is written with the same password and restrictions; a test checks both protected fixtures. No `--decrypt`.
-- **Memory:** qpdf holds the file, the stream files in its memory, and the output; one picture is decoded at a time. About three times the file plus the largest decoded picture.
+- **The pixel limit:**
+  - each page's box is its `/CropBox`, or else its `/MediaBox`, found up the `/Parent` chain with `outlineDepthLimit` and scaled by `/UserUnit`;
+  - boxes that are not four finite numbers are ignored;
+  - the limit is `ceil(longest side / 72 × 150)` pixels, at least 1;
+  - with no usable box, the pictures step is skipped.
+- **`shrinkJpeg`:**
+  - the raw stream must pass `walkJpeg` with one 8-bit frame whose width, height and component count equal the dictionary's (1 for grey, 3 for RGB); otherwise it is left alone;
+  - `jpegForPdf` rebuilds it without EXIF or colour profile segments, so nothing in the JPG can change how the browser decodes it;
+  - `tools.decodePicture` decodes at the target size (the limit, or the full size when not too large) with `colorSpaceConversion: 'none'` and `resizeQuality: 'high'`;
+  - `tools.canvas` draws, and encodes JPG at quality 0.75;
+  - a `/DeviceGray` picture comes back as an RGB JPG from the canvas, so its `/ColorSpace` becomes `/DeviceRGB`, and the pixels stay grey;
+  - the new stream replaces the old when the picture was too large, or when it is at least 10% smaller.
+- **`shrinkLossless`, only when too large:**
+  - the raw data is inflated by `inflateLimited`, capped at exactly the expected size (width × height × components, plus one byte per row with a predictor); data that inflates to more or less is left alone;
+  - PNG predictors are undone by `src/engines/resample.ts`, which then scales by area averaging;
+  - the result is deflated by `tools.fflate`'s `Deflate` at level 9, with `/Filter /FlateDecode` and no `/DecodeParms`;
+  - it is used only when smaller than the original stream.
+- **The new dictionary** keeps every allowed key of the old one except `/Width`, `/Height`, `/Filter`, `/DecodeParms`, `/Length` and, for a grey JPG, `/ColorSpace`.
+- **The lossless options:** `--object-streams=generate --compress-streams=y --recompress-flate --compression-level=9 --remove-unreferenced-resources=yes`, with no `--decrypt`. A protected file is written with the same password and restrictions, which a test checks on both protected fixtures.
+- **Memory:**
+  - the file and the dictionaries' JSON (at most 64 MB);
+  - one batch of raw data (32 MB) and one decoded picture (at most 50 million pixels, about 200 MB as RGBA);
+  - then qpdf's write: the input, the replacement data and the output.
 
-### 6. Picture tools for engines
+  About three times the file plus 250 MB at the peak. qpdf's `--recompress-flate` and `--check` inflate streams one at a time, never all at once.
 
-- `decodePicture` gains options `{ orientation: 'none', colours: 'none' }`; in the worker these become `imageOrientation: 'none'` (or `'flipY'`-free default where unsupported, with the camera turn already removed by `jpegForPdf`) and `colorSpaceConversion: 'none'`. Image to PDF's thumbnail keeps its current options.
-- `canvas` gains `jpeg(canvas, quality)`, `OffscreenCanvas.convertToBlob({ type: 'image/jpeg', quality })` in the worker, `@napi-rs/canvas`'s `encode('jpeg', quality)` in tests.
-- Both stay out of `src/engines/`'s own code: lint already forbids the browser's picture APIs there.
+### 7. Picture tools for engines
 
-### 7. The page text
+- **`decodePicture`** accepts `{ colours: 'none' }`, which becomes `colorSpaceConversion: 'none'` in the worker. Image to PDF's thumbnail keeps its current options.
+  - Since `jpegForPdf` has removed any colour profile, a browser that ignores the option decodes the same values.
+  - The camera turn is already removed, so `imageOrientation` is left at `'from-image'` (`'none'` is deprecated).
+- **`canvas`** gains `jpeg(canvas, quality)`: `convertToBlob({ type: 'image/jpeg', quality })` in the worker, and `encode('jpeg', quality)` from `@napi-rs/canvas` in tests.
+- **`fflate`** gains streaming `Deflate` beside `Inflate`, in the worker and in the unit tests' tools.
 
-`src/content/tools/compress-pdf.md`, 250 to 500 words, draft: how to; what is made smaller and what is not; "Why is my file still large after compressing?" (text-only files, CMYK or 1-bit scans, fonts, already compressed files); whether quality drops; passwords kept; that nothing is uploaded and the page forgets the file.
+### 8. The page text
+
+`src/content/tools/compress-pdf.md`, 250 to 500 words, marked as a draft, covering:
+- how to use it;
+- what is made smaller and what is not;
+- "Why is my file still large after compressing?" (text-only files, CMYK or 1-bit scans, fonts, files already compressed);
+- whether quality drops: pictures can be slightly less sharp up close, with no claim about print;
+- that passwords are kept;
+- that changes saved on top of the file are dropped, and anything the file still uses stays;
+- that nothing is uploaded and the page forgets the file.
 
 ## Page weight and late loading
 
-No change before a pick. After a pick: as for the page tools (worker, qpdf, inspect, plain, PDF.js and its data for the first page's thumbnail), plus the engine, `qpdf-json`, `resample` and, at the main button, `picture` (for `jpegForPdf`) and `fflate`. No new library; pdf-lib is not fetched. `check-worker.mjs` checks `qpdf-json` and `resample` load late.
+No change before a pick. At the pick, these are fetched:
+- what every page tool fetches: the worker, qpdf and its WebAssembly, `inspect`, `plain` and PDF.js with its data for the first page's thumbnail;
+- the engine;
+- its static imports `qpdf-json`, `picture` and `resample`, in whatever chunks the bundler gives them;
+- `fflate` when the engine starts.
+
+pdf-lib is not fetched. `check-worker.mjs` checks the engine and the new shared code stay out of the worker file. `page-weight.mjs`, which already builds its engine list from the files, gets a `loadedLater` line only for any new chunk the build makes.
 
 ## Threats
 
-- **Hostile PDFs.** qpdf parses them, as for every tool, in the worker, which is ended after every job.
-- **Hostile picture data.** JPG data is decoded by the browser's decoder in the worker after `jpegForPdf` checks its structure; a picture whose header says more than 50 million pixels is skipped, so a small stream claiming a huge picture is never decoded. Lossless samples are used only when their length is exactly width × height × components, so a stream that inflates to more is skipped (qpdf has already inflated it into its own memory; its own limits apply).
-- **The JSON.** Only qpdf's own output is parsed, after a size check; object keys and paths are made by our code.
-- **Passwords.** Passed only in `--password=` through the argument file; never logged; the output keeps qpdf's encryption.
+- **Hostile PDFs.** qpdf parses them in the worker, which is ended after every job.
+- **Compression bombs.**
+  - No stream is decoded in bulk: dictionaries are read without data, and only candidates' raw data is fetched, in bounded batches.
+  - Candidate data is inflated by our own code with an output cap equal to the expected size.
+  - Attached files, fonts and content streams are never decoded by the pictures step.
+  - qpdf's `--recompress-flate` and `--check` do inflate every Flate stream, one at a time. A bomb there costs time, not memory; the page stays responsive, and Cancel ends the worker. A test with a bomb attachment checks this.
+- **Hostile picture data.**
+  - A JPG's own frame must match its dictionary in size, components and precision, and stay under 50 million pixels, before the browser decodes it.
+  - A CMYK JPG labelled RGB, or a small dictionary over a huge JPG, is left alone.
+- **The JSON.**
+  - Only qpdf's own output is parsed, from a file whose size is checked first (64 MB).
+  - Object keys must match `obj:N G R`, and the update is built with `JSON.stringify`.
+  - Numbers from the file are checked to be finite and in range before use.
+- **Passwords.** Passed only inside `--password=`, never logged. The output keeps qpdf's encryption, at the input's own strength.
 - **Hostile file names.** Unchanged: `stem` cleans the output name.
 
 ## Risks and trade-offs
 
-- **150 pixels to the inch across the largest page** is measured from page size, not from where each picture is drawn. A picture drawn small on a page keeps more pixels than it needs, and a picture cropped to a small part of itself can lose sharpness in that part. Working out each picture's drawn size needs the page content parsed; left for later.
-- **Grey JPGs become RGB JPGs,** which the canvas encoder always writes. Their chroma compresses to almost nothing, and the 10% rule keeps the old one when it is not smaller.
-- **Files that do not shrink**, such as text-only files already packed, get "could not be made smaller", which the FAQ explains.
-- **qpdf's JSON on very large files** is memory-heavy; above 512 MB of JSON the pictures step is skipped.
+- **The limit is measured from the largest page, not from where each picture is drawn.** A picture drawn small keeps more pixels than it needs. A picture cropped to a small part of itself can lose sharpness in that part, so the page text claims nothing about print. Working out each picture's drawn size needs the page content parsed; left for later.
+- **Grey DeviceGray JPGs become RGB JPGs,** which the canvas encoder always writes. The pixels stay grey, but some office printers may print such greys in composite colour. Named among the agent's choices.
+- **Files that do not shrink,** such as text-only files already packed, get "could not be made smaller" with its advice.
+- **This pull request carries shared widget pieces** (no-file result, "was" size, progress units, the one-file summary), as Reorder's and Rotate's did. The pull request names this; `SPEC.md` "Build phases" 3 prefers them in their own pull request.
 
 ## Migration plan
 
