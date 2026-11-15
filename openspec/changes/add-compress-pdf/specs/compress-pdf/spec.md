@@ -59,7 +59,7 @@ A picture stored without loss (`/FlateDecode`, grey or RGB, 8 bits) larger than 
 
 ### Requirement: Pictures that are left alone
 
-Every picture that is not a candidate SHALL be left exactly as it was: other colour spaces (CMYK, indexed, Lab, separations, grey with a colour profile), masks and soft masks, colour-key masks and soft masks with `/Matte`, 1-bit scans, JPEG 2000, unusual dictionary entries or decode settings, JPGs whose own header disagrees with their dictionary, more than 50 million pixels, and inline pictures. The design lists the exact rules. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
+Every picture that is not a JPG or lossless candidate, as the two requirements above and the design's rules define one, SHALL be left exactly as it was: other colour spaces, masks and soft masks, 1-bit scans, JPEG 2000, unusual entries, mismatched JPG headers, more than 50 million pixels, and inline pictures. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
 
 #### Scenario: A CMYK picture and a 1-bit scan
 
