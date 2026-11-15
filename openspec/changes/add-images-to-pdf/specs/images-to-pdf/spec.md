@@ -4,17 +4,36 @@
 
 ### Requirement: Three pages, one tool
 
-The tool SHALL be served at `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf` from one registry entry, by the owner's decision of 13 Nov 2026. Each page SHALL have its own title tag, meta description, heading, sentence and text below the tool, written for its search, and no two texts SHALL be the same text with a word swapped. All three SHALL take JPG and PNG pictures. (CLAUDE.md: Owner decisions; SPEC.md: SEO, Every tool page and Specific-search pages)
+The tool SHALL be served at `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf` from one registry entry, by the owner's decision of 13 Nov 2026, and all three SHALL take JPG and PNG pictures. Each page SHALL have its own title tag, meta description, heading and sentence. The sentence and the description SHALL say the files stay on the device. (CLAUDE.md: Owner decisions; SPEC.md: Tool page anatomy, 1 and 2; SEO, Every tool page)
 
 #### Scenario: The JPG page is opened
 
 - **WHEN** a visitor opens `/jpg-to-pdf`
-- **THEN** the heading is "Convert JPG to PDF", the title tag is "Convert JPG to PDF in your browser - PDFkaro", and the text below the tool is about JPG pictures
+- **THEN** the title tag is "Convert JPG to PDF in your browser - PDFkaro", the heading "Convert JPG to PDF", and the sentence "Turn one or more JPG photos into one PDF. Files stay on your device."
+
+#### Scenario: The PNG page is opened
+
+- **WHEN** a visitor opens `/png-to-pdf`
+- **THEN** the title tag is "Convert PNG to PDF in your browser - PDFkaro", the heading "Convert PNG to PDF", and the sentence "Turn one or more PNG pictures or screenshots into one PDF. Files stay on your device."
+
+#### Scenario: The image page is opened
+
+- **WHEN** a visitor opens `/image-to-pdf`
+- **THEN** the title tag is "Convert images to PDF in your browser - PDFkaro", the heading "Convert images to PDF", and the sentence "Turn JPG and PNG pictures into one PDF, in the order you choose. Files stay on your device."
+
+#### Scenario: The descriptions are read
+
+- **WHEN** the three meta descriptions are read
+- **THEN** each is under 155 characters, names its kind of picture, and says the files stay on the device and are not uploaded
 
 #### Scenario: A PNG is dropped on the JPG page
 
 - **WHEN** a visitor drops `screenshot.png` on `/jpg-to-pdf`
 - **THEN** it is listed and converted like a JPG
+
+### Requirement: Each page has its own text
+
+The text below the tool SHALL be 250 to 500 words on each page, written for that page's search, with steps and questions people ask about that kind of picture. No text SHALL be another with a word swapped. (SPEC.md: SEO, Every tool page and Specific-search pages)
 
 #### Scenario: The texts are compared
 
@@ -23,12 +42,12 @@ The tool SHALL be served at `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf` fro
 
 ### Requirement: Choosing pictures
 
-The page SHALL take several pictures at once and let more be added, from the picker button, from a drop anywhere on the page, and from paste. A file whose first bytes are not those of a JPG or a PNG SHALL be refused with a sentence that names it. (SPEC.md: Tool page anatomy, 3)
+The page SHALL take several pictures at once and let more be added, from the picker button, a drop anywhere on the page, and paste. The picker's `accept` attribute SHALL be `image/jpeg,image/png`. A file whose first bytes are not those of a JPG or a PNG SHALL be refused with a sentence that names it and says what to do. (SPEC.md: Tool page anatomy, 3; How the words should read)
 
 #### Scenario: Pictures are chosen
 
 - **WHEN** a visitor chooses three JPG files with the "Choose pictures" button
-- **THEN** all three are listed, in the order chosen
+- **THEN** all three are listed, in the order chosen, and "Add more pictures" and "You can also drop pictures anywhere on this page, or paste them." are shown
 
 #### Scenario: A screenshot is pasted
 
@@ -37,12 +56,12 @@ The page SHALL take several pictures at once and let more be added, from the pic
 
 #### Scenario: A file is not a picture
 
-- **WHEN** a visitor chooses `notes.txt`, a PDF, or a text file renamed `notes.jpg`
-- **THEN** it is not listed, and the page says "notes.jpg is not a JPG or PNG picture, so it was not added."
+- **WHEN** a visitor chooses a PDF, or a text file renamed `notes.jpg`
+- **THEN** it is not listed, and the page says "notes.jpg is not a JPG or PNG picture, so it was not added. To add a picture of another kind, save it as a JPG or PNG first."
 
 ### Requirement: Each picture is read before the job
 
-While the engine loads, each picture SHALL show "Getting ready" beside its name. A picture that has been read SHALL show "1 page" and its size in plain units, and a thumbnail drawn as it comes into view, turned upright as its camera recorded. The list SHALL say how many files and pages there are in all, and "Each picture becomes one page, in this order." (SPEC.md: States every tool handles; Details that apply everywhere)
+While the engine loads, each picture SHALL show "Getting ready" beside its name. A picture that has been read SHALL show its size in plain units, with no page count, and a thumbnail drawn as it comes into view, upright as its camera recorded. The summary SHALL say how many files there are and their total size, and "Each picture becomes one page, in this order." (SPEC.md: States every tool handles; Details that apply everywhere)
 
 #### Scenario: The engine is loading
 
@@ -51,8 +70,8 @@ While the engine loads, each picture SHALL show "Getting ready" beside its name.
 
 #### Scenario: A picture has been read
 
-- **WHEN** a JPG of 2.3 MB has been read
-- **THEN** it shows "1 page, 2.3 MB" and, once in view, its thumbnail
+- **WHEN** `IMG_2041.jpg` of 2.3 MB has been read
+- **THEN** its row shows "2.3 MB" and, once in view, its thumbnail, and the summary reads "1 file, 2.3 MB."
 
 #### Scenario: A phone photo taken on its side
 
@@ -61,7 +80,7 @@ While the engine loads, each picture SHALL show "Getting ready" beside its name.
 
 #### Scenario: A picture cannot be drawn small
 
-- **WHEN** a picture's thumbnail cannot be drawn, or the picture has more than 50 million pixels
+- **WHEN** a picture's thumbnail cannot be drawn
 - **THEN** its blank box stays, and the picture can still be converted
 
 ### Requirement: The visitor sets the order
@@ -87,6 +106,11 @@ The main button SHALL read "Convert and download" and SHALL work with one pictur
 - **WHEN** one JPG is listed and the visitor presses "Convert and download"
 - **THEN** the result has one page
 
+#### Scenario: The order is changed first
+
+- **WHEN** the visitor moves the second picture above the first and converts
+- **THEN** the first page holds the picture that is now first
+
 ### Requirement: How a picture sits on its page
 
 Each page SHALL be A4 (595.28 by 841.89 points): upright when its picture, as shown, is taller than wide or square, and on its side when wider. The picture SHALL be centred, as large as fits, but no larger than its own size at 96 pixels to the inch. It SHALL be turned and mirrored by its camera turn (EXIF orientation 1 to 8), so the page matches the thumbnail. (SPEC.md: Tool page anatomy, 4)
@@ -103,41 +127,65 @@ Each page SHALL be A4 (595.28 by 841.89 points): upright when its picture, as sh
 
 #### Scenario: Every camera turn
 
-- **WHEN** a picture is converted with each EXIF orientation from 1 to 8
-- **THEN** each page, drawn by PDF.js, shows the picture as a browser shows it
-
-#### Scenario: The order is changed first
-
-- **WHEN** the visitor moves the second picture above the first and converts
-- **THEN** the first page holds the picture that is now first
+- **WHEN** a picture with four coloured corners is converted with each EXIF orientation from 1 to 8
+- **THEN** each page, drawn by PDF.js, has its corners where a browser draws them for that orientation
 
 ### Requirement: Pictures are kept as they are
 
-A JPG SHALL be stored as its own compressed picture data, not compressed again. A PNG SHALL be stored without loss, with see-through parts showing the white page; a 16-bit PNG at 8 bits per colour, and an animated PNG as its first picture, which the result notes SHALL say. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
+A JPG SHALL be stored as its own compressed picture data, not compressed again. A PNG SHALL be stored without loss, with see-through parts showing the white page. A picture's colour profile SHALL be kept, so its colours on the page match the thumbnail. (SPEC.md: Definition of done, "Produces a correct result" and "Leaves alone what it was not asked to change")
 
-#### Scenario: A JPG goes in unchanged
+#### Scenario: A JPG is not compressed again
 
 - **WHEN** a JPG is converted
-- **THEN** the PDF holds a `/DCTDecode` image stream whose bytes equal the JPG's with its details segments taken out, and its picture data (from the start of the frame to the end) is unchanged
+- **THEN** the PDF holds a `/DCTDecode` image stream whose frame and scan data are the JPG's own bytes, up to its end-of-image marker
 
 #### Scenario: A PNG with see-through parts
 
 - **WHEN** a PNG with a see-through background is converted
 - **THEN** the page shows the picture on white, and its pixels are kept exactly
 
+#### Scenario: A photo in Display P3
+
+- **WHEN** a JPG that carries a Display P3 colour profile is converted
+- **THEN** its image uses that profile as an `/ICCBased` colour space
+
 #### Scenario: A CMYK JPG
 
-- **WHEN** a JPG in CMYK colours, as some print programs save, is converted
-- **THEN** its colours on the page match the browser's thumbnail
+- **WHEN** a JPG in CMYK colours with an Adobe segment is converted
+- **THEN** its image is CMYK with its colour values read the way the Adobe segment says, and drawn by PDF.js it is close to the browser's own drawing
 
 ### Requirement: Picture details are not copied
 
-The PDF SHALL NOT carry the pictures' details: a JPG's EXIF, XMP, IPTC, colour profile and comment segments SHALL be left out of its data, and no title, author, producer or dates SHALL be written. The result notes SHALL say the details are not copied. (SPEC.md: Privacy, limits and security)
+The PDF SHALL NOT carry the pictures' details. From a JPG, only the parts needed to draw it SHALL be kept; every other segment, wherever it appears, and everything after the first end-of-image marker SHALL be left out. From a PNG, only the decoded pixels and the colour profile SHALL be kept. No document information, XMP or `/Metadata` SHALL be written. The result note SHALL say the details are not copied. (SPEC.md: Privacy, limits and security)
 
-#### Scenario: A photo with a place in its details
+#### Scenario: Details in every place they hide
 
-- **WHEN** a photo whose details hold a GPS place and a camera name is converted
-- **THEN** neither appears anywhere in the PDF
+- **WHEN** JPGs are converted with a marker text in each of: EXIF, XMP and extended XMP, IPTC, a comment, APP0 with a JFIF or JFXX thumbnail, APP15 and another APPn, an APPn between progressive scans, a second JPG after the end marker with GPS in its EXIF, and plain bytes after the end marker; and PNGs with a marker text in `tEXt`, `iTXt`, `zTXt` and `eXIf`
+- **THEN** no marker text and no GPS value appears in the PDF, read with its streams decoded and object streams undone, and the PDF has no `/Info`, no `/Metadata` and no XMP
+
+### Requirement: Pictures that cannot be converted
+
+A picture SHALL be refused, naming the file, with a way to leave it out or choose another, when it is damaged, too large or coded in an unusual way. Each SHALL be found from the file's bytes before anything is decoded. (SPEC.md: States every tool handles, "Damaged file" and "Too large")
+
+#### Scenario: A damaged picture is chosen with others
+
+- **WHEN** a PNG with a broken chunk, or a picture whose width or height is 0, is listed with two good pictures
+- **THEN** the page says "broken.png is damaged and cannot be read." and offers "Leave this file out"
+
+#### Scenario: A damaged picture is chosen on its own
+
+- **WHEN** a broken JPG is the only picture
+- **THEN** the page says it is damaged and offers "Choose another file"
+
+#### Scenario: A PNG with too many pixels
+
+- **WHEN** a 1 MB PNG that claims 16,000 by 16,000 pixels is listed
+- **THEN** nothing is decoded, and the page says "huge.png is too large to convert: it has 256 million pixels, and this tool takes pictures of up to 50 million. Make the picture smaller, then add it again."
+
+#### Scenario: A JPG coded in an unusual way
+
+- **WHEN** a JPG with arithmetic coding, 12-bit samples, lossless or hierarchical coding is listed
+- **THEN** the page says "odd.jpg is saved in a way this tool cannot read. Open it and save it again as a JPG, then add it again."
 
 ### Requirement: Progress and cancel
 
@@ -160,7 +208,7 @@ While the job runs the page SHALL show progress in real units, with a Cancel but
 
 ### Requirement: The result
 
-When the job is done the page SHALL show the result's name, size and page count, a Download button, "Start again", and the result notes. The name SHALL be the first picture's name with its extension replaced by `.pdf`. Nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When the job is done the page SHALL show the result's name, size and page count, a Download button, "Start again", and the result note. The name SHALL be the first picture's name with its extension replaced by `.pdf`. Nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A job finishes
 
@@ -177,28 +225,14 @@ When the job is done the page SHALL show the result's name, size and page count,
 - **WHEN** the visitor presses "Start again"
 - **THEN** the page returns to the file picker alone and the pictures are forgotten
 
-### Requirement: A damaged picture
-
-A file that starts like a JPG or PNG but whose structure is broken, or whose size cannot be read, SHALL be shown as damaged, naming the file, with a way to leave it out or choose another. (SPEC.md: States every tool handles)
-
-#### Scenario: A damaged picture is chosen with others
-
-- **WHEN** a broken PNG is listed with two good pictures
-- **THEN** the page says "broken.png is damaged and cannot be read." and offers "Leave this file out"
-
-#### Scenario: A damaged picture is chosen on its own
-
-- **WHEN** a broken JPG is the only picture
-- **THEN** the page says it is damaged and offers "Choose another file"
-
 ### Requirement: A job that fails
 
 When the engine fails, cannot be fetched, or runs out of memory, the page SHALL say what happened in one sentence and one thing to try, keeping the list as it was. (SPEC.md: States every tool handles)
 
 #### Scenario: Out of memory
 
-- **WHEN** the engine runs out of memory, such as on a PNG that claims to be 50,000 pixels square
-- **THEN** the page says the device ran out of memory and to try fewer pictures or smaller ones
+- **WHEN** the engine runs out of memory
+- **THEN** the page says "Your browser ran out of memory. Try fewer pictures, or smaller ones."
 
 #### Scenario: The engine cannot be fetched
 
@@ -221,7 +255,7 @@ No request that leaves the page SHALL carry a picture's contents, its name or it
 #### Scenario: The no-upload test
 
 - **WHEN** the no-upload test picks two pictures, one with a camera name and a GPS place in its details, reorders them, converts them and downloads the result
-- **THEN** every request is to the site's own files on an exact list (the worker, the workspace chunk, the engine and the shared picture files, with no qpdf, PDF.js or `fflate`), and no request, console line or page title holds either file name, its stem, the camera name or the place
+- **THEN** every request is to the site's own files on an exact list taken from the build (the worker, the workspace chunk, the engine, the shared picture files, pdf-lib's file and `fflate`'s file, with no qpdf or PDF.js), no request has a header the browser does not send itself, no request, console line or page title holds either file name, its stem, the camera name or the place, and the downloaded PDF holds neither the camera name nor the place
 
 #### Scenario: The visitor starts again or leaves
 
@@ -230,7 +264,7 @@ No request that leaves the page SHALL carry a picture's contents, its name or it
 
 ### Requirement: The words on the page
 
-Each page's heading, sentence, picker, list words, main button, result notes and text below the tool SHALL be in the served HTML or the widget's own words, and the text below each tool SHALL be 250 to 500 words, marked as a draft for the owner, with nothing from "Banned patterns". (SPEC.md: SEO, Every tool page; How the words should read; Banned patterns)
+Each page's heading, sentence and text below the tool SHALL be in the served HTML, and the text below each tool SHALL be marked as a draft for the owner, with nothing from "Banned patterns". (SPEC.md: SEO, Every tool page; How the words should read; Banned patterns)
 
 #### Scenario: The text is in the served page
 
@@ -254,4 +288,4 @@ Every part of the tool SHALL work with a keyboard alone and with a screen reader
 #### Scenario: A screen reader reads the list
 
 - **WHEN** a screen reader reads a listed picture
-- **THEN** it hears the picture's name, "1 page" and its size, and buttons such as "Move IMG_2041.jpg down", and no thumbnail
+- **THEN** it hears the picture's name and size and buttons such as "Move IMG_2041.jpg down", and no thumbnail
