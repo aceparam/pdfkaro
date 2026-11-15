@@ -3,13 +3,11 @@ import type { Progress } from '../../engines/types';
 import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
-import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
+import { fileCount, formatSize, number, pageCount, progressLine, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
-
-import { number, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';

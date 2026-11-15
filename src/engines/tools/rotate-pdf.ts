@@ -1,7 +1,9 @@
 // Rotate PDF: writes every page of one PDF, each turned as the visitor chose.
 //
-// Only each page's /Rotate changes: text, links, form fields, notes,
-// bookmarks, attached files, details and tags are left as they were. qpdf
+// On the pages, only each page's /Rotate changes: text, links, form fields,
+// notes, bookmarks, attached files, details and tags are kept. The file is
+// written afresh, so earlier saved versions inside it are not kept and a
+// digital signature stops being valid, as the page says. qpdf
 // adds the turn to the one a page already has, normalising odd values as
 // PDF.js draws them, so the result matches the turned thumbnail. The new file
 // has no password and no restrictions, by the owner's decision of 13 Nov 2026.
