@@ -108,9 +108,8 @@ function walkJpeg(bytes: Uint8Array): JpegWalk {
   for (let count = 0; count < maxJpegSegments; count++) {
     if (at >= bytes.length || bytes[at] !== 0xff) return { kind: 'damaged' };
     // Fill bytes: any number of FF before a marker.
-    let start = at;
     while (at + 1 < bytes.length && bytes[at + 1] === 0xff) at++;
-    start = at;
+    const start = at;
     if (at + 1 >= bytes.length) return { kind: 'damaged' };
     const marker = bytes[at + 1]!;
     if (marker === 0xd9) {

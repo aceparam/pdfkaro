@@ -406,7 +406,11 @@ describe('a CMYK JPG', () => {
     for (const [px, py] of [[50, 25], [150, 25], [50, 75], [150, 75]] as const) {
       const wanted = [...context.getImageData(px, py, 1, 1).data].slice(0, 3);
       const seen = colour(box.x + px * 0.75, box.y + box.height - py * 0.75);
-      expect(close(seen, wanted, 60), `${px},${py}: ${seen} vs ${wanted}`).toBe(true);
+      // PDF.js turns CMYK into RGB with a printing-ink curve (pure cyan is about 0, 185, 242; magenta 251, 49, 153), while the
+      // decoder here inverts the inks plainly (0, 255, 255); inverted values the wrong way would be far off.
+      // So each channel is checked to be on the same side of the middle; inverted inks would put every one on the other.
+      expect(seen.map((value) => value >= 128), `${px},${py}: ${seen} vs ${wanted}`).toEqual(wanted.map((value) => value >= 128));
+      expect(close(seen, wanted, 110), `${px},${py}: ${seen} vs ${wanted}`).toBe(true);
     }
   });
 });
