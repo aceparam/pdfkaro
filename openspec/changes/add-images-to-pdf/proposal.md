@@ -13,7 +13,8 @@ Image to PDF is the next Phase 1 tool in catalogue order: it is the last row of 
   Each has its own title, description, heading, sentence (ending "Files stay on your device.") and text below the tool, written for its search. All three take JPG and PNG, because a visitor who drops a PNG on the JPG page wants it converted, not refused.
 - **Choosing pictures.** The picker reads "Choose pictures" and takes several at once. Drop and paste also work, so a pasted screenshot is taken. A file that is not a JPG or PNG is refused: "notes.txt is not a JPG or PNG picture, so it was not added. To add a picture of another kind, save it as a JPG or PNG first."
 - **The list.** Each picture is listed as Merge PDF lists files: its own thumbnail, its name and its size (no page count), with "Move up", "Move down", "Remove" and drag. "Each picture becomes one page, in this order." sits under the summary. One picture is enough; the main button works with one.
-- **Pictures that cannot be converted** are refused by name, from their bytes, before anything is decoded: a damaged one; a PNG of more than 50 million pixels ("too large", with the limit and what to try), so a small file claiming a huge size cannot exhaust the device; and a JPG coded in a way many PDF readers cannot draw (arithmetic, 12-bit, lossless or hierarchical), with a sentence saying to save it again as a JPG.
+- **Pictures that cannot be converted** are refused by name, from their bytes, before anything is decoded: a damaged one, and a JPG coded in a way many PDF readers cannot draw (arithmetic, 12-bit, lossless or hierarchical), with a sentence saying to save it again as a JPG.
+- **Very large pictures.** A PNG of more than 50 million pixels gets no thumbnail and a notice naming its pixels and saying a phone may run out of memory; the job still runs, because `SPEC.md` sets no fixed size limit for browser tools. Whether to refuse such files is an owner question.
 - **Thumbnails of pictures** are drawn in the tool worker by the browser's own image decoder, scaled down on an `OffscreenCanvas`, the same way as page thumbnails are handed back. The browser turns a photo upright as its camera recorded (EXIF orientation), so the thumbnail shows it as the visitor's gallery does.
 - **The main button, "Convert and download",** gives one PDF named after the first picture: `IMG_2041.jpg` gives `IMG_2041.pdf`. The extension changes, so no word is added to the name.
 - **Each page:**
@@ -21,12 +22,12 @@ Image to PDF is the next Phase 1 tool in catalogue order: it is the last row of 
   - holds its picture centred, as large as fits, but never larger than the picture's own size at 96 pixels to the inch, so a small picture is not blown up and blurred;
   - is turned and mirrored as the camera recorded, so the page matches the thumbnail;
   - has no margin.
-- **The pictures are not made worse.** A JPG goes into the PDF as its own compressed data, so it is not compressed again. A PNG is decoded and stored without loss; parts that are see-through show the white page. A picture's colour profile is kept, so an iPhone photo in Display P3 keeps its colours. A 16-bit PNG is stored at 8 bits per colour, and an animated PNG gives its first picture; the PNG page text says so.
-- **What the PDF keeps from a picture:** the picture and its colour profile. A JPG is rebuilt from a list of the parts needed to draw it, stopping at its end marker, so camera details, GPS places, thumbnails, and the second picture or video some phones add after the end are all left out. The PDF has no title, author, dates or XMP. The result note says the details are not copied.
+- **The pictures are not made worse.** A JPG goes into the PDF as its own compressed data, so it is not compressed again. A PNG is decoded and stored without loss; parts that are see-through show the white page. The colour data of a picture's colour profile is kept, so an iPhone photo in Display P3 keeps its colours; the profile's text, device and date fields are left out. A 16-bit PNG is stored at 8 bits per colour, and an animated PNG gives its first picture; the PNG page text says so.
+- **What the PDF keeps from a picture:** the picture and its colours. A JPG is rebuilt from a list of the parts needed to draw it, stopping at its end marker, so camera details, GPS places, thumbnails, and the second picture or video some phones add after the end are all left out. The PDF has no title, author, dates or XMP. The result note says the details are not copied.
 - **Shared code:**
   - `src/engines/picture.ts` reads a JPG's or PNG's size and camera turn, checks its structure without decoding it, and rebuilds a JPG from the parts needed to draw it; used by the engine and by the thumbnail.
   - `src/engines/picture-thumbnail.ts` draws a thumbnail of a picture; the worker uses it in place of PDF.js for this tool only.
-  - Two new outcomes of reading a file, `too-large` and `unsupported`, shown where `damaged` is, and two optional widget words: advice after a refused file, and leaving the page count out of the list.
+  - A new outcome of reading a file, `unsupported`, shown where `damaged` is; a notice for very large pictures; and two optional widget words: advice after a refused file, and leaving the page count out of the list.
   - pdf-lib loads through `src/workers/pdflib.ts`, so its file has a stable name the build checks can list.
   - `outputName` takes an empty suffix, giving `IMG_2041.pdf`.
   - The catalogue type gains `image-to-pdf` and drops `image2pdf`, by the owner's decision.
@@ -34,7 +35,7 @@ Image to PDF is the next Phase 1 tool in catalogue order: it is the last row of 
 
 ### Scope
 
-- **One tool.** It reuses `FilePicker`, `PageGrid` (rows of files), `Result` and the widget; no new shared component. The two new outcomes are shown by the existing damaged-file notice.
+- **One tool.** It reuses `FilePicker`, `PageGrid` (rows of files), `Result` and the widget; no new shared component. The new outcome is shown by the existing damaged-file notice.
 - **No options.** Page size, margin and fitting are fixed as above. SPEC.md asks for "only the options this tool needs" and defaults that work without touching one; a page size choice (A4, Letter, the picture's own size) and a margin are an owner question, and would come with a shared options control in its own change.
 - **Out of scope:**
   - next steps in the result, a known gap across the site;
@@ -62,7 +63,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **New dependency:** `@cantoo/pdf-lib`, the library `SPEC.md` names for this job, moves from a test-only dependency to one the site ships. It is MIT, as are the three packages it brings (`culori`, `node-html-better-parser`, `html-entities`), which are pinned with `overrides`. It is not under the AGPL.
 - **Repair PDF link:** does not apply; a damaged picture offers to leave the file out or choose another.
 - **The agent's own choices,** named in the pull request: A4 pages with no margin and no options; never enlarging past 96 pixels to the inch; the output named after the first picture with no word added; all three pages taking both types; the pages listed under "Convert to PDF"; "Choose pictures" and "Convert and download".
-- **New owner questions:** whether to offer a page size and a margin; whether to keep any picture details; whether all three pages belong under "Convert to PDF"; whether 50 million pixels is the right limit for PNGs.
+- **New owner questions:** whether to offer a page size and a margin; whether to keep any picture details; whether all three pages belong under "Convert to PDF"; whether PNGs of more than 50 million pixels should be refused rather than warned about.
 
 No open decision needs more than its assumed default.
 
@@ -87,7 +88,7 @@ No open decision needs more than its assumed default.
 - **Changed code:**
   - the registry entry, `catalogue.ts` and its test;
   - `outputName` in `src/widget/format.ts`;
-  - `InspectOutcome`, `messages.ts`, `state.ts`, `failures.ts` and `ToolWorkspace` for the two new outcomes and two widget words;
+  - `InspectOutcome`, `messages.ts`, `state.ts`, `failures.ts` and `ToolWorkspace` for the new outcome, the notice and two widget words;
   - `worker-core.ts`, which tells `openDocument` which drawer a tool uses;
   - `tests/e2e/no-upload.ts`, which checks request headers;
   - `eslint.config.js`, which forbids picture decoding inside `src/engines/`;

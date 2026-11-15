@@ -132,7 +132,7 @@ Each page SHALL be A4 (595.28 by 841.89 points): upright when its picture, as sh
 
 ### Requirement: Pictures are kept as they are
 
-A JPG SHALL be stored as its own compressed picture data, not compressed again. A PNG SHALL be stored without loss, with see-through parts showing the white page. A picture's colour profile SHALL be kept, so its colours on the page match the thumbnail. (SPEC.md: Definition of done, "Produces a correct result" and "Leaves alone what it was not asked to change")
+A JPG SHALL be stored as its own compressed picture data, not compressed again. A PNG SHALL be stored without loss, with see-through parts showing the white page. The colour data of a picture's colour profile SHALL be kept, so its colours on the page match the thumbnail. (SPEC.md: Definition of done, "Produces a correct result" and "Leaves alone what it was not asked to change")
 
 #### Scenario: A JPG is not compressed again
 
@@ -147,7 +147,7 @@ A JPG SHALL be stored as its own compressed picture data, not compressed again. 
 #### Scenario: A photo in Display P3
 
 - **WHEN** a JPG that carries a Display P3 colour profile is converted
-- **THEN** its image uses that profile as an `/ICCBased` colour space
+- **THEN** its image uses that profile's colour data as an `/ICCBased` colour space
 
 #### Scenario: A CMYK JPG
 
@@ -156,16 +156,30 @@ A JPG SHALL be stored as its own compressed picture data, not compressed again. 
 
 ### Requirement: Picture details are not copied
 
-The PDF SHALL NOT carry the pictures' details. From a JPG, only the parts needed to draw it SHALL be kept; every other segment, wherever it appears, and everything after the first end-of-image marker SHALL be left out. From a PNG, only the decoded pixels and the colour profile SHALL be kept. No document information, XMP or `/Metadata` SHALL be written. The result note SHALL say the details are not copied. (SPEC.md: Privacy, limits and security)
+The PDF SHALL NOT carry the pictures' details. From a JPG, only the parts needed to draw it SHALL be kept; every other segment, wherever it appears, and everything after the first end-of-image marker SHALL be left out. From a PNG, only the decoded pixels SHALL be kept. No document information, XMP or `/Metadata` SHALL be written. The result note SHALL say the details are not copied. (SPEC.md: Privacy, limits and security)
 
 #### Scenario: Details in every place they hide
 
-- **WHEN** JPGs are converted with a marker text in each of: EXIF, XMP and extended XMP, IPTC, a comment, APP0 with a JFIF or JFXX thumbnail, APP15 and another APPn, an APPn between progressive scans, a second JPG after the end marker with GPS in its EXIF, and plain bytes after the end marker; and PNGs with a marker text in `tEXt`, `iTXt`, `zTXt` and `eXIf`
-- **THEN** no marker text and no GPS value appears in the PDF, read with its streams decoded and object streams undone, and the PDF has no `/Info`, no `/Metadata` and no XMP
+- **WHEN** JPGs are converted with a marker text in each of: EXIF, XMP and extended XMP, IPTC, a comment, APP0 with a JFIF or JFXX thumbnail, APP15 and another APPn, an APPn between progressive scans, a second JPG after the end marker with GPS in its EXIF, and plain bytes after the end marker; PNGs with a marker text in `tEXt`, `iTXt`, `zTXt` and `eXIf`; and a colour profile with a marker text in its description, copyright and device name tags and a creation date in its header
+- **THEN** no marker text, no profile date and no GPS value appears in the PDF, read with its streams decoded and object streams undone, and the PDF has no `/Info`, no `/Metadata` and no XMP
+
+### Requirement: Only a profile's colour data is copied
+
+From a picture's colour profile, only its colour data SHALL be kept: its date, device, creator and profile ID fields SHALL be cleared and its text tags (description, copyright, device names) left out. A profile that does not fit the image as stored SHALL be left out. (SPEC.md: Privacy, limits and security; Definition of done)
+
+#### Scenario: A profile with text and a date
+
+- **WHEN** a JPG whose colour profile has a marker text in its description, copyright and device name tags and a creation date is converted
+- **THEN** the PDF's profile has none of them, and draws the same colours
+
+#### Scenario: A grey PNG with a grey profile
+
+- **WHEN** a greyscale PNG with a grey `iCCP` profile is converted
+- **THEN** its image, stored as RGB, has no profile and passes `qpdf --check`
 
 ### Requirement: Pictures that cannot be converted
 
-A picture SHALL be refused, naming the file, with a way to leave it out or choose another, when it is damaged, too large or coded in an unusual way. Each SHALL be found from the file's bytes before anything is decoded. (SPEC.md: States every tool handles, "Damaged file" and "Too large")
+A picture SHALL be refused, naming the file, with a way to leave it out or choose another, when it is damaged or coded in an unusual way, found from its bytes before anything is decoded. (SPEC.md: States every tool handles, "Damaged file"; Definition of done, "a clear message saying why it cannot")
 
 #### Scenario: A damaged picture is chosen with others
 
@@ -177,15 +191,24 @@ A picture SHALL be refused, naming the file, with a way to leave it out or choos
 - **WHEN** a broken JPG is the only picture
 - **THEN** the page says it is damaged and offers "Choose another file"
 
-#### Scenario: A PNG with too many pixels
-
-- **WHEN** a 1 MB PNG that claims 16,000 by 16,000 pixels is listed
-- **THEN** nothing is decoded, and the page says "huge.png is too large to convert: it has 256 million pixels, and this tool takes pictures of up to 50 million. Make the picture smaller, then add it again."
-
 #### Scenario: A JPG coded in an unusual way
 
 - **WHEN** a JPG with arithmetic coding, 12-bit samples, lossless or hierarchical coding is listed
 - **THEN** the page says "odd.jpg is saved in a way this tool cannot read. Open it and save it again as a JPG, then add it again."
+
+### Requirement: Very large pictures
+
+A PNG of more than 50 million pixels SHALL be listed with a notice that names it, gives its pixels, and says the job may be slow or run out of memory, and the job SHALL still run, as `SPEC.md` sets no fixed size limit for browser tools. Its thumbnail SHALL NOT be drawn. A failure then SHALL get the out-of-memory sentence. (SPEC.md: Privacy, limits and security, Browser tools; CLAUDE.md: the owner's decision of 13 Nov 2026 to warn, not limit, above 20,000 pages)
+
+#### Scenario: A PNG with very many pixels
+
+- **WHEN** a 1 MB PNG that claims 16,000 by 16,000 pixels is listed
+- **THEN** nothing is decoded on listing, its blank box stays, the notice "huge.png has 256 million pixels" says "Converting it may be slow, and a phone may run out of memory. You can still go ahead.", and the main button works
+
+#### Scenario: It runs out of memory
+
+- **WHEN** that PNG is converted and the worker runs out of memory
+- **THEN** the page says "Your browser ran out of memory. Try fewer pictures, or smaller ones." and the list is as it was
 
 ### Requirement: Progress and cancel
 
