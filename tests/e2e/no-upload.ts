@@ -17,13 +17,46 @@ export function builtFiles(pattern: RegExp): string[] {
     .map((name) => `/_astro/${name}`);
 }
 
-export type Seen = { url: string; method: string; body: string | null; origin: string };
+export type Seen = { url: string; method: string; body: string | null; origin: string; headers?: Record<string, string> };
+
+/**
+ * The request headers a browser sends by itself. A header outside this list was
+ * set by a script, and could carry a file's name or contents, so it is refused.
+ * `cookie` is left out on purpose: the site sets none.
+ */
+export const browserHeaders = new Set([
+  'accept',
+  'accept-encoding',
+  'accept-language',
+  'cache-control',
+  'connection',
+  'host',
+  'if-modified-since',
+  'if-none-match',
+  'origin',
+  'pragma',
+  'priority',
+  'purpose',
+  'range',
+  'referer',
+  'sec-ch-ua',
+  'sec-ch-ua-mobile',
+  'sec-ch-ua-platform',
+  'sec-fetch-dest',
+  'sec-fetch-mode',
+  'sec-fetch-site',
+  'sec-fetch-storage-access',
+  'sec-fetch-user',
+  'sec-purpose',
+  'upgrade-insecure-requests',
+  'user-agent',
+]);
 
 /** Watches every request from the page and its workers, and every WebSocket. */
 export function watch(context: BrowserContext, page: Page): Seen[] {
   const seen: Seen[] = [];
   const record = (request: Request) =>
-    seen.push({ url: request.url(), method: request.method(), body: request.postData(), origin: new URL(request.url()).origin });
+    seen.push({ url: request.url(), method: request.method(), body: request.postData(), origin: new URL(request.url()).origin, headers: request.headers() });
   context.on('request', record);
   page.on('websocket', (socket) => seen.push({ url: socket.url(), method: 'WEBSOCKET', body: null, origin: new URL(socket.url()).origin }));
   return seen;
@@ -48,6 +81,12 @@ export function violations(seen: Seen[], siteOrigin: string, secrets: string[], 
     if (url.search) problems.push(`data in the address: ${request.url}`);
     if (!allowed.has(url.pathname)) problems.push(`not on the list: ${request.url}`);
     for (const secret of secrets) if (where.includes(secret)) problems.push(`"${secret}" in ${request.url}`);
+    for (const [name, value] of Object.entries(request.headers ?? {})) {
+      // HTTP/2 names its address parts as headers starting with a colon; they are the address, checked above.
+      if (name.startsWith(':')) continue;
+      if (!browserHeaders.has(name.toLowerCase())) problems.push(`a header the browser does not send itself, ${name}: ${request.url}`);
+      for (const secret of secrets) if (decodeURIComponent(value).includes(secret)) problems.push(`"${secret}" in the ${name} header of ${request.url}`);
+    }
   }
   return problems;
 }
