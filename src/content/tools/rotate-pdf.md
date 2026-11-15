@@ -25,7 +25,7 @@ No. Pages turn by quarters only: a quarter, a half or three quarters. Straighten
 
 ### Does anything else in the file change?
 
-Nothing on the pages or in the document's parts is removed: text, links, form fields, notes, bookmarks, attached files, the document's details and any hidden text stay. But the new file is written afresh, so earlier saved versions stored inside the original are not kept, and a digital signature will no longer be valid. The new file also has no password.
+Nothing on the pages or elsewhere in the file is removed: text, links, form fields, notes, bookmarks, attached files, the document's details and any hidden text stay. But the new file is written afresh, so earlier saved versions stored inside the original are not kept, and a digital signature will no longer be valid. The new file also has no password.
 
 ### Is my original file changed?
 

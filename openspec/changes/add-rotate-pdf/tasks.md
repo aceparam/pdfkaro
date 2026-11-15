@@ -43,4 +43,4 @@
 - [x] 9.1 No `LICENSES.md` line: no dependency added
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [x] 9.3 Add Rotate PDF's hand checks to issue #7
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Turn left"/"Turn right" and "Turn every page", the main button waiting for a turn, unlike Reorder's, as an owner question, `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names next steps as a site-wide gap, the missing multilingual test file, and the agent's choices ("Turn left"/"Turn right" and "Turn every page", the main button waiting for a turn, unlike Reorder's, as an owner question, `-rotated`, "turn" in the words and "rotate" in the name); it does not call the tool done
