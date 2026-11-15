@@ -82,3 +82,23 @@ export function turnsToSend(turns: Turns | null, pages: number): { all: number; 
 
 /** What ToolWorkspace and useToolRun ask of a tool whose pages turn, in one place. */
 export const turnRules = { summary: turnSummary, blocked: turnsBlocked, option: (turns: Turns | null, pages: number) => ({ turns: turnsToSend(turns, pages) }) };
+
+/**
+ * How many pages a chunk of the grid holds, and how many drawn pages "Turn every page" reaches in
+ * each frame. One number, so the front always lands on a chunk's edge and each frame draws one chunk.
+ */
+export const turnChunk = 50;
+
+const versions = new WeakMap<Turns, number>();
+let nextVersion = 1;
+
+/** A number for each turns value, so a chunk of pages can tell whether the turns it shows have changed. */
+export function turnsVersion(turns: Turns | null): number {
+  if (!turns) return 0;
+  let version = versions.get(turns);
+  if (version === undefined) {
+    version = nextVersion++;
+    versions.set(turns, version);
+  }
+  return version;
+}

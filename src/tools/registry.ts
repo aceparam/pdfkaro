@@ -398,7 +398,7 @@ export const tools: Tool[] = [
       outputs: 'one',
       // The owner's decision of 13 Nov 2026 on passwords; only each page's turn changes.
       resultNotes: [
-        "Apart from the password, nothing changes but the way pages face: text, links, form fields, bookmarks, attached files, hidden text and the document's details are as they were.",
+        "Pages, text, links, form fields, bookmarks, attached files, hidden text and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },

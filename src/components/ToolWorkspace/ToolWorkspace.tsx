@@ -5,25 +5,10 @@ import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, pageCount, progressLine } from '../../widget/format';
 import { failureSentence, workingLine } from '../../widget/failures';
-import { gridItems } from '../../widget/items';
+import { gridItems, pageOf } from '../../widget/items';
 import { orderSummary } from '../../widget/order';
-import { allAnnouncement, turnAnnouncement, turnCaption, turnedAll, turnedPage, turnOf, turnRules, type Turns } from '../../widget/turns';
+import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 
-/** How many drawn cells "Turn every page" reaches in each frame: one chunk of PageGrid's. */
-const turnBatch = 50;
-
-/** A number for each turns value, so a chunk of pages can tell whether the turns it shows have changed. */
-const versions = new WeakMap<Turns, number>();
-let nextVersion = 1;
-function turnsVersion(turns: Turns | null): number {
-  if (!turns) return 0;
-  let version = versions.get(turns);
-  if (version === undefined) {
-    version = nextVersion++;
-    versions.set(turns, version);
-  }
-  return version;
-}
 import { number, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
@@ -255,7 +240,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             skip,
             drawsCut: rules.drawsCut,
             onToggle: (id: string) => {
-              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              const page = pageOf(id);
               const marked = !marks.includes(page);
               run.toggleMark(page);
               setAnnouncement(rules.announce(filePages, toggledMarks(marks, page), page, marked));
@@ -271,7 +256,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const onMove = useCallback(
     (id: string, to: number) => {
       if (!pageMoves) return run.moveFile(id, to);
-      run.movePage(Number(id.slice(id.lastIndexOf(':') + 1)), to);
+      run.movePage(pageOf(id), to);
     },
     [pageMoves, run],
   );
@@ -282,14 +267,14 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const turnLine = useMemo(() => (pageTurns && filePages > 0 ? turnRules.summary(state.turns, filePages) : null), [pageTurns, filePages, state.turns]);
   const turnsBlocked = pageTurns && filePages > 0 ? turnRules.blocked(state.turns, filePages) : null;
   // "Turn every page" changes every drawn cell's picture and caption. To keep each frame short on a
-  // slow phone, the new turns reach the drawn cells 100 a frame: pages up to `front` show the new
+  // slow phone, the new turns reach the drawn cells one chunk (`turnChunk`, 50) a frame: pages up to `front` show the new
   // turns, pages beyond it the turns from before the press. Rotate never moves pages, so a page's
   // number is its place in the grid.
   const [turnFront, setTurnFront] = useState<{ before: Turns | null; front: number } | null>(null);
   useEffect(() => {
     if (!turnFront) return;
     // Each frame moves the front on; once it has passed the drawn cells, the batching ends.
-    const frame = requestAnimationFrame(() => setTurnFront((now) => (now && now.front < drawn ? { ...now, front: now.front + turnBatch } : null)));
+    const frame = requestAnimationFrame(() => setTurnFront((now) => (now && now.front < drawn ? { ...now, front: now.front + turnChunk } : null)));
     return () => cancelAnimationFrame(frame);
   }, [turnFront, drawn]);
   const turns = useMemo(
@@ -297,15 +282,15 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       pageTurns
         ? {
             of: (id: string) => {
-              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              const page = pageOf(id);
               return turnOf(turnFront && page > turnFront.front ? turnFront.before : state.turns, page);
             },
             caption: turnCaption,
             // A chunk of pages shows the new turns, the turns from before the press, or (only while
             // the front is inside it) a mix; its stamp changes only when what it shows does.
             stamp: (firstId: string, lastId: string) => {
-              const first = Number(firstId.slice(firstId.lastIndexOf(':') + 1));
-              const last = Number(lastId.slice(lastId.lastIndexOf(':') + 1));
+              const first = pageOf(firstId);
+              const last = pageOf(lastId);
               // The stamp is the version of the turns the chunk shows, so a chunk that keeps showing the same
               // turns (the ones from before the press, beyond the front) is not drawn again.
               if (!turnFront || last <= turnFront.front) return `${turnsVersion(state.turns)}`;
@@ -313,7 +298,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
               return `front:${turnFront.front}:${turnsVersion(state.turns)}`;
             },
             onTurn: (id: string, _title: string, by: 1 | -1) => {
-              const page = Number(id.slice(id.lastIndexOf(':') + 1));
+              const page = pageOf(id);
               // A single turn while the front is moving draws every cell with the current turns.
               setTurnFront(null);
               run.turnPage(page, by);
@@ -324,7 +309,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     [pageTurns, state.turns, turnFront, run, setAnnouncement],
   );
   const turnEveryPage = (by: 1 | -1) => {
-    setTurnFront({ before: turnFront ? turnFront.before : state.turns, front: turnBatch });
+    setTurnFront({ before: turnFront ? turnFront.before : state.turns, front: turnChunk });
     run.turnAll(by);
     setAnnouncement(allAnnouncement(turnedAll(state.turns, by), by));
   };

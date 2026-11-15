@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { turnChunk } from '../../widget/turns';
 import styles from './PageGrid.module.css';
 
 export type GridItem = {
@@ -222,8 +223,8 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
   );
 });
 
-/** How many pages a chunk holds, for pages that turn. */
-const chunkSize = 50;
+/** How many pages a chunk holds, for pages that turn: the same number "Turn every page" reaches a frame. */
+const chunkSize = turnChunk;
 
 type ChunkProps = {
   items: GridItem[];
@@ -233,7 +234,12 @@ type ChunkProps = {
   itemProps(item: GridItem, index: number): ItemProps & { key: string };
 };
 
-/** A run of pages drawn together; drawn again only when its items, the list's length or its stamp change. */
+/**
+ * A run of pages drawn together; drawn again only when its items, the list's length or its stamp change.
+ * The stamp must change with everything else a cell shows. Chunks are used only for pages that turn,
+ * which have no moves and no toggle, so only the turns change; a tool that adds another per-page
+ * state must fold it into the stamp.
+ */
 const Chunk = memo(
   function Chunk({ items, start, itemProps }: ChunkProps) {
     return (

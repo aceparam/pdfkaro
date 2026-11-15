@@ -126,7 +126,9 @@
 }
 /* A cut after this page: a 2px line on the cell's trailing edge. Every cell keeps room for it, so marking a cut moves nothing. */
 .cell {
-  padding-inline-end: 0.25rem;
+  /* Room on every side for a button's focus ring (2px outline, 2px offset), which the cell's paint
+     containment would otherwise clip. */
+  padding: 0.25rem;
   border-inline-end: 2px solid transparent;
 }
 .cut {
@@ -145,11 +147,11 @@
   padding: 0.25rem 0.375rem;
 }
 
-/* A page that turns: its caption keeps two lines, so a caption that wraps never moves the grid or the
+/* A page that turns: its caption keeps three lines ("Page 120, turned half round" can take three in a narrow cell), so a caption that wraps never moves the grid or the
    button that has focus. */
 .turnCaption {
-  min-height: 3.2em;
-  min-height: 2lh;
+  min-height: 4.8em;
+  min-height: 3lh;
 }
 /* A turned picture, at its own shape within the slot. For a quarter turn its limits are swapped
    before it turns, so once turned it is at most 52 wide and 68 tall. No transition. */

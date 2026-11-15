@@ -232,6 +232,23 @@ test.describe('marking cuts and splitting', () => {
   });
 });
 
+test.describe('focus', () => {
+  test("a focused page button's ring stays inside its cell, so nothing clips it", async ({ page }) => {
+    await open(page);
+    await pick(page, 'text.pdf');
+    await page.getByRole('button', { name: 'Cut after page 1', exact: true }).focus();
+    const inside = await page.evaluate(() => {
+      const button = document.activeElement as HTMLElement;
+      const cell = button.closest('li')!;
+      const b = button.getBoundingClientRect();
+      const c = cell.getBoundingClientRect();
+      // The ring is a 2px outline 2px outside the button.
+      return b.left - 4 >= c.left - 0.5 && b.right + 4 <= c.right + 0.5 && b.bottom + 4 <= c.bottom + 0.5 && b.top - 4 >= c.top - 0.5;
+    });
+    expect(inside).toBe(true);
+  });
+});
+
 test.describe('problems with the file', () => {
   test('a protected file asks for its password, shows no pages until it opens, and its pages follow', async ({ page }) => {
     await open(page);

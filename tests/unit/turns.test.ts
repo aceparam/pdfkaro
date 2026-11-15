@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { initialState, reducer, type State } from '../../src/widget/state';
-import { allAnnouncement, turnAnnouncement, turnCaption, turnedCount, turnOf, turnRules, turnsBlocked, turnSummary, turnsToSend } from '../../src/widget/turns';
+import { allAnnouncement, turnAnnouncement, turnCaption, turnedCount, turnOf, turnRules, turnsBlocked, turnSummary, turnsToSend, turnsVersion } from '../../src/widget/turns';
+import { pageOf } from '../../src/widget/items';
 
 function read(pages: number): State {
   let state = reducer(initialState, { type: 'added', files: [{ id: 'f1', name: 'report.pdf', size: 10 }] });
@@ -95,5 +96,20 @@ describe('counting and words', () => {
     expect(turnsToSend(null, 3)).toEqual({ all: 0, pages: [] });
     expect(turnsToSend({ all: 1, pages: { 9: 2, 2: 3 } }, 12)).toEqual({ all: 1, pages: [[2, 3], [9, 2]] });
     expect(turnRules.option({ all: 0, pages: { 1: 1 } }, 2)).toEqual({ turns: { all: 0, pages: [[1, 1]] } });
+  });
+});
+
+describe('chunk stamps', () => {
+  it('gives each turns value its own version, the same each time it is asked, and 0 for none', () => {
+    const one = { all: 1, pages: {} };
+    const two = { all: 1, pages: {} };
+    expect(turnsVersion(null)).toBe(0);
+    expect(turnsVersion(one)).toBe(turnsVersion(one));
+    expect(turnsVersion(one)).not.toBe(turnsVersion(two));
+  });
+
+  it('reads the page from a page item id', () => {
+    expect(pageOf('f1:3')).toBe(3);
+    expect(pageOf('file:with:colons:120000')).toBe(120000);
   });
 });
