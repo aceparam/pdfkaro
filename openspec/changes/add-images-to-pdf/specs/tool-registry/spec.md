@@ -9,7 +9,7 @@ Image to PDF, JPG to PDF and PNG to PDF SHALL be one registry entry, `images-to-
 #### Scenario: The home page lists the pages
 
 - **WHEN** the home page is built
-- **THEN** "JPG to PDF", "PNG to PDF" and "Images to PDF" are listed under "Convert to PDF", each linking to its own page
+- **THEN** "JPG to PDF", "PNG to PDF" and "Image to PDF" are listed under "Convert to PDF", each linking to its own page
 
 #### Scenario: The catalogue test runs
 
