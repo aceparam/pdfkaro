@@ -113,6 +113,31 @@ export async function writePages(tools: EngineTools, plain: Uint8Array, list: re
   return qpdf.read('/out.pdf');
 }
 
+/** Pages grouped by the quarters to add to their turn: 1 (right), 2 (half round), 3 (left). */
+export type TurnGroups = { 1: number[]; 2: number[]; 3: number[] };
+
+/**
+ * Writes every page of the plain copy, adding a turn to the pages in each
+ * group, and checks the result. Only each page's /Rotate changes. The lists
+ * must not repeat: qpdf keeps only the last --rotate with the same list text
+ * and drops the earlier one silently. The groups never share a page, so never
+ * share a list. Object streams go back in, so the result is no bigger than the
+ * input for being written from the plain copy.
+ */
+export async function writeTurned(tools: EngineTools, plain: Uint8Array, groups: TurnGroups): Promise<Uint8Array> {
+  const qpdf = await freshQpdf(tools, plain);
+  const args = ['/in.pdf'];
+  for (const quarters of [1, 2, 3] as const) {
+    const pages = groups[quarters];
+    if (pages.length > 0) args.push(`--rotate=+${quarters * 90}:${pageList(pages)}`);
+  }
+  args.push('--object-streams=generate', '/out.pdf');
+  const written = callWithArgumentFile(qpdf, args);
+  if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
+  if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
+  return qpdf.read('/out.pdf');
+}
+
 /**
  * One new file of the pages in `keep` (sorted, unique, in range), in page
  * order, from the plain copy, for a tool that leaves pages out. It keeps the

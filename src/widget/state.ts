@@ -5,6 +5,7 @@
 import type { InspectOutcome, Progress } from '../engines/types';
 import { progressFraction } from './format';
 import { toggledMarks } from './toggles';
+import { turnedAll, turnedPage, type Turns } from './turns';
 
 export type FileStatus = 'reading' | 'ready' | 'needs-password' | 'wrong-password' | 'damaged';
 
@@ -45,6 +46,8 @@ export type State = {
    * is never moved holds no list.
    */
   order: number[] | null;
+  /** The turns of the one file's pages, for a tool whose pages turn: Rotate PDF. `null` is nothing turned. */
+  turns: Turns | null;
 };
 
 /** How many pages a page list shows at first, and adds each time. */
@@ -65,6 +68,8 @@ export type Action =
   | { type: 'toggled'; page: number }
   | { type: 'shown-more' }
   | { type: 'page-moved'; page: number; to: number }
+  | { type: 'page-turned'; page: number; by: 1 | -1 }
+  | { type: 'all-turned'; by: 1 | -1 }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -78,6 +83,7 @@ export const initialState: State = {
   marks: [],
   shown: pageBatch,
   order: null,
+  turns: null,
 };
 
 const statusFor: Record<InspectOutcome['kind'], FileStatus> = {
@@ -162,6 +168,15 @@ export function reducer(state: State, action: Action): State {
       // A page moved past the pages shown brings the next batch into view, so it stays in sight.
       const shown = to >= state.shown ? state.shown + pageBatch : state.shown;
       return { ...state, order, shown };
+    }
+    case 'page-turned': {
+      const pages = state.files[0]?.pages ?? 0;
+      if (state.step !== 'listing' || !Number.isInteger(action.page) || action.page < 1 || action.page > pages || (action.by !== 1 && action.by !== -1)) return state;
+      return { ...state, turns: turnedPage(state.turns, action.page, action.by) };
+    }
+    case 'all-turned': {
+      if (state.step !== 'listing' || !(state.files[0]?.pages) || (action.by !== 1 && action.by !== -1)) return state;
+      return { ...state, turns: turnedAll(state.turns, action.by) };
     }
     case 'reset':
       return initialState;

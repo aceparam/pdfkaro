@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
-import { callWithArgumentFile, chosenPages, pageList, plainCopy } from '../../src/engines/plain';
+import { callWithArgumentFile, chosenPages, pageList, plainCopy, writeTurned } from '../../src/engines/plain';
 import type { EngineTools } from '../../src/engines/types';
 
 const require = createRequire(import.meta.url);
@@ -67,4 +67,17 @@ describe('the argument file', () => {
   it('refuses an argument holding a line break', async () => {
     expect(() => callWithArgumentFile({} as Qpdf, ['a\nb'])).toThrow();
   });
+});
+
+describe('writing turned pages', () => {
+  it('turns each group by its own angle in one write, with no list repeated', async () => {
+    const { plain } = await plainCopy(tools, fixture('pages-500.pdf'), undefined);
+    const output = await writeTurned(tools, plain, { 1: [1, 2], 2: [3], 3: [4, 500] });
+    expect(await pageCount(output)).toBe(500);
+    const shown = JSON.parse((await qpdfOn(output, ['--json=2', '--json-key=pages', '--json-key=qpdf'])).out) as { pages: { object: string }[]; qpdf: [unknown, Record<string, { value: { '/Rotate'?: number } }>] };
+    const turn = (index: number) => shown.qpdf[1][`obj:${shown.pages[index]!.object}`]!.value['/Rotate'] ?? 0;
+    expect([0, 1, 2, 3, 4, 499].map(turn)).toEqual([90, 90, 180, 270, 0, 270]);
+    // Object streams go back in: the result is no bigger than the input.
+    expect(output.length).toBeLessThanOrEqual(fixture('pages-500.pdf').length);
+  }, 120_000);
 });

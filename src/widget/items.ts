@@ -36,3 +36,8 @@ export function gridItems(state: Pick<State, 'files' | 'order'>, items: 'files' 
 export function shownItems(state: Pick<State, 'files' | 'shown' | 'order'>, items: 'files' | 'pages'): GridEntry[] {
   return gridItems(state, items, state.shown);
 }
+
+/** The page number in a page item's id, `${fileId}:${page}`. */
+export function pageOf(id: string): number {
+  return Number(id.slice(id.lastIndexOf(':') + 1));
+}
