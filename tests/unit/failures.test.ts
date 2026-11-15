@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { failureSentence, workingLine } from '../../src/widget/failures';
+import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -47,5 +47,59 @@ describe('the items the thumbnail queue walks', () => {
     expect(shownItems(state, 'pages')).toHaveLength(500);
     expect(shownItems(reducer(state, { type: 'shown-more' }), 'pages')).toHaveLength(1000);
     expect(gridItems(state, 'files')).toHaveLength(1);
+  });
+});
+
+describe('files turned away for their type', () => {
+  it('names each, then gives the tool advice once', () => {
+    const words = { acceptsName: 'a JPG or PNG picture', refusedAdvice: 'To add a picture of another kind, save it as a JPG or PNG first.' };
+    expect(refusedSentence(['notes.jpg'], words)).toBe(
+      'notes.jpg is not a JPG or PNG picture, so it was not added. To add a picture of another kind, save it as a JPG or PNG first.',
+    );
+    expect(refusedSentence(['a.txt', 'b.pdf'], words)).toBe(
+      'a.txt is not a JPG or PNG picture, so it was not added. b.pdf is not a JPG or PNG picture, so it was not added. To add a picture of another kind, save it as a JPG or PNG first.',
+    );
+    expect(refusedSentence([], words)).toBe('');
+  });
+
+  it('says what it always said for a tool with no advice', () => {
+    expect(refusedSentence(['notes.txt'], { acceptsName: 'a PDF' })).toBe('notes.txt is not a PDF, so it was not added.');
+  });
+});
+
+describe('a file that cannot be read', () => {
+  const pictures = { damagedAdvice: 'Open it in a photo app, save a copy, and add the copy.', unsupportedAdvice: 'Open it in a photo app, save a copy as a JPG, and add the copy.' };
+
+  it('says a damaged file is damaged, with the tool advice, heard together', () => {
+    expect(unreadableNotice('broken.png', 'damaged', pictures)).toEqual({
+      heading: 'broken.png is damaged and cannot be read.',
+      advice: 'Open it in a photo app, save a copy, and add the copy.',
+      announcement: 'broken.png is damaged and cannot be read. Open it in a photo app, save a copy, and add the copy.',
+    });
+  });
+
+  it('says how to save an unsupported file again', () => {
+    expect(unreadableNotice('odd.jpg', 'unsupported', pictures)).toEqual({
+      heading: 'odd.jpg is saved in a way this tool cannot read.',
+      advice: 'Open it in a photo app, save a copy as a JPG, and add the copy.',
+      announcement: 'odd.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy as a JPG, and add the copy.',
+    });
+  });
+
+  it('says the heading alone for a tool with no advice, as the PDF tools always did', () => {
+    expect(unreadableNotice('report.pdf', 'damaged', {})).toEqual({ heading: 'report.pdf is damaged and cannot be read.', announcement: 'report.pdf is damaged and cannot be read.' });
+  });
+});
+
+describe('the notice for a very large picture', () => {
+  it('names the picture and its pixels in millions, rounded down', () => {
+    expect(pixelsHeading('huge.png', 16_000 * 16_000)).toBe('huge.png has 256 million pixels');
+    expect(pixelsHeading('big.png', 50_999_999)).toBe('big.png has 50 million pixels');
+    expect(pixelsHeading('vast.png', 2_147_000_000)).toBe('vast.png has 2,147 million pixels');
+    expect(pixelsAdvice).toBe('Converting it may be slow, and a phone may run out of memory. You can still go ahead.');
+  });
+
+  it('says the job may run out of memory with the tool words', () => {
+    expect(failureSentence('memory', { memoryAdvice: 'Try fewer pictures, or smaller ones.' })).toBe('Your browser ran out of memory. Try fewer pictures, or smaller ones.');
   });
 });

@@ -3,7 +3,8 @@
 // from it; registry.ts stays the one place a tool is declared. The type exists
 // so that a misspelt slug in the registry fails the type check.
 //
-// /image2pdf is left out until the owner answers the question in CLAUDE.md.
+// Two owner changes since the export (13 Nov 2026): Image to PDF is served at
+// /image-to-pdf, beside /jpg-to-pdf and /png-to-pdf, and /image2pdf is dropped.
 
 export type CatalogueSlug =
   // Organise pages
@@ -19,6 +20,7 @@ export type CatalogueSlug =
   | 'pdf-pages-per-sheet'
   | 'pdf-booklet'
   | 'alternate-mix-pdf'
+  | 'image-to-pdf'
   // Make smaller and fix
   | 'compress-pdf'
   | 'compress-pdf-to-100kb'

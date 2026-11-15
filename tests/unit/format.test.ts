@@ -56,6 +56,21 @@ describe('output names', () => {
   });
 });
 
+describe('an output name with no word added', () => {
+  it('changes only the extension, for a tool whose result is another kind of file', () => {
+    expect(outputName('IMG_2041.jpg', '')).toBe('IMG_2041.pdf');
+    expect(outputName('Screenshot 2026-11-15 at 09.12.png', '')).toBe('Screenshot 2026-11-15 at 09.12.pdf');
+    expect(outputName('photo.JPEG', '')).toBe('photo.pdf');
+    expect(outputName('.png', '')).toBe('document.pdf');
+    expect(outputName('../a:b.jpg', '')).toBe('ab.pdf');
+    expect(outputName('scan.jpg', '')).toBe(`${stem('scan.jpg')}.pdf`);
+  });
+
+  it('leaves the names inside a zip as they were', () => {
+    expect(partName('report', 'part', 2, 3)).toBe('report-part-2.pdf');
+  });
+});
+
 describe('names that every system accepts', () => {
   it('strips characters Windows refuses, and any path or leading dot', () => {
     expect(stem('a:b*c?.pdf')).toBe('abc');

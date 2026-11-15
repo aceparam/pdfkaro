@@ -21,8 +21,12 @@ export type WorkerDeps = {
   loadEngine(toolId: string): Promise<EngineModule | undefined>;
   tools: EngineTools;
   post(message: FromWorker, transfer?: Transferable[]): void;
-  /** Opens a PDF for drawing thumbnails. Loaded late by the worker, so its code and PDF.js stay out of the worker file. */
-  openDocument?(file: Uint8Array, password: string | undefined, tools: EngineTools): Promise<KeptDocument>;
+  /**
+   * Opens a file for drawing thumbnails. Loaded late by the worker, so its code and PDF.js stay out of the worker file.
+   * `kind` is the tool's engine's `thumbnails`: left out for a PDF, drawn by PDF.js; `'picture'` for a JPG or PNG,
+   * drawn by the browser's image decoder. It comes from the tool, never from the file.
+   */
+  openDocument?(file: Uint8Array, password: string | undefined, tools: EngineTools, kind: EngineModule['thumbnails']): Promise<KeptDocument>;
   /** Loads fflate's zipSync. Loaded late by the worker, at the start of every run that may give several files. */
   loadZip?(): Promise<ZipSync>;
 };
@@ -122,8 +126,12 @@ export function createHandler(deps: WorkerDeps) {
       try {
         if (deps.openDocument) {
           if (kept?.key !== data.documentKey) {
+            // The tool's engine says how its files are drawn; it is already loaded by the read before. It is asked
+            // before the close, so the wait between closing the last document and keeping the new one is no longer
+            // than before. The page asks for one thumbnail at a time, so no second request lands in that wait.
+            const kind = (await engineFor(data.toolId)).thumbnails;
             await closeKept();
-            const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools);
+            const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools, kind);
             kept = { key: data.documentKey, doc: opening };
             // A file that cannot be opened is not kept, so it is tried afresh if asked for again.
             opening.catch(() => {

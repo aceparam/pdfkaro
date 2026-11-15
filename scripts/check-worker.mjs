@@ -89,5 +89,47 @@ for (const name of [...pdfjsDisplay, ...pdfjsWorker]) {
   if (/\beval\(|new Function\(/.test(source)) problems.push(`${name} holds eval( or new Function(.`);
 }
 
+// pdf-lib loads late, from one file of its own, never inside the worker file or an engine's file
+// (Image to PDF's engine takes it from its tools, with `import type` only). A sentence from pdf-lib's
+// own source marks its code.
+const pdflib = files.filter((name) => /^pdflib-[A-Za-z0-9_-]{8}\.js$/.test(name));
+const pdflibSentence = 'SOI not found in JPEG';
+let pdflibNote = '';
+if (pdflib.length !== 1) problems.push(`Expected pdf-lib as one file of its own in ${assets}, found ${pdflib.length}.`);
+else {
+  if (!worker.includes(`import(\`./${pdflib[0]}\`)`) && !worker.includes(`import("./${pdflib[0]}")`)) {
+    problems.push(`The worker does not load ${pdflib[0]} with import(), so it is not loaded late.`);
+  }
+  const library = readFileSync(join(assets, pdflib[0]), 'utf8');
+  if (!library.includes(pdflibSentence)) problems.push(`${pdflib[0]} does not hold pdf-lib's sentence "${pdflibSentence}", so this check would find nothing.`);
+  // node-html-better-parser comes with pdf-lib (for drawing SVG); the bundler cannot leave it out. Noted, not refused.
+  pdflibNote = library.includes('<!--[^]*?(?=-->)-->') ? `; node-html-better-parser is in ${pdflib[0]}` : `; node-html-better-parser is not in ${pdflib[0]}`;
+}
+for (const name of [workers[0], ...files.filter((each) => engineIds.some((id) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each)))]) {
+  if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name} holds pdf-lib's code.`);
+}
+
+// The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
+// picture.ts throws no sentences, so its marker names stand in for them.
+const sentencesIn = (path) => [...readFileSync(path, 'utf8').matchAll(/['"`]([A-Z][^'"`\n$]{15,})['"`]/g)].map((match) => match[1]);
+for (const [what, pattern, markers] of [
+  ['the picture reader', /^picture-[A-Za-z0-9_-]{8}\.js$/, ['ICC_PROFILE', 'mntr', 'acTL']],
+  ['the picture thumbnail', /^picture-thumbnail-[A-Za-z0-9_-]{8}\.js$/, sentencesIn(join('src', 'engines', 'picture-thumbnail.ts'))],
+]) {
+  const found = files.filter((name) => pattern.test(name));
+  if (found.length !== 1) {
+    problems.push(`Expected ${what} as one file of its own in ${assets}, found ${found.length}.`);
+    continue;
+  }
+  const own = readFileSync(join(assets, found[0]), 'utf8');
+  if (markers.length === 0) problems.push(`Nothing was found to mark ${what}'s code.`);
+  for (const marker of markers) {
+    if (!own.includes(marker)) problems.push(`${found[0]} does not hold "${marker}", so this check would find nothing.`);
+    if (worker.includes(marker)) problems.push(`The worker file holds code from ${what} ("${marker}").`);
+  }
+}
+
 if (problems.length > 0) fail(problems.join('\n'));
-console.log(`${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js, its helper data and fflate in files of their own.`);
+console.log(
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
+);

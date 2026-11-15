@@ -43,6 +43,26 @@ const tools: EngineTools = {
   }),
   // PDF.js's fonts and decoders: one fixed set, loaded late, never statically.
   pdfjsData: async () => (await import('./pdfjs-data')).pdfjsData,
+  // pdf-lib, for an engine that writes a PDF from nothing; its own chunk, fetched at the main button.
+  pdflib: () => import('./pdflib'),
+  // fflate, from the same chunk pdf-lib and the zip use: its streaming Inflate, never inflateSync.
+  fflate: async () => {
+    const { Inflate } = await import('fflate');
+    return { Inflate };
+  },
+  // The browser's own image decoder, for pictures' thumbnails only (Image to PDF). The picture is turned
+  // as its camera recorded, and scaled down while it is decoded where the browser can.
+  decodePicture: async () => ({
+    async decode(bytes: Uint8Array, width: number, height: number) {
+      const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]), {
+        imageOrientation: 'from-image',
+        resizeWidth: width,
+        resizeHeight: height,
+        resizeQuality: 'medium',
+      });
+      return { image: bitmap, close: () => bitmap.close() };
+    },
+  }),
 };
 
 // PDF.js runs its own worker, started from this one, once. If it fails, PDF.js
@@ -66,7 +86,12 @@ const handle = createHandler({
   },
   tools,
   post: (message, transfer) => scope.postMessage(message, { transfer: transfer ?? [] }),
-  openDocument: async (file, password, given) => {
+  openDocument: async (file, password, given, kind) => {
+    // A picture tool's files are drawn by the browser's image decoder; PDF.js is never loaded for them.
+    if (kind === 'picture') {
+      const { openPicture } = await import('../engines/picture-thumbnail');
+      return openPicture(file, given);
+    }
     const { openDocument } = await import('../engines/thumbnail');
     const doc = await pdfjsLoader.guard(openDocument(file, password, given));
     return { render: (page, box) => pdfjsLoader.guard(doc.render(page, box)), close: () => doc.close() };

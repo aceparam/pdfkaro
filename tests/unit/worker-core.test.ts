@@ -83,6 +83,10 @@ describe('failureKind', () => {
     expect(failureKind(new RangeError('Maximum call stack size exceeded'))).toBe('engine');
     expect(failureKind(new RangeError('Offset is outside the bounds of the DataView'))).toBe('engine');
     expect(failureKind(new Error('qpdf exited with 2'))).toBe('engine');
+    // A typed array too large to make, as pdf-lib's PNG decoder meets on a very large picture.
+    expect(failureKind(new RangeError('Invalid typed array length: 1024000000'))).toBe('memory');
+    expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
+    expect(failureKind(new RangeError('Invalid array buffer length'))).toBe('memory');
   });
 });
 
@@ -225,5 +229,77 @@ describe('putting several files into one zip, as the worker does it', async () =
     const { handle, posted } = handler(65_536);
     await handle({ type: 'run', requestId: 3, toolId: 'split-pdf', files: [blob('x')], passwords: [undefined], options: {}, zip });
     expect(posted.at(-1)).toEqual({ type: 'failed', requestId: 3, kind: 'too-many-files' });
+  });
+});
+
+describe('how a tool draws its thumbnails', () => {
+  const box = { width: 104, height: 136 };
+  const thumb = (toolId: string, documentKey = 'f1') => ({ type: 'thumbnail', requestId: 1, toolId, file: blob('x'), page: 1, box, documentKey });
+  function drawing(engines: Record<string, EngineModule>) {
+    const kinds: unknown[] = [];
+    const posted: FromWorker[] = [];
+    const handle = createHandler({
+      loadEngine: async (toolId) => engines[toolId],
+      tools: {},
+      post: (message) => posted.push(message),
+      openDocument: async (_file, _password, _tools, kind) => {
+        kinds.push(kind);
+        return { render: async () => new Uint8Array([1]), close: async () => {} };
+      },
+    });
+    return { handle, kinds, posted };
+  }
+
+  it('tells the drawer a picture tool draws pictures, and never a PDF tool', async () => {
+    const { handle, kinds } = drawing({ 'merge-pdf': joiner, 'images-to-pdf': { ...joiner, thumbnails: 'picture' } });
+    await handle(thumb('merge-pdf', 'f1'));
+    await handle(thumb('images-to-pdf', 'f2'));
+    await handle(thumb('merge-pdf', 'f3'));
+    expect(kinds).toEqual([undefined, 'picture', undefined]);
+  });
+
+  it('draws nothing when the engine cannot be loaded', async () => {
+    const { handle, kinds, posted } = drawing({});
+    await handle(thumb('images-to-pdf'));
+    expect(kinds).toEqual([]);
+    expect(posted).toEqual([{ type: 'thumbnail', requestId: 1, image: null }]);
+  });
+});
+
+describe('a job that runs out of memory', () => {
+  it('is sorted as memory, and the client ends the worker after it and on Cancel', async () => {
+    const { handle, posted } = setup({ run: async () => { throw new RangeError('Invalid typed array length: 4096000000'); } });
+    await handle({ type: 'run', requestId: 9, toolId: 'images-to-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(posted).toEqual([{ message: { type: 'failed', requestId: 9, kind: 'memory' }, transfer: undefined }]);
+
+    const { ToolClient } = await import('../../src/workers/client');
+    let ended = 0;
+    const made: { onmessage: ((event: { data: unknown }) => void) | null; sent: { requestId: number }[] }[] = [];
+    const client = new ToolClient('images-to-pdf', () => {
+      const worker = {
+        onmessage: null as ((event: { data: unknown }) => void) | null,
+        onerror: null,
+        sent: [] as { requestId: number }[],
+        postMessage(message: { requestId: number }) {
+          worker.sent.push(message);
+        },
+        terminate() {
+          ended++;
+        },
+      };
+      made.push(worker);
+      return worker;
+    });
+    const failing = client.run([blob('a')], [undefined], {}, () => {});
+    made[0]!.onmessage!({ data: { type: 'failed', requestId: made[0]!.sent[0]!.requestId, kind: 'memory' } });
+    await expect(failing).rejects.toMatchObject({ kind: 'memory' });
+    expect(ended).toBeGreaterThanOrEqual(1);
+    expect(client.running).toBe(false);
+    const before = ended;
+    const cancelled = client.run([blob('a')], [undefined], {}, () => {});
+    client.end();
+    await expect(cancelled).rejects.toMatchObject({ kind: 'cancelled' });
+    expect(ended).toBe(before + 1);
+    expect(client.running).toBe(false);
   });
 });

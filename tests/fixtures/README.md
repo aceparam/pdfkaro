@@ -27,6 +27,55 @@ The encrypted files come out different on each run, because encryption uses rand
 | `images.pdf` | A JPEG 2000 image and text and shapes in CMYK colour, for PDF.js's decoders. The JPEG 2000 bytes were made once with Pillow and are kept in `make.mjs` | 1 |
 | `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field, a note and a web link that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
 
+## The pictures, in `pictures/`
+
+For Image to PDF. `make.mjs` makes them too: each JPG and PNG is drawn with `@napi-rs/canvas`, and the parts that carry details (EXIF, XMP, IPTC, comments, thumbnails, colour profiles, PNG text chunks) are written by hand, each with a marker text starting `SECRET-` that the tests look for in the PDF. `make.mjs` writes everything to the folder given as its argument, so to make the pictures alone without changing the encrypted PDFs, run it into a scratch folder and copy `pictures/` back.
+
+Two pictures were made once with Pillow 12 (Python) and are committed; `make.mjs` reads `progressive.jpg` but never writes either:
+
+```python
+from PIL import Image, ImageDraw
+im = Image.new('CMYK', (200, 100), (0, 0, 0, 0))
+d = ImageDraw.Draw(im)
+d.rectangle([0, 0, 99, 49], fill=(255, 0, 0, 0))
+d.rectangle([100, 0, 199, 49], fill=(0, 255, 0, 0))
+d.rectangle([0, 50, 99, 99], fill=(0, 0, 255, 0))
+d.rectangle([100, 50, 199, 99], fill=(0, 0, 0, 200))
+im.save('cmyk.jpg', 'JPEG', quality=95)
+g = Image.new('RGB', (320, 240))
+g.putdata([(x * 255 // 319, y * 255 // 239, 128) for y in range(240) for x in range(320)])
+g.save('progressive.jpg', 'JPEG', quality=90, progressive=True)
+```
+
+| File | What it is |
+| --- | --- |
+| `tall.jpg`, `wide.jpg` | Photo-like scenes, 1500 by 2000 and 2000 by 1500, each with the sRGB profile `@napi-rs/canvas` adds |
+| `screenshot.png` | A wide screenshot-like picture, 1280 by 720 |
+| `turn-1.jpg` to `turn-8.jpg` | Every EXIF camera turn. Once turned, each shows the same 160 by 100 picture: red top-left, green top-right, blue bottom-left, yellow bottom-right |
+| `turn-6.png` | The same, turned a quarter by a PNG `eXIf` chunk |
+| `details.jpg` | Marker texts in EXIF (camera maker and model, and a GPS directory with a latitude and a place), XMP, extended XMP, IPTC, a comment, APP0 with a JFIF thumbnail and a JFXX thumbnail, APP11, APP15 and an MPF segment; after its end, a second JPG with GPS in its EXIF, then plain trailing bytes |
+| `details-progressive.jpg` | `progressive.jpg` with an APP9 segment between its first and second scans |
+| `cmyk.jpg` | CMYK with an Adobe segment (Pillow): cyan, magenta, yellow and grey blocks |
+| `progressive.jpg` | A progressive JPG (Pillow) |
+| `p3.icc` | A Display P3 profile made by hand (version 4), with marker texts in its description, copyright and device name tags, a creation date (2019-12-25 10:20:30) and maker, model, creator and profile ID fields. littleCMS (Pillow's ImageCms) reads it |
+| `p3.jpg` | Vivid red and green, with `p3.icc` split over two APP2 chunks |
+| `bad-profile.jpg`, `bad-profile.png` | `p3.icc` whose own size disagrees with its bytes |
+| `profile.png` | `p3.icc` in an `iCCP` chunk |
+| `bomb-profile.png` | An `iCCP` chunk that inflates to 5 MB |
+| `grey-profile.png` | A greyscale PNG with a grey `iCCP` profile |
+| `alpha.png` | 8-bit RGBA with see-through and half see-through parts |
+| `palette.png`, `grey16.png`, `animated.png` | A palette PNG, 16-bit grey, and an animated PNG whose default picture is red and second frame blue |
+| `details.png` | Marker texts in `tEXt`, `iTXt`, `zTXt` and `eXIf` (camera and GPS) |
+| `small.png` | 300 by 200 |
+| `huge.png` | Claims 16,000 by 16,000 pixels of grey, all zero; 243 KB |
+| `huge.jpg` | A JPG header that claims 16,000 by 16,000 pixels, with no real picture data |
+| `text-bomb.png` | A 1 by 1 PNG of 20 KB whose `zTXt` chunk inflates to 20 MB |
+| `data-bomb.png` | A 1 by 1 PNG of 20 KB whose image data (IDAT) inflates to 20 MB |
+| `arithmetic.jpg` | An arithmetic-coded JPG header (SOF9) |
+| `broken.jpg`, `broken.png`, `zero-size.png` | A JPG cut off half way, a PNG with a chunk longer than the file, and a PNG whose width is 0 |
+
+**Not committed:** a picture set over 100 MB. The end-to-end test writes one (`tall.jpg` with 1,900 comment segments, about 124 MB) to the system's temporary folder.
+
 **Missing:** a file with a JBIG2 image, as no JBIG2 encoder runs on the build machine. PDF.js's JBIG2 decoder is in the same fixed helper data as the JPEG 2000 one, which `images.pdf` tests.
 
 **Missing:** a file with text in Hindi, Telugu, Arabic and Chinese, which `SPEC.md` lists. Making it needs fonts for those scripts, and none are on the build machine or in the repo. It is to be added with the first tool that reads or changes text.
@@ -228,3 +277,43 @@ Each file was opened once, then its first, second and last pages were drawn from
 | `mixed.pdf` | Opened, 4 pages; page 1 drawn upright, page 2 on its side drawn wide (104 by 80), page 4 drawn |
 | `rich.pdf` | Opened, 2 pages drawn |
 | `images.pdf` | Opened, 1 page drawn, with the JPEG 2000 image |
+
+### Image to PDF (`src/engines/tools/images-to-pdf.ts`)
+
+Each picture was converted in Node with the same pdf-lib the browser gets (`tests/unit/images-to-pdf.test.ts`). Every result passes `qpdf --check`, has one A4 page per picture, no `/Info`, no `/Metadata` and no XMP, and no marker text, GPS value or profile date anywhere once its object streams are undone and its streams decoded.
+
+| File | Outcome |
+| --- | --- |
+| `tall.jpg`, `wide.jpg` | One page, A4 upright and on its side; the picture touches two edges. The JPG's own data, from its start to its end, is the image (`/DCTDecode`); its sRGB profile's colour data is kept as `/ICCBased` |
+| `screenshot.png`, `small.png` | Pixels kept exactly. `small.png` is drawn 225 by 150 points, not enlarged |
+| `turn-1.jpg` to `turn-8.jpg`, `turn-6.png` | A4 on its side; drawn by PDF.js, each corner has the colour a browser shows there |
+| `details.jpg`, `details-progressive.jpg`, `details.png` | Converted; none of the marker texts, GPS values, thumbnails, the second picture or the trailing bytes is in the PDF |
+| `cmyk.jpg` | `/DeviceCMYK` with `/Decode [1 0 1 0 1 0 1 0]`; drawn by PDF.js with the same colours as the plain decoder, allowing for PDF.js's ink curve. Without its Adobe segment, the decode array is left out |
+| `progressive.jpg` | Converted, as its own data |
+| `p3.jpg`, `profile.png` | `/ICCBased` with `/N 3` and `/Alternate /DeviceRGB`, holding only the profile's colour tags, a plain description and an empty copyright; no profile text, date or device field |
+| `bad-profile.jpg`, `bad-profile.png`, `bomb-profile.png` | Converted, as `/DeviceRGB`, with no profile |
+| `grey-profile.png` | Stored as RGB with no profile; passes `qpdf --check` |
+| `alpha.png` | RGB and a `/DeviceGray` soft mask, both exact; see-through parts show the white page |
+| `palette.png` | Stored as RGB, exact |
+| `grey16.png` | Stored as 8-bit RGB: the high byte of each value |
+| `animated.png` | Its default (red) picture only |
+| `huge.png` | Read as ready, one page, with its 256 million pixels for the notice; its image data is counted (it fits its header) but never decoded by the tests or for a thumbnail |
+| `huge.jpg` | Read as ready, one page, with no notice; never decoded for a thumbnail. Not converted in the tests, as it holds no real picture data |
+| `text-bomb.png` | Ready; converted, and pdf-lib is given the picture with no `zTXt` chunk |
+| `data-bomb.png` | Damaged before the job: its image data passes what its header allows after the first few kilobytes, and counting stops there. The job fails without pdf-lib being given it |
+| `arithmetic.jpg` | Unsupported before the job; the job fails if it is run |
+| `broken.jpg`, `broken.png`, `zero-size.png` | Damaged before the job; the job fails if it is run |
+| Every PDF in the test set | Damaged if read; on the page each is turned away by its first bytes before that ("… is not a JPG or PNG picture") |
+
+The multilingual file does not apply: pictures carry no text the tool reads.
+
+### Picture thumbnails (`src/engines/picture-thumbnail.ts`)
+
+Drawn in Node with `@napi-rs/canvas` in place of the worker's `createImageBitmap` (`tests/unit/picture-thumbnail.test.ts`); the camera turn in a real browser is checked by the end-to-end test.
+
+| File | Outcome |
+| --- | --- |
+| `tall.jpg`, `wide.jpg`, `alpha.png`, `palette.png`, `cmyk.jpg`, `p3.jpg`, `screenshot.png` | Drawn inside the box, decoded once |
+| `turn-6.jpg` | Sized from its shown size: 104 by 65 |
+| `huge.png`, `huge.jpg` | Not drawn, and never decoded |
+| `broken.jpg`, `broken.png`, `zero-size.png`, `arithmetic.jpg` | Not drawn, and never decoded |

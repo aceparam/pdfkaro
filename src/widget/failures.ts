@@ -3,7 +3,7 @@
 
 import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
-import { fileCount, progressLine } from './format';
+import { fileCount, number, progressLine } from './format';
 import type { FailureKind } from './state';
 import { zipLimitSentence } from './zip-limits';
 
@@ -27,3 +27,33 @@ export function workingLine(progress: Progress | null, words: Pick<ToolWidgetWor
   if (progress) return progressLine(progress, words.writingLabel);
   return words.outputs === 'several' ? 'Starting' : `Starting on ${fileCount(listed)}`;
 }
+
+/** What the page says about files turned away for being of the wrong type, with the tool's advice said once after them. */
+export function refusedSentence(names: readonly string[], words: Pick<ToolWidgetWords, 'acceptsName' | 'refusedAdvice'>): string {
+  if (names.length === 0) return '';
+  const said = names.map((name) => `${name} is not ${words.acceptsName}, so it was not added.`);
+  return [...said, ...(words.refusedAdvice ? [words.refusedAdvice] : [])].join(' ');
+}
+
+/**
+ * The heading, the one thing to try, and the words a screen reader hears, for a file that cannot be read:
+ * damaged, or saved in a way the tool cannot read. The advice is the tool's own, from the registry; a tool
+ * with none (the PDF tools) says the heading alone, as it always did.
+ */
+export function unreadableNotice(
+  name: string,
+  status: 'damaged' | 'unsupported',
+  words: Pick<ToolWidgetWords, 'damagedAdvice' | 'unsupportedAdvice'>,
+): { heading: string; advice?: string; announcement: string } {
+  const heading = status === 'damaged' ? `${name} is damaged and cannot be read.` : `${name} is saved in a way this tool cannot read.`;
+  const advice = status === 'damaged' ? words.damagedAdvice : words.unsupportedAdvice;
+  return advice ? { heading, advice, announcement: `${heading} ${advice}` } : { heading, announcement: heading };
+}
+
+/** The heading of the notice for a very large picture, with its pixels in millions, rounded down: "huge.png has 256 million pixels". */
+export function pixelsHeading(name: string, pixels: number): string {
+  return `${name} has ${number(Math.floor(pixels / 1_000_000))} million pixels`;
+}
+
+/** What the notice for a very large picture says under its heading. */
+export const pixelsAdvice = 'Converting it may be slow, and a phone may run out of memory. You can still go ahead.';

@@ -120,7 +120,10 @@ describe('registry', () => {
   it('keeps widget words plain: no exclamation marks, and nothing empty', () => {
     for (const tool of tools) {
       if (!tool.widget) continue;
-      const text = Object.values(tool.widget).flat().filter((value) => typeof value === 'string') as string[];
+      // An empty output suffix is the one empty word allowed: it adds no word to the name (Image to PDF).
+      const { outputSuffix, ...rest } = tool.widget;
+      expect(outputSuffix).toMatch(/^([a-z0-9]+(-[a-z0-9]+)*)?$/);
+      const text = Object.values(rest).flat().filter((value) => typeof value === 'string') as string[];
       for (const value of text) {
         expect(value.trim().length).toBeGreaterThan(0);
         expect(value).not.toContain('!');
@@ -135,7 +138,11 @@ describe('catalogue order', () => {
     const spec = readFileSync('SPEC.md', 'utf8');
     const catalogue = spec.slice(spec.indexOf('## Tool catalogue'), spec.indexOf('## Architecture'));
     const order = [...catalogue.matchAll(/\| (\/[a-z0-9-]+) \|/g)].map((match) => match[1]!.slice(1));
-    const positions = tools.map((tool) => order.indexOf(tool.pages[0]!.slug));
+    // Image to PDF is one tool with three pages (the owner's decision of 13 Nov 2026). Its first page,
+    // /jpg-to-pdf, sits under "Convert to PDF", but the owner's tool is Image to PDF, which the
+    // export lists at /image2pdf, right after Rotate PDF; so it is counted there.
+    const placeOf = (tool: (typeof tools)[number]) => (tool.id === 'images-to-pdf' ? 'image2pdf' : tool.pages[0]!.slug);
+    const positions = tools.map((tool) => order.indexOf(placeOf(tool)));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
@@ -191,5 +198,79 @@ describe('Rotate PDF', () => {
     expect(words!.resultNotes.join(' ')).toMatch(/no password and no restrictions/);
     const ids = tools.map((tool) => tool.id);
     expect(ids.indexOf('rotate-pdf')).toBe(ids.indexOf('rearrange-pdf-pages') + 1);
+  });
+});
+
+describe('Images to PDF', () => {
+  const tool = tools.find((each) => each.id === 'images-to-pdf')!;
+
+  it('is one tool with three pages under Convert to PDF, taking JPG and PNG, after Rotate', () => {
+    expect(tool).toMatchObject({ group: 'to-pdf', runsIn: 'browser', phase: 1, accepts: ['image/jpeg', 'image/png'] });
+    expect(tool.pages.map((page) => page.slug)).toEqual(['jpg-to-pdf', 'png-to-pdf', 'image-to-pdf']);
+    expect(tool.pages.map((page) => page.name)).toEqual(['JPG to PDF', 'PNG to PDF', 'Image to PDF']);
+    for (const page of tool.pages) expect(page.accepts).toBeUndefined();
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('images-to-pdf')).toBe(ids.indexOf('rotate-pdf') + 1);
+    expect(tool.related).toEqual(['merge-pdf', 'compress-pdf', 'pdf-to-jpg', 'rotate-pdf', 'rearrange-pdf-pages']);
+  });
+
+  it('gives each page its own title, heading and sentence', () => {
+    expect(tool.pages.map(({ title, heading, sentence }) => ({ title, heading, sentence }))).toEqual([
+      { title: 'Convert JPG to PDF in your browser - PDFkaro', heading: 'Convert JPG to PDF', sentence: 'Turn one or more JPG photos into one PDF. Files stay on your device.' },
+      { title: 'Convert PNG to PDF in your browser - PDFkaro', heading: 'Convert PNG to PDF', sentence: 'Turn one or more PNG pictures or screenshots into one PDF. Files stay on your device.' },
+      {
+        title: 'Convert images to PDF in your browser - PDFkaro',
+        heading: 'Convert images to PDF',
+        sentence: 'Turn JPG and PNG pictures into one PDF, in the order you choose. Files stay on your device.',
+      },
+    ]);
+  });
+
+  it('gives each page a description that names its pictures and says they are not uploaded', () => {
+    const [jpg, png, image] = tool.pages.map((page) => page.description);
+    expect(jpg).toMatch(/JPG/);
+    expect(png).toMatch(/PNG/);
+    expect(image).toMatch(/JPG and PNG/);
+    for (const description of [jpg, png, image]) {
+      expect(description!.length).toBeLessThan(155);
+      expect(description).toMatch(/stay on your device and are not uploaded\.$/);
+    }
+  });
+
+  it('has the widget words of the design', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose pictures',
+      addLabel: 'Add more pictures',
+      dropHint: 'You can also drop pictures anywhere on this page, or paste them.',
+      acceptsName: 'a JPG or PNG picture',
+      refusedAdvice: 'To add a picture of another kind, save it as a JPG or PNG first.',
+      unsupportedAdvice: 'Open it in a photo app, save a copy as a JPG, and add the copy.',
+      damagedAdvice: 'Open it in a photo app, save a copy, and add the copy.',
+      listNote: 'Each picture becomes one page, in this order.',
+      listPages: false,
+      actionLabel: 'Convert and download',
+      writingLabel: 'Writing the PDF',
+      doneHeading: 'Your PDF is ready',
+      failedHeading: 'The conversion did not finish.',
+      outputSuffix: '',
+      minFiles: 1,
+      multiple: true,
+      items: 'files',
+      itemControls: true,
+      outputs: 'one',
+      resultPages: 'sum',
+      memoryAdvice: 'Try fewer pictures, or smaller ones.',
+    });
+    expect(tool.widget!.resultNotes).toEqual(['The pictures’ details, such as the camera, the date and the place, are not copied into the PDF.']);
+  });
+
+  it('leaves the other tools without the new words, so they are unchanged', () => {
+    for (const each of tools) {
+      if (each.id === 'images-to-pdf') continue;
+      expect(each.widget?.refusedAdvice).toBeUndefined();
+      expect(each.widget?.listPages).toBeUndefined();
+      expect(each.widget?.unsupportedAdvice).toBeUndefined();
+      expect(each.widget?.damagedAdvice).toBeUndefined();
+    }
   });
 });

@@ -33,8 +33,11 @@ function typeSlugs(): string[] {
   return [...body.matchAll(/\| '([^']+)'/g)].map((match) => match[1] ?? '');
 }
 
-// Left out of the type until the owner answers the question in CLAUDE.md.
-const waitingForOwner = ['image2pdf'];
+// The owner's changes since the last export of SPEC.md (13 Nov 2026, in CLAUDE.md):
+// Image to PDF is one tool with three pages, so /image-to-pdf is added and /image2pdf dropped.
+// Remove these once the next export carries both.
+const ownerAdded = ['image-to-pdf'];
+const ownerDropped = ['image2pdf'];
 
 describe('catalogue', () => {
   it('reads the catalogue out of SPEC.md', () => {
@@ -46,8 +49,14 @@ describe('catalogue', () => {
   });
 
   it('names every URL in the SPEC.md catalogue, and no others', () => {
-    const wanted = specSlugs().filter((slug) => !waitingForOwner.includes(slug)).sort();
+    const wanted = [...specSlugs().filter((slug) => !ownerDropped.includes(slug)), ...ownerAdded].sort();
     expect(typeSlugs().sort()).toEqual(wanted);
+  });
+
+  it('knows the owner changes are still owner changes, so it fails once the export carries them', () => {
+    for (const slug of ownerAdded) expect(specSlugs()).not.toContain(slug);
+    for (const slug of ownerDropped) expect(specSlugs()).toContain(slug);
+    for (const slug of ownerDropped) expect(typeSlugs()).not.toContain(slug);
   });
 
   it('names no slug twice', () => {

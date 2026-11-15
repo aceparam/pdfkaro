@@ -57,9 +57,8 @@ describe('the worker handling a thumbnail', () => {
   function setup(renderPage?: (page: number, box: unknown, password: string | undefined) => Promise<Uint8Array>) {
     const posted: { message: FromWorker; transfer?: Transferable[] }[] = [];
     const handle = createHandler({
-      loadEngine: async () => {
-        throw new Error('no engine is loaded for a thumbnail');
-      },
+      // The engine is asked only how its files are drawn (Image to PDF's design); a PDF tool's says nothing.
+      loadEngine: async () => ({ run: async () => [] }),
       tools: {},
       post: (message, transfer) => posted.push({ message, transfer }),
       openDocument: renderPage
@@ -70,7 +69,7 @@ describe('the worker handling a thumbnail', () => {
   }
   const request: ToWorker = { type: 'thumbnail', requestId: 7, toolId: 'merge-pdf', file, password: 'pw', page: 1, box, documentKey: 'f1' };
 
-  it('sends the picture back, moved, without loading a tool engine', async () => {
+  it('sends the picture back, moved', async () => {
     const seen: unknown[] = [];
     const { handle, posted } = setup(async (...args) => {
       seen.push(args);
@@ -325,7 +324,7 @@ describe('closing and opening documents in the worker', () => {
     let closing = 0;
     let overlapped = false;
     const handle = createHandler({
-      loadEngine: async () => undefined,
+      loadEngine: async () => ({ run: async () => [] }),
       tools: {},
       post: () => {},
       openDocument: async () => {

@@ -11,7 +11,7 @@ async function open(page: Page) {
 }
 
 test.describe('the no-upload watcher', () => {
-  test('the watcher catches a POST, a beacon, an image address with a file name, and a fetch from a worker', async ({ page, context, baseURL }) => {
+  test('the watcher catches a POST, a beacon, an image address with a file name, a fetch from a worker, and a header set by a script', async ({ page, context, baseURL }) => {
     const origin = new URL(baseURL!).origin;
     await open(page);
     // Each plant goes to its own address, and the test checks that very request was seen and judged wrong.
@@ -63,6 +63,16 @@ test.describe('the no-upload watcher', () => {
           ),
       ],
       [
+        'a header set by a script',
+        '/planted-header',
+        (p) => p.evaluate(() => fetch('/planted-header', { headers: { 'x-file-name': 'text.pdf' } }).catch(() => {})),
+      ],
+      [
+        'a file name in an allowed header set by a script',
+        '/planted-accept',
+        (p) => p.evaluate(() => fetch('/planted-accept', { headers: { accept: 'text.pdf' } }).catch(() => {})),
+      ],
+      [
         'a blob: address of another origin',
         '/planted-blob',
         // A made-up record: a page cannot make a blob: address of another origin, so the watcher is handed one.
@@ -80,6 +90,30 @@ test.describe('the no-upload watcher', () => {
       await expect.poll(() => seen.some((request) => new URL(request.url).pathname === path), { message: `${what} was seen` }).toBe(true);
       const planted = seen.filter((request) => new URL(request.url).pathname === path);
       expect(violations(planted, origin, ['text.pdf'], []).length, what).toBeGreaterThan(0);
+      // The header plants are caught by their headers, not only for being off the list of files.
+      if (path === '/planted-header' || path === '/planted-accept') {
+        expect(violations(planted, origin, ['text.pdf'], [path]).some((problem) => /header/.test(problem)), what).toBe(true);
+      }
     }
+  });
+});
+
+test.describe('records the watcher is handed', () => {
+  test('a cookie and a malformed escape are reported, not thrown', ({ baseURL }) => {
+    const origin = new URL(baseURL!).origin;
+    const cookie = [{ url: `${origin}/merge-pdf`, method: 'GET', body: null, origin, headers: { cookie: 'a=1' } }];
+    expect(violations(cookie, origin, [], ['/merge-pdf'])).toEqual([`a cookie, which the site never sets: ${origin}/merge-pdf`]);
+    const malformed = [{ url: `${origin}/merge-pdf`, method: 'GET', body: null, origin, headers: { accept: '%E0%A4%A' } }];
+    expect(violations(malformed, origin, ['x'], ['/merge-pdf'])).toEqual([`a malformed percent escape in the accept header of ${origin}/merge-pdf`]);
+  });
+});
+
+test.describe('the headers a page sends by itself', () => {
+  test('pass the watcher, while the site loads', async ({ page, context, baseURL }) => {
+    const seen = watch(context, page);
+    await open(page);
+    expect(seen.length).toBeGreaterThan(0);
+    const files = seen.map((request) => new URL(request.url).pathname);
+    expect(violations(seen, new URL(baseURL!).origin, [], files)).toEqual([]);
   });
 });
