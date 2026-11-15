@@ -96,7 +96,8 @@ test.describe('tool page', () => {
     await page.goto('/merge-pdf');
     await expect(page.getByRole('heading', { name: 'Related tools' })).toHaveCount(1);
     const related = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('link');
-    await expect(related).toHaveText(['Split PDF', 'Reorder pages', 'Rotate PDF']);
+    // Compress PDF is not published yet; JPG to PDF is, since Image to PDF.
+    await expect(related).toHaveText(['Split PDF', 'Reorder pages', 'Rotate PDF', 'JPG to PDF']);
   });
 });
 

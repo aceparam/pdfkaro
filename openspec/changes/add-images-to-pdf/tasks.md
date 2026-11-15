@@ -25,16 +25,16 @@
 
 ## 5. Page and page text
 
-- [ ] 5.1 Check the three pages render with their own heading, sentence, title and description, the widget's words, the picker's `accept` attribute, and the home page and hub listing them under "Convert to PDF"
-- [ ] 5.2 Write `src/content/tools/jpg-to-pdf.md`, `png-to-pdf.md` and `image-to-pdf.md`, 250 to 500 words each, marked as drafts, each with its own questions as the design lists; that nothing is uploaded and the page forgets the pictures; check against "Banned patterns"
+- [x] 5.1 Check the three pages render with their own heading, sentence, title and description, the widget's words, the picker's `accept` attribute, and the home page and hub listing them under "Convert to PDF"
+- [x] 5.2 Write `src/content/tools/jpg-to-pdf.md`, `png-to-pdf.md` and `image-to-pdf.md`, 250 to 500 words each, marked as drafts, each with its own questions as the design lists; that nothing is uploaded and the page forgets the pictures; check against "Banned patterns"
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/images-to-pdf.spec.ts` at 360px and 1280px: choosing two pictures, the `accept` attribute, a PNG on the JPG page, paste, not-a-picture refused with its advice (a PDF and a renamed text file), rows with no page count, thumbnails drawn and the sideways photo shown upright, reorder by keyboard with announcement, remove, convert and check the download (pages, sizes, order, name, `qpdf --check`), one picture alone, damaged and unsupported pictures with others and alone, the very large PNG with its notice and the main button working, Cancel keeps the order, engine-load failure, the 100 MB notice; the three pages' headings, sentences and titles; the other tools' e2e tests still pass
+- [x] 6.1 `tests/e2e/images-to-pdf.spec.ts` at 360px and 1280px: choosing two pictures, the `accept` attribute, a PNG on the JPG page, paste, not-a-picture refused with its advice (a PDF and a renamed text file), rows with no page count, thumbnails drawn and the sideways photo shown upright, reorder by keyboard with announcement, remove, convert and check the download (pages, sizes, order, name, `qpdf --check`), one picture alone, damaged and unsupported pictures with others and alone, the very large PNG with its notice and the main button working, Cancel keeps the order, engine-load failure, the 100 MB notice; the three pages' headings, sentences and titles; the other tools' e2e tests still pass
 
 ## 7. No-upload test
 
-- [ ] 7.1 The watcher in `tests/e2e/no-upload.ts` fails on any request header the browser does not send itself, with its self-test; the tool's no-upload test: its exact allowlist from the build (engine, `picture`, `picture-thumbnail`, `pdflib`, `fflate`; no qpdf or PDF.js), positive checks that the engine and pdf-lib were fetched and that qpdf, PDF.js and the other engines were not; the file names, stems, camera name and GPS text as secrets for requests, the console and the page title, and searched for in the downloaded PDF; storage and traces; the address with no query and no hash
+- [x] 7.1 The watcher in `tests/e2e/no-upload.ts` fails on any request header the browser does not send itself, with its self-test; the tool's no-upload test: its exact allowlist from the build (engine, `picture`, `picture-thumbnail`, `pdflib`, `fflate`; no qpdf or PDF.js), positive checks that the engine and pdf-lib were fetched and that qpdf, PDF.js and the other engines were not; the file names, stems, camera name and GPS text as secrets for requests, the console and the page title, and searched for in the downloaded PDF; storage and traces; the address with no query and no hash
 
 ## 8. Screenshots
 
