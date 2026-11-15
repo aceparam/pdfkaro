@@ -24,10 +24,13 @@ export type Engine<Options = Record<string, never>> = (
 
 /** What reading one file before a job tells the page. */
 export type InspectOutcome =
-  | { kind: 'ready'; pages: number }
+  /** `pixels` is given only for a picture so large that the page warns about it (Image to PDF). */
+  | { kind: 'ready'; pages: number; pixels?: number }
   | { kind: 'needs-password' }
   | { kind: 'wrong-password' }
-  | { kind: 'damaged' };
+  | { kind: 'damaged' }
+  /** Not damaged, but saved in a way the tool cannot read, such as a JPG with arithmetic coding. */
+  | { kind: 'unsupported' };
 
 /** Reads one file before a job, so the page can show its page count or a problem. */
 export type Inspector = (file: Uint8Array, password: string | undefined, tools: EngineTools) => Promise<InspectOutcome>;
@@ -36,4 +39,10 @@ export type Inspector = (file: Uint8Array, password: string | undefined, tools: 
 export type EngineModule = {
   run: Engine<Record<string, unknown>>;
   inspect?: Inspector;
+  /**
+   * How the worker draws this tool's thumbnails. Left out, a file is a PDF drawn by PDF.js;
+   * `'picture'`, a JPG or PNG drawn by the browser's own image decoder (Image to PDF).
+   * Chosen by tool, never by a file's bytes, so a PDF tool never hands a file to the image decoder.
+   */
+  thumbnails?: 'picture';
 };

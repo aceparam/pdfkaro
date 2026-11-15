@@ -48,8 +48,15 @@ export type ToolWidgetWords = {
   dropHint: string;
   /** What a refused file is not: "a PDF", as in "notes.txt is not a PDF, so it was not added." */
   acceptsName: string;
+  /** Said once after the names of refused files: "To add a picture of another kind, save it as a JPG or PNG first." */
+  refusedAdvice?: string;
   /** Under the summary of listed files, if the order matters: "They will be joined in this order." */
   listNote?: string;
+  /**
+   * `false` leaves the page count out of each row and the summary, for a tool
+   * whose every file is one page and whose list note says so (Image to PDF).
+   */
+  listPages?: false;
   /** The main button, named after the result: "Merge and download". */
   actionLabel: string;
   /** While the result is written: "Writing the merged file". */
@@ -60,7 +67,7 @@ export type ToolWidgetWords = {
   failedHeading: string;
   /** Tied to the main button while too few files are listed: "Add at least one more file to merge." */
   tooFewFiles: string;
-  /** Put after the first input's name to name the result: "merged". */
+  /** Put after the first input's name to name the result: "merged". Empty adds no word: "IMG_2041.pdf". */
   outputSuffix: string;
   /** How many files the tool needs before it can run. */
   minFiles: number;
@@ -401,6 +408,70 @@ export const tools: Tool[] = [
         "Pages, text, links, form fields, bookmarks, attached files, hidden text and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
+    },
+  },
+  {
+    // One tool with three pages, by the owner's decision of 13 Nov 2026. It sits at
+    // /image2pdf's place in catalogue order ("Organise pages", after Rotate PDF), but
+    // all three pages are listed under "Convert to PDF", where people look for a conversion.
+    id: 'images-to-pdf',
+    group: 'to-pdf',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['image/jpeg', 'image/png'],
+    related: ['merge-pdf', 'compress-pdf', 'pdf-to-jpg', 'rotate-pdf', 'rearrange-pdf-pages'],
+    pages: [
+      {
+        slug: 'jpg-to-pdf',
+        name: 'JPG to PDF',
+        summary: 'Turn JPG photos into one PDF.',
+        title: 'Convert JPG to PDF in your browser - PDFkaro',
+        description: 'Turn JPG photos into one PDF, in the order you choose. The photos stay on your device and are not uploaded.',
+        heading: 'Convert JPG to PDF',
+        sentence: 'Turn one or more JPG photos into one PDF. Files stay on your device.',
+      },
+      {
+        slug: 'png-to-pdf',
+        name: 'PNG to PDF',
+        summary: 'Turn PNG pictures and screenshots into one PDF.',
+        title: 'Convert PNG to PDF in your browser - PDFkaro',
+        description: 'Turn PNG pictures and screenshots into one PDF. The pictures stay on your device and are not uploaded.',
+        heading: 'Convert PNG to PDF',
+        sentence: 'Turn one or more PNG pictures or screenshots into one PDF. Files stay on your device.',
+      },
+      {
+        slug: 'image-to-pdf',
+        name: 'Image to PDF',
+        summary: 'Turn JPG and PNG pictures into one PDF.',
+        title: 'Convert images to PDF in your browser - PDFkaro',
+        description: 'Turn JPG and PNG pictures into one PDF, in the order you choose. The pictures stay on your device and are not uploaded.',
+        heading: 'Convert images to PDF',
+        sentence: 'Turn JPG and PNG pictures into one PDF, in the order you choose. Files stay on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose pictures',
+      addLabel: 'Add more pictures',
+      dropHint: 'You can also drop pictures anywhere on this page, or paste them.',
+      acceptsName: 'a JPG or PNG picture',
+      refusedAdvice: 'To add a picture of another kind, save it as a JPG or PNG first.',
+      listNote: 'Each picture becomes one page, in this order.',
+      listPages: false,
+      actionLabel: 'Convert and download',
+      writingLabel: 'Writing the PDF',
+      doneHeading: 'Your PDF is ready',
+      failedHeading: 'The conversion did not finish.',
+      tooFewFiles: 'Choose a picture to convert.',
+      // The extension changes, so no word is added: IMG_2041.jpg gives IMG_2041.pdf.
+      outputSuffix: '',
+      minFiles: 1,
+      multiple: true,
+      resultPages: 'sum',
+      memoryAdvice: 'Try fewer pictures, or smaller ones.',
+      items: 'files',
+      itemControls: true,
+      outputs: 'one',
+      resultNotes: ["The pictures' details, such as the camera, the date and the place, are not copied into the PDF."],
     },
   },
 ];

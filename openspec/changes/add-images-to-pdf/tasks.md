@@ -2,9 +2,9 @@
 
 ## 1. Registry entry
 
-- [ ] 1.1 Add the `images-to-pdf` entry with its three pages to `src/tools/registry.ts`, with the new optional widget words `refusedAdvice` and `listPages`; add `image-to-pdf` to `catalogue.ts` and drop `image2pdf`, with the catalogue test naming both as owner changes since the export and the order test counting the entry at `/image2pdf`'s place; the registry test checks the entry's words, sentences and descriptions
-- [ ] 1.2 `outputName(input, '')` gives `stem.pdf`; a test in `format.test.ts`
-- [ ] 1.3 The `unsupported` outcome (`InspectOutcome`, `isFromWorker`, the file status in `state.ts`, its sentence in `failures.ts`, shown and announced in `ToolWorkspace` where `damaged` is, holding the main button back) and `pixels` on `ready` with its notice, shown as soon as the file is read and tied to the main button by `aria-describedby`; `refusedAdvice` after the refused names and `listPages: false` in the rows and summary; unit and component tests, and PDF tools unchanged
+- [x] 1.1 Add the `images-to-pdf` entry with its three pages to `src/tools/registry.ts`, with the new optional widget words `refusedAdvice` and `listPages`; add `image-to-pdf` to `catalogue.ts` and drop `image2pdf`, with the catalogue test naming both as owner changes since the export and the order test counting the entry at `/image2pdf`'s place; the registry test checks the entry's words, sentences and descriptions
+- [x] 1.2 `outputName(input, '')` gives `stem.pdf`; a test in `format.test.ts`
+- [x] 1.3 The `unsupported` outcome (`InspectOutcome`, `isFromWorker`, the file status in `state.ts`, its sentence in `failures.ts`, shown and announced in `ToolWorkspace` where `damaged` is, holding the main button back) and `pixels` on `ready` with its notice, shown as soon as the file is read and tied to the main button by `aria-describedby`; `refusedAdvice` after the refused names and `listPages: false` in the rows and summary; unit and component tests, and PDF tools unchanged
 
 ## 2. Engine
 

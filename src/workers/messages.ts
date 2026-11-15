@@ -86,6 +86,25 @@ export function isToWorker(value: unknown): value is ToWorker {
   return false;
 }
 
+const isWhole = (value: unknown, least: number) => Number.isInteger(value) && (value as number) >= least;
+
+/** An outcome of reading a file, of a known kind, with whole numbers where it carries any. */
+function isOutcome(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  switch (value.kind) {
+    case 'ready':
+      // A tool with no reader of its own is ready with 0 pages.
+      return isWhole(value.pages, 0) && (value.pixels === undefined || isWhole(value.pixels, 1));
+    case 'needs-password':
+    case 'wrong-password':
+    case 'damaged':
+    case 'unsupported':
+      return true;
+    default:
+      return false;
+  }
+}
+
 const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large'];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
@@ -93,7 +112,7 @@ export function isFromWorker(value: unknown): value is FromWorker {
   if (!isRecord(value) || typeof value.requestId !== 'number') return false;
   switch (value.type) {
     case 'inspected':
-      return isRecord(value.outcome) && typeof value.outcome.kind === 'string';
+      return isOutcome(value.outcome);
     case 'progress':
       return isRecord(value.progress) && typeof value.progress.stage === 'string';
     case 'done':

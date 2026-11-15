@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allReady, canRun, currentProblem, initialState, isReading, isLarge, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
+import { allReady, canRun, currentProblem, hugeFiles, initialState, isReading, isLarge, isUnreadable, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
 
 const play = (...actions: Action[]): State => actions.reduce(reducer, initialState);
 const add = (...names: string[]): Action => ({ type: 'added', files: names.map((name, index) => ({ id: name, name: `${name}.pdf`, size: 1000 * (index + 1) })) });
@@ -105,5 +105,54 @@ describe('the steps of a tool', () => {
   it('holds no bytes and no passwords', () => {
     const state = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'wrong-password' } });
     expect(JSON.stringify(state)).not.toMatch(/password":|bytes|Uint8Array/);
+  });
+});
+
+describe('a file saved in a way the tool cannot read', () => {
+  it('is a problem like a damaged file, shown in list order, and holds the main button back', () => {
+    const state = play(
+      add('a', 'b', 'c'),
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 1 } },
+      { type: 'inspected', id: 'b', outcome: { kind: 'unsupported' } },
+      { type: 'inspected', id: 'c', outcome: { kind: 'damaged' } },
+    );
+    expect(state.files.map((file) => file.status)).toEqual(['ready', 'unsupported', 'damaged']);
+    expect(currentProblem(state)?.id).toBe('b');
+    expect(isUnreadable(currentProblem(state))).toBe(true);
+    expect(canRun(state, 1)).toBe(false);
+    const left = reducer(reducer(state, { type: 'removed', id: 'b' }), { type: 'removed', id: 'c' });
+    expect(currentProblem(left)).toBeUndefined();
+    expect(canRun(left, 1)).toBe(true);
+  });
+
+  it('is not unreadable when it needs a password, and nothing is unreadable when there is no problem', () => {
+    const asked = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'needs-password' } });
+    expect(isUnreadable(currentProblem(asked))).toBe(false);
+    expect(isUnreadable(undefined)).toBe(false);
+  });
+});
+
+describe('a very large picture', () => {
+  it('keeps its pixels once read, and is listed for its notice without holding the main button back', () => {
+    const state = play(
+      add('a', 'b'),
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 1, pixels: 256_000_000 } },
+      { type: 'inspected', id: 'b', outcome: { kind: 'ready', pages: 1 } },
+    );
+    expect(state.files[0]?.pixels).toBe(256_000_000);
+    expect(state.files[1]?.pixels).toBeUndefined();
+    expect(hugeFiles(state).map((file) => file.id)).toEqual(['a']);
+    expect(canRun(state, 1)).toBe(true);
+    expect(hugeFiles(reducer(state, { type: 'removed', id: 'a' }))).toEqual([]);
+  });
+
+  it('is not listed for a notice before it has been read', () => {
+    expect(hugeFiles(play(add('a')))).toEqual([]);
+  });
+
+  it('gives PDF outcomes no pixels, so page tools are unchanged', () => {
+    const state = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 12 } });
+    expect(hugeFiles(state)).toEqual([]);
+    expect(state.files[0]).toMatchObject({ status: 'ready', pages: 12 });
   });
 });

@@ -68,10 +68,11 @@ export function stem(input: string): string {
 
 /**
  * The name for an output file, built from an input file's name:
- * "report.pdf" and "merged" give "report-merged.pdf".
+ * "report.pdf" and "merged" give "report-merged.pdf". An empty suffix adds no
+ * word, for a tool whose result changes the extension: "IMG_2041.jpg" gives "IMG_2041.pdf".
  */
 export function outputName(input: string, suffix: string, extension = 'pdf'): string {
-  return `${stem(input)}-${suffix}.${extension}`;
+  return suffix === '' ? `${stem(input)}.${extension}` : `${stem(input)}-${suffix}.${extension}`;
 }
 
 /**

@@ -71,3 +71,38 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'other', requestId: 1 })).toBe(false);
   });
 });
+
+describe('what reading a file found', () => {
+  const inspected = (outcome: unknown) => ({ type: 'inspected', requestId: 1, outcome });
+
+  it('accepts every known outcome, a picture outcome only with whole positive numbers', () => {
+    for (const outcome of [
+      { kind: 'ready', pages: 3 },
+      { kind: 'ready', pages: 0 },
+      { kind: 'ready', pages: 1, pixels: 256_000_000 },
+      { kind: 'needs-password' },
+      { kind: 'wrong-password' },
+      { kind: 'damaged' },
+      { kind: 'unsupported' },
+    ]) {
+      expect(isFromWorker(inspected(outcome)), JSON.stringify(outcome)).toBe(true);
+    }
+  });
+
+  it('refuses an unknown kind, or numbers that are not whole and positive', () => {
+    for (const outcome of [
+      null,
+      { kind: 'odd' },
+      { kind: 'ready' },
+      { kind: 'ready', pages: -1 },
+      { kind: 'ready', pages: 1.5 },
+      { kind: 'ready', pages: '3' },
+      { kind: 'ready', pages: 1, pixels: 0 },
+      { kind: 'ready', pages: 1, pixels: 2.5 },
+      { kind: 'ready', pages: 1, pixels: '256' },
+      { kind: 'ready', pages: 1, pixels: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(isFromWorker(inspected(outcome)), JSON.stringify(outcome)).toBe(false);
+    }
+  });
+});

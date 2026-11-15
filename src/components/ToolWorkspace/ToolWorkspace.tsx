@@ -4,12 +4,12 @@ import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, showMoreLabel, shownAnnouncement } from '../../widget/format';
-import { failureSentence, workingLine } from '../../widget/failures';
+import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
-import { allReady, canRun, currentProblem, isLarge, isManyPages, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
+import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -38,18 +38,21 @@ const drawStep = 100;
 const createWorker = (): WorkerLike =>
   new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
 
-function detailFor(file: FileEntry): string {
+/** What a file's row says beside its name. `listPages: false` leaves the page count out, for a tool whose every file is one page. */
+function detailFor(file: FileEntry, listPages = true): string {
   if (file.checking) return 'Trying the password';
   switch (file.status) {
     case 'reading':
       return 'Getting ready';
     case 'ready':
-      return `${pageCount(file.pages ?? 0)}, ${formatSize(file.size)}`;
+      return listPages ? `${pageCount(file.pages ?? 0)}, ${formatSize(file.size)}` : formatSize(file.size);
     case 'needs-password':
     case 'wrong-password':
       return 'Needs a password';
     case 'damaged':
       return 'Damaged and cannot be read';
+    case 'unsupported':
+      return 'Saved in a way this tool cannot read';
   }
 }
 
@@ -88,8 +91,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
 
   // The first files: add them once, then move focus to the summary.
   const refusedText = useCallback(
-    (names: string[]) => names.map((name) => `${name} is not ${words.acceptsName}, so it was not added.`).join(' '),
-    [words.acceptsName],
+    (names: string[]) => refusedSentence(names, words),
+    [words],
   );
   // A tool that takes one file keeps the first of several dropped or pasted, and says so.
   const [leftOut, setLeftOut] = useState<string[]>([]);
@@ -176,11 +179,16 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
       damagedRef.current?.focus();
       return;
     }
-    setAnnouncement(`${problem.name} is damaged and cannot be read.`);
+    if (problem.status === 'damaged' || problem.status === 'unsupported') setAnnouncement(unreadableNotice(problem.name, problem.status).heading);
   }, [problem, problemKey, state.files, setAnnouncement]);
 
   const count = totals(state);
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
+  const unreadable = isUnreadable(problem);
+  const listPages = words.listPages !== false;
+  // Very large pictures, each with a notice tied to the main button (Image to PDF).
+  const huge = hugeFiles(state);
+  const hugeId = (file: FileEntry) => `${toolId}-pixels-${file.id}`;
 
   const pages = words.items === 'pages';
   const entries = useMemo(() => gridItems({ files: state.files, order: state.order }, words.items, state.shown), [state.files, state.order, words.items, state.shown]);
@@ -188,9 +196,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     const byId = new Map(state.files.map((file) => [file.id, file]));
     return entries.map((entry) => {
       const file = byId.get(entry.fileId);
-      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file), thumbnail: thumbnails[entry.id] };
+      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file, listPages), thumbnail: thumbnails[entry.id] };
     });
-  }, [entries, state.files, thumbnails, pages]);
+  }, [entries, state.files, thumbnails, pages, listPages]);
   // A tool that lists pages has one file, shown on its own line above them.
   const onlyFile = pages ? state.files[0] : undefined;
 
@@ -317,6 +325,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
   const ready = canRun(state, words.minFiles, blocked === null);
   const tiedSentence = tooFew ? words.tooFewFiles : blocked;
+  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, ...huge.map(hugeId)].filter(Boolean).join(' ');
 
   // More pages: focus goes to the first new page, which sits where the button was.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -405,7 +414,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ) : (
             <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
               {fileCount(count.files)}
-              {everyReady ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
+              {everyReady && listPages ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
               {words.listNote && anyReady && state.files.length > 1 ? ` ${words.listNote}` : ''}
             </p>
           )}
@@ -431,7 +440,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </div>
           ) : null}
 
-          {pages && items.length > 0 && !askingPassword && problem?.status !== 'damaged' ? (
+          {pages && items.length > 0 && !askingPassword && !unreadable ? (
             <a
               href={`#${toolId}-main`}
               className={styles.skip}
@@ -485,8 +494,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             />
           ) : null}
 
-          {problem?.status === 'damaged' ? (
-            <Notice heading={`${problem.name} is damaged and cannot be read.`} headingRef={damagedRef}>
+          {problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? (
+            <Notice heading={unreadableNotice(problem.name, problem.status).heading} headingRef={damagedRef}>
+              {unreadableNotice(problem.name, problem.status).advice ? <p>{unreadableNotice(problem.name, problem.status).advice}</p> : null}
               <div>
                 <button
                   type="button"
@@ -508,13 +518,21 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </Notice>
           ) : null}
 
+          {huge.map((file) => (
+            <div key={file.id} id={hugeId(file)}>
+              <Notice heading={pixelsHeading(file.name, file.pixels!)}>
+                <p>{pixelsAdvice}</p>
+              </Notice>
+            </div>
+          ))}
+
           {isLarge(state) && !askingPassword ? (
             <Notice heading={pages ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
               <p>The job may be slow, and a phone may run out of memory. You can still go ahead.</p>
             </Notice>
           ) : null}
 
-          {!askingPassword && problem?.status !== 'damaged' ? (
+          {!askingPassword && !unreadable ? (
             <div className={`actions ${styles.apart}`}>
               {pages ? null : (
                 <FilePicker label={words.addLabel} accepts={accepts} multiple={words.multiple} onFiles={add} look="secondary" inputRef={addRef} />
@@ -525,7 +543,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 type="button"
                 className="button"
                 aria-disabled={ready ? undefined : true}
-                aria-describedby={tiedSentence ? `${toolId}-why-not` : undefined}
+                aria-describedby={describedBy || undefined}
                 onClick={() => {
                   if (ready) void run.start();
                 }}
