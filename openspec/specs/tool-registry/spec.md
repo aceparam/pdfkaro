@@ -89,11 +89,21 @@ Tools SHALL be built in catalogue order within a phase, and no tool from a phase
 - **WHEN** a change proposes a phase 2 tool before the phase 1 gate has passed
 - **THEN** the change is blocked until the gate passes
 
-### Requirement: Image to PDF waits for the owner
+### Requirement: Images to PDF is one tool with three pages
 
-Image to PDF (`/image2pdf`) SHALL NOT be added to the registry until the owner says how it relates to JPG to PDF and PNG to PDF, and which URL it uses. Its catalogue URL does not follow the hyphen rule in the SEO section. (CLAUDE.md: Questions waiting for the owner; SPEC.md: SEO, Every tool page)
+Image to PDF, JPG to PDF and PNG to PDF SHALL be one registry entry, `images-to-pdf`, in the "Convert to PDF" group, with three pages: `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf`, by the owner's decision of 13 Nov 2026. `/image2pdf` SHALL NOT be published. (CLAUDE.md: Owner decisions; SPEC.md: Tool catalogue)
 
-#### Scenario: Image to PDF is proposed
+#### Scenario: The home page lists the pages
 
-- **WHEN** a change proposes Image to PDF before the owner has answered
-- **THEN** the change is blocked and the owner is asked how the three tools relate and which URL to use
+- **WHEN** the home page is built
+- **THEN** "JPG to PDF", "PNG to PDF" and "Image to PDF" are listed under "Convert to PDF", each linking to its own page
+
+#### Scenario: The catalogue test runs
+
+- **WHEN** the catalogue test compares `catalogue.ts` with `SPEC.md`
+- **THEN** it passes with `image-to-pdf` added and `image2pdf` dropped, and fails on any other difference, until the next export of `SPEC.md` carries both
+
+#### Scenario: The catalogue order is checked
+
+- **WHEN** the registry test checks that tools are declared in catalogue order
+- **THEN** `images-to-pdf` counts at the catalogue place of Image to PDF, after Rotate PDF
