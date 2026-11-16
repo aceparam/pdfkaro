@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allReady, canRun, currentProblem, hugeFiles, initialState, isReading, isLarge, isUnreadable, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
+import { allReady, canRun, currentProblem, finishedAs, hugeFiles, initialState, isNoNewFile, isReading, isLarge, isUnreadable, reducer, totals, warnAboveBytes, type Action, type State } from '../../src/widget/state';
 
 const play = (...actions: Action[]): State => actions.reduce(reducer, initialState);
 const add = (...names: string[]): Action => ({ type: 'added', files: names.map((name, index) => ({ id: name, name: `${name}.pdf`, size: 1000 * (index + 1) })) });
@@ -154,5 +154,37 @@ describe('a very large picture', () => {
     const state = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 12 } });
     expect(hugeFiles(state)).toEqual([]);
     expect(state.files[0]).toMatchObject({ status: 'ready', pages: 12 });
+  });
+});
+
+describe('a job that gives no new file', () => {
+  it('finishes with a result that has no name, size or link, and keeps the bar full', () => {
+    const state = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 3 } }, { type: 'started' }, { type: 'finished', result: { none: true } });
+    expect(state.step).toBe('done');
+    expect(isNoNewFile(state.result)).toBe(true);
+    expect(state.fraction).toBe(1);
+    expect(isNoNewFile(play(add('a'), { type: 'started' }, { type: 'finished', result: { name: 'a.pdf', size: 1 } }).result)).toBe(false);
+    expect(isNoNewFile(null)).toBe(false);
+  });
+
+  it('Start again forgets it', () => {
+    const state = play(add('a'), { type: 'started' }, { type: 'finished', result: { none: true } }, { type: 'reset' });
+    expect(state).toEqual(initialState);
+  });
+});
+
+describe('what a finished job shows', () => {
+  const mb = 1024 * 1024;
+  it('with words for "no smaller": no file, or one whose size reads the same, gives those words', () => {
+    expect(finishedAs(undefined, 5 * mb, true)).toBe('no-new-file');
+    expect(finishedAs(4.97 * mb, 5.02 * mb, true)).toBe('no-new-file');
+    expect(finishedAs(5.5 * mb, 5 * mb, true)).toBe('no-new-file');
+    expect(finishedAs(4.2 * mb, 11.8 * mb, true)).toBe('file');
+  });
+
+  it('without them, no file is the engine failure and any file is shown, whatever its size, so other tools are unchanged', () => {
+    expect(finishedAs(undefined, 5 * mb, false)).toBe('engine-failure');
+    expect(finishedAs(5 * mb, 5 * mb, false)).toBe('file');
+    expect(finishedAs(9 * mb, 5 * mb, false)).toBe('file');
   });
 });

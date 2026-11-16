@@ -15,7 +15,8 @@
 // into a log, an error message or a failure.
 
 import { inspectPdf } from '../inspect';
-import { carriesAttachment, outlineUpdate, pageRange, readStructure, updateJson } from '../outline';
+import { carriesAttachment, outlineUpdate, pageRange, readStructure } from '../outline';
+import { updateJson } from '../qpdf-json';
 import { freshQpdf, passwordFrom, plainCopy } from '../plain';
 import { finished } from '../qpdf';
 import type { Engine, Inspector } from '../types';

@@ -27,6 +27,23 @@ The encrypted files come out different on each run, because encryption uses rand
 | `images.pdf` | A JPEG 2000 image and text and shapes in CMYK colour, for PDF.js's decoders. The JPEG 2000 bytes were made once with Pillow and are kept in `make.mjs` | 1 |
 | `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field, a note and a web link that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
 
+### For Compress PDF
+
+`make.mjs` makes these too, in section 15. Pictures go in by hand, as image streams with exactly the dictionary each case needs.
+
+| File | What it is | Pages |
+| --- | --- | --- |
+| `compress-scans.pdf` | Three A4 scans at 300 pixels to the inch (2480 by 3508): an RGB JPG carrying the EXIF of `pictures/details.jpg` (camera maker and model, a GPS place, each `SECRET-…`), the grey JPG `pictures/grey-scan.jpg` (`/DeviceGray`), and an RGB picture stored without loss with a PNG predictor (`/Predictor 15`) | 3 |
+| `compress-lossless.pdf` | A screenshot of 2560 by 1440 stored without loss (`/FlateDecode`, no predictor) on an A4 page | 1 |
+| `compress-small-jpg.pdf` | A JPG that is already small (600 by 400, quality 50), and 40 lines of text in a content stream that was never compressed | 1 |
+| `compress-kinds.pdf` | Pages of 72 by 72 points, so 150 pixels is the most a picture needs. Pictures left alone: a CMYK JPG (`pictures/cmyk.jpg`), a CCITT Group 4 scan (the strip of `pictures/scan-g4.tif`), an image mask, a picture with a colour-key mask, a grey picture with a grey ICC profile, and a picture whose soft mask has `/Matte`. One made smaller: a 400 by 400 picture with an RGB ICC profile (`p3.icc`), a soft mask and `/Interpolate` | 7 |
+| `compress-text.pdf` | Text only, in content streams that were never compressed | 3 |
+| `compress-packed.pdf` | `text.pdf` written by qpdf with the options Compress PDF writes with, so it cannot be made 1% smaller | 3 |
+| `compress-bomb-attachment.pdf` | A page of text with an attached file `zeros.bin` whose compressed data (1 MB) inflates to 1 GB | 1 |
+| `compress-flate-bomb.pdf` | A picture whose dictionary says 400 by 400 RGB stored without loss, and whose data inflates to 100 MB | 1 |
+| `compress-jpeg-mismatch.pdf` | Two JPGs whose own header disagrees with their dictionary: 100 by 100 RGB over a whole JPG of 400 by 300, and 200 by 100 RGB over `cmyk.jpg` (four colours). A JPG frame of 20,000 by 20,000 under a 100 by 100 dictionary is made in the unit test instead, as qpdf's own check refuses it | 2 |
+| `compress-json-bomb.pdf` | 5,000 objects, each a string of 14,000 characters, packed by qpdf into a file of 140 KB whose JSON of dictionaries is about 70 MB; and a 400 by 400 picture it would make smaller if it read that JSON | 1 |
+
 ## The pictures, in `pictures/`
 
 For Image to PDF. `make.mjs` makes them too: each JPG and PNG is drawn with `@napi-rs/canvas`, and the parts that carry details (EXIF, XMP, IPTC, comments, thumbnails, colour profiles, PNG text chunks) are written by hand, each with a marker text starting `SECRET-` that the tests look for in the PDF. `make.mjs` writes everything to the folder given as its argument, so to make the pictures alone without changing the encrypted PDFs, run it into a scratch folder and copy `pictures/` back.
@@ -47,8 +64,31 @@ g.putdata([(x * 255 // 319, y * 255 // 239, 128) for y in range(240) for x in ra
 g.save('progressive.jpg', 'JPEG', quality=90, progressive=True)
 ```
 
+Two more were made once with Pillow 12.3 for Compress PDF, and are committed; `make.mjs` reads both and never writes either:
+
+```python
+from PIL import Image, ImageDraw
+w, h = 2480, 3508
+g = Image.new('L', (w, h), 236)
+d = ImageDraw.Draw(g)
+for row in range(40):
+    y = 300 + row * 75
+    for word in range(12):
+        x = 250 + word * 165
+        d.rectangle([x, y, x + 120 - (row * 7 + word * 13) % 50, y + 28], fill=60 + (row * 3 + word) % 40)
+d.rectangle([250, 120, 1600, 200], fill=30)
+g.save('grey-scan.jpg', 'JPEG', quality=85)
+b = Image.new('1', (800, 600), 1)
+db = ImageDraw.Draw(b)
+for row in range(12):
+    db.rectangle([60, 40 + row * 45, 700 - (row * 37) % 200, 60 + row * 45], fill=0)
+b.save('scan-g4.tif', 'TIFF', compression='group4')
+```
+
 | File | What it is |
 | --- | --- |
+| `grey-scan.jpg` | A grey A4 scan at 300 pixels to the inch, 2480 by 3508, one colour component (Pillow) |
+| `scan-g4.tif` | A 1-bit scan of 800 by 600 in CCITT Group 4, one strip (Pillow) |
 | `tall.jpg`, `wide.jpg` | Photo-like scenes, 1500 by 2000 and 2000 by 1500, each with the sRGB profile `@napi-rs/canvas` adds |
 | `screenshot.png` | A wide screenshot-like picture, 1280 by 720 |
 | `turn-1.jpg` to `turn-8.jpg` | Every EXIF camera turn. Once turned, each shows the same 160 by 100 picture: red top-left, green top-right, blue bottom-left, yellow bottom-right |
@@ -317,3 +357,34 @@ Drawn in Node with `@napi-rs/canvas` in place of the worker's `createImageBitmap
 | `turn-6.jpg` | Sized from its shown size: 104 by 65 |
 | `huge.png`, `huge.jpg` | Not drawn, and never decoded |
 | `broken.jpg`, `broken.png`, `zero-size.png`, `arithmetic.jpg` | Not drawn, and never decoded |
+
+### Compress PDF (`src/engines/tools/compress-pdf.ts`)
+
+Each file was compressed in Node with the same qpdf the browser uses (`tests/unit/compress-pdf.test.ts`), with `@napi-rs/canvas` decoding and encoding JPGs in place of the browser. Every result passes `qpdf --check` (with the password for `password.pdf`), has the same pages, and is at most 99% of the input; otherwise the engine gives no file and the page says the file could not be made smaller. Sizes in bytes, from a run on 16 Nov 2026; JPG sizes depend on the encoder, so the browser's differ a little.
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf` | 6,057 | 3,441 | Written again in object streams; text kept |
+| `pages-500.pdf` | 198,025 | 101,461 | 500 pages kept |
+| `scanned.pdf` | 6,191 | 4,442 | Its two pictures (300 by 424) are not too large for A4, so they are left alone |
+| `password.pdf` | 7,178 | 4,192 | With its password: the result asks for the same password, with the same encryption and restrictions. Without it, the job fails |
+| `restricted.pdf` | 7,181 | 4,195 | Opens with no password and keeps its restrictions |
+| `warning.pdf` | 6,057 | 3,441 | qpdf's warning does not stop the job |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Not compressed: the job fails and hands back nothing |
+| `form.pdf` | 3,189 | 2,651 | Both fields kept, and the value `Sample text` |
+| `mixed.pdf` | 2,257 | 1,590 | Sizes and turns kept |
+| `rich.pdf` | 2,064 | 1,676 | Bookmarks, link, `note.txt` and the title kept |
+| `images.pdf` | 1,642 | 1,543 | The JPEG 2000 picture byte for byte as it was |
+| `tagged.pdf` | 5,118 | 2,523 | Everything kept: text, tags, destination, thread, the tagged field and its value, note and link |
+| `compress-scans.pdf` | 634,679 | 237,481 | Each scan scaled to 1240 by 1754 (150 to the inch across A4's 841.89 points): both JPGs saved again at quality 75 as RGB JPGs (the grey one too, and its pixels still draw grey), the lossless one stored with `/FlateDecode` and no predictor. No EXIF or marker is left. Drawn by PDF.js, each page differs from before by a mean of under 4 in 255. Progress: "Reading the file", "Picture 1 of 3" to "Picture 3 of 3", then writing from 75% |
+| `compress-lossless.pdf` | 16,884 | 8,770 | The screenshot scaled to 1754 by 987 and stored without loss again; drawn by PDF.js it looks as before |
+| `compress-small-jpg.pdf` | 12,852 | 8,774 | Its text compressed. Whether its JPG is saved again depends on the encoder (the 10% rule); in Chromium the end-to-end test finds it byte for byte as it was |
+| `compress-kinds.pdf` | 41,034 | 28,494 | The CMYK JPG and the CCITT scan byte for byte; the image mask, the colour-key picture, the grey ICC picture and the `/Matte` pair decoded byte for byte, with the same dictionaries (qpdf compresses their data again, without loss). The RGB ICC picture scaled to 150 by 150, keeping its profile, `/Interpolate` and soft mask, which stays 400 by 400 |
+| `compress-text.pdf` | 21,019 | 2,391 | Its content streams compressed; text kept |
+| `compress-packed.pdf` | 3,441 | none | Could not be made smaller |
+| `compress-bomb-attachment.pdf` | 1,045,278 | none | The pictures step reads no attachment; qpdf compresses its 1 GB again a piece at a time, in about 6 seconds, and the result is not smaller |
+| `compress-flate-bomb.pdf` | 103,018 | none | Inflating the picture stops just past the 480,000 bytes it should hold; it is left alone |
+| `compress-jpeg-mismatch.pdf` | 15,014 | 14,774 | Neither JPG is decoded; both byte for byte. The 20,000 by 20,000 frame made in the test is never decoded either, and that job fails at `qpdf --check`, which the file itself fails |
+| `compress-json-bomb.pdf` | 140,759 | none | The JSON of dictionaries is over 64 MB, so it is not parsed and the pictures step is skipped (its picture stays 400 by 400); the file is still written again, in about 17 seconds in Node, and is not smaller |
+
+The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI. The multilingual file is still missing.

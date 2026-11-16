@@ -26,6 +26,12 @@ export const canvasMaker: CanvasMaker = {
   png: async (canvas) => new Uint8Array((canvas as Canvas).toBuffer('image/png')),
 };
 
+/** The canvas maker with a JPG encoder, as the worker gives it: `encode('jpeg', quality)` from @napi-rs/canvas, quality 0 to 100. */
+export const jpegCanvasMaker = {
+  ...canvasMaker,
+  jpeg: async (canvas: unknown, quality: number) => new Uint8Array(await (canvas as Canvas).encode('jpeg', Math.round(quality * 100))),
+};
+
 /** Decodes a picture with @napi-rs/canvas, counting each call so a test can see nothing was decoded. */
 export const pictureDecoder: PictureDecoder & { calls: number } = {
   calls: 0,
@@ -39,11 +45,14 @@ export const pictureDecoder: PictureDecoder & { calls: number } = {
 export const tools: EngineTools = {
   // Node needs PDF.js's legacy build; the browser takes the modern one.
   pdfjs: async () => import('pdfjs-dist/legacy/build/pdf.mjs'),
-  canvas: async () => canvasMaker,
+  canvas: async () => jpegCanvasMaker,
   pdfjsData: async () => (await import('../../src/workers/pdfjs-data')).pdfjsData,
   // As the worker gives them: pdf-lib from its own file, and fflate's streaming Inflate.
   pdflib: async () => import('../../src/workers/pdflib'),
-  fflate: async () => ({ Inflate: (await import('fflate')).Inflate }),
+  fflate: async () => {
+    const { Inflate, Deflate } = await import('fflate');
+    return { Inflate, Deflate };
+  },
   // In place of the worker's createImageBitmap: Skia's decoder, through @napi-rs/canvas.
   decodePicture: async () => pictureDecoder,
 };

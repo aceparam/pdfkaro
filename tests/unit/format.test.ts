@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileCount, formatSize, outputName, pageCount, partName, progressFraction, progressLine, stem } from '../../src/widget/format';
+import { fileCount, formatSize, isNoSmaller, outputName, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
 
 describe('counts and sizes', () => {
   it('says one page and many pages', () => {
@@ -29,6 +29,30 @@ describe('progress', () => {
     expect(progressFraction({ stage: 'reading', unit: 'file', done: 4, total: 4 })).toBeCloseTo(0.2);
     expect(progressFraction({ stage: 'writing', percent: 50 })).toBeCloseTo(0.6);
     expect(progressFraction({ stage: 'writing', percent: 100 })).toBeCloseTo(1);
+  });
+
+  it('says "Reading the file" for one file read before the work, and leaves every other reading as it was', () => {
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 0, total: 1 }, 'x')).toBe('Reading the file');
+    // Merge PDF's readings, and any reading that has counted something or has more than one file.
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 1, total: 1 }, 'x')).toBe('Reading file 1 of 1');
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 1, total: 2 }, 'x')).toBe('Reading file 1 of 2');
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 0, total: 2 }, 'x')).toBe('Reading file 0 of 2');
+    expect(progressLine({ stage: 'working', unit: 'file', done: 0, total: 1 }, 'x')).toBe('File 0 of 1');
+    expect(progressLine({ stage: 'reading', unit: 'page', done: 0, total: 1 }, 'x')).toBe('Page 0 of 1');
+    expect(progressFraction({ stage: 'reading', unit: 'file', done: 0, total: 1 })).toBe(0);
+  });
+
+  it('counts pictures, filling 0.2 to 0.8, and leaves the last fifth for writing from 75%', () => {
+    expect(progressLine({ stage: 'working', unit: 'picture', done: 3, total: 40 }, 'x')).toBe('Picture 3 of 40');
+    expect(progressLine({ stage: 'working', unit: 'picture', done: 1200, total: 3000 }, 'x')).toBe('Picture 1,200 of 3,000');
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 0, total: 40 })).toBeCloseTo(0.2);
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 20, total: 40 })).toBeCloseTo(0.5);
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 40, total: 40 })).toBeCloseTo(0.8);
+    expect(progressFraction({ stage: 'writing', percent: 75 })).toBeCloseTo(0.8);
+    expect(progressFraction({ stage: 'writing', percent: 99 })).toBeLessThan(1);
+    // Pages and files still fill to the end.
+    expect(progressFraction({ stage: 'working', unit: 'page', done: 40, total: 40 })).toBeCloseTo(1);
+    expect(progressFraction({ stage: 'working', unit: 'file', done: 2, total: 4 })).toBeCloseTo(0.6);
   });
 
   it('never goes outside 0 to 1, even with odd numbers', () => {
@@ -95,5 +119,24 @@ describe('the files inside a zip', () => {
     expect(partName('report', 'part', 7, 500)).toBe('report-part-007.pdf');
     const names = Array.from({ length: 12 }, (_, index) => partName('r', 'part', index + 1, 12));
     expect([...names].sort()).toEqual(names);
+  });
+});
+
+describe('the result line', () => {
+  it('gives the size, then "was" and the old size for a tool that makes files smaller, then the pages', () => {
+    const mb = 1024 * 1024;
+    expect(resultDetail({ size: 4.2 * mb, was: 11.8 * mb, pages: 64 })).toBe('4.2 MB, was 11.8 MB, 64 pages');
+    expect(resultDetail({ size: 11.6 * mb, pages: 120 })).toBe('11.6 MB, 120 pages');
+    expect(resultDetail({ size: 3 * mb, parts: 3 })).toBe('3 files, 3.0 MB');
+  });
+
+  it('counts a result as no smaller when it is not smaller, or both sizes read the same', () => {
+    const mb = 1024 * 1024;
+    expect(isNoSmaller(4.97 * mb, 5.02 * mb)).toBe(true);
+    expect(formatSize(4.97 * mb)).toBe(formatSize(5.02 * mb));
+    expect(isNoSmaller(5 * mb, 5 * mb)).toBe(true);
+    expect(isNoSmaller(6 * mb, 5 * mb)).toBe(true);
+    expect(isNoSmaller(4.2 * mb, 11.8 * mb)).toBe(false);
+    expect(isNoSmaller(500, 900)).toBe(false);
   });
 });

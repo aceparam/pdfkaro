@@ -40,25 +40,30 @@ const tools: EngineTools = {
       (canvas as OffscreenCanvas).height = 0;
     },
     png: async (canvas: unknown) => new Uint8Array(await (await (canvas as OffscreenCanvas).convertToBlob({ type: 'image/png' })).arrayBuffer()),
+    // A JPG at `quality` from 0 to 1, for an engine that saves pictures again (Compress PDF).
+    jpeg: async (canvas: unknown, quality: number) =>
+      new Uint8Array(await (await (canvas as OffscreenCanvas).convertToBlob({ type: 'image/jpeg', quality })).arrayBuffer()),
   }),
   // PDF.js's fonts and decoders: one fixed set, loaded late, never statically.
   pdfjsData: async () => (await import('./pdfjs-data')).pdfjsData,
   // pdf-lib, for an engine that writes a PDF from nothing; its own chunk, fetched at the main button.
   pdflib: () => import('./pdflib'),
-  // fflate, from the same chunk pdf-lib and the zip use: its streaming Inflate, never inflateSync.
+  // fflate, from the same chunk pdf-lib and the zip use: its streaming Inflate and Deflate, never inflateSync.
   fflate: async () => {
-    const { Inflate } = await import('fflate');
-    return { Inflate };
+    const { Inflate, Deflate } = await import('fflate');
+    return { Inflate, Deflate };
   },
-  // The browser's own image decoder, for pictures' thumbnails only (Image to PDF). The picture is turned
-  // as its camera recorded, and scaled down while it is decoded where the browser can.
+  // The browser's own image decoder. For pictures' thumbnails (Image to PDF), the picture is turned as
+  // its camera recorded, and scaled down while it is decoded where the browser can. With
+  // `colours: 'none'` (Compress PDF), its colours are left as they are and it is scaled with care; the
+  // engine has already removed any camera turn and colour profile from it.
   decodePicture: async () => ({
-    async decode(bytes: Uint8Array, width: number, height: number) {
+    async decode(bytes: Uint8Array, width: number, height: number, options?: { colours?: 'none' }) {
       const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]), {
         imageOrientation: 'from-image',
         resizeWidth: width,
         resizeHeight: height,
-        resizeQuality: 'medium',
+        ...(options?.colours === 'none' ? { colorSpaceConversion: 'none', resizeQuality: 'high' } : { resizeQuality: 'medium' }),
       });
       return { image: bitmap, close: () => bitmap.close() };
     },

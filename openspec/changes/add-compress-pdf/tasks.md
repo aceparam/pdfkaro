@@ -2,20 +2,20 @@
 
 ## 1. Registry entry and shared widget pieces
 
-- [ ] 1.1 Add the `compress-pdf` entry to `src/tools/registry.ts` with the optional words `resultWas` and `noSmaller` (heading and advice); the registry test checks catalogue order and its words
-- [ ] 1.2 A run that gives no file: `Engine` may return `[]`, `worker-core` and `isFromWorker` pass it, the state holds a "no smaller" result, and `ToolWorkspace` shows `noSmaller`'s heading and advice with focus and announcement, "Start again" and no Download; the page treats a result whose size reads the same as the input's as no smaller; a tool without `noSmaller` shows the engine failure; `Result` shows "was" and the input's size when `resultWas` is set; the summary line is left out for one file in a one-file tool; unit and component tests, other tools unchanged
-- [ ] 1.3 Progress: the `'picture'` unit ("Picture 3 of 40", filling 0.2 to 0.8) and "Reading the file" for a reading of `done: 0, total: 1`, in `format.ts`, with tests that other tools' lines are unchanged
+- [x] 1.1 Add the `compress-pdf` entry to `src/tools/registry.ts` with the optional words `resultWas` and `noSmaller` (heading and advice); the registry test checks catalogue order and its words
+- [x] 1.2 A run that gives no file: `Engine` may return `[]`, `worker-core` and `isFromWorker` pass it, the state holds a "no smaller" result, and `ToolWorkspace` shows `noSmaller`'s heading and advice with focus and announcement, "Start again" and no Download; the page treats a result whose size reads the same as the input's as no smaller; a tool without `noSmaller` shows the engine failure; `Result` shows "was" and the input's size when `resultWas` is set; the summary line is left out for one file in a one-file tool; unit and component tests, other tools unchanged
+- [x] 1.3 Progress: the `'picture'` unit ("Picture 3 of 40", filling 0.2 to 0.8) and "Reading the file" for a reading of `done: 0, total: 1`, in `format.ts`, with tests that other tools' lines are unchanged
 
 ## 2. Engine
 
-- [ ] 2.1 Move `json`, `objects`, `objectArg`, `objectsPerCall`, `updateJson` and `callWithArgumentFile` into `src/engines/qpdf-json.ts`, unchanged, with `outline.ts` and `plain.ts` importing them and their tests and `check-worker.mjs`'s sentences following; add `Qpdf.remove(path)`; add `readDictionaries` (to a file in qpdf's memory, 64 MB limit before parsing, failures skip the pictures step), `readRawStreams` (fresh qpdf per batch of at most 32 MB of raw data, files removed after use) and `writeUpdate` (fresh qpdf, `JSON.stringify`, lossless options, `qpdf --check` with the password)
-- [ ] 2.2 Write `src/engines/resample.ts`: undo PNG predictors 10 to 15, and scale 8-bit grey or RGB samples by area averaging; pure
-- [ ] 2.3 Write `src/engines/tools/compress-pdf.ts`: `canShrink` (exported; the key allow-list, size, colours, filter, not a mask, no `/Matte`), the pixel limit from CropBox or MediaBox up `/Parent` with `/UserUnit` and finite checks, `shrinkJpeg` (frame must match the dictionary), `shrinkLossless` (`inflateLimited` at the exact size), the new dictionary rules, `run` with reading, picture and writing progress, the 1% rule giving `[]`, passwords kept; `inspect` is `inspectPdf`
-- [ ] 2.4 `decodePicture`'s `{ colours: 'none' }` option with `resizeQuality: 'high'`, `canvas.jpeg(canvas, quality)`, and `fflate`'s `Deflate`, in `tool.worker.ts` and in the unit tests' tools
+- [x] 2.1 Move `json`, `objects`, `objectArg`, `objectsPerCall`, `updateJson` and `callWithArgumentFile` into `src/engines/qpdf-json.ts`, unchanged, with `outline.ts` and `plain.ts` importing them and their tests and `check-worker.mjs`'s sentences following; add `Qpdf.remove(path)`; add `readDictionaries` (to a file in qpdf's memory, 64 MB limit before parsing, failures skip the pictures step), `readRawStreams` (fresh qpdf per batch of at most 32 MB of raw data, files removed after use) and `writeUpdate` (fresh qpdf, `JSON.stringify`, lossless options, `qpdf --check` with the password)
+- [x] 2.2 Write `src/engines/resample.ts`: undo PNG predictors 10 to 15, and scale 8-bit grey or RGB samples by area averaging; pure
+- [x] 2.3 Write `src/engines/tools/compress-pdf.ts`: `canShrink` (exported; the key allow-list, size, colours, filter, not a mask, no `/Matte`), the pixel limit from CropBox or MediaBox up `/Parent` with `/UserUnit` and finite checks, `shrinkJpeg` (frame must match the dictionary), `shrinkLossless` (`inflateLimited` at the exact size), the new dictionary rules, `run` with reading, picture and writing progress, the 1% rule giving `[]`, passwords kept; `inspect` is `inspectPdf`
+- [x] 2.4 `decodePicture`'s `{ colours: 'none' }` option with `resizeQuality: 'high'`, `canvas.jpeg(canvas, quality)`, and `fflate`'s `Deflate`, in `tool.worker.ts` and in the unit tests' tools
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 Fixtures in `tests/fixtures/make.mjs`:
+- [x] 3.1 Fixtures in `tests/fixtures/make.mjs`:
   - an A4 file of three 300 pixels-to-the-inch JPG scans (DeviceGray and RGB), one carrying `pictures/details.jpg`'s EXIF markers;
   - a file with a large lossless screenshot, one with a PNG predictor;
   - a JPG already small;
@@ -27,8 +27,8 @@
     - a picture whose Flate data inflates past its dictionary's size;
     - a JPG whose header disagrees with its dictionary (size, and four components under `/DeviceRGB`);
     - a small file of very many objects that gives a JSON over the limit.
-- [ ] 3.2 `tests/unit/resample.test.ts`; `tests/unit/qpdf-json.test.ts` (the moved helpers keep their tests; the new steps; keys refused unless `obj:N G R`; the size limit)
-- [ ] 3.3 `tests/unit/compress-pdf.test.ts`: `canShrink` for every case; `run` on every file in `tests/fixtures/` and the new fixtures, checking with qpdf's JSON each picture's size, filter and colour space, untouched streams (soft masks, masks, CMYK, CCITT, grey ICC, mismatched JPGs) byte for byte, allowed keys kept, `qpdf --check`, the result smaller or `[]`, `rich.pdf`'s bookmarks, link and attachment, `form.pdf`'s fields and values, `tagged.pdf` kept, `password.pdf` written with the same password and restrictions and `restricted.pdf` keeping its restrictions, damaged files, the hostile fixtures ending skipped or with a result and never decoding past their limits; pages drawn by PDF.js before and after look alike (a mean difference under a set amount), and the DeviceGray scan still draws grey; do not assert which side of the 10% line a picture falls, as encoders differ; record each outcome and the sizes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
+- [x] 3.2 `tests/unit/resample.test.ts`; `tests/unit/qpdf-json.test.ts` (the moved helpers keep their tests; the new steps; keys refused unless `obj:N G R`; the size limit)
+- [x] 3.3 `tests/unit/compress-pdf.test.ts`: `canShrink` for every case; `run` on every file in `tests/fixtures/` and the new fixtures, checking with qpdf's JSON each picture's size, filter and colour space, untouched streams (soft masks, masks, CMYK, CCITT, grey ICC, mismatched JPGs) byte for byte, allowed keys kept, `qpdf --check`, the result smaller or `[]`, `rich.pdf`'s bookmarks, link and attachment, `form.pdf`'s fields and values, `tagged.pdf` kept, `password.pdf` written with the same password and restrictions and `restricted.pdf` keeping its restrictions, damaged files, the hostile fixtures ending skipped or with a result and never decoding past their limits; pages drawn by PDF.js before and after look alike (a mean difference under a set amount), and the DeviceGray scan still draws grey; do not assert which side of the 10% line a picture falls, as encoders differ; record each outcome and the sizes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
 
 ## 4. Worker wiring
 

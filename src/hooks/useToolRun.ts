@@ -3,7 +3,7 @@ import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
 import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, stem } from '../widget/format';
-import { initialState, reducer, totals, type State } from '../widget/state';
+import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
@@ -293,7 +293,15 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
         zip,
       );
       const output = outputs[0];
-      if (!output) throw new ToolError('engine');
+      const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
+      // No file, or one whose size reads the same as the input's, is "no smaller", for a tool with words for it.
+      // For any other tool, no file is the engine's failure.
+      const shown = finishedAs(output?.byteLength, inputSize, words.noSmaller !== undefined);
+      if (shown === 'no-new-file') {
+        dispatch({ type: 'finished', result: { none: true } });
+        return;
+      }
+      if (shown === 'engine-failure' || !output) throw new ToolError('engine');
       const zipped = parts !== undefined && parts > 1;
       const blob = new Blob([output as BlobPart], { type: zipped ? 'application/zip' : 'application/pdf' });
       const name = outputName(inputs[0]!.name, words.outputSuffix, zipped ? 'zip' : 'pdf');
@@ -306,13 +314,14 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
           size: blob.size,
           pages: zipped ? undefined : resultPageCount(),
           parts: zipped ? parts : undefined,
+          was: words.resultWas ? inputSize : undefined,
         },
       });
     } catch (error) {
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.noSmaller, words.resultWas, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);

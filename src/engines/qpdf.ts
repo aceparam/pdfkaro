@@ -13,6 +13,8 @@ type QpdfModule = {
     mkdir(path: string): void;
     writeFile(path: string, data: Uint8Array): void;
     readFile(path: string): Uint8Array;
+    unlink(path: string): void;
+    stat(path: string): { size: number };
   };
 };
 
@@ -25,6 +27,10 @@ export type Qpdf = {
   /** Writes a file into qpdf's memory. Paths are made up by the engine, never taken from a file name. */
   write(path: string, data: Uint8Array): void;
   read(path: string): Uint8Array;
+  /** Removes a file from qpdf's memory, so a step that has read it does not keep it twice. */
+  remove(path: string): void;
+  /** A file's length in bytes, read without reading the file. */
+  size(path: string): number;
   /**
    * Runs qpdf with these arguments. Gives its exit code, what it wrote as its
    * answer (`out`, standard output) and everything it printed (`printed`,
@@ -59,6 +65,8 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
     mkdir: (path) => module.FS.mkdir(path),
     write: (path, data) => module.FS.writeFile(path, data),
     read: (path) => module.FS.readFile(path),
+    remove: (path) => module.FS.unlink(path),
+    size: (path) => module.FS.stat(path).size,
     call(args) {
       out = '';
       printed = '';

@@ -274,3 +274,66 @@ describe('Images to PDF', () => {
     }
   });
 });
+
+describe('Compress PDF', () => {
+  const tool = tools.find((each) => each.id === 'compress-pdf')!;
+
+  it('is the first row of "Make smaller and fix", after Image to PDF, taking one PDF', () => {
+    expect(tool).toMatchObject({ group: 'smaller', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('compress-pdf')).toBe(ids.indexOf('images-to-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'compress-pdf',
+        name: 'Compress PDF',
+        summary: 'Make a PDF file smaller.',
+        title: 'Compress a PDF file in your browser - PDFkaro',
+        description: 'Make a PDF file smaller by shrinking its pictures. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF file',
+        sentence: 'Make a PDF smaller. Your file stays on your device.',
+      },
+    ]);
+  });
+
+  it('has the widget words of the design, with the "was" size and the words for no smaller file', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      tooFewFiles: 'Choose a PDF file to compress.',
+      actionLabel: 'Compress and download',
+      writingLabel: 'Writing the compressed file',
+      doneHeading: 'Your compressed file is ready',
+      failedHeading: 'The compression did not finish.',
+      outputSuffix: 'compressed',
+      outputs: 'one',
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and compress the parts.',
+      resultWas: true,
+      noSmaller: {
+        heading: 'This file could not be made smaller.',
+        advice: 'It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.',
+      },
+    });
+    expect(tool.widget!.resultNotes).toEqual([
+      'Pictures that were made smaller can look slightly less sharp up close.',
+      'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+      'If the file had a password or restrictions, it still has them.',
+    ]);
+    for (const text of Object.values(tool.widget!.noSmaller!)) expect(text).not.toContain('!');
+  });
+
+  it('leaves the other tools without the "was" size or the words for no smaller file, so they are unchanged', () => {
+    for (const each of tools) {
+      if (each.id === 'compress-pdf') continue;
+      expect(each.widget?.resultWas).toBeUndefined();
+      expect(each.widget?.noSmaller).toBeUndefined();
+    }
+  });
+});

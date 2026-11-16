@@ -96,6 +96,13 @@ export type ToolWidgetWords = {
   itemToggle?: { kind: ToggleKind; label: string };
   /** For a tool that lists pages: each page turns, by "Turn left" and "Turn right" under it (Rotate PDF). */
   itemTurns?: true;
+  /** For a tool that makes a file smaller: the result shows the input's size beside the new one, "4.2 MB, was 11.8 MB". */
+  resultWas?: true;
+  /**
+   * For a tool whose engine can give no file because the file could not be improved (Compress PDF):
+   * the heading shown in place of the result, and the one thing to try. Without it, no file is the engine's failure.
+   */
+  noSmaller?: { heading: string; advice: string };
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
   /** What the list shows: one item per file, or the pages of one file. */
@@ -478,6 +485,57 @@ export const tools: Tool[] = [
       itemControls: true,
       outputs: 'one',
       resultNotes: ['The pictures’ details, such as the camera, the date and the place, are not copied into the PDF.'],
+    },
+  },
+  {
+    // The first row of "Make smaller and fix". Our own recompression on qpdf, by the owner's decision of 13 Nov 2026.
+    id: 'compress-pdf',
+    group: 'smaller',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg'],
+    pages: [
+      {
+        slug: 'compress-pdf',
+        name: 'Compress PDF',
+        summary: 'Make a PDF file smaller.',
+        title: 'Compress a PDF file in your browser - PDFkaro',
+        description: 'Make a PDF file smaller by shrinking its pictures. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF file',
+        sentence: 'Make a PDF smaller. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Compress and download',
+      writingLabel: 'Writing the compressed file',
+      doneHeading: 'Your compressed file is ready',
+      failedHeading: 'The compression did not finish.',
+      tooFewFiles: 'Choose a PDF file to compress.',
+      outputSuffix: 'compressed',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and compress the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      resultWas: true,
+      // Page text, a draft for the owner's review like the result notes.
+      noSmaller: {
+        heading: 'This file could not be made smaller.',
+        advice: 'It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.',
+      },
+      // Passwords are kept: Compress PDF is not among the page tools that drop them (13 Nov 2026).
+      resultNotes: [
+        'Pictures that were made smaller can look slightly less sharp up close.',
+        'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'If the file had a password or restrictions, it still has them.',
+      ],
     },
   },
 ];

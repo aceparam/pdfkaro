@@ -3,13 +3,13 @@ import type { Progress } from '../../engines/types';
 import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
-import { fileCount, formatSize, number, pageCount, progressLine, showMoreLabel, shownAnnouncement } from '../../widget/format';
+import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
-import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
+import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
@@ -137,7 +137,8 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   useEffect(() => {
     const from = previousStep.current;
     previousStep.current = state.step;
-    if (state.step === 'listing' && from === 'empty') summaryRef.current?.focus();
+    // A one-file tool that lists its file as a row has no summary line, so focus goes to the main button.
+    if (state.step === 'listing' && from === 'empty') (summaryRef.current ?? mainRef.current)?.focus();
     if (state.step === 'working') cancelRef.current?.focus();
     if (state.step === 'done') resultRef.current?.focus();
     if (state.step === 'failed') failedRef.current?.focus();
@@ -205,6 +206,9 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   }, [entries, state.files, thumbnails, pages, listPages]);
   // A tool that lists pages has one file, shown on its own line above them.
   const onlyFile = pages ? state.files[0] : undefined;
+  // A tool that takes one file and lists it as a row (Compress PDF): the row says it all, so no summary line above it.
+  const oneFileRow = !pages && !words.multiple && state.files.length === 1;
+  const soleFile = onlyFile ?? (oneFileRow ? state.files[0] : undefined);
 
   // Pages are put on the page a screenful first, then 100 a frame, so that 500 at once never
   // block the page for more than 100 ms on a slow phone. A list of files is drawn whole.
@@ -221,14 +225,14 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   }, [pages, drawn, items.length]);
   const gridItemsDrawn = useMemo(() => (pages ? items.slice(0, drawn) : items), [pages, items, drawn]);
 
-  // When that file has been read and its pages appear, say what the line now says.
-  const onlyReady = onlyFile && onlyFile.status === 'ready' && !onlyFile.checking ? `${onlyFile.id}:${detailFor(onlyFile)}` : '';
+  // When that file has been read and its pages or its row appear, say what the line now says.
+  const onlyReady = soleFile && soleFile.status === 'ready' && !soleFile.checking ? `${soleFile.id}:${detailFor(soleFile)}` : '';
   const announcedReady = useRef('');
   useEffect(() => {
-    if (!onlyReady || !onlyFile || announcedReady.current === onlyReady) return;
+    if (!onlyReady || !soleFile || announcedReady.current === onlyReady) return;
     announcedReady.current = onlyReady;
-    setAnnouncement(`${onlyFile.name}, ${detailFor(onlyFile)}.`);
-  }, [onlyReady, onlyFile, setAnnouncement]);
+    setAnnouncement(`${soleFile.name}, ${detailFor(soleFile)}.`);
+  }, [onlyReady, soleFile, setAnnouncement]);
 
   // A toggle on each page, such as Split's cuts or Extract's choice. What it means comes from toggles.ts.
   const itemToggle = words.itemToggle;
@@ -345,21 +349,19 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
   const everyReady = allReady(state);
   const anyReady = state.files.some((file) => file.status === 'ready');
 
-  if (state.step === 'done' && state.result && result) {
-    // A zip says how many files it holds; a PDF, how many pages.
-    const detail = [
-      state.result.parts ? fileCount(state.result.parts) : null,
-      formatSize(state.result.size),
-      state.result.pages ? pageCount(state.result.pages) : null,
-    ]
-      .filter(Boolean)
-      .join(', ');
+  // A job that gave no new file, for a tool with words for it: its sentence and advice, Start again, no Download.
+  if (state.step === 'done' && isNoNewFile(state.result) && words.noSmaller) {
+    return (
+      <Result heading={words.noSmaller.heading} advice={words.noSmaller.advice} notes={[]} onStartAgain={run.clear} headingRef={resultRef} />
+    );
+  }
+
+  if (state.step === 'done' && state.result && !isNoNewFile(state.result) && result) {
+    // A zip says how many files it holds; a PDF, how many pages; a tool that makes files smaller, the old size.
     return (
       <Result
         heading={words.doneHeading}
-        name={state.result.name}
-        detail={detail}
-        href={result.url}
+        file={{ name: state.result.name, detail: resultDetail(state.result), href: result.url }}
         notes={words.resultNotes}
         onStartAgain={run.clear}
         headingRef={resultRef}
@@ -415,7 +417,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
                 Remove
               </button>
             </div>
-          ) : (
+          ) : oneFileRow ? null : (
             <p ref={summaryRef} tabIndex={-1} className={styles.summary}>
               {fileCount(count.files)}
               {everyReady && listPages ? `, ${pageCount(count.pages)}` : ''}, {formatSize(count.size)}.
@@ -516,7 +518,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
             </Notice>
           ) : null}
 
-          {pages && isManyPages(state) ? (
+          {(pages || !words.multiple) && isManyPages(state) ? (
             <Notice heading={`This file has more than ${number(manyPages)} pages`}>
               <p>The job may take a long time. You can still go ahead.</p>
             </Notice>
@@ -531,7 +533,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           ))}
 
           {isLarge(state) && !askingPassword ? (
-            <Notice heading={pages ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
+            <Notice heading={pages || !words.multiple ? 'This file is more than 100 MB' : 'These files add up to more than 100 MB'}>
               <p>The job may be slow, and a phone may run out of memory. You can still go ahead.</p>
             </Notice>
           ) : null}

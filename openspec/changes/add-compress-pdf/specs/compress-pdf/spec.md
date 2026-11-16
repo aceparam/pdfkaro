@@ -37,7 +37,7 @@ Pressing "Compress and download" SHALL make pictures smaller where that saves sp
 #### Scenario: A scan of large JPG pages
 
 - **WHEN** an A4 file whose pages are 300 pixels-to-the-inch JPG scans is compressed
-- **THEN** each scan is 1240 pixels on its long side or less, the file is smaller, and each page shows the same scan in the same place
+- **THEN** each scan is 1754 pixels on its long side or less (1240 by 1754), the file is smaller, and each page shows the same scan in the same place
 
 ### Requirement: JPG pictures
 

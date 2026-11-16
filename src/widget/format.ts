@@ -27,6 +27,9 @@ export function formatSize(bytes: number): string {
  */
 export function progressLine(progress: Progress, writingLabel: string): string {
   if (progress.stage === 'writing') return writingLabel;
+  // One file read before the work starts, with nothing counted yet (Compress PDF).
+  if (progress.stage === 'reading' && progress.unit === 'file' && progress.done === 0 && progress.total === 1) return 'Reading the file';
+  if (progress.unit === 'picture') return `Picture ${number(progress.done)} of ${number(progress.total)}`;
   if (progress.unit === 'file') {
     return progress.stage === 'reading'
       ? `Reading file ${progress.done} of ${progress.total}`
@@ -35,12 +38,42 @@ export function progressLine(progress: Progress, writingLabel: string): string {
   return `Page ${progress.done} of ${progress.total}`;
 }
 
-/** How full the bar is, from 0 to 1. Reading fills the first fifth; the rest is the work. */
+/**
+ * How full the bar is, from 0 to 1. Reading fills the first fifth; the rest is the work.
+ * Pictures fill 0.2 to 0.8, leaving the last fifth for writing, which an engine that
+ * works on pictures reports from 75% (Compress PDF), so the bar is never full while it writes.
+ */
 export function progressFraction(progress: Progress): number {
   const share = (part: number, whole: number) => (whole > 0 ? Math.min(1, Math.max(0, part / whole)) : 0);
   if (progress.stage === 'reading') return 0.2 * share(progress.done, progress.total);
   if (progress.stage === 'writing') return 0.2 + 0.8 * share(progress.percent, 100);
+  if (progress.unit === 'picture') return 0.2 + 0.6 * share(progress.done, progress.total);
   return 0.2 + 0.8 * share(progress.done, progress.total);
+}
+
+/**
+ * Whether a result counts as no smaller than its input, for a tool that makes
+ * files smaller: not smaller at all, or so little smaller that both sizes read
+ * the same ("5.0 MB, was 5.0 MB" is never shown).
+ */
+export function isNoSmaller(size: number, was: number): boolean {
+  return size >= was || formatSize(size) === formatSize(was);
+}
+
+/**
+ * The line under a result's name: "4.2 MB, was 11.8 MB, 64 pages". A zip says
+ * how many files it holds first; `was`, for a tool that makes files smaller, is
+ * the input's size.
+ */
+export function resultDetail(result: { size: number; pages?: number; parts?: number; was?: number }): string {
+  return [
+    result.parts ? fileCount(result.parts) : null,
+    formatSize(result.size),
+    result.was !== undefined ? `was ${formatSize(result.was)}` : null,
+    result.pages ? pageCount(result.pages) : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 // Characters a file name must not carry: control characters, marks that

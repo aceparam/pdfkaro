@@ -1,13 +1,14 @@
 // The steps the page engines share (src/engines/plain.ts): the plain copy, the
-// check of a list of pages, qpdf's page list and the argument file. Extract and
-// Delete both use them; their own tests cover keepPages through real runs.
+// check of a list of pages and qpdf's page list. Extract and Delete both use
+// them; their own tests cover keepPages through real runs. The argument file's
+// tests moved with it to qpdf-json.test.ts.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
-import { callWithArgumentFile, chosenPages, pageList, plainCopy, writeTurned } from '../../src/engines/plain';
+import { chosenPages, pageList, plainCopy, writeTurned } from '../../src/engines/plain';
 import type { EngineTools } from '../../src/engines/types';
 
 const require = createRequire(import.meta.url);
@@ -49,23 +50,6 @@ describe('the shared plain copy', () => {
     expect(pages).toBe(3);
     expect((await qpdfOn(plain, ['--show-encryption'])).out).toContain('not encrypted');
     await expect(plainCopy(tools, fixture('password.pdf'), 'wrong')).rejects.toThrow(/password/);
-  });
-});
-
-describe('the argument file', () => {
-  it('carries a page list over 64 KB, which would overflow qpdf on the command line', async () => {
-    // Repeated pages, which chosenPages would refuse, so the step is called directly.
-    const list = Array.from({ length: 20_000 }, (_, index) => `${(index % 500) + 1}`).join(',');
-    expect(list.length).toBeGreaterThan(64 * 1024);
-    const qpdf = await makeQpdf();
-    qpdf.write('/in.pdf', fixture('pages-500.pdf'));
-    const { code } = callWithArgumentFile(qpdf, ['/in.pdf', '--pages', '.', list, '--', '/out.pdf']);
-    expect(code).toBe(0);
-    expect(await pageCount(qpdf.read('/out.pdf'))).toBe(20_000);
-  }, 120_000);
-
-  it('refuses an argument holding a line break', async () => {
-    expect(() => callWithArgumentFile({} as Qpdf, ['a\nb'])).toThrow();
   });
 });
 

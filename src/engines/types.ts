@@ -2,9 +2,12 @@
 // bytes, never fetch, and never touch the page. What they need from outside,
 // such as a PDF library that has to be loaded, comes in through `tools`.
 
-/** How far a job has got, in real units. */
+/**
+ * How far a job has got, in real units. A reading of `done: 0, total: 1` says one
+ * file is being read, before the work starts (Compress PDF's "Reading the file").
+ */
 export type Progress =
-  | { stage: 'reading' | 'working'; unit: 'file' | 'page'; done: number; total: number }
+  | { stage: 'reading' | 'working'; unit: 'file' | 'page' | 'picture'; done: number; total: number }
   | { stage: 'writing'; percent: number };
 
 /**
@@ -14,7 +17,12 @@ export type Progress =
  */
 export type EngineTools = Record<string, () => Promise<unknown>>;
 
-/** Turns input files into output files. */
+/**
+ * Turns input files into output files. An engine may give no files, meaning the
+ * input could not be improved; only a tool whose words say what that means
+ * (`noSmaller` in the registry) may do so. For any other tool the page treats
+ * no files as the engine's failure.
+ */
 export type Engine<Options = Record<string, never>> = (
   files: Uint8Array[],
   options: Options,
