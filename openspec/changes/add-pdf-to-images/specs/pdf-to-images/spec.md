@@ -135,7 +135,7 @@ When drawing fails, the engine cannot be fetched, memory runs out, the pictures 
 #### Scenario: A small file that would make huge pictures
 
 - **WHEN** a small file declares thousands of poster-sized pages
-- **THEN** the job stops once the pictures pass 1 GB, saying "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first, or choose JPG.", and the tab keeps working
+- **THEN** the job stops once the pictures pass 1 GB, saying "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.", and the tab keeps working
 
 #### Scenario: A page with deeply nested transparency
 
