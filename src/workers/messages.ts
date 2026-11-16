@@ -20,8 +20,15 @@ export type ToWorker =
   /** Closes the document kept open for thumbnails, such as when its file is removed. */
   | { type: 'close'; requestId: number; toolId: string };
 
-/** The cleaned base of the input's name, and the word for each file inside a zip. */
-export type ZipNaming = { stem: string; partSuffix: string };
+/**
+ * The cleaned base of the input's name, the word for each file inside a zip, and
+ * the files' extension: `pdf` when left out, or a picture's (PDF to JPG).
+ */
+export type ZipNaming = { stem: string; partSuffix: string; extension?: ZipExtension };
+
+/** The extensions a file inside a zip may have: a closed set, so no name the page sends can carry anything else. */
+export const zipExtensions = ['pdf', 'jpg', 'png'] as const;
+export type ZipExtension = (typeof zipExtensions)[number];
 
 /** The most a thumbnail may measure, in pixels; the page fits inside it. */
 export type ThumbnailBox = { width: number; height: number };
@@ -51,7 +58,12 @@ const idPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const refusedInStem = /[\\/\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069:*?"<>|]/;
 const isStem = (value: unknown) =>
   typeof value === 'string' && value.length >= 1 && value.length <= 100 && !refusedInStem.test(value) && !value.startsWith('.');
-const isZipNaming = (value: unknown) => isRecord(value) && isStem(value.stem) && typeof value.partSuffix === 'string' && idPattern.test(value.partSuffix);
+const isZipNaming = (value: unknown) =>
+  isRecord(value) &&
+  isStem(value.stem) &&
+  typeof value.partSuffix === 'string' &&
+  idPattern.test(value.partSuffix) &&
+  (value.extension === undefined || (zipExtensions as readonly unknown[]).includes(value.extension));
 
 /** True when a message the worker received has the shape of a `ToWorker` message. Anything else is ignored. */
 export function isToWorker(value: unknown): value is ToWorker {
@@ -105,7 +117,7 @@ function isOutcome(value: unknown): boolean {
   }
 }
 
-const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large'];
+const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large', 'too-many-pictures'];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
 export function isFromWorker(value: unknown): value is FromWorker {

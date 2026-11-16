@@ -28,9 +28,17 @@ export type ToolPage = {
   sentence: string;
   /** File types this URL accepts, when they differ from the tool's own list. */
   accepts?: string[];
-  /** Options already chosen when this URL opens, such as a target size. */
+  /** Options already chosen when this URL opens, such as a target size. Engine options only; the engine checks them. */
   preset?: Record<string, string | number | boolean>;
+  /**
+   * Widget words this URL says differently from the tool's, such as the main button of a
+   * page whose preset sets the result's format. Only these keys; `pageWords` in queries.ts merges them.
+   */
+  words?: PageWords;
 };
+
+/** The widget words a page may say differently from its tool's. */
+export type PageWords = Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';
@@ -73,6 +81,11 @@ export type ToolWidgetWords = {
   tooFewFiles: string;
   /** Put after the first input's name to name the result: "merged". Empty adds no word: "IMG_2041.pdf". */
   outputSuffix: string;
+  /**
+   * The extension of each output, alone or inside a zip, which the download's type follows.
+   * Left out, `pdf`. A page whose preset sets the format says it in its own words (PDF to JPG).
+   */
+  outputExtension?: 'pdf' | 'jpg' | 'png';
   /** How many files the tool needs before it can run. */
   minFiles: number;
   /** Whether the picker takes several files at once. */
@@ -536,6 +549,73 @@ export const tools: Tool[] = [
         'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'If the file had a password or restrictions, it still has them.',
       ],
+    },
+  },
+  {
+    // The first two rows of "Convert from PDF", one tool with two pages by the agent's choice, after the
+    // owner's Image to PDF decision (13 Nov 2026). Each page sets the format through its preset.
+    id: 'pdf-to-images',
+    group: 'from-pdf',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Each page links to the other; a page never links to itself (relatedItems in queries.ts).
+    related: ['pdf-to-jpg', 'pdf-to-png', 'jpg-to-pdf', 'extract-pdf-pages', 'compress-pdf', 'split-pdf'],
+    pages: [
+      {
+        slug: 'pdf-to-jpg',
+        name: 'PDF to JPG',
+        summary: 'Turn each page of a PDF into a JPG picture.',
+        title: 'Convert PDF to JPG in your browser - PDFkaro',
+        description: 'Turn each page of a PDF into a JPG picture. The file stays on your device and is not uploaded.',
+        heading: 'Convert PDF to JPG',
+        sentence: 'Turn each page of a PDF into a JPG picture. Files stay on your device.',
+        preset: { format: 'jpg' },
+        words: {
+          actionLabel: 'Convert to JPG and download',
+          outputExtension: 'jpg',
+          resultNotes: ['Each page is a JPG picture at 150 pixels to the inch. The PDF itself was not changed.'],
+        },
+      },
+      {
+        slug: 'pdf-to-png',
+        name: 'PDF to PNG',
+        summary: 'Turn each page of a PDF into a PNG picture.',
+        title: 'Convert PDF to PNG in your browser - PDFkaro',
+        description: 'Turn each page of a PDF into a PNG picture. The file stays on your device and is not uploaded.',
+        heading: 'Convert PDF to PNG',
+        sentence: 'Turn each page of a PDF into a PNG picture. Files stay on your device.',
+        preset: { format: 'png' },
+        words: {
+          actionLabel: 'Convert to PNG and download',
+          outputExtension: 'png',
+          resultNotes: ['Each page is a PNG picture at 150 pixels to the inch, without loss. The PDF itself was not changed.'],
+        },
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      // Each page names its own button, result notes and extension, above.
+      actionLabel: 'Convert and download',
+      writingLabel: 'Writing the zip',
+      doneHeading: 'Your download is ready',
+      failedHeading: 'The conversion did not finish.',
+      tooFewFiles: 'Choose a PDF file to convert.',
+      // The extension changes, so no word is added: report.pdf gives report.jpg, or report.zip for several pages.
+      outputSuffix: '',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'none',
+      memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      zipLimitAdvice: 'Split the file first, then convert the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'several',
+      partSuffix: 'page',
+      resultNotes: [],
     },
   },
 ];

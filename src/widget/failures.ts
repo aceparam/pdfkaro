@@ -7,10 +7,12 @@ import { fileCount, number, progressLine } from './format';
 import type { FailureKind } from './state';
 import { zipLimitSentence } from './zip-limits';
 
-const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
+const shared: Record<'memory' | 'engine-load' | 'engine' | 'too-many-pictures', string> = {
   memory: 'Your browser ran out of memory. Try fewer or smaller files.',
   'engine-load': 'The tool could not be loaded. Check your connection and try again.',
   engine: 'Something went wrong. Try again.',
+  // PDF to JPG and PDF to PNG stop at maxOutputBytes (zip-limits.ts), so the tab is not ended.
+  'too-many-pictures': 'The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.',
 };
 
 /** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileCount, finerSize, formatSize, outputName, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
+import { fileCount, finerSize, formatSize, outputName, outputType, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
 
 describe('counts and sizes', () => {
   it('says one page and many pages', () => {
@@ -83,6 +83,12 @@ describe('output names', () => {
 describe('an output name with no word added', () => {
   it('changes only the extension, for a tool whose result is another kind of file', () => {
     expect(outputName('IMG_2041.jpg', '')).toBe('IMG_2041.pdf');
+    // A picture of each page (PDF to JPG): the extension changes, no word is added.
+    expect(outputName('report.pdf', '', 'jpg')).toBe('report.jpg');
+    expect(outputName('report.pdf', '', 'png')).toBe('report.png');
+    expect(outputName('report.pdf', '', 'zip')).toBe('report.zip');
+    expect(partName('report', 'page', 1, 500, 'jpg')).toBe('report-page-001.jpg');
+    expect(partName('report', 'page', 12, 12, 'png')).toBe('report-page-12.png');
     expect(outputName('Screenshot 2026-11-15 at 09.12.png', '')).toBe('Screenshot 2026-11-15 at 09.12.pdf');
     expect(outputName('photo.JPEG', '')).toBe('photo.pdf');
     expect(outputName('.png', '')).toBe('document.pdf');
@@ -141,5 +147,14 @@ describe('the result line', () => {
     // Sizes that read differently are left as they are.
     expect(resultDetail({ size: 3441, was: 6057, pages: 3 })).toBe('3 KB, was 6 KB, 3 pages');
     expect(finerSize(1000, 900)).toBe('1,000 bytes');
+  });
+});
+
+describe('the type of a download', () => {
+  it('follows the extension', () => {
+    expect(outputType('pdf')).toBe('application/pdf');
+    expect(outputType('jpg')).toBe('image/jpeg');
+    expect(outputType('png')).toBe('image/png');
+    expect(outputType('zip')).toBe('application/zip');
   });
 });

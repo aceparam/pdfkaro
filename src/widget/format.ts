@@ -107,6 +107,20 @@ export function outputName(input: string, suffix: string, extension = 'pdf'): st
   return suffix === '' ? `${stem(input)}.${extension}` : `${stem(input)}-${suffix}.${extension}`;
 }
 
+/** The type a download is given, from its extension. */
+export function outputType(extension: 'pdf' | 'jpg' | 'png' | 'zip'): string {
+  switch (extension) {
+    case 'jpg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'zip':
+      return 'application/zip';
+    case 'pdf':
+      return 'application/pdf';
+  }
+}
+
 /**
  * The name of one file inside a zip: "report", "part", 3 of 12 gives
  * "report-part-03.pdf". Numbers are padded so the files sort in order.

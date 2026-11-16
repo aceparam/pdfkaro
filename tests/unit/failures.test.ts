@@ -22,6 +22,16 @@ describe('the failure sentence', () => {
   });
 });
 
+describe('the sentence for pictures past the most one job makes', () => {
+  it('names the 1 GB limit and one thing to try, whatever the tool own advice', async () => {
+    const { maxOutputBytes } = await import('../../src/widget/zip-limits');
+    const sentence = 'The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.';
+    expect(failureSentence('too-many-pictures', {})).toBe(sentence);
+    expect(failureSentence('too-many-pictures', { memoryAdvice: 'x', zipLimitAdvice: 'y' })).toBe(sentence);
+    expect(maxOutputBytes).toBe(1024 ** 3);
+  });
+});
+
 describe('the line above the bar', () => {
   it('says Starting for a tool that gives several files, then the files as they come, then the writing label', () => {
     const words = { writingLabel: 'Putting the files into one zip', outputs: 'several' as const };
@@ -101,5 +111,30 @@ describe('the notice for a very large picture', () => {
 
   it('says the job may run out of memory with the tool words', () => {
     expect(failureSentence('memory', { memoryAdvice: 'Try fewer pictures, or smaller ones.' })).toBe('Your browser ran out of memory. Try fewer pictures, or smaller ones.');
+  });
+});
+
+describe('the running count of outputs that Split and PDF to JPG share', async () => {
+  const { outputTally, TooBigForZip, TooManyPictures, zipMaxFiles: most } = await import('../../src/widget/zip-limits');
+
+  it('refuses at once more outputs than one zip can hold', () => {
+    expect(() => outputTally(most + 1)).toThrow(TooBigForZip);
+    expect(() => outputTally(most)).not.toThrow();
+  });
+
+  it('throws once the outputs pass what one zip holds, only when there are several', () => {
+    const several = outputTally(3, { zipBytes: () => 100 });
+    several.add(60);
+    expect(() => several.add(41)).toThrow(expect.objectContaining({ name: 'TooBigForZip', reason: 'bytes' }));
+    const one = outputTally(1, { zipBytes: () => 100 });
+    expect(() => one.add(1000)).not.toThrow();
+  });
+
+  it("throws TooManyPictures once the outputs pass the tool's own cap, for one output too", () => {
+    const one = outputTally(1, { most: 100 });
+    one.add(100);
+    expect(() => one.add(1)).toThrow(TooManyPictures);
+    const several = outputTally(5, { most: 10 });
+    expect(() => several.add(11)).toThrow(expect.objectContaining({ name: 'TooManyPictures' }));
   });
 });

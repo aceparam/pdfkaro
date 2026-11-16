@@ -13,6 +13,8 @@ type Props = {
   /** File types the tool accepts, from the registry. */
   accepts: string[];
   words: ToolWidgetWords;
+  /** The page's preset: engine options every job starts from, such as PDF to JPG's format. */
+  preset?: Record<string, string | number | boolean>;
 };
 
 export type FileBatch = { id: number; files: File[] };
@@ -21,7 +23,7 @@ export type FileBatch = { id: number; files: File[] };
  * The one island on every tool page. Before a file is picked it is only the
  * file picker; after, it loads the workspace, which does the rest.
  */
-export function ToolWidget({ toolId, accepts, words }: Props) {
+export function ToolWidget({ toolId, accepts, words, preset }: Props) {
   const [batch, setBatch] = useState<FileBatch | null>(null);
   const [returned, setReturned] = useState(false);
   const [message, setMessage] = useState('');
@@ -71,7 +73,7 @@ export function ToolWidget({ toolId, accepts, words }: Props) {
         </>
       ) : (
         <Suspense fallback={<p>Getting ready</p>}>
-          <ToolWorkspace toolId={toolId} accepts={accepts} words={words} firstFiles={batch.files} onEmpty={onEmpty} />
+          <ToolWorkspace toolId={toolId} accepts={accepts} words={words} preset={preset} firstFiles={batch.files} onEmpty={onEmpty} />
         </Suspense>
       )}
       <p role="status" className={message ? styles.message : 'visually-hidden'}>

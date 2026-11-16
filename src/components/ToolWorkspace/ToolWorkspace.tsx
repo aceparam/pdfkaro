@@ -23,6 +23,8 @@ type Props = {
   toolId: string;
   accepts: string[];
   words: ToolWidgetWords;
+  /** The page's preset, passed on to every job. */
+  preset?: Record<string, string | number | boolean>;
   firstFiles: File[];
   /**
    * Called when no file is left, so the widget shows the picker alone again.
@@ -57,7 +59,7 @@ function detailFor(file: FileEntry, listPages = true): string {
 }
 
 /** Everything after the first pick: the list, problems, progress, the result. */
-export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEmpty }: Props) {
+export default function ToolWorkspace({ toolId, accepts, words, preset, firstFiles, onEmpty }: Props) {
   const [announcement, setAnnouncementText] = useState('Getting ready');
   // The same words twice in a row would not change the page, so a screen
   // reader would not say them again; a no-break space tells the two apart.
@@ -77,7 +79,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
     [words.writingLabel],
   );
 
-  const run = useToolRun({ toolId, accepts, words, createWorker, onProgress: announceProgress });
+  const run = useToolRun({ toolId, accepts, words, preset, createWorker, onProgress: announceProgress });
   const { state, result, thumbnails } = run;
 
   const summaryRef = useRef<HTMLParagraphElement | null>(null);

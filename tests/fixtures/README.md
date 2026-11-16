@@ -390,3 +390,45 @@ Each file was compressed in Node with the same qpdf the browser uses (`tests/uni
 | `compress-password.pdf` | 36,730 | 12,707 | With its password: the photo scaled to 600 by 600 (150 to the inch across 4 inches), and the result asks for the same password with the same encryption and restrictions. Without it, the job fails |
 
 The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI. The multilingual file is still missing.
+
+### PDF to JPG and PDF to PNG (`src/engines/tools/pdf-to-images.ts`)
+
+Each file was converted in Node through the real PDF.js and the same fixed helper data the browser gets, with `@napi-rs/canvas` drawing and encoding in place of the worker's `OffscreenCanvas` (`tests/unit/pdf-to-images.test.ts`). Every picture is checked by its first bytes and decoded; each page is drawn at 150 pixels to the inch of its own size (an A4 page is 1240 by 1754), turned by its `/Rotate`, on white, with progress "Page n of m" for each page. Sizes in bytes are the pictures added up, from a run on 16 Nov 2026; the browser's encoders give other sizes.
+
+| File | Pictures | PNG | JPG | Outcome |
+| --- | --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn; each matches its thumbnail scaled down. qpdf's warning on `warning.pdf` does not stop the job |
+| `pages-500.pdf` | 500, A4 | 10,026,225 | 9,099,672 | Drawn in about 38 seconds (PNG) and 13 seconds (JPG) in Node. With the zip's copy, the peak is about twice the pictures, about 20 MB for PNG |
+| `scanned.pdf` | 2, A4 | 78,035 | 427,218 | Drawn |
+| `password.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn with `open-sesame`; without it, or with a wrong one, the job fails |
+| `restricted.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn with no password |
+| `damaged-xref.pdf` | | | | Damaged before the job, as qpdf cannot read it, so the page never runs it. PDF.js alone would repair it and draw three pages |
+| `damaged-cut.pdf`, `not-a-pdf.pdf` | | | | Damaged before the job; the job fails if it is run (PDF.js: invalid PDF structure) |
+| `form.pdf` | 1, A4 | 22,018 | 21,487 | The field `name` is drawn with `Sample text` |
+| `mixed.pdf` | 4 | 66,142 | 61,295 | 1240 by 1754; 1650 by 1275 (Letter on its side); 1240 by 875 (A5 turned a quarter, its label down the right-hand side); 1240 by 1754 (upside down) |
+| `rich.pdf` | 2, A4 | 40,245 | 37,042 | Drawn; the link cannot be clicked in a picture |
+| `images.pdf` | 1, A4 | 25,041 | 38,566 | Drawn, with the JPEG 2000 picture and the CMYK colours |
+| `tagged.pdf` | 2, 625 by 625 | 24,823 | 24,416 | Drawn. In the browser, its PNGs hold no text chunk, its JPGs no APP1 or comment segment, and neither holds a `SECRET-` marker (end-to-end test) |
+| `compress-scans.pdf` | 3, A4 | 257,581 | 330,769 | Drawn |
+| `compress-lossless.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf` | 1, 1, 3, 3, A4 | | | Drawn |
+| `compress-kinds.pdf` | 7, 150 by 150 | 16,120 | 29,607 | Drawn, every kind of picture it holds |
+| `compress-bomb-attachment.pdf` | 1, A4 | 22,911 | 20,589 | Drawn; the 1 GB attachment is never read |
+| `compress-flate-bomb.pdf` | 1, 150 by 150 | 493 | 908 | Drawn in about half a second; PDF.js decodes the picture within its own 16 million pixel cap |
+| `compress-jpeg-mismatch.pdf` | 2, 75 by 75 | 4,385 | 4,127 | Drawn |
+| `compress-json-bomb.pdf` | 1, 150 by 150 | 2,253 | 8,998 | Drawn in under 0.1 seconds |
+| `compress-password.pdf` | 1, 600 by 600 | 35,946 | 16,263 | Drawn with `open-sesame` |
+
+Files made in the test:
+
+| File | Outcome |
+| --- | --- |
+| A page of 100 by 100 inches | 4096 by 4096, not 15000 by 15000 |
+| A page of 50 by 100 inches | 2896 by 5793, under 16,777,216 pixels |
+| 1,000 poster pages sharing one drawing (a small file) | Stopped by the cap on what one job makes (made small in the test; 1 GB on the page) after the fourth page, with `TooManyPictures`, sorted as `too-many-pictures` and its own sentence |
+| A page whose drawing sits in four nested knockout groups | Refused by the canvas budget (four times the picture's pixels) at 150 by 150; the job fails with the engine sentence. One group draws |
+| A stand-in PDF.js that claims 70,000 pages | Refused before any page is drawn: more files than one zip holds |
+| A stand-in PDF.js worker that stops while a page is drawn | The job fails at once with "PDF.js stopped.", not left on "Page 1 of 3" |
+
+The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was converted by hand in Node on 16 Nov 2026: one picture, 26,341 bytes as PNG and 23,552 as JPG, in under half a second each. It is not run in CI.
+
+The multilingual file is still missing, so Chinese, Japanese and Korean text cannot be checked against the test set. PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data holds no character maps; the page text says such text may be missing.

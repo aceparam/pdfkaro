@@ -26,7 +26,7 @@ import { inflateLimited, jpegForPdf, walkJpeg, type InflateClass } from '../pict
 import { freshQpdf, passwordFrom } from '../plain';
 import { isDict, isRef, passwordArgsFor, rawBatches, readDictionaries, readRawStreams, writeUpdate, type Dict, type ObjectEntry, type StreamReplacement } from '../qpdf-json';
 import { fittedSize, scaleDown, unpredict } from '../resample';
-import type { CanvasMaker } from '../thumbnail';
+import type { JpegCanvasMaker } from '../thumbnail';
 import type { Engine, EngineTools, Inspector } from '../types';
 
 type Options = { passwords?: unknown };
@@ -219,8 +219,6 @@ export function newDictionary(old: Dict, size: { width: number; height: number }
 type Decoded = { image: unknown; close(): void };
 /** The browser's image decoder, at `width` by `height`, with colours left as they are. */
 export type PictureDecoder = { decode(bytes: Uint8Array, width: number, height: number, options?: { colours?: 'none' }): Promise<Decoded> };
-/** A canvas maker that can also encode its canvas as a JPG. */
-export type JpegCanvasMaker = CanvasMaker & { jpeg(canvas: unknown, quality: number): Promise<Uint8Array> };
 /** fflate's streaming deflater. */
 export type DeflateClass = new (options: { level: 9 }, ondata: (chunk: Uint8Array, final: boolean) => void) => { push(chunk: Uint8Array, final?: boolean): void };
 type Fflate = { Inflate: InflateClass; Deflate: DeflateClass };

@@ -20,7 +20,7 @@ import { updateJson } from '../qpdf-json';
 import { freshQpdf, passwordFrom, plainCopy } from '../plain';
 import { finished } from '../qpdf';
 import type { Engine, Inspector } from '../types';
-import { TooBigForZip, zipMaxBytes, zipMaxFiles } from '../../widget/zip-limits';
+import { outputTally, zipMaxBytes } from '../../widget/zip-limits';
 
 type Options = { passwords?: unknown; cuts?: unknown };
 type Part = { first: number; last: number };
@@ -77,12 +77,11 @@ export function makeRun(maxBytes: (files: number) => number = zipMaxBytes): Engi
 
     const { plain, pages } = await plainCopy(tools, file, password);
     const total = partCount(pages, cuts);
-    if (total > zipMaxFiles) throw new TooBigForZip('files');
+    const tally = outputTally(total, { zipBytes: maxBytes });
     const list = parts(pages, cuts);
     const structure = await readStructure(() => freshQpdf(tools, plain), []);
 
     const outputs: Uint8Array[] = [];
-    let bytes = 0;
     for (const [index, part] of list.entries()) {
       const isFirst = index === 0;
       const qpdf = await freshQpdf(tools, plain);
@@ -99,8 +98,7 @@ export function makeRun(maxBytes: (files: number) => number = zipMaxBytes): Engi
       const output = qpdf.read('/out.pdf');
       if (!isFirst && carriesAttachment(await freshQpdf(tools, output), '/in.pdf'))
         throw new Error(`Part ${index + 1} still carries an attached file.`);
-      bytes += output.byteLength;
-      if (total > 1 && bytes > maxBytes(total)) throw new TooBigForZip('bytes');
+      tally.add(output.byteLength);
       outputs.push(output);
       onProgress({ stage: 'working', unit: 'file', done: index + 1, total });
     }

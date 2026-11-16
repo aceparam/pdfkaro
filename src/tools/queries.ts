@@ -2,7 +2,7 @@
 // Node and could be reused by an app with different views.
 
 import { withBase } from '../site';
-import type { Group, GroupId, Tool, ToolPage } from './registry';
+import type { Group, GroupId, PageWords, Tool, ToolPage, ToolWidgetWords } from './registry';
 
 /** What a list of tools shows for one page. */
 export type ListItem = {
@@ -52,13 +52,33 @@ export function groupsWithItems(groups: Group[], tools: Tool[], base: string): G
     .filter((group) => group.items.length > 0);
 }
 
-/** The related tools of a tool that are published, in the order the tool names them. */
-export function relatedItems(tools: Tool[], tool: Tool, base: string): ListItem[] {
+/**
+ * The related tools of a tool that are published, in the order the tool names them. A tool with
+ * several pages may name its own other pages; `current`, the page being built, is never linked.
+ */
+export function relatedItems(tools: Tool[], tool: Tool, base: string, current?: ToolPage): ListItem[] {
   const published = new Map(allPages(tools).map(({ page }) => [page.slug, page]));
   return tool.related.flatMap((slug) => {
     const page = published.get(slug);
-    return page ? [toListItem(page, base)] : [];
+    return page && slug !== current?.slug ? [toListItem(page, base)] : [];
   });
+}
+
+/** The keys of the widget words a page may say differently from its tool's. */
+export const pageWordKeys = ['actionLabel', 'resultNotes', 'outputExtension'] as const satisfies readonly (keyof PageWords)[];
+
+/**
+ * The widget words for one page: the tool's, with the page's own words in place of
+ * them for the keys a page may change, and no others. Undefined for a tool with no widget.
+ */
+export function pageWords(tool: Tool, page: ToolPage): ToolWidgetWords | undefined {
+  if (!tool.widget) return undefined;
+  const own: Record<string, unknown> = {};
+  for (const key of pageWordKeys) {
+    const value = page.words?.[key];
+    if (value !== undefined) own[key] = value;
+  }
+  return { ...tool.widget, ...own } as ToolWidgetWords;
 }
 
 /** The file types a page accepts: its own list if it has one, else the tool's. */

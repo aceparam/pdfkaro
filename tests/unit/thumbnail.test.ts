@@ -2,9 +2,10 @@
 // data, drawing through @napi-rs/canvas in place of the worker's OffscreenCanvas.
 
 import { describe, expect, it } from 'vitest';
-import { openDocument, renderPage, safeOptions } from '../../src/engines/thumbnail';
+import { CanvasBudgetError, maxImagePixels, openDocument, pictureSize, renderPage, safeOptions, type PdfjsModule } from '../../src/engines/thumbnail';
 import type { EngineTools } from '../../src/engines/types';
-import { box, fixture, look, tools } from './thumbnail-helpers';
+import { PDFDocument, PDFName } from '@cantoo/pdf-lib';
+import { box, canvasMaker, fixture, look, tools } from './thumbnail-helpers';
 
 // The JPEG 2000 decoder is checked in thumbnail-decoders.test.ts: PDF.js keeps a
 // decoder once loaded, so that test needs a fresh copy of PDF.js.
@@ -114,3 +115,145 @@ describe('the options given to PDF.js', () => {
     expect(() => pdfjs.getDocument({ ...safeOptions, wasmUrl: 'data:,', data: fixture('text.pdf') })).toThrow(/trailing slash/);
   });
 });
+
+describe('the size of a whole page', () => {
+  it('keeps a page under the cap as it is, rounded, each side at least 1', () => {
+    expect(pictureSize(1239.58, 1754.17, maxImagePixels)).toEqual({ width: 1240, height: 1754, shrink: 1 });
+    expect(pictureSize(0.2, 0.3, maxImagePixels)).toMatchObject({ width: 1, height: 1 });
+  });
+
+  it('scales a poster down to the cap, keeping its shape: 4096 by 4096 for a square, about 2896 by 5793 at 1:2', () => {
+    expect(pictureSize(15000, 15000, maxImagePixels)).toMatchObject({ width: 4096, height: 4096 });
+    const tall = pictureSize(7500, 15000, maxImagePixels);
+    expect(tall).toMatchObject({ width: 2896, height: 5793 });
+    expect(tall.width * tall.height).toBeLessThanOrEqual(16_777_216);
+  });
+
+  it('never passes the cap, however the sides round, even for a page too thin to keep its shape', () => {
+    for (const [width, height] of [[10001, 10003], [3, 99999999], [99999999, 3], [0.001, 1e9], [12345.6, 6543.21]]) {
+      const size = pictureSize(width!, height!, maxImagePixels);
+      expect(size.width * size.height, `${width} by ${height}`).toBeLessThanOrEqual(maxImagePixels);
+      expect(Math.min(size.width, size.height)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('refuses a page with no size', () => {
+    for (const [width, height] of [[0, 10], [10, -1], [Number.NaN, 10], [Number.POSITIVE_INFINITY, 10]]) expect(() => pictureSize(width!, height!, 100)).toThrow();
+  });
+});
+
+describe('drawing a whole page', () => {
+  const scale = 150 / 72;
+
+  it('draws an A4 page at 150 to the inch as PNG and as JPG, each checked by its first bytes', async () => {
+    const doc = await openDocument(fixture('text.pdf'), undefined, tools);
+    const png = await doc.draw(1, { scale, maxPixels: maxImagePixels, format: 'png' });
+    const jpg = await doc.draw(1, { scale, maxPixels: maxImagePixels, format: 'jpg', quality: 0.85 });
+    expect([png.width, png.height, jpg.width, jpg.height]).toEqual([1240, 1754, 1240, 1754]);
+    expect([...png.bytes.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect([...jpg.bytes.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+    expect(await look(png.bytes)).toMatchObject({ width: 1240, height: 1754 });
+    expect((await look(jpg.bytes)).ink).toBeGreaterThan(0.0005);
+    await doc.close();
+  });
+
+  it("follows each page's turn: mixed.pdf's Letter page on its side and its A5 page turned a quarter are drawn wide", async () => {
+    const doc = await openDocument(fixture('mixed.pdf'), undefined, tools);
+    const sizes = [];
+    for (let page = 1; page <= 4; page++) {
+      const drawn = await doc.draw(page, { scale, maxPixels: maxImagePixels, format: 'png' });
+      sizes.push([drawn.width, drawn.height]);
+    }
+    expect(sizes).toEqual([[1240, 1754], [1650, 1275], [1240, 875], [1240, 1754]]);
+    await doc.close();
+  });
+
+  it('draws to the cap it is given, keeping the shape', async () => {
+    const doc = await openDocument(fixture('text.pdf'), undefined, tools);
+    const drawn = await doc.draw(1, { scale, maxPixels: 10_000, format: 'png' });
+    expect(drawn.width * drawn.height).toBeLessThanOrEqual(10_000);
+    expect(drawn.height / drawn.width).toBeCloseTo(842 / 595, 1);
+    await doc.close();
+  });
+
+  it('refuses a JPG with no JPG encoder, a format it does not know, a bad scale and a page that does not exist', async () => {
+    const plain = { ...tools, canvas: async () => canvasMaker };
+    const doc = await openDocument(fixture('text.pdf'), undefined, plain);
+    await expect(doc.draw(1, { scale, maxPixels: maxImagePixels, format: 'jpg' })).rejects.toThrow(/JPG encoder/);
+    await expect(doc.draw(1, { scale, maxPixels: maxImagePixels, format: 'gif' as 'png' })).rejects.toThrow(/format/);
+    await expect(doc.draw(1, { scale: 0, maxPixels: maxImagePixels, format: 'png' })).rejects.toThrow(/scale/);
+    await expect(doc.draw(4, { scale, maxPixels: maxImagePixels, format: 'png' })).rejects.toThrow(/No such page/);
+    await doc.close();
+    await expect(doc.draw(1, { scale, maxPixels: maxImagePixels, format: 'png' })).rejects.toThrow(/closed/);
+  });
+
+  it("counts PDF.js's own canvases and the picture's against four times the cap, and lets each go once drawn", async () => {
+    // Three nested knockout groups each ask PDF.js for two page-sized canvases: with the picture, seven at once.
+    const file = await PDFDocument.create();
+    const page = file.addPage([72, 72]);
+    const context = file.context;
+    let inner = context.register(context.stream('1 0 0 rg 0 0 72 72 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 72, 72] }));
+    for (let level = 0; level < 3; level++) {
+      inner = context.register(context.stream('/X Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 72, 72], Group: { S: 'Transparency', K: true, I: true }, Resources: { XObject: { X: inner } } }));
+    }
+    page.node.set(PDFName.of('Resources'), context.obj({ XObject: { X: inner } }));
+    page.node.set(PDFName.of('Contents'), context.register(context.stream('/X Do')));
+    const bytes = await file.save();
+    // Counting what the canvas maker holds: every canvas made is released by the end.
+    let live = 0;
+    const counting = {
+      ...tools,
+      canvas: async () => ({
+        ...(await tools.canvas!()) as typeof canvasMaker,
+        create(width: number, height: number) {
+          live++;
+          return canvasMaker.create(width, height);
+        },
+        release(canvas: unknown) {
+          live--;
+          canvasMaker.release(canvas);
+        },
+      }),
+    };
+    const doc = await openDocument(bytes.slice(), undefined, counting);
+    // The page fits a budget large enough for seven page-sized canvases, and every canvas is let go after.
+    const drawn = await doc.draw(1, { scale, maxPixels: 7 * 150 * 150, format: 'png' });
+    expect(drawn).toMatchObject({ width: 150, height: 150 });
+    expect((await look(drawn.bytes)).ink).toBeGreaterThan(0.9);
+    expect(live).toBe(0);
+    const failed = await doc.draw(1, { scale, maxPixels: 150 * 150, format: 'png' }).catch((error: unknown) => error);
+    expect(failed).toBeInstanceOf(CanvasBudgetError);
+    // PDF.js does not let go of the canvases a failed drawing held; they stay counted, and go with the worker,
+    // which is ended after every job. The job itself has failed.
+    await doc.close();
+  });
+
+  it('draws thumbnails as before: inside the box, with annotations drawn as PDF.js draws them by default', async () => {
+    const real = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsModule;
+    const modes: unknown[] = [];
+    const watching: PdfjsModule = {
+      AnnotationMode: real.AnnotationMode,
+      getDocument(options) {
+        const task = real.getDocument(options);
+        return {
+          destroy: () => task.destroy(),
+          promise: task.promise.then((doc) => ({
+            numPages: doc.numPages,
+            getPage: async (number: number) => {
+              const page = await doc.getPage(number);
+              return {
+                getViewport: (given: { scale: number }) => page.getViewport(given),
+                render: (given: Record<string, unknown>) => (modes.push(given.annotationMode), page.render(given)),
+                cleanup: () => page.cleanup(),
+              };
+            },
+          })),
+        };
+      },
+    };
+    const png = await renderPage(fixture('text.pdf'), 1, box, undefined, { ...tools, pdfjs: async () => watching });
+    expect(await look(png)).toMatchObject({ width: 96, height: 136 });
+    expect(modes).toEqual([real.AnnotationMode.ENABLE]);
+  });
+});
+
