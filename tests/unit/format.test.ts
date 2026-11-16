@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileCount, formatSize, outputName, pageCount, partName, progressFraction, progressLine, stem } from '../../src/widget/format';
+import { fileCount, finerSize, formatSize, outputName, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
 
 describe('counts and sizes', () => {
   it('says one page and many pages', () => {
@@ -29,6 +29,30 @@ describe('progress', () => {
     expect(progressFraction({ stage: 'reading', unit: 'file', done: 4, total: 4 })).toBeCloseTo(0.2);
     expect(progressFraction({ stage: 'writing', percent: 50 })).toBeCloseTo(0.6);
     expect(progressFraction({ stage: 'writing', percent: 100 })).toBeCloseTo(1);
+  });
+
+  it('says "Reading the file" for one file read before the work, and leaves every other reading as it was', () => {
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 0, total: 1 }, 'x')).toBe('Reading the file');
+    // Merge PDF's readings, and any reading that has counted something or has more than one file.
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 1, total: 1 }, 'x')).toBe('Reading file 1 of 1');
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 1, total: 2 }, 'x')).toBe('Reading file 1 of 2');
+    expect(progressLine({ stage: 'reading', unit: 'file', done: 0, total: 2 }, 'x')).toBe('Reading file 0 of 2');
+    expect(progressLine({ stage: 'working', unit: 'file', done: 0, total: 1 }, 'x')).toBe('File 0 of 1');
+    expect(progressLine({ stage: 'reading', unit: 'page', done: 0, total: 1 }, 'x')).toBe('Page 0 of 1');
+    expect(progressFraction({ stage: 'reading', unit: 'file', done: 0, total: 1 })).toBe(0);
+  });
+
+  it('counts pictures, filling 0.2 to 0.8, and leaves the last fifth for writing from 75%', () => {
+    expect(progressLine({ stage: 'working', unit: 'picture', done: 3, total: 40 }, 'x')).toBe('Picture 3 of 40');
+    expect(progressLine({ stage: 'working', unit: 'picture', done: 1200, total: 3000 }, 'x')).toBe('Picture 1,200 of 3,000');
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 0, total: 40 })).toBeCloseTo(0.2);
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 20, total: 40 })).toBeCloseTo(0.5);
+    expect(progressFraction({ stage: 'working', unit: 'picture', done: 40, total: 40 })).toBeCloseTo(0.8);
+    expect(progressFraction({ stage: 'writing', percent: 75 })).toBeCloseTo(0.8);
+    expect(progressFraction({ stage: 'writing', percent: 99 })).toBeLessThan(1);
+    // Pages and files still fill to the end.
+    expect(progressFraction({ stage: 'working', unit: 'page', done: 40, total: 40 })).toBeCloseTo(1);
+    expect(progressFraction({ stage: 'working', unit: 'file', done: 2, total: 4 })).toBeCloseTo(0.6);
   });
 
   it('never goes outside 0 to 1, even with odd numbers', () => {
@@ -95,5 +119,27 @@ describe('the files inside a zip', () => {
     expect(partName('report', 'part', 7, 500)).toBe('report-part-007.pdf');
     const names = Array.from({ length: 12 }, (_, index) => partName('r', 'part', index + 1, 12));
     expect([...names].sort()).toEqual(names);
+  });
+});
+
+describe('the result line', () => {
+  it('gives the size, then "was" and the old size for a tool that makes files smaller, then the pages', () => {
+    const mb = 1024 * 1024;
+    expect(resultDetail({ size: 4.2 * mb, was: 11.8 * mb, pages: 64 })).toBe('4.2 MB, was 11.8 MB, 64 pages');
+    expect(resultDetail({ size: 11.6 * mb, pages: 120 })).toBe('11.6 MB, 120 pages');
+    expect(resultDetail({ size: 3 * mb, parts: 3 })).toBe('3 files, 3.0 MB');
+  });
+
+  it('says both sizes one unit finer when they would read the same, with a thousands separator', () => {
+    const mb = 1024 * 1024;
+    // rich.pdf: 2,064 bytes become 1,676, both "2 KB".
+    expect(resultDetail({ size: 1676, was: 2064, pages: 2 })).toBe('1,676 bytes, was 2,064 bytes, 2 pages');
+    // 5.02 MB become 4.97 MB, both "5.0 MB".
+    expect(formatSize(4.97 * mb)).toBe(formatSize(5.02 * mb));
+    expect(resultDetail({ size: 4.97 * mb, was: 5.02 * mb })).toBe('5,089 KB, was 5,140 KB');
+    expect(resultDetail({ size: 2.51 * 1024 * mb, was: 2.54 * 1024 * mb })).toBe('2,570 MB, was 2,601 MB');
+    // Sizes that read differently are left as they are.
+    expect(resultDetail({ size: 3441, was: 6057, pages: 3 })).toBe('3 KB, was 6 KB, 3 pages');
+    expect(finerSize(1000, 900)).toBe('1,000 bytes');
   });
 });

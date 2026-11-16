@@ -85,9 +85,9 @@ export function readOrientation(tiff: Uint8Array): Orientation {
 // JPG
 
 /** One part of a JPG between markers: its marker, where it starts (at FF) and ends, and where its data starts. */
-type Segment = { marker: number; start: number; end: number; data: number };
+export type Segment = { marker: number; start: number; end: number; data: number };
 
-type JpegWalk =
+export type JpegWalk =
   | { kind: 'ok'; segments: Segment[]; frame: { marker: number; precision: number; width: number; height: number; components: number }; eoi: number }
   | { kind: 'damaged' }
   | { kind: 'unsupported' };
@@ -98,8 +98,9 @@ const isSof = (marker: number) => marker >= 0xc0 && marker <= 0xcf && marker !==
  * Walks a JPG's markers from its start through every scan to the first end of
  * image. Inside scan data, FF00 and FFD0 to FFD7 are data and any other marker
  * starts a segment. Nothing after the first end of image is looked at.
+ * Exported for Compress PDF, which compares a JPG's frame with its PDF dictionary before it is decoded.
  */
-function walkJpeg(bytes: Uint8Array): JpegWalk {
+export function walkJpeg(bytes: Uint8Array): JpegWalk {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return { kind: 'damaged' };
   const segments: Segment[] = [{ marker: 0xd8, start: 0, end: 2, data: 2 }];
   let frame: Extract<JpegWalk, { kind: 'ok' }>['frame'] | undefined;

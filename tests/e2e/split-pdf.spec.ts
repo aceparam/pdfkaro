@@ -227,7 +227,7 @@ test.describe('marking cuts and splitting', () => {
     await expect(page.getByRole('heading', { name: 'The split did not finish.' })).toBeFocused({ timeout: 30000 });
     await expect(page.getByText('The tool could not be loaded. Check your connection and try again.')).toBeVisible();
     await context.unroute(/\/_astro\/fflate-/);
-    await page.getByRole('button', { name: 'Go back to your files' }).click();
+    await page.getByRole('button', { name: 'Go back to your file', exact: true }).click();
     await expect(cutLine(page)).toHaveText('Cut after page 1. You will get 2 files.');
   });
 });

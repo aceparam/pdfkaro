@@ -11,8 +11,9 @@
 // `writePages`, writes any list of pages in any order through an argument file
 // and checks the result; a tool that keeps every page (Reorder) calls it alone.
 
-import { outlineUpdate, readStructure, updateJson } from './outline';
+import { outlineUpdate, readStructure } from './outline';
 import { finished, qpdfFrom, saidInvalidPassword, type Qpdf } from './qpdf';
+import { callWithArgumentFile, updateJson } from './qpdf-json';
 import type { EngineTools } from './types';
 
 /** The password given for the one file, if any. */
@@ -77,18 +78,6 @@ export function pageList(pages: readonly number[]): string {
   }
   parts.push(start === end ? `${start}` : `${start}-${end}`);
   return parts.join(',');
-}
-
-/**
- * Runs qpdf with its arguments in an argument file, one per line, because qpdf
- * copies command-line arguments onto its small stack and a long page list
- * would overflow it. Every argument is a made-up path, an option or a page
- * list built from checked page numbers, in any order, so none holds a line break.
- */
-export function callWithArgumentFile(qpdf: Qpdf, args: readonly string[]): { code: number } {
-  if (args.some((arg) => /[\r\n]/.test(arg))) throw new Error('An argument held a line break.');
-  qpdf.write('/args', new TextEncoder().encode(`${args.join('\n')}\n`));
-  return qpdf.call(['@/args']);
 }
 
 /**

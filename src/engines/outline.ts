@@ -6,10 +6,9 @@
 // a log, an error message or a failure.
 
 import { finished, type Qpdf } from './qpdf';
+import { isDict, isRef, json, objectArg, objects, objectsPerCall, type Dict } from './qpdf-json';
 
-export type Dict = Record<string, unknown>;
-export const isRef = (value: unknown): value is string => typeof value === 'string' && /^\d+ \d+ R$/.test(value);
-export const isDict = (value: unknown): value is Dict => typeof value === 'object' && value !== null && !Array.isArray(value);
+export { isDict, isRef, type Dict };
 
 // ---------------------------------------------------------------------------
 // Outlines
@@ -183,58 +182,8 @@ export function outlineUpdate(structure: Structure, keep: (page: number) => bool
   return update;
 }
 
-/** The text of qpdf's --update-from-json file, always built from objects. */
-export function updateJson(maxObjectId: number, update: Map<string, Dict>): string {
-  const objects: Record<string, { value: Dict }> = {};
-  for (const [id, value] of update) objects[`obj:${id}`] = { value };
-  return JSON.stringify({
-    qpdf: [
-      {
-        jsonversion: 2,
-        pushedinheritedpageresources: false,
-        calledgetallpages: false,
-        maxobjectid: maxObjectId,
-      },
-      objects,
-    ],
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Reading the input once
-
-const objectArg = (id: string) => {
-  const [number, generation] = id.split(' ');
-  return `--json-object=${number},${generation}`;
-};
-
-export function json(qpdf: Qpdf, args: string[]): Dict {
-  const { code, out } = qpdf.call(['--json=2', ...args]);
-  if (!finished(code)) throw new Error('qpdf could not describe the file.');
-  const parsed: unknown = JSON.parse(out);
-  if (!isDict(parsed)) throw new Error('qpdf gave an unexpected answer.');
-  return parsed;
-}
-
-/** The dictionaries of these objects, and the file's highest object number. */
-export function objects(qpdf: Qpdf, passwordArgs: string[], ids: string[]): { max: number; values: Map<string, Dict>; trailer: Dict | null } {
-  const result = json(qpdf, [...passwordArgs, '--json-key=qpdf', '--json-object=trailer', ...ids.map(objectArg), '/in.pdf']);
-  const [header, body] = Array.isArray(result.qpdf) ? result.qpdf : [];
-  const max = isDict(header) && Number.isInteger(header.maxobjectid) ? (header.maxobjectid as number) : 0;
-  const values = new Map<string, Dict>();
-  let trailer: Dict | null = null;
-  if (isDict(body)) {
-    for (const [key, entry] of Object.entries(body)) {
-      if (!isDict(entry) || !isDict(entry.value)) continue;
-      if (key === 'trailer') trailer = entry.value;
-      else if (key.startsWith('obj:')) values.set(key.slice(4), entry.value);
-    }
-  }
-  return { max, values, trailer };
-}
-
-/** How many objects one qpdf call is asked for: each is an argument, and qpdf's arguments sit on its small stack. */
-export const objectsPerCall = 200;
 
 export async function readStructure(fresh: () => Promise<Qpdf>, passwordArgs: string[]): Promise<Structure> {
   const qpdf = await fresh();

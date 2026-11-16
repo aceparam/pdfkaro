@@ -10,6 +10,7 @@ import { inspectPdf } from '../../src/engines/inspect';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import { mergeArgs, run } from '../../src/engines/tools/merge-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
+import { progressLine } from '../../src/widget/format';
 
 const require = createRequire(import.meta.url);
 const wasm = require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
@@ -150,6 +151,13 @@ describe('merging', () => {
     expect(qpdf.call(['--qdf', '--object-streams=disable', '/check.pdf', '/plain.pdf']).code).toBe(0);
     const plain = Buffer.from(qpdf.read('/plain.pdf')).toString('latin1');
     for (const words of ['Ordinary document, page 1', 'Ordinary document, page 3']) expect(plain).toContain(`(${words}) Tj`);
+  });
+
+  it('its reading lines stay "Reading file n of m", even for the first of two, never "Reading the file"', async () => {
+    const { progress } = await merge(['text.pdf', 'mixed.pdf']);
+    const lines = progress.map((step) => progressLine(step, 'Writing the merged file'));
+    expect(lines.slice(0, 2)).toEqual(['Reading file 1 of 2', 'Reading file 2 of 2']);
+    expect(lines).not.toContain('Reading the file');
   });
 
   it('reports each file as it is read, then write progress that only goes up', async () => {

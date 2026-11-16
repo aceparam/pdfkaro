@@ -200,7 +200,7 @@ describe('PasswordField', () => {
 
 describe('Result', () => {
   const html = renderToStaticMarkup(
-    <Result heading="Your merged file is ready" name="report-merged.pdf" detail="11.6 MB, 120 pages" href="blob:abc" notes={['Bookmarks come from the first file only.']} onStartAgain={noop} />,
+    <Result heading="Your merged file is ready" file={{ name: 'report-merged.pdf', detail: '11.6 MB, 120 pages', href: 'blob:abc' }} notes={['Bookmarks come from the first file only.']} onStartAgain={noop} />,
   );
 
   it('offers the file under its name, and starts nothing by itself', () => {
@@ -213,6 +213,33 @@ describe('Result', () => {
     expect(html).toContain('<h2 tabindex="-1"');
     expect(html).toContain('Bookmarks come from the first file only.');
     expect(html).toContain('>Start again</button>');
+  });
+
+  it('shows "was" and the old size when given them', () => {
+    const was = renderToStaticMarkup(
+      <Result heading="Your compressed file is ready" file={{ name: 'report-compressed.pdf', detail: '4.2 MB, was 11.8 MB, 64 pages', href: 'blob:abc' }} notes={[]} onStartAgain={noop} />,
+    );
+    expect(was).toContain('4.2 MB, was 11.8 MB, 64 pages');
+  });
+
+  it('with no new file: the sentence and its advice tied to the heading, Start again, and no Download', () => {
+    const none = renderToStaticMarkup(
+      <Result
+        heading="This file could not be made smaller."
+        advice="It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more."
+        notes={['Pictures that were made smaller can look slightly less sharp up close.']}
+        onStartAgain={noop}
+      />,
+    );
+    const describedBy = none.match(/<h2 [^>]*aria-describedby="([^"]+)"/)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(none).toContain('tabindex="-1"');
+    expect(none).toMatch(new RegExp(`<p id="${describedBy}"[^>]*>It may already be compressed`));
+    expect(none).not.toContain('Download');
+    expect(none).not.toContain('<a ');
+    // The notes are about a new file, so none is shown.
+    expect(none).not.toContain('less sharp');
+    expect(none).toContain('>Start again</button>');
   });
 });
 

@@ -63,6 +63,9 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'writing', percent: 3 } })).toBe(true);
     expect(isFromWorker({ type: 'done', requestId: 1, outputs: [new Uint8Array(2)] })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'memory' })).toBe(true);
+    // No file: an engine that could not make the file smaller (Compress PDF).
+    expect(isFromWorker({ type: 'done', requestId: 1, outputs: [] })).toBe(true);
+    expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'working', unit: 'picture', done: 3, total: 40 } })).toBe(true);
   });
 
   it('ignores anything else, including a failure that carries a message', () => {

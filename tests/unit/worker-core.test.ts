@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EngineModule } from '../../src/engines/types';
-import type { FromWorker } from '../../src/workers/messages';
+import { isFromWorker, type FromWorker } from '../../src/workers/messages';
 import { createHandler, failureKind, ownBuffers } from '../../src/workers/worker-core';
 
 const blob = (text: string) => new Blob([text]);
@@ -65,6 +65,13 @@ describe('the tool worker', () => {
     await handle({ type: 'run', requestId: 4, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
     expect(posted).toEqual([{ message: { type: 'failed', requestId: 4, kind: 'engine' }, transfer: undefined }]);
     expect(JSON.stringify(posted)).not.toContain('secret-name');
+  });
+
+  it('passes on an engine that gives no file, as an empty list, which the page accepts', async () => {
+    const { handle, posted } = setup({ run: async () => [] });
+    await handle({ type: 'run', requestId: 9, toolId: 'compress-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(posted).toEqual([{ message: { type: 'done', requestId: 9, outputs: [] }, transfer: [] }]);
+    expect(isFromWorker(posted[0]!.message)).toBe(true);
   });
 
   it('ignores a message of the wrong shape', async () => {

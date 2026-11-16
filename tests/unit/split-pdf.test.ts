@@ -12,7 +12,6 @@ import {
   outlineUpdate,
   pageRange,
   readOutline,
-  updateJson,
   type OutlineItem,
   type Structure,
 } from '../../src/engines/outline';
@@ -216,13 +215,6 @@ describe("a part's update", () => {
     expect(outlineUpdate(inline, pageRange(2, 2), { dropAttachments: true }).get('2 0 R')).toEqual({ '/Type': '/Catalog', '/Names': { '/Dests': '31 0 R' } });
     const indirect = base({ catalog: { '/Type': '/Catalog', '/Names': '40 0 R' }, namesId: '40 0 R', names: { '/EmbeddedFiles': '30 0 R' }, rootId: null, root: null, outline: null });
     expect(outlineUpdate(indirect, pageRange(2, 2), { dropAttachments: true }).get('40 0 R')).toEqual({});
-  });
-
-  it('is written as JSON from objects', () => {
-    const text = updateJson(20, new Map([['2 0 R', { '/Title': 'u:"quoted" \\ name' }]]));
-    expect(JSON.parse(text)).toEqual({
-      qpdf: [{ jsonversion: 2, pushedinheritedpageresources: false, calledgetallpages: false, maxobjectid: 20 }, { 'obj:2 0 R': { value: { '/Title': 'u:"quoted" \\ name' } } }],
-    });
   });
 });
 

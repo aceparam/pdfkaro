@@ -44,6 +44,8 @@ const lateSources = [
   ...engineIds.map((id) => ({ what: `the ${id} engine`, path: join('src', 'engines', 'tools', `${id}.ts`) })),
   { what: "the page engines' shared steps (plain.ts)", path: join('src', 'engines', 'plain.ts') },
   { what: "the page engines' shared steps (outline.ts)", path: join('src', 'engines', 'outline.ts') },
+  { what: "the shared qpdf JSON steps (qpdf-json.ts)", path: join('src', 'engines', 'qpdf-json.ts') },
+  { what: 'the picture resampling (resample.ts)', path: join('src', 'engines', 'resample.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');
@@ -72,6 +74,10 @@ else if (!worker.includes(`import(\`./${fflate[0]}\`)`) && !worker.includes(`imp
 }
 // The page engines' shared steps load late: besides their sentences, above, qpdf's option for the plain copy.
 if (worker.includes('--object-streams=disable')) problems.push("The worker file holds the page engines' shared steps.");
+// Compress PDF's steps load late: besides their sentences, above, qpdf's options for reading raw streams and writing again.
+for (const option of ['--json-stream-prefix=', '--recompress-flate', '--update-from-json=']) {
+  if (worker.includes(option)) problems.push(`The worker file holds Compress PDF's steps ("${option}").`);
+}
 
 // Lookup tables from fflate's deflate code: present only if fflate itself is in the file.
 if (worker.includes('[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]')) problems.push("The worker file holds fflate's code.");
@@ -131,5 +137,5 @@ for (const [what, pattern, markers] of [
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; the shared qpdf JSON steps and resampling out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
 );

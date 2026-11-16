@@ -707,3 +707,251 @@ savePicture('broken.png', brokenPng);
 const zero = Buffer.from(plainPng(80, 60));
 zero.writeUInt32BE(0, 16);
 savePicture('zero-size.png', zero);
+
+// ---------------------------------------------------------------------------
+// 15. Files for Compress PDF, each named compress-*.pdf. Pictures go in by
+// hand, as image streams with the exact dictionary each case needs. Two
+// pictures were made once with Pillow and are committed (see the README):
+// grey-scan.jpg, a grey JPG, which @napi-rs/canvas cannot write, and
+// scan-g4.tif, a 1-bit scan in CCITT Group 4, whose one strip is used.
+
+/** A page of `size` points that draws each picture over the box given, [x, y, width, height]. */
+function drawPictures(doc, size, pictures) {
+  const page = doc.addPage(size);
+  for (const [ref, [x, y, width, height]] of pictures) {
+    const name = page.node.newXObject('Im', ref);
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(width, 0, 0, height, x, y), drawObject(name), popGraphicsState());
+  }
+  return page;
+}
+const imageStream = (doc, data, dict) => doc.context.register(doc.context.stream(data, { Type: 'XObject', Subtype: 'Image', ...dict }));
+/** The pixels of a canvas as RGB samples, its alpha dropped. */
+function rgbOf(canvas) {
+  const { data, width, height } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+  const rgb = Buffer.alloc(width * height * 3);
+  for (let at = 0, to = 0; at < data.length; at += 4, to += 3) rgb.set([data[at], data[at + 1], data[at + 2]], to);
+  return rgb;
+}
+/** Rows of samples each with PNG filter 2 (Up) in front, as a PNG predictor of 15 allows. */
+function upFiltered(samples, rowBytes, rows) {
+  const out = Buffer.alloc((rowBytes + 1) * rows);
+  for (let y = 0; y < rows; y++) {
+    out[y * (rowBytes + 1)] = 2;
+    for (let x = 0; x < rowBytes; x++) out[y * (rowBytes + 1) + 1 + x] = (samples[y * rowBytes + x] - (y > 0 ? samples[(y - 1) * rowBytes + x] : 0)) & 0xff;
+  }
+  return out;
+}
+/** A screenshot-like picture: a light page, a dark bar and lines of "text". */
+function drawScreenshot(context, width, height) {
+  context.fillStyle = '#f4f2ec';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = '#20406a';
+  context.fillRect(0, 0, width, Math.round(height * 0.06));
+  context.fillStyle = '#1b1b1b';
+  const line = Math.max(8, Math.round(height / 60));
+  for (let y = Math.round(height * 0.12); y < height * 0.95; y += line * 2) context.fillRect(Math.round(width * 0.08), y, Math.round(width * (0.5 + ((y * 7) % 30) / 100)), Math.round(line * 0.6));
+  context.fillStyle = '#c0392b';
+  context.fillRect(Math.round(width * 0.7), Math.round(height * 0.2), Math.round(width * 0.2), Math.round(height * 0.2));
+}
+/** A scan-like page in colour: paper, lines of print and a red stamp. */
+function drawColourScan(context, width, height) {
+  context.fillStyle = '#efece4';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = '#2a2a2a';
+  for (let row = 0; row < 40; row++) {
+    for (let word = 0; word < 12; word++) context.fillRect(250 + word * 165, 300 + row * 75, 120 - ((row * 7 + word * 13) % 50), 28);
+  }
+  context.strokeStyle = '#b3261e';
+  context.lineWidth = 14;
+  context.beginPath();
+  context.arc(width * 0.75, height * 0.85, 220, 0, Math.PI * 2);
+  context.stroke();
+}
+
+const a4Size = [595.28, 841.89];
+const fullPage = [0, 0, a4Size[0], a4Size[1]];
+const detailsExif = (() => {
+  const details = readFileSync(join(pictureSource, 'details.jpg'));
+  const exif = jpegSegments(details).find((part) => part.marker === 0xe1 && details.subarray(part.start + 4, part.start + 10).toString('latin1') === 'Exif\0\0');
+  return details.subarray(exif.start, exif.end);
+})();
+
+// 15a. Three A4 scans at 300 pixels to the inch (2480 by 3508): an RGB JPG carrying details.jpg's
+// camera and place markers in its EXIF, a grey JPG, and an RGB picture stored without loss with a PNG predictor.
+{
+  const doc = await newDoc('Three scans to compress');
+  const colour = createCanvas(2480, 3508);
+  drawColourScan(colour.getContext('2d'), 2480, 3508);
+  const colourJpeg = withSegments(withoutProfile(colour.toBuffer('image/jpeg', 85)), [detailsExif]);
+  const greyJpeg = readFileSync(join(pictureSource, 'grey-scan.jpg'));
+  const shot = createCanvas(2480, 3508);
+  drawScreenshot(shot.getContext('2d'), 2480, 3508);
+  const lossless = deflateSync(upFiltered(rgbOf(shot), 2480 * 3, 3508), { level: 9 });
+  drawPictures(doc, a4Size, [[imageStream(doc, colourJpeg, { Width: 2480, Height: 3508, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), fullPage]]);
+  drawPictures(doc, a4Size, [[imageStream(doc, greyJpeg, { Width: 2480, Height: 3508, ColorSpace: 'DeviceGray', BitsPerComponent: 8, Filter: 'DCTDecode' }), fullPage]]);
+  drawPictures(doc, a4Size, [
+    [imageStream(doc, lossless, { Width: 2480, Height: 3508, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode', DecodeParms: { Predictor: 15, Colors: 3, Columns: 2480 } }), fullPage],
+  ]);
+  save('compress-scans.pdf', await doc.save());
+}
+
+// 15b. A large screenshot stored without loss and with no predictor, 2560 by 1440, on an A4 page.
+{
+  const doc = await newDoc('A screenshot to compress');
+  const shot = createCanvas(2560, 1440);
+  drawScreenshot(shot.getContext('2d'), 2560, 1440);
+  const data = deflateSync(rgbOf(shot));
+  drawPictures(doc, a4Size, [[imageStream(doc, data, { Width: 2560, Height: 1440, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode' }), [40, 400, 515, 290]]]);
+  save('compress-lossless.pdf', await doc.save());
+}
+
+// 15c. A JPG that is already small (600 by 400, quality 50), with a page of text in an uncompressed content
+// stream, so the file itself still gets smaller and the picture can be looked at in the result.
+{
+  const doc = await newDoc('A small picture to compress');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const jpeg = withoutProfile(canvasJpeg(600, 400, scene, 50));
+  const page = drawPictures(doc, a4Size, [[imageStream(doc, jpeg, { Width: 600, Height: 400, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [60, 500, 300, 200]]]);
+  const fontName = page.node.newFontDictionary('F', font.ref);
+  const lines = Array.from({ length: 40 }, (_, line) => `BT ${fontName} 10 Tf 60 ${460 - line * 11} Td (Line ${line + 1} of text kept in a content stream that was never compressed.) Tj ET`);
+  const textRef = doc.context.register(doc.context.stream(lines.join('\n')));
+  page.node.addContentStream(textRef);
+  save('compress-small-jpg.pdf', await doc.save());
+}
+
+// 15d. Pictures this tool leaves alone, and one it makes smaller, each on a page of 72 by 72 points
+// (1 inch), so 150 pixels is the most any picture needs: a CMYK JPG, a CCITT scan, an image mask, a
+// picture with a colour-key mask, a grey picture with a grey ICC profile, a picture whose soft mask has
+// /Matte, and an RGB picture with an RGB ICC profile, a soft mask and /Interpolate, the one that is made smaller.
+{
+  const doc = await newDoc('Kinds of picture to compress');
+  const square = [72, 72];
+  const box = [0, 0, 72, 72];
+  const ramp = (components, seed) => {
+    const out = Buffer.alloc(400 * 400 * components);
+    for (let y = 0; y < 400; y++) for (let x = 0; x < 400; x++) for (let c = 0; c < components; c++) out[(y * 400 + x) * components + c] = ((x >> 2) * (c + 1) + (y >> 5) * (seed + c) * 9) & 0xff;
+    return out;
+  };
+  const cmykJpeg = readFileSync(join(pictureSource, 'cmyk.jpg'));
+  drawPictures(doc, square, [[imageStream(doc, cmykJpeg, { Width: 200, Height: 100, ColorSpace: 'DeviceCMYK', BitsPerComponent: 8, Filter: 'DCTDecode', Decode: [1, 0, 1, 0, 1, 0, 1, 0] }), box]]);
+  // The one strip of scan-g4.tif (800 by 600), as the TIFF's StripOffsets (273) and StripByteCounts (279) say.
+  const tif = readFileSync(join(pictureSource, 'scan-g4.tif'));
+  const ifd = tif.readUInt32LE(4);
+  const tag = (id) => {
+    for (let index = 0; index < tif.readUInt16LE(ifd); index++) {
+      const at = ifd + 2 + index * 12;
+      if (tif.readUInt16LE(at) === id) return tif.readUInt16LE(at + 2) === 3 ? tif.readUInt16LE(at + 8) : tif.readUInt32LE(at + 8);
+    }
+    throw new Error(`TIFF tag ${id} was not found.`);
+  };
+  const ccitt = tif.subarray(tag(273), tag(273) + tag(279));
+  drawPictures(doc, square, [[imageStream(doc, ccitt, { Width: 800, Height: 600, ColorSpace: 'DeviceGray', BitsPerComponent: 1, Filter: 'CCITTFaxDecode', DecodeParms: { K: -1, Columns: 800, Rows: 600 } }), box]]);
+  const maskBits = Buffer.alloc(50 * 400);
+  for (let y = 0; y < 400; y++) for (let x = 0; x < 50; x++) maskBits[y * 50 + x] = (x + y) % 3 === 0 ? 0xff : 0x0f;
+  drawPictures(doc, square, [[imageStream(doc, deflateSync(maskBits), { Width: 400, Height: 400, ImageMask: true, BitsPerComponent: 1, Filter: 'FlateDecode' }), box]]);
+  drawPictures(doc, square, [[imageStream(doc, deflateSync(ramp(3, 1)), { Width: 400, Height: 400, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode', Mask: [250, 255, 250, 255, 250, 255] }), box]]);
+  const greyProfile = doc.context.register(doc.context.flateStream(grey, { N: 1 }));
+  drawPictures(doc, square, [[imageStream(doc, deflateSync(ramp(1, 2)), { Width: 400, Height: 400, ColorSpace: ['ICCBased', greyProfile], BitsPerComponent: 8, Filter: 'FlateDecode' }), box]]);
+  const matte = imageStream(doc, deflateSync(ramp(1, 3)), { Width: 400, Height: 400, ColorSpace: 'DeviceGray', BitsPerComponent: 8, Filter: 'FlateDecode', Matte: [0, 0, 0] });
+  drawPictures(doc, square, [[imageStream(doc, deflateSync(ramp(3, 4)), { Width: 400, Height: 400, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode', SMask: matte }), box]]);
+  const rgbProfile = doc.context.register(doc.context.flateStream(p3, { N: 3, Alternate: 'DeviceRGB' }));
+  const softMask = imageStream(doc, deflateSync(ramp(1, 5)), { Width: 400, Height: 400, ColorSpace: 'DeviceGray', BitsPerComponent: 8, Filter: 'FlateDecode' });
+  const photo = createCanvas(400, 400);
+  scene(photo.getContext('2d'), 400, 400);
+  drawPictures(doc, square, [[imageStream(doc, deflateSync(rgbOf(photo)), { Width: 400, Height: 400, ColorSpace: ['ICCBased', rgbProfile], BitsPerComponent: 8, Filter: 'FlateDecode', SMask: softMask, Interpolate: true }), box]]);
+  save('compress-kinds.pdf', await doc.save());
+}
+
+// 15e. Text only, with content streams that were never compressed.
+{
+  const doc = await newDoc('Plain text to compress');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let number = 1; number <= 3; number++) {
+    const page = doc.addPage(a4Size);
+    const fontName = page.node.newFontDictionary('F', font.ref);
+    const lines = Array.from({ length: 60 }, (_, line) => `BT ${fontName} 10 Tf 50 ${800 - line * 12} Td (Page ${number}, line ${line + 1}: plain text in a stream that was never compressed.) Tj ET`);
+    page.node.set(PDFName.of('Contents'), doc.context.register(doc.context.stream(lines.join('\n'))));
+  }
+  save('compress-text.pdf', await doc.save({ useObjectStreams: false }));
+}
+
+// 15f. Text already packed: text.pdf written by qpdf with the options Compress PDF writes with,
+// so it cannot be made 1% smaller.
+save('compress-packed.pdf', qpdfRun(textBytes, ['--deterministic-id', '--object-streams=generate', '--compress-streams=y', '--recompress-flate', '--compression-level=9', '--remove-unreferenced-resources=yes']));
+
+// 15g. Hostile files. A text page with an attached file whose compressed data inflates to 1 GB.
+{
+  const doc = await newDoc('An attachment that inflates to 1 GB');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage(a4Size).drawText('A page with a large attachment', { x: 60, y: 760, size: 16, font });
+  await doc.attach(Buffer.from('placeholder'), 'zeros.bin', { mimeType: 'application/octet-stream', creationDate: fixedDate, modificationDate: fixedDate });
+  // Deflated a piece at a time, so the 1 GB of zeros is never held whole.
+  const { createDeflate } = await import('node:zlib');
+  const bomb = await new Promise((resolve, reject) => {
+    const parts = [];
+    const deflater = createDeflate({ level: 9 });
+    deflater.on('data', (part) => parts.push(part));
+    deflater.on('end', () => resolve(Buffer.concat(parts)));
+    deflater.on('error', reject);
+    const piece = Buffer.alloc(64 * 1024 * 1024);
+    let left = 16;
+    const write = () => {
+      while (left > 0) {
+        left--;
+        if (!deflater.write(piece)) return deflater.once('drain', write);
+      }
+      deflater.end();
+    };
+    write();
+  });
+  await doc.flush();
+  const names = doc.catalog.lookup(PDFName.of('Names')).lookup(PDFName.of('EmbeddedFiles')).lookup(PDFName.of('Names'));
+  const spec = names.lookup(1);
+  const fileRef = spec.lookup(PDFName.of('EF')).get(PDFName.of('F'));
+  doc.context.assign(fileRef, doc.context.stream(bomb, { Type: 'EmbeddedFile', Filter: 'FlateDecode', Params: { Size: 1024 * 1024 * 1024 } }));
+  save('compress-bomb-attachment.pdf', await doc.save({ useObjectStreams: false }));
+}
+
+// A picture whose stored-without-loss data inflates to 100 MB, far past the 400 by 400 RGB its dictionary says.
+{
+  const doc = await newDoc('A picture that inflates past its size');
+  const bomb = deflateSync(Buffer.alloc(100 * 1024 * 1024), { level: 9 });
+  drawPictures(doc, [72, 72], [[imageStream(doc, bomb, { Width: 400, Height: 400, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode' }), [0, 0, 72, 72]]]);
+  save('compress-flate-bomb.pdf', await doc.save());
+}
+
+// JPGs whose own header disagrees with their dictionary, on a page of 36 by 36 points: a dictionary of
+// 100 by 100 RGB over a whole JPG of 400 by 300, and a dictionary of 200 by 100 RGB over cmyk.jpg (four
+// colours). Both JPGs are whole, so the file passes qpdf --check. A JPG header of 20,000 by 20,000 under a
+// small dictionary, which qpdf --check itself refuses, is made in the unit test.
+{
+  const doc = await newDoc('Pictures whose headers disagree');
+  const bigHeader = withoutProfile(canvasJpeg(400, 300, scene));
+  const cmykJpeg = readFileSync(join(pictureSource, 'cmyk.jpg'));
+  drawPictures(doc, [36, 36], [[imageStream(doc, bigHeader, { Width: 100, Height: 100, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [0, 0, 36, 36]]]);
+  drawPictures(doc, [36, 36], [[imageStream(doc, cmykJpeg, { Width: 200, Height: 100, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [0, 0, 36, 36]]]);
+  save('compress-jpeg-mismatch.pdf', await doc.save());
+}
+
+// A small file of 5,000 objects, each a string of 14,000 characters, whose JSON of dictionaries is about
+// 70 MB, past the 64 MB Compress PDF parses; with a picture it would make smaller if it read the JSON.
+{
+  const doc = await newDoc('A file whose JSON is too large');
+  const filler = 'x'.repeat(14_000);
+  const refs = Array.from({ length: 5_000 }, () => doc.context.register(PDFString.of(filler)));
+  doc.catalog.set(PDFName.of('PieceInfo'), doc.context.obj({ Filler: doc.context.obj({ Private: doc.context.obj(refs) }) }));
+  const ramp = Buffer.alloc(400 * 400 * 3);
+  for (let at = 0; at < ramp.length; at++) ramp[at] = (at * 7) & 0xff;
+  drawPictures(doc, [72, 72], [[imageStream(doc, deflateSync(ramp), { Width: 400, Height: 400, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode' }), [0, 0, 72, 72]]]);
+  // Packed by qpdf, a hundred objects to a compressed object stream, so the file stays small.
+  save('compress-json-bomb.pdf', qpdfRun(await doc.save({ useObjectStreams: false }), ['--deterministic-id', '--object-streams=generate', '--compression-level=9']));
+}
+
+// 15h. A large JPG in a file that needs a password (open-sesame), so the whole engine runs on an encrypted file:
+// a 1200 by 1200 photo on a page of 288 by 288 points (4 inches), where 600 pixels is the most it needs.
+{
+  const doc = await newDoc('A protected picture to compress');
+  const photo = withoutProfile(canvasJpeg(1200, 1200, scene, 85));
+  drawPictures(doc, [288, 288], [[imageStream(doc, photo, { Width: 1200, Height: 1200, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [0, 0, 288, 288]]]);
+  save('compress-password.pdf', qpdfRun(await doc.save(), ['--encrypt', 'open-sesame', 'owner-secret', '256', '--print=low']));
+}

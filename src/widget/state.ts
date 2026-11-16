@@ -25,8 +25,29 @@ export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
 
 export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large';
 
-/** The finished result. `parts` is set when it is a zip holding that many files. */
-export type ResultInfo = { name: string; size: number; pages?: number; parts?: number };
+/**
+ * The finished result. `parts` is set when it is a zip holding that many files;
+ * `was` is the input's size, for a tool that shows it beside the new size.
+ * `{ none: true }` is a job that ended with no new file, because the file could
+ * not be improved (a tool with `noSmaller` words): it has no name, size or link.
+ */
+export type ResultInfo = { name: string; size: number; pages?: number; parts?: number; was?: number } | NoNewFile;
+export type NoNewFile = { none: true };
+
+/** Whether a finished job gave no new file. */
+export const isNoNewFile = (result: ResultInfo | null): result is NoNewFile => result !== null && 'none' in result;
+
+/**
+ * What a finished job shows, from whether the engine gave a file. Whether a
+ * file is smaller is the engine's to say (Compress PDF gives none unless the
+ * file is at least 1% smaller), so any file it gives is shown. With no file, a
+ * tool with words for "no smaller" (`noSmaller`) shows them; for any other
+ * tool, no file is the engine's failure.
+ */
+export function finishedAs(gaveFile: boolean, hasNoSmallerWords: boolean): 'file' | 'no-new-file' | 'engine-failure' {
+  if (gaveFile) return 'file';
+  return hasNoSmallerWords ? 'no-new-file' : 'engine-failure';
+}
 
 export type State = {
   step: Step;

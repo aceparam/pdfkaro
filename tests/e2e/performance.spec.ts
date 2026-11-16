@@ -67,3 +67,24 @@ test('Rotate PDF: turning every page, with 500 and then 1,000 drawn, blocks a CP
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   expect(await measure()).toEqual([]);
 });
+
+test('Compress PDF: compressing the three scans blocks the page for no more than 100 ms at a time', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/compress-pdf');
+  await page.waitForLoadState('networkidle');
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+  await page.locator('input[type=file]').first().setInputFiles(join(here, '../fixtures/compress-scans.pdf'));
+  await expect(page.locator('astro-island ol > li img')).toHaveCount(1, { timeout: 30000 });
+  await page.evaluate(() => {
+    const long: number[] = [];
+    (window as unknown as { longTasks: number[] }).longTasks = long;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) long.push(entry.duration);
+    }).observe({ type: 'longtask', buffered: false });
+  });
+  await page.getByRole('button', { name: 'Compress and download' }).click();
+  await expect(page.getByRole('heading', { name: 'Your compressed file is ready' })).toBeFocused({ timeout: 90000 });
+  await page.waitForTimeout(500);
+  const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
+  expect(long.filter((duration) => duration > 100)).toEqual([]);
+});
