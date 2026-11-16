@@ -216,6 +216,7 @@ export async function* readRawStreams(
       try {
         if (finished(callWithPassword(qpdf, passwordArgs, args).code)) {
           const parsed: unknown = JSON.parse(new TextDecoder().decode(qpdf.read('/raw.json')));
+          qpdf.remove('/raw.json');
           body = isDict(parsed) && Array.isArray(parsed.qpdf) ? (parsed.qpdf as unknown[])[1] : undefined;
         }
       } catch {

@@ -222,7 +222,7 @@ export type PictureDecoder = { decode(bytes: Uint8Array, width: number, height: 
 /** A canvas maker that can also encode its canvas as a JPG. */
 export type JpegCanvasMaker = CanvasMaker & { jpeg(canvas: unknown, quality: number): Promise<Uint8Array> };
 /** fflate's streaming deflater. */
-export type DeflateClass = new (options: { level: number }, ondata: (chunk: Uint8Array, final: boolean) => void) => { push(chunk: Uint8Array, final?: boolean): void };
+export type DeflateClass = new (options: { level: 9 }, ondata: (chunk: Uint8Array, final: boolean) => void) => { push(chunk: Uint8Array, final?: boolean): void };
 type Fflate = { Inflate: InflateClass; Deflate: DeflateClass };
 type DrawingContext = { drawImage(image: unknown, x: number, y: number, width: number, height: number): void };
 

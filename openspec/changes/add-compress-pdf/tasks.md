@@ -62,12 +62,12 @@
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/compress-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed, working, result with "was", "could not be made smaller", password, damaged, failed (out of memory), the 100 MB notice; check 200% text
+- [x] 8.1 Screenshots of `/compress-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed, working, result with "was", "could not be made smaller", password, damaged, failed (out of memory), the 100 MB notice; check 200% text
 
 ## 9. Checks and review
 
-- [ ] 9.1 No `LICENSES.md` line: no dependency added
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
+- [x] 9.1 No `LICENSES.md` line: no dependency added
+- [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add Compress PDF's hand checks to issue #7 (the four PDF readers, browsers and phones, a real scanned PDF from a phone app)
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names:
   - the agent's choices: no options; 150 pixels to the inch across the largest page; quality 75; the 10% rule; never JPG for lossless pictures; the 1% rule; DeviceGray JPGs becoming RGB; grey ICC pictures left alone; passwords kept;
