@@ -70,7 +70,7 @@
 - [x] 9.1 No `LICENSES.md` line: no dependency added
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [x] 9.3 Add Compress PDF's hand checks to issue #7 (the four PDF readers, browsers and phones, a real scanned PDF from a phone app)
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names:
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names:
   - the agent's choices: no options; 150 pixels to the inch across the largest page; quality 75; the 10% rule; never JPG for lossless pictures; the 1% rule; DeviceGray JPGs becoming RGB; grey ICC pictures left alone; passwords kept;
   - that the shared widget pieces ride along in this pull request.
 

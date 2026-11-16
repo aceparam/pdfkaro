@@ -594,7 +594,7 @@ describe('hostile files', () => {
     expect(outputs).toEqual([]);
   }, 180_000);
 
-  it('a file whose JSON of dictionaries is over 64 MB skips the pictures step, and is still written again', async () => {
+  it('a file whose JSON of dictionaries is over 64 MB skips the pictures step, and gives no smaller file', async () => {
     const file = fixture('compress-json-bomb.pdf');
     inflated.calls = 0;
     const { outputs, progress } = await compress(file);
