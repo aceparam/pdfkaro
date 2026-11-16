@@ -191,6 +191,10 @@ All but `developer` are read-only.
 
 - **Shared pieces in tool pull requests.** Shared widget changes have ridden along with the tool that needed them (Reorder, Rotate, Compress), though `SPEC.md` "Build phases" 3 prefers their own pull request first. Keep doing this, or split them out?
 
+- **Character maps for PDF to JPG and PNG.** PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data (11 Nov 2026) holds no character maps. So Chinese, Japanese or Korean text in many PDFs is missing from thumbnails, and will be missing from the pictures PDF to JPG and PDF to PNG give (`add-pdf-to-images`). The owner was told only about fonts a PDF does not embed. Ship character maps for these tools (about 1 MB more after a pick, on these pages only), or keep the fixed set and say so on the page, as planned?
+
+- **Resolution and page choice for PDF to JPG and PNG.** Pictures are 150 pixels to the inch, every page, no options. Offer a resolution or a choice of pages later?
+
 - **Licence.** The assumed default was AGPL-3.0 because compression would use Ghostscript; the owner has since chosen no Ghostscript (13 Nov 2026). The repo's licence, and whether it is public, are still the owner's to decide ("Source code" in Open decisions). Add no `LICENSE` file until then.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
 - **Which pushes publish to the preview.** The owner switched Pages on, on 10 Nov 2026. Should every push to `main` or a `claude/` branch publish, as built, or only chosen branches? The branch rule is under Settings > Environments > github-pages.

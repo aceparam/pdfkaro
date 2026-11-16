@@ -2,7 +2,14 @@
 
 ## Context
 
-PDF.js already runs in the tool worker. It draws page thumbnails through `src/engines/thumbnail.ts`, which keeps one document open across pages, draws on an `OffscreenCanvas` from `tools.canvas`, and uses the owner's fixed helper data (11 Nov 2026) with safe options: no font faces installed, no fetching, and decoded pictures capped at 16 million pixels. `tools.canvas` can already encode PNG, and since Compress PDF, JPG. Several outputs are zipped in the worker by `fflate`'s `zipSync`, with names from `partName` and the limits in `zip-limits.ts` (built for Split PDF). Compress PDF added the one-file row. The registry's `ToolPage` has had a `preset` field since the skeleton, unused until now.
+PDF.js already runs in the tool worker. It draws page thumbnails through `src/engines/thumbnail.ts`:
+- one document is kept open across pages;
+- pages are drawn on an `OffscreenCanvas` from `tools.canvas`;
+- the owner's fixed helper data (11 Nov 2026) is used, with safe options: no font faces installed, no fetching, no XFA, and pictures inside a page capped at 16 million pixels.
+
+Thumbnails are wrapped in `pdfjsLoader.guard`, so a dead PDF.js worker fails them at once. Engines reach PDF.js through `tools.pdfjs`, which has no guard yet.
+
+`tools.canvas` encodes PNG and, since Compress PDF, JPG; the JPG encoder's type is declared inside the Compress engine. Several outputs are zipped in the worker by `fflate`'s `zipSync`, which is fetched on every run of a several-outputs tool. Names come from `partName`, which pads numbers to the width of the total. The limits live in `zip-limits.ts`, and Split's engine checks them as it goes. Compress PDF added the one-file row. The registry's `ToolPage` has had a `preset` field since the skeleton, unused until now.
 
 ## Goals and non-goals
 
@@ -10,136 +17,176 @@ PDF.js already runs in the tool worker. It draws page thumbnails through `src/en
   - every page as a picture, looking as a PDF reader shows it;
   - one picture for a one-page file and a zip otherwise;
   - two pages from one entry, each setting its format;
-  - bounded memory per page.
+  - memory bounded per page, and a clear failure, not a dead tab, when the pictures add up to too much.
 - **Non-goals:**
   - choosing pages, resolution or quality;
   - extracting embedded pictures;
-  - OCR.
+  - OCR;
+  - a streaming zip (a later shared change, as Split gains too).
 
 ## Decisions
 
-### 1. The registry entry
+### 1. The registry entry: one tool, two pages (`tool-registry`)
 
-`pdf-to-images`, group `from-pdf`, phase 1, `accepts: ['application/pdf']`.
-
-Two pages:
+`pdf-to-images`, group `from-pdf`, phase 1, `accepts: ['application/pdf']`, with two pages:
 - `/pdf-to-jpg`: name "PDF to JPG", `preset: { format: 'jpg' }`;
 - `/pdf-to-png`: name "PDF to PNG", `preset: { format: 'png' }`.
 
-Each has the title, heading and sentence the spec gives. The descriptions:
-- JPG: "Turn each page of a PDF into a JPG picture, in one zip. The file stays on your device and is not uploaded."
-- PNG: "Turn each page of a PDF into a sharp PNG picture, in one zip. The file stays on your device and is not uploaded."
+Folding the two catalogue rows into one entry is the agent's choice, recorded in a `tool-registry` requirement. It mirrors the owner's Image to PDF decision and `SPEC.md`'s own "one tool with preset pages" for target sizes. No URL is dropped and no group changes. The catalogue test needs nothing new, as both slugs are in the catalogue. The order test counts the entry by its first page, `/pdf-to-jpg`, which follows Compress PDF.
 
-Widget words are shared, with the format-specific words given per page.
+Each page has the title, heading and sentence the spec gives. The descriptions:
+- JPG: "Turn each page of a PDF into a JPG picture. The file stays on your device and is not uploaded."
+- PNG: "Turn each page of a PDF into a PNG picture. The file stays on your device and is not uploaded."
 
-`ToolPage` gains an optional `words?: Partial<Pick<ToolWidgetWords, 'actionLabel' | 'writingLabel' | 'doneHeading' | 'resultNotes'>>`, which the page's words override. This is a small, typed extension, so one tool's two pages can name their button after their own result, as "Tool page anatomy" part 5 asks. `[slug].astro` merges them.
+**Words:**
+- `ToolWidgetWords` gains `outputExtension?: 'pdf' | 'jpg' | 'png'`, with `pdf` assumed when it is absent.
+- `ToolPage` gains an optional `words?: Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>`, which the page's words override.
+- The merge is a plain tested function, `pageWords(tool, page)`, in `src/tools/queries.ts`; `[slug].astro` calls it.
+- `preset` holds engine options only.
 
 The shared words:
 - `pickerLabel: 'Choose a PDF file'`, `addLabel: 'Choose another file'`, `dropHint: 'You can also drop a file anywhere on this page, or paste it.'`;
 - `items: 'files'`, `itemControls: false`, `multiple: false`, `minFiles: 1`, `tooFewFiles: 'Choose a PDF file to convert.'`;
 - `outputs: 'several'`, `partSuffix: 'page'`, `outputSuffix: ''`, `resultPages: 'none'`;
-- `failedHeading: 'The conversion did not finish.'`;
+- `writingLabel: 'Writing the zip'`, `doneHeading: 'Your download is ready'`, `failedHeading: 'The conversion did not finish.'`;
 - `memoryAdvice: 'Try on a computer, or split the file first and convert the parts.'`;
 - `zipLimitAdvice: 'Split the file first, then convert the parts.'`.
 
-Per page: `actionLabel` ("Convert to JPG and download" or "… PNG …"), `writingLabel: 'Writing the zip'`, `doneHeading` ("Your pictures are ready"), and `resultNotes`:
+Per page: `actionLabel` ("Convert to JPG and download" or "… PNG …"), `outputExtension` (`jpg` or `png`), and `resultNotes`:
 - JPG: "Each page is a JPG picture at 150 pixels to the inch. The PDF itself was not changed."
 - PNG: "Each page is a PNG picture at 150 pixels to the inch, without loss. The PDF itself was not changed."
 
-`related`: `pdf-to-jpg` and `pdf-to-png` for each other, plus `jpg-to-pdf`, `extract-pdf-pages`, `compress-pdf`, `split-pdf`.
+**The result line** uses the existing words: a zip reads "12 files, 3.4 MB" (`fileCount`), and a single picture its size only (`resultPages: 'none'`).
 
-### 2. Presets and extensions in the widget
+`related`: each page links to the other, plus `jpg-to-pdf`, `extract-pdf-pages`, `compress-pdf` and `split-pdf`.
 
-- **Presets:** `[slug].astro` passes `page.preset` to `ToolWidget`, which hands it to `useToolRun`. Each job's options are `{ ...preset, ...options }`.
-- **Extensions:** the preset may carry `extension`, here the same as `format`. `useToolRun` names a single output `outputName(input, outputSuffix, extension)`: `report.jpg`, since the suffix is empty, which `outputName` already handles. The zip is `outputName(input, '', 'zip')`: `report.zip`.
-- **Zip naming:** `ZipNaming` gains `extension` (`pdf`, `jpg` or `png`, checked by `isZipNaming`). `worker-core` passes it to `partName`, giving `report-page-01.jpg`.
-- **One output from a several-outputs tool:** a one-page file gives a single output, which the worker does not zip, as Split PDF does today.
-- **Other tools:** they pass no preset and keep `pdf`.
+### 2. Presets, extensions and types in the widget
 
-### 3. Drawing pages: `src/engines/pdf-pages.ts`
+- **Options:** `[slug].astro` passes `page.preset` to `ToolWidget`, which hands it to `useToolRun`; each job's options are `{ ...preset, ...options }`. The engine checks `format` itself.
+- **Names:** `useToolRun` names a single output `outputName(input, outputSuffix, outputExtension)`, giving `report.jpg`, and a zip `report.zip`.
+- **Types:** the Blob type follows the extension: `image/jpeg`, `image/png`, `application/pdf` or `application/zip`. Today it is always PDF or zip.
+- **Inside a zip:** `ZipNaming` gains `extension`, checked by `isZipNaming` against the closed set `pdf`, `jpg`, `png`. `worker-core` passes it to `partName`, giving `report-page-01.jpg`. The padding follows the total, so 500 pages give `report-page-001.jpg`.
+- **One output** from a several-outputs tool is not zipped, as for Split today.
+- **Other tools** set no extension and keep `pdf`.
 
-`thumbnail.ts` is renamed `pdf-pages.ts`, unchanged except that its kept document gains a second method:
+### 3. Drawing whole pages, in `src/engines/thumbnail.ts`
+
+The file keeps its name. Its kept document gains `draw`:
 
 ```
 draw(page, { scale, maxPixels, format: 'jpg' | 'png', quality }): Promise<{ bytes, width, height }>
 ```
 
-- **Size:** the viewport at `scale` (150 / 72), including the page's `/Rotate`. If width × height passes `maxPixels` (25 million), the scale is reduced to fit; width and height are rounded and at least 1.
-- **Rendering:** on white, with `annotationMode: AnnotationMode.ENABLE_STORAGE`, so form fields are drawn with their values and other annotations as their appearance streams show them. The thumbnail keeps its current mode.
-- **Encoding:** through `tools.canvas` (`png` or `jpeg` at 0.85). The canvas is released in a `finally`.
-- **Safety:** `safeOptions` are unchanged, so the helper data, the no-fetch rules and the 16 million pixel cap on pictures inside the page all apply. `maxImageSize` caps a hostile picture inside the PDF; `maxPixels` caps the output canvas.
+`render(page, box)` (thumbnails) becomes "work out the scale for the box, then draw as PNG". So the white background, the bounds checks and the canvas release exist once.
 
-The worker's thumbnail step imports the renamed file. `check-worker.mjs` and `page-weight.mjs` follow the name.
+- **Size:**
+  - the viewport at `scale` (150 / 72), including the page's `/Rotate`;
+  - if width × height passes `maxPixels` (16 × 1024 × 1024, the same as `maxImagePixels` and Safari's canvas limit), the scale is reduced to fit;
+  - sides are rounded and at least 1.
+- **Annotations:** drawn on white, with `annotationMode` set to the loaded PDF.js module's `AnnotationMode.ENABLE_STORAGE`, read from `PdfjsModule`, never imported. Form fields are drawn with their values, and other annotations as their appearance streams show them. Thumbnails keep their current mode.
+- **Encoding:** through `tools.canvas`. `CanvasMaker` here gains `jpeg(canvas, quality)`, and Compress PDF imports that type from here.
+- **Freeing each page:** the canvas is released, then `pdfPage.cleanup()` is called, both in a `finally`, so a page's decoded pictures and operator list are let go before the next page.
+- **A canvas budget:** the `CanvasFactory` given to PDF.js counts the pixels of every live canvas, its own temporary ones for transparency and soft masks included, across `create`, `reset` and `destroy`. Asked to go past 4 × `maxPixels` (about 256 MB as RGBA), it throws, the page fails to draw, and the job fails with the engine sentence.
+- **The guard:** `tools.pdfjsGuard`, filled in by the worker from `pdfjsLoader.guard`, wraps `openDocument`, `render` and `draw`. A dead PDF.js worker then fails the job at once instead of leaving it on "Page n of m". The worker's thumbnail wrapper uses the same guard through `tools`.
+- **Unchanged:** `safeOptions` stay as they are, with `verbosity: 0`, so PDF.js writes nothing to the console. Errors leave the worker only as a failure kind, never as a message.
+- **Lint:** a rule for `src/engines/**` refuses value imports of `pdfjs-dist`, allowing type imports, so PDF.js can never be bundled into an engine.
 
 ### 4. The engine: `src/engines/tools/pdf-to-images.ts`
 
 ```
 run([file], { format, passwords }, onProgress, tools):
   format must be 'jpg' or 'png'
-  doc = openDocument(file, password, tools)        // PDF.js, the kept-document code
+  doc = openDocument(file, password, tools)
   try:
     pages = doc.pages
-    check fitsInOneZip early for the names, when pages > 1
-    outputs = []
+    if pages > zipMaxFiles: throw TooBigForZip('files')
+    outputs = [], total = 0
     for page 1..pages:
       onProgress({ stage: 'working', unit: 'page', done: page, total: pages })
-      outputs.push((await doc.draw(page, { scale: 150/72, maxPixels: 25e6, format, quality: 0.85 })).bytes)
+      bytes = (await doc.draw(page, { scale: 150/72, maxPixels, format, quality: 0.85 })).bytes
+      total += bytes.length
+      if total > zipMaxBytes(pages): throw TooBigForZip('bytes')
+      if total > maxOutputBytes: throw OutOfMemory
+      outputs.push(bytes)
   finally:
     doc.close()
   return outputs
 inspect = inspectPdf
 ```
 
-- **Reading the file:** `inspectPdf` (qpdf) reads the page count and asks for a password, as every PDF tool does. PDF.js then opens the file with the same password.
-- **PDF.js failures:** a page PDF.js cannot draw fails the job with the engine sentence. A file PDF.js cannot open, after qpdf could, does the same.
-- **Zipping:** the worker zips several outputs as it does for Split PDF, storing the pictures (level 0), since JPG and PNG are already compressed. It checks the exact size against the zip limits before zipping.
-- **The worker ends** after every job, as now.
+- **Reading the file:** `inspectPdf` (qpdf) reads the page count and asks for a password. PDF.js then opens the file with the same password.
+- **The running checks:**
+  - Split's pattern of checking the zip limits as outputs arrive moves into `src/widget/zip-limits.ts` as a small helper both engines use.
+  - `maxOutputBytes` is 1 GB, so the outputs and the copy `zipSync` makes stay well under what a tab can hold. Past it the job fails with the memory sentence (an error the worker already sorts as memory), not by ending the tab.
+  - This is a guard on what the job makes, not a limit on what a visitor may choose: the input notices are unchanged.
+- **Failures:** a page PDF.js cannot draw, or a file PDF.js cannot open after qpdf could, fails the job with the engine sentence.
+- **Zipping:** the worker zips several outputs as for Split, storing them (level 0). It writes no zip comment or extra field: only the cleaned names and `fflate`'s entry times.
 
 ### 5. Memory
 
-- **Per page:** one canvas of at most 25 million pixels (100 MB as RGBA) at a time, released after each page.
-- **Outputs:** all are held until zipped, as for Split PDF. An A4 page at 150 pixels to the inch is about 150 to 400 KB as JPG and 100 KB to 1 MB as PNG, depending on content, so a 500-page file is up to about 500 MB as PNG.
-- **Large files:** the 100 MB notice applies, and the memory advice says to split first. A streaming zip could lower the peak later.
+- **Per page:** one output canvas of at most 16 million pixels (64 MB as RGBA). PDF.js's temporary canvases fit inside the 256 MB budget, and the page is freed after drawing.
+- **Outputs:** they are held until zipped, and `zipSync` copies them once more, so the peak is about twice the outputs. The 1 GB guard keeps that under about 2 GB.
+- **Sizes:** an A4 page at 150 pixels to the inch is about 150 to 400 KB as JPG and 100 KB to 1 MB as PNG. A 500-page PNG job is about 0.5 GB of outputs and 1 GB at its peak.
+- **Advice:** the memory advice says to split first. A streaming zip would halve the peak; it is a later shared change.
 
-### 6. The page text
+### 6. What "Definition of done" means for pictures
 
-Two Markdown files, 250 to 500 words each, marked as drafts:
-- **`pdf-to-jpg.md`:** sharing a page as a photo; file size; quality 85 and why text edges can look soft; every page in a zip; one page by using Extract pages first.
-- **`pdf-to-png.md`:** sharp text and drawings; screenshots for slides; why PNGs are larger; every page in a zip.
+- **`qpdf --check` and the four PDF readers** do not apply to pictures. In their place, the pictures are checked by their first bytes and decoded in tests, and opened on Windows, macOS, Android and iOS by hand (issue #7).
+- **"Leaves alone what it was not asked to change":** the PDF is only read. The pictures hold only the drawn page, with no text chunks, EXIF, XMP or comments, which an e2e test checks on the browser's own output. Links and text in a picture cannot be clicked or selected, which the page text says.
+- **"Correct result for every file in the test set":** every fixture is run. The multilingual file is still missing, so CJK text cannot be checked against the test set.
 
-Both say that the PDF is not changed, that Chinese, Japanese and Korean text in fonts the PDF does not embed may be missing, and that nothing is uploaded.
+### 7. Text PDF.js cannot draw
+
+PDF.js refuses a composite font whose named character map it cannot load, and draws none of its text. This happens whether or not the font is embedded. With the owner's fixed helper data, which holds no character maps, that is true of many Chinese, Japanese and Korean PDFs. The page text says so in plain words, and the result gives no warning. The question goes to the owner now (CLAUDE.md), with these facts, which are wider than what the owner was told on 11 Nov 2026.
+
+### 8. The page text
+
+Two Markdown files, 250 to 500 words each, marked as drafts.
+
+`pdf-to-jpg.md`:
+- sharing a page as a photo;
+- file size;
+- plain words on JPG blurring text edges a little, with PNG for sharp text;
+- every page in a zip, and how to open a zip on a phone;
+- one page by using Extract pages first;
+- poster-sized pages drawn smaller.
+
+`pdf-to-png.md`:
+- text and drawings without loss;
+- screenshots for slides;
+- why PNGs are larger;
+- every page in a zip, and opening it on a phone;
+- posters.
+
+Both say:
+- the PDF is not changed;
+- pictures cannot be searched or clicked;
+- Chinese, Japanese or Korean text may be missing;
+- nothing is uploaded, and the page forgets the file.
 
 ## Page weight and late loading
 
-No change before a pick. After a pick, the page tools' files load as now:
-- qpdf and `inspect`;
-- PDF.js, its worker and data;
-- the engine (small: it uses `pdf-pages`);
-- `fflate`, at the main button for a file of more than one page.
-
-pdf-lib is not fetched.
+No change before a pick beyond a few island props. After a pick, the page tools' files load as now: qpdf and `inspect`, PDF.js with its worker and data, the engine, and `fflate`, which is fetched on every run of this tool, one-page files included. pdf-lib is not fetched.
 
 ## Threats
 
-- **Hostile PDFs.** qpdf reads them for the page count. PDF.js draws them with the safe options every thumbnail uses:
-  - no font faces installed;
-  - no fetching;
-  - no XFA;
-  - pictures inside the page capped at 16 million pixels;
-  - output canvases capped at 25 million pixels.
-
-  All of this runs in the worker, which is ended after every job.
-- **Very many pages.** The zip limits refuse more than 65,535 files or 4 GB early, with a sentence saying to split first. Progress and Cancel keep the page responsive.
-- **Passwords.** A password is passed to PDF.js in memory only, as for thumbnails, and to qpdf inside `--password=`.
-- **Hostile file names.** Names are cleaned by `stem`, inside the zip as well; `isZipNaming` checks the stem and the extension.
+- **Hostile PDFs.** qpdf reads them for the page count. PDF.js draws them with the safe options every thumbnail uses (no font faces, no fetching, no XFA, pictures inside a page capped), in the worker, which is ended after every job.
+- **Output bombs.** A tiny file can declare tens of thousands of poster-sized pages. Each picture is capped at 16 million pixels, and the running total of output bytes fails the job at 1 GB, or at the zip limits if those come first. So memory stays bounded and the page shows a sentence, not a dead tab.
+- **PDF.js's own canvases.** Nested transparency groups ask for canvases the size of the page. The canvas budget refuses past four page-sized canvases, so one page cannot take gigabytes.
+- **Per-page memory.** `pdfPage.cleanup()` after every page stops decoded pictures from building up across a long file.
+- **A dead PDF.js worker.** The guard fails the job at once.
+- **Form appearances.** `ENABLE_STORAGE` makes PDF.js build appearance streams for fields that have none, using fonts from the file. That is more parsing than thumbnails do, with no scripting; hidden fields stay hidden.
+- **Passwords.** In memory only, as for thumbnails and qpdf.
+- **Hostile file names.** Cleaned by `stem`, inside the zip as well; `isZipNaming` checks the stem and the closed extension set.
 
 ## Risks and trade-offs
 
-- **Missing CJK text** in fonts a PDF does not embed, by the owner's fixed helper data; said on the page, and an owner question.
-- **Every page is converted.** A visitor who wants one page converts all of them, or uses Extract pages first. Choosing pages could come with a page grid later.
-- **One resolution.** 150 pixels to the inch suits screens and ordinary printing; posters and fine print may want more. An owner question.
-- **Two catalogue rows as one tool,** like Image to PDF. Named in the pull request.
+- **Missing CJK text,** as §7 says; an owner question.
+- **Every page is converted.** Extract pages gives a subset first.
+- **One resolution** (150 pixels to the inch). Posters are drawn smaller, at most 4096 pixels a side.
+- **The progress bar is full during "Writing the zip",** as for Split today.
+- **A single-picture result has no next steps.** The owner's 12 Nov exemption covers zips only, so the pull request names it.
 
 ## Migration plan
 
-None; a new tool. Renaming `thumbnail.ts` changes only imports.
+None; a new tool.

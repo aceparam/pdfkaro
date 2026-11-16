@@ -2,22 +2,22 @@
 
 ## 1. Registry entry and shared widget pieces
 
-- [ ] 1.1 Add the `pdf-to-images` entry with its two pages, each with `preset` (`format`, `extension`) and per-page `words`, to `src/tools/registry.ts`; the registry test checks catalogue order, both pages' words, and that page words override only the allowed keys
-- [ ] 1.2 `[slug].astro`, `ToolWidget` and `useToolRun`: pass the preset into each job's options, merge page words, and name single outputs and zips with the preset's extension; `ZipNaming.extension` checked by `isZipNaming` and used by `worker-core`'s `partName`; unit and component tests, other tools still `.pdf`
+- [ ] 1.1 Add the `pdf-to-images` entry with its two pages, each with `preset` (`format`) and per-page `words` (`actionLabel`, `resultNotes`, `outputExtension`), to `src/tools/registry.ts`, and `pageWords` in `src/tools/queries.ts`; the registry and catalogue tests check catalogue order (the entry at PDF to JPG's place), both pages' words, and that page words override only the allowed keys
+- [ ] 1.2 `[slug].astro`, `ToolWidget` and `useToolRun`: pass the preset into each job's options, use `pageWords`, name single outputs and zips with `outputExtension`, and type the download by its extension; `ZipNaming.extension` checked against `pdf`, `jpg`, `png` by `isZipNaming` and used by `worker-core`'s `partName`; unit and component tests, other tools still `.pdf`
 
 ## 2. Engine
 
-- [ ] 2.1 Rename `src/engines/thumbnail.ts` to `pdf-pages.ts` (imports, tests, `check-worker.mjs`, `page-weight.mjs`); add `draw(page, { scale, maxPixels, format, quality })` with the pixel cap, `/Rotate`, `ENABLE_STORAGE` annotations, white background and the canvas released in a `finally`
-- [ ] 2.2 Write `src/engines/tools/pdf-to-images.ts`: format checked, every page drawn in order with progress, zip limits checked early, the document closed in a `finally`; `inspect` is `inspectPdf`
+- [ ] 2.1 In `src/engines/thumbnail.ts`: `draw(page, { scale, maxPixels, format, quality })` with the 16 million pixel cap, `/Rotate`, `ENABLE_STORAGE` read from the loaded module, white background, the canvas released and `pdfPage.cleanup()` in a `finally`; `render` built on it; the canvas budget in the `CanvasFactory`; `tools.pdfjsGuard` wrapping open, render and draw (the worker's thumbnail wrapper using it); `jpeg` on `CanvasMaker`, with Compress importing the type; a lint rule refusing value imports of `pdfjs-dist` in `src/engines/`
+- [ ] 2.2 Write `src/engines/tools/pdf-to-images.ts`: format checked, every page drawn in order with progress, the page count against `zipMaxFiles` before drawing, a running total against `zipMaxBytes` and the 1 GB guard (through a helper in `zip-limits.ts` that Split also uses), the document closed in a `finally`; `inspect` is `inspectPdf`
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 `tests/unit/pdf-to-images.test.ts` on every file in `tests/fixtures/` for both formats: picture count and sizes (A4 1240 by 1754, `mixed.pdf`'s sizes and turns), formats checked by their first bytes, JPG and PNG decoded and compared with the thumbnail drawing, `form.pdf`'s values visible, `password.pdf` with its password, damaged files failing, a made-up 100 by 100 inch page drawn at 5000 by 5000, and a zip-limit refusal from a stand-in page count; record outcomes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
-- [ ] 3.2 `tests/unit/pdf-pages.test.ts`: `draw` sizes, the cap, rotation, both encoders, and the thumbnail unchanged
+- [ ] 3.1 `tests/unit/pdf-to-images.test.ts` on every file in `tests/fixtures/` for both formats: picture count and sizes (A4 1240 by 1754, `mixed.pdf`'s sizes and turns), formats checked by their first bytes, JPG and PNG decoded and compared with the thumbnail drawing, `form.pdf`'s values visible, `password.pdf` with its password, damaged files failing, a made-up 100 by 100 inch page drawn at 4096 by 4096, a made-up many-page poster file stopped by the 1 GB guard, a page of nested soft-mask groups refused by the canvas budget, `cleanup` called after each page, a stand-in dead PDF.js worker failing the job, and a zip-limit refusal; the 500-page PNG outcome and peak recorded; record outcomes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
+- [ ] 3.2 Thumbnail tests: `draw` sizes, the cap, rotation, both encoders, the canvas budget, and thumbnails unchanged
 
 ## 4. Worker wiring
 
-- [ ] 4.1 `check-worker.mjs` and `page-weight.mjs`: the engine loads late, `pdf-pages` stays out of the worker file
+- [ ] 4.1 `check-worker.mjs` and `page-weight.mjs`: the engine loads late and stays out of the worker file
 
 ## 5. Page and page text
 
@@ -29,7 +29,8 @@
 - [ ] 6.1 `tests/e2e/pdf-to-images.spec.ts` at 360px and 1280px:
   - **Both pages:** headings and buttons; choosing a file; two files dropped; not a PDF.
   - **The zip:** a 3-page file to JPG, checking its file names, count and picture sizes.
-  - **A single picture:** a one-page file to PNG gives `name.png`, checked by its first bytes.
+  - **A single picture:** a one-page file to PNG gives `name.png`, checked by its first bytes and its download type.
+  - **Only the drawn page:** the browser's PNG holds no text chunks and its JPG no APP1 or COM segment, and neither holds a `tagged.pdf` `SECRET-` marker.
   - **Password:** right and wrong.
   - **Failures:** damaged file; Cancel; engine-load failure; the 100 MB notice.
   - **Progress:** "Page n of m".
@@ -39,9 +40,9 @@
 ## 7. No-upload test
 
 - [ ] 7.1 The tool's no-upload test on both pages:
-  - **Files fetched:** its exact allowlist from the build, with positive checks that the engine, PDF.js and `fflate` were fetched and pdf-lib was not.
+  - **Files fetched:** its exact allowlist from the build, with positive checks that the engine, PDF.js and `fflate` (on every run, one-page files included) were fetched and pdf-lib was not.
   - **Files converted:** runs on `rich.pdf` under a telling name, `tagged.pdf`, and `password.pdf` with its password.
-  - **Secrets:** the file name, stem and password, `rich.pdf`'s bookmark titles, attachment name and title, and `tagged.pdf`'s `SECRET-` markers, checked against requests, headers, the console and the title.
+  - **Secrets:** the file name, stem and password, `rich.pdf`'s bookmark titles, attachment name and title, `tagged.pdf`'s `SECRET-` markers, and a font name from a fixture, checked against requests, headers, the console and the title.
   - **After the job:** storage and traces; the address with no query and no hash.
 
 ## 8. Screenshots
@@ -52,8 +53,9 @@
 
 - [ ] 9.1 No `LICENSES.md` line: no dependency added
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
-- [ ] 9.3 Add the tool's hand checks to issue #7 (pictures opened on Windows, macOS, Android and iOS; a PDF with Hindi, Arabic and Chinese text)
+- [ ] 9.3 Add the tool's hand checks to issue #7 (pictures opened on Windows, macOS, Android and iOS; a poster-sized page on iOS Safari; the pictures' bytes from Firefox and Safari; a PDF with Hindi, Arabic and Chinese text)
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings. The pull request:
-  - names the agent's choices: one tool, two pages; every page; 150 pixels to the inch; the 25 million pixel cap; quality 85; a single picture or a zip; the names;
-  - asks the owner about character maps for these tools, and about a resolution or page choice;
+  - names the agent's choices: one tool, two pages; every page; 150 pixels to the inch; the 16 million pixel cap; quality 85; the 1 GB guard; a single picture or a zip; the names;
+  - names that a single-picture result has no next steps and is not covered by the owner's zip exemption;
+  - repeats the owner questions on character maps (with the corrected facts) and on a resolution or page choice; after merge, the fold goes in CLAUDE.md's agent decisions;
   - does not call the tool done.

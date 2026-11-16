@@ -24,7 +24,7 @@ Output names SHALL be built from the input name, so that `report.pdf` becomes `r
 #### Scenario: Outputs that are pictures
 
 - **WHEN** a 12-page `report.pdf` is turned into JPG pictures
-- **THEN** the zip is `report.zip` and holds `report-page-01.jpg` to `report-page-12.jpg`, in order; a one-page file gives `report.jpg`
+- **THEN** the zip is `report.zip` and holds `report-page-01.jpg` to `report-page-12.jpg`, in order, numbered to the width of the total (500 pages give `report-page-001.jpg`); a one-page file gives `report.jpg`, downloaded as a JPG, not a PDF
 
 #### Scenario: A name with characters some systems refuse
 

@@ -36,7 +36,7 @@ The page SHALL take one PDF from the picker, a drop or paste; a second file SHAL
 
 ### Requirement: Every page becomes a picture
 
-Pressing the main button SHALL draw every page, in order, as one picture in the page's format: at 150 pixels to the inch of the page's own size, scaled down to at most 25 million pixels, on white, with form fields drawn with their values and notes and stamps as the page shows them. JPG pictures SHALL be quality 85; PNG pictures SHALL be without loss. The PDF itself SHALL not be changed. (SPEC.md: Tool catalogue; Architecture and tech stack, PDF.js)
+Pressing the main button SHALL draw every page, in order, as one picture in the page's format: at 150 pixels to the inch of the page's own size, scaled down to at most 16 million pixels, on white, with form fields drawn with their values and notes and stamps as the page shows them. JPG pictures SHALL be quality 85; PNG pictures SHALL be without loss. The PDF itself SHALL not be changed, and a picture SHALL hold only the drawn page. (SPEC.md: Tool catalogue; Architecture and tech stack, PDF.js)
 
 #### Scenario: An A4 page
 
@@ -51,7 +51,12 @@ Pressing the main button SHALL draw every page, in order, as one picture in the 
 #### Scenario: A poster-sized page
 
 - **WHEN** a page is 100 by 100 inches
-- **THEN** its picture is 5000 by 5000 pixels, not 15000 by 15000
+- **THEN** its picture is 4096 by 4096 pixels, not 15000 by 15000
+
+#### Scenario: Nothing but the drawn page
+
+- **WHEN** `tagged.pdf` is converted in the browser
+- **THEN** each PNG holds only picture chunks (no text chunks) and each JPG no EXIF, XMP or comment segment, and no `SECRET-` marker is in their bytes
 
 #### Scenario: A filled form
 
@@ -60,21 +65,21 @@ Pressing the main button SHALL draw every page, in order, as one picture in the 
 
 ### Requirement: The result
 
-A one-page PDF SHALL give one picture named after the file (`report.jpg`). A longer one SHALL give one zip named after the file (`report.zip`) holding `report-page-01.jpg` and so on, in order. The result SHALL show the name, the size and how many pictures, a Download button and "Start again", and nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+A one-page PDF SHALL give one picture named after the file (`report.jpg`). A longer one SHALL give one zip named after the file (`report.zip`) holding `report-page-01.jpg` and so on, in order. The result SHALL show the name and the size (and, for a zip, how many files), a Download button and "Start again", and nothing SHALL download until the visitor presses Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A 12-page file
 
 - **WHEN** a 12-page `report.pdf` is converted to PNG
-- **THEN** the result is `report.zip`, holding 12 pictures, `report-page-01.png` to `report-page-12.png`, and no download has started
+- **THEN** the result is `report.zip`, "12 files" and its size, holding `report-page-01.png` to `report-page-12.png`, and no download has started
 
 #### Scenario: A one-page file
 
 - **WHEN** a one-page `menu.pdf` is converted to JPG
 - **THEN** the result is `menu.jpg`
 
-### Requirement: Text in fonts a PDF does not embed
+### Requirement: Text PDF.js cannot draw
 
-The pictures SHALL be drawn with the owner's fixed set of PDF.js helper data (11 Nov 2026), which holds no character maps, and the page text SHALL say that Chinese, Japanese and Korean text in fonts the PDF does not embed may be missing from the pictures. (CLAUDE.md: Owner decisions)
+The pictures SHALL be drawn with the owner's fixed set of PDF.js helper data (11 Nov 2026), which holds no character maps, and the page text SHALL say that Chinese, Japanese or Korean text in some PDFs may be missing from the pictures, whether or not the PDF embeds its fonts, with no warning in the result. (CLAUDE.md: Owner decisions)
 
 #### Scenario: The page text is read
 
@@ -115,12 +120,22 @@ A file that cannot be read SHALL be shown as damaged, naming it, with "Choose an
 
 ### Requirement: A job that fails
 
-When drawing fails, the engine cannot be fetched, memory runs out, or the zip would pass its limits, the page SHALL say what happened in one sentence and one thing to try, keeping the file. (SPEC.md: States every tool handles)
+When drawing fails, the engine cannot be fetched, memory runs out, the pictures add up to more than 1 GB, or the zip would pass its limits, the page SHALL say what happened in one sentence and one thing to try, keeping the file; the job SHALL never be left waiting on a PDF.js worker that has stopped. (SPEC.md: States every tool handles)
 
 #### Scenario: Out of memory
 
 - **WHEN** the engine runs out of memory
 - **THEN** the page says the browser ran out of memory and to try a smaller file or a computer
+
+#### Scenario: A small file that would make huge pictures
+
+- **WHEN** a small file declares thousands of poster-sized pages
+- **THEN** the job stops once the pictures pass 1 GB, with the memory sentence, and the tab keeps working
+
+#### Scenario: A page with deeply nested transparency
+
+- **WHEN** a page asks PDF.js for more than four page-sized canvases at once
+- **THEN** the page fails to draw and the job fails with one sentence, without the tab running out of memory
 
 ### Requirement: Large files
 
