@@ -137,7 +137,7 @@ A job that would give more than 65,535 parts, or more than 4 GB of parts, SHALL 
 #### Scenario: Too many parts
 
 - **WHEN** a 120,000-page file is split with no cuts
-- **THEN** the page says "This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts." at once, and "Go back to your files" returns to the pages
+- **THEN** the page says "This would make more than 65,535 files, more than one zip can hold. Mark cuts so the file is split into fewer parts." at once, and "Go back to your file" returns to the pages
 
 #### Scenario: Parts over 4 GB
 
@@ -237,7 +237,7 @@ When the job fails the page SHALL say what happened in one sentence and give one
 #### Scenario: The browser runs out of memory
 
 - **WHEN** the browser runs out of memory during a split
-- **THEN** the page says "Your browser ran out of memory. Mark cuts so the file is split into fewer parts, then try again.", and "Go back to your files" returns to the pages with the same cuts
+- **THEN** the page says "Your browser ran out of memory. Mark cuts so the file is split into fewer parts, then try again.", and "Go back to your file" returns to the pages with the same cuts
 
 #### Scenario: The engine cannot be fetched
 
