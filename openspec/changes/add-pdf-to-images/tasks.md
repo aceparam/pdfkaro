@@ -17,16 +17,16 @@
 
 ## 4. Worker wiring
 
-- [ ] 4.1 `check-worker.mjs` and `page-weight.mjs`: the engine loads late and stays out of the worker file
+- [x] 4.1 `check-worker.mjs` and `page-weight.mjs`: the engine loads late and stays out of the worker file
 
 ## 5. Page and page text
 
-- [ ] 5.1 Check both pages render with their own heading, sentence, title, description and main button, and the home page lists them under "Convert from PDF"
-- [ ] 5.2 Write `src/content/tools/pdf-to-jpg.md` and `pdf-to-png.md` as the design lists, 250 to 500 words each, drafts; check against "Banned patterns"
+- [x] 5.1 Check both pages render with their own heading, sentence, title, description and main button, and the home page lists them under "Convert from PDF"
+- [x] 5.2 Write `src/content/tools/pdf-to-jpg.md` and `pdf-to-png.md` as the design lists, 250 to 500 words each, drafts; check against "Banned patterns"
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/pdf-to-images.spec.ts` at 360px and 1280px:
+- [x] 6.1 `tests/e2e/pdf-to-images.spec.ts` at 360px and 1280px:
   - **Both pages:** headings and buttons; choosing a file; two files dropped; not a PDF.
   - **The zip:** a 3-page file to JPG, checking its file names, count and picture sizes.
   - **A single picture:** a one-page file to PNG gives `name.png`, checked by its first bytes and its download type.
@@ -39,7 +39,7 @@
 
 ## 7. No-upload test
 
-- [ ] 7.1 The tool's no-upload test on both pages:
+- [x] 7.1 The tool's no-upload test on both pages:
   - **Files fetched:** its exact allowlist from the build, with positive checks that the engine, PDF.js and `fflate` (on every run, one-page files included) were fetched and pdf-lib was not.
   - **Files converted:** runs on `rich.pdf` under a telling name, `tagged.pdf`, and `password.pdf` with its password.
   - **Secrets:** the file name, stem and password, `rich.pdf`'s bookmark titles, attachment name and title, `tagged.pdf`'s `SECRET-` markers, and a font name from a fixture, checked against requests, headers, the console and the title.

@@ -398,7 +398,7 @@ Each file was converted in Node through the real PDF.js and the same fixed helpe
 | File | Pictures | PNG | JPG | Outcome |
 | --- | --- | --- | --- | --- |
 | `text.pdf`, `warning.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn; each matches its thumbnail scaled down. qpdf's warning on `warning.pdf` does not stop the job |
-| `pages-500.pdf` | 500, A4 | 10,026,225 | 9,099,672 | Drawn in about 38 seconds (PNG) and 13 seconds (JPG) in Node. With the zip's copy, the peak is about twice the pictures, about 20 MB for PNG |
+| `pages-500.pdf` | 500, A4 | 10,026,225 | 9,099,672 | Drawn in about 38 seconds (PNG) and 13 seconds (JPG) in Node. In Chromium on 16 Nov 2026 the zips were 27.5 MB (PNG, in about 7.5 seconds) and 8.7 MB (JPG, about 10 seconds); with the pictures and the zip's copy held together, the PNG job's peak is about twice that, about 55 MB, far below the 1 GB stop. The page blocks for no more than 100 ms at a time (`performance.spec.ts`) |
 | `scanned.pdf` | 2, A4 | 78,035 | 427,218 | Drawn |
 | `password.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn with `open-sesame`; without it, or with a wrong one, the job fails |
 | `restricted.pdf` | 3, A4 | 1,252,608 | 793,787 | Drawn with no password |

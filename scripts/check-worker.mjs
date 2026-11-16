@@ -46,6 +46,7 @@ const lateSources = [
   { what: "the page engines' shared steps (outline.ts)", path: join('src', 'engines', 'outline.ts') },
   { what: "the shared qpdf JSON steps (qpdf-json.ts)", path: join('src', 'engines', 'qpdf-json.ts') },
   { what: 'the picture resampling (resample.ts)', path: join('src', 'engines', 'resample.ts') },
+  { what: 'the page drawing and its canvas budget (thumbnail.ts)', path: join('src', 'engines', 'thumbnail.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');
@@ -64,6 +65,11 @@ for (const [what, found] of [['PDF.js', pdfjsDisplay], ["PDF.js's worker", pdfjs
   if (found.length !== 1) problems.push(`Expected ${what} as one file of its own in ${assets}, found ${found.length}.`);
 }
 if (worker.includes('Invalid factory url') || worker.includes('pdfjsVersion')) problems.push('The worker file holds code from PDF.js.');
+// PDF.js reaches engines through `tools` only (lint refuses its value imports there), so no engine's file holds it.
+for (const name of files.filter((each) => engineIds.some((id) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each)))) {
+  const source = readFileSync(join(assets, name), 'utf8');
+  if (source.includes('Invalid factory url') || source.includes('pdfjsVersion')) problems.push(`${name} holds code from PDF.js.`);
+}
 if (worker.includes('data:application/octet-stream;base64') || worker.includes('data:font/')) problems.push("The worker file holds PDF.js's helper data.");
 
 // fflate's zip step loads late, from a file of its own, never inside the worker file.
@@ -137,5 +143,5 @@ for (const [what, pattern, markers] of [
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}; the shared qpdf JSON steps and resampling out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling and page drawing out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
 );

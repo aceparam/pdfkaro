@@ -88,3 +88,25 @@ test('Compress PDF: compressing the three scans blocks the page for no more than
   const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
   expect(long.filter((duration) => duration > 100)).toEqual([]);
 });
+
+test('PDF to PNG: listing and converting the 500-page file blocks the page for no more than 100 ms at a time', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto('/pdf-to-png');
+  await page.waitForLoadState('networkidle');
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+  await page.evaluate(() => {
+    const long: number[] = [];
+    (window as unknown as { longTasks: number[] }).longTasks = long;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) long.push(entry.duration);
+    }).observe({ type: 'longtask', buffered: false });
+  });
+  await page.locator('input[type=file]').first().setInputFiles(join(here, '../fixtures/pages-500.pdf'));
+  await expect(page.locator('astro-island ol > li img')).toHaveCount(1, { timeout: 30000 });
+  await page.getByRole('button', { name: 'Convert to PNG and download' }).click();
+  await expect(page.getByRole('heading', { name: 'Your download is ready' })).toBeFocused({ timeout: 200000 });
+  await expect(page.locator('astro-island section')).toContainText('500 files');
+  await page.waitForTimeout(500);
+  const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
+  expect(long.filter((duration) => duration > 100)).toEqual([]);
+});
