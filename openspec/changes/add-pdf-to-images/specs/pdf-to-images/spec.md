@@ -153,7 +153,7 @@ No request that leaves the page SHALL carry the file's contents, its name or its
 #### Scenario: The no-upload test
 
 - **WHEN** the no-upload test converts `rich.pdf` under a telling name, `tagged.pdf`, and `password.pdf` with its password, on both pages, and downloads each result
-- **THEN** every request is to the site's own files on an exact list taken from the build (with PDF.js, its worker and data, the engine and `fflate`, and no pdf-lib), and no request, header, console line or page title holds the file name, its stem, the password, `rich.pdf`'s bookmark titles, attachment name and title, or `tagged.pdf`'s `SECRET-` markers
+- **THEN** every request is to the site's own files on an exact list taken from the build (with PDF.js, its worker and data, the engine, and `fflate` on every run, one-page files included, and no pdf-lib), and no request, header, console line or page title holds the file name, its stem, the password, `rich.pdf`'s bookmark titles, attachment name and title, `tagged.pdf`'s `SECRET-` markers, or a font name from a fixture
 
 ### Requirement: Keyboard and screen reader use
 
