@@ -63,7 +63,7 @@ With one file listed and `multiple: false`, the summary line above the row is le
 ### 3. Progress
 
 - **Pictures:** `Progress`'s `unit` gains `'picture'`; `progressLine` gives "Picture 3 of 40". `progressFraction` fills 0.2 to 0.8 for pictures, leaving the last fifth for writing.
-- **Writing:** this engine reports writing from 75% to 100%, so the bar does not sit full while qpdf writes (`0.2 + 0.8 × 0.75 = 0.8`).
+- **Writing:** this engine reports writing at 75% before qpdf writes, and never 100%, so the bar does not sit full while qpdf writes (`0.2 + 0.8 × 0.75 = 0.8`); the result follows at once.
 - **Reading:** a reading progress of `done: 0, total: 1` reads "Reading the file". The engine sends it before the first qpdf call, so the line never sits on "Starting".
 - **Other tools:** they do not send `total: 1` readings with `done: 0`; tests check their lines are unchanged.
 
@@ -121,7 +121,6 @@ run([file], { passwords }, onProgress, tools):
       replacement = shrinkJpeg or shrinkLossless, or none
   onProgress({ stage: 'writing', percent: 75 })
   out = writeUpdate(fresh qpdf, file, passwordArgs, update)     // includes qpdf --check
-  onProgress({ stage: 'writing', percent: 100 })
   return out.length <= file.length * 0.99 ? [out] : []
 inspect = inspectPdf
 ```

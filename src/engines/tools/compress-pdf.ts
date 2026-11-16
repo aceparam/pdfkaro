@@ -415,7 +415,7 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   // A fresh qpdf, once the reading ones are let go.
   const output = writeUpdate(await freshQpdf(tools, file), passwordArgs, max, replacements, losslessOptions);
   replacements.clear();
-  onProgress({ stage: 'writing', percent: 100 });
+  // No 100% here: the result follows at once, and a full bar beside "Writing" would say the work is done before it is.
   return output.length <= file.length * keepBelow ? [output] : [];
 };
 

@@ -414,11 +414,11 @@ describe('the scans', () => {
       'Picture 2 of 3',
       'Picture 3 of 3',
       'Writing the compressed file',
-      'Writing the compressed file',
     ]);
     const fractions = progress.map(progressFraction);
     expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
-    expect(fractions.at(-2)).toBeCloseTo(0.8);
+    // Writing sits at 0.8 and never reports full; the result follows at once.
+    expect(fractions.at(-1)).toBeCloseTo(0.8);
     const pictures = images((await streamsOf(output!)).streams).map((image) => image.dict);
     expect(pictures.map((dict) => [dict['/Width'], dict['/Height'], dict['/Filter'], dict['/ColorSpace'], dict['/DecodeParms']]).sort()).toEqual([
       [1240, 1754, '/DCTDecode', '/DeviceRGB', undefined],
