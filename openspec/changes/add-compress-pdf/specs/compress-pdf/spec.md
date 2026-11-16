@@ -64,7 +64,12 @@ A picture stored without loss (`/FlateDecode`, grey or RGB, 8 bits) larger than 
 
 ### Requirement: Pictures that are left alone
 
-Every picture that is not a JPG or lossless candidate, as the two requirements above and the design's rules define one, SHALL be left as it was: other colour spaces, masks and soft masks, 1-bit scans, JPEG 2000, unusual entries, mismatched JPG headers, more than 50 million pixels, and inline pictures. A picture whose data is not stored with `/FlateDecode` (CMYK and mismatched JPGs, CCITT scans, JPEG 2000) SHALL stay byte for byte. A picture stored with `/FlateDecode` SHALL keep the same dictionary and the same decoded data; its compressed bytes may change, as the whole file's Flate data is compressed again without loss. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
+Every picture that is not a candidate, as the design's rules define one, SHALL be left as it was: byte for byte when not stored with `/FlateDecode`, and with the same dictionary and decoded data when it is, as the whole file's Flate data is compressed again without loss. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change")
+
+#### Scenario: The kinds left alone
+
+- **WHEN** a file holds pictures in other colour spaces, masks and soft masks, 1-bit scans, JPEG 2000, unusual entries, mismatched JPG headers, more than 50 million pixels, or inline pictures
+- **THEN** none of them is scaled or saved again
 
 #### Scenario: A CMYK picture and a 1-bit scan
 
