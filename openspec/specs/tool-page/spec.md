@@ -73,7 +73,7 @@ The page SHALL have one main button, named after the result, such as "Merge and 
 
 ### Requirement: Result block
 
-When a job is done the page SHALL show the file name, the new size, a Download button and a short list of next steps that carry the file into another tool. A tool that makes a file smaller SHALL show the old size beside the new one; a tool whose job can end with no new file SHALL say so in its own words, with "Start again" and no Download button, as the scenarios below set out. Nothing SHALL download until the visitor presses a button. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When a job is done the page SHALL show the file name, the new size, a Download button and next steps that carry the file into another tool. A tool that makes files smaller SHALL also show the old size, and a job that ends with no new file SHALL say so with no Download button, as the scenarios set out. Nothing SHALL download until the visitor presses a button. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A job finishes
 
