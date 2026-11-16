@@ -41,7 +41,7 @@ The widget words:
   - `memoryAdvice: 'Try on a computer, or split the file first and compress the parts.'`.
 - **Two new optional words:**
   - `resultWas: true`: the result's detail reads "4.2 MB, was 11.8 MB, 64 pages".
-  - `noSmaller: { heading: 'This file could not be made smaller.', advice: 'It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.' }`: shown when the engine gives no file.
+  - `noSmaller: { heading: 'This file could not be made smaller.', advice: 'It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more.' }`: shown when the engine gives no file. Its words are page text, a draft for the owner's review like the result notes.
 
 `resultNotes`:
 - "Pictures that were made smaller can look slightly less sharp up close."
@@ -85,7 +85,7 @@ Added:
 - **`readRawStreams(fresh, passwordArgs, ids)`:**
   - for chosen candidates, in batches, runs `--json=2 --json-key=qpdf --decode-level=none --json-stream-data=file --json-object=…`;
   - uses a fresh qpdf for each batch, as `plain.ts` records that one qpdf writes JSON only once;
-  - a batch holds candidates whose compressed data adds up to at most 32 MB, or one candidate;
+  - a batch holds candidates whose compressed data adds up to at most 32 MB, or one candidate when that one is larger, which is still bounded by the file's own size;
   - each data file is read, handed over, and removed (`Qpdf` gains `remove(path)`).
 - **`writeUpdate(fresh, input, passwordArgs, update)`:**
   - uses a fresh qpdf, after the reading ones are let go;
@@ -138,7 +138,7 @@ inspect = inspectPdf
   - a `/DeviceGray` picture comes back as an RGB JPG from the canvas, so its `/ColorSpace` becomes `/DeviceRGB`, and the pixels stay grey;
   - the new stream replaces the old when the picture was too large, or when it is at least 10% smaller.
 - **`shrinkLossless`, only when too large:**
-  - the raw data is inflated by `inflateLimited`, capped at exactly the expected size (width × height × components, plus one byte per row with a predictor); data that inflates to more or less is left alone;
+  - the raw data is inflated by `inflateLimited`, the one already in `src/engines/picture.ts`, capped at exactly the expected size (width × height × components, plus one byte per row with a predictor); data that inflates to more or less is left alone;
   - PNG predictors are undone by `src/engines/resample.ts`, which then scales by area averaging;
   - the result is deflated by `tools.fflate`'s `Deflate` at level 9, with `/Filter /FlateDecode` and no `/DecodeParms`;
   - it is used only when smaller than the original stream.
@@ -146,10 +146,10 @@ inspect = inspectPdf
 - **The lossless options:** `--object-streams=generate --compress-streams=y --recompress-flate --compression-level=9 --remove-unreferenced-resources=yes`, with no `--decrypt`. A protected file is written with the same password and restrictions, which a test checks on both protected fixtures.
 - **Memory:**
   - the file and the dictionaries' JSON (at most 64 MB);
-  - one batch of raw data (32 MB) and one decoded picture (at most 50 million pixels, about 200 MB as RGBA);
+  - one batch of raw data (32 MB) and one decoded picture (at most 50 million pixels, about 200 MB as RGBA, held twice in the worker as the decoded picture and the canvas, so about 400 MB);
   - then qpdf's write: the input, the replacement data and the output.
 
-  About three times the file plus 250 MB at the peak. qpdf's `--recompress-flate` and `--check` inflate streams one at a time, never all at once.
+  About three times the file plus 450 MB at the peak. qpdf's `--recompress-flate` and `--check` inflate streams one at a time, never all at once.
 
 ### 7. Picture tools for engines
 

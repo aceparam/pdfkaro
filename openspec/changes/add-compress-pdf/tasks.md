@@ -55,7 +55,7 @@
 
 - [ ] 7.1 The tool's no-upload test:
   - its exact allowlist from the build, including the engine, `qpdf-json`, `picture`, `resample` and `fflate`, with no pdf-lib;
-  - a watched run on the scan fixture under a telling name where a JPG and a lossless picture are made smaller and the result is downloaded, with positive checks that the engine, `picture`, `resample` and `fflate` were fetched;
+  - a watched run on the scan fixture under a telling name where a JPG and a lossless picture are made smaller and the result is downloaded, with positive checks that the engine and `fflate` were fetched, that the picture code ran (found by its own sentences if the bundler puts it in the engine's chunk), and that the downloaded file's pictures have their new sizes and filters;
   - runs on `rich.pdf`, `password.pdf`, `tagged.pdf` and `form.pdf`, one ending in "could not be made smaller";
   - secrets for requests, headers, the console and the page title: the file name, its stem, the password, `rich.pdf`'s bookmark titles, attachment name and document title, `tagged.pdf`'s `SECRET-` markers, `form.pdf`'s field values, and the EXIF markers;
   - storage and traces; the address with no query and no hash.
