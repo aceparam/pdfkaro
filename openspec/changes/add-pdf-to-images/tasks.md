@@ -12,7 +12,7 @@
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 `tests/unit/pdf-to-images.test.ts` on every file in `tests/fixtures/` for both formats: picture count and sizes (A4 1240 by 1754, `mixed.pdf`'s sizes and turns), formats checked by their first bytes, JPG and PNG decoded and compared with the thumbnail drawing, `form.pdf`'s values visible, `password.pdf` with its password, damaged files failing, a made-up 100 by 100 inch page drawn at 4096 by 4096, a made-up many-page poster file stopped by the 1 GB guard, a page of nested soft-mask groups refused by the canvas budget, `cleanup` called after each page, a stand-in dead PDF.js worker failing the job, and a zip-limit refusal; the 500-page PNG outcome and peak recorded; record outcomes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
+- [ ] 3.1 `tests/unit/pdf-to-images.test.ts` on every file in `tests/fixtures/` for both formats: picture count and sizes (A4 1240 by 1754, `mixed.pdf`'s sizes and turns), formats checked by their first bytes, JPG and PNG decoded and compared with the thumbnail drawing, `form.pdf`'s values visible, `password.pdf` with its password, damaged files failing, a made-up 100 by 100 inch page drawn at 4096 by 4096 and a 50 by 100 inch page keeping its shape under the cap, a made-up many-page poster file stopped by the 1 GB guard with `TooManyPictures` sorted as `too-many-pictures` and its sentence (the failure kind, `isFromWorker` and `failures.ts` gaining it), a page of nested soft-mask groups refused by the canvas budget, `cleanup` called after each page, a stand-in dead PDF.js worker failing the job, and a zip-limit refusal; the 500-page PNG outcome and peak recorded; record outcomes in the fixtures README, and that the multilingual file is still missing; `make-large.mjs`'s file by hand
 - [ ] 3.2 Thumbnail tests: `draw` sizes, the cap, rotation, both encoders, the canvas budget, and thumbnails unchanged
 
 ## 4. Worker wiring
@@ -55,7 +55,7 @@
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add the tool's hand checks to issue #7 (pictures opened on Windows, macOS, Android and iOS; a poster-sized page on iOS Safari; the pictures' bytes from Firefox and Safari; a PDF with Hindi, Arabic and Chinese text)
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings. The pull request:
-  - names the agent's choices: one tool, two pages; every page; 150 pixels to the inch; the 16 million pixel cap; quality 85; the 1 GB guard; a single picture or a zip; the names;
+  - names the agent's choices: one tool, two pages; every page; 150 pixels to the inch; the 16 million pixel cap (Safari's canvas limit, down from 25 million); quality 85; the 1 GB stop with its own sentence; a single picture or a zip; the names;
   - names that a single-picture result has no next steps and is not covered by the owner's zip exemption;
-  - repeats the owner questions on character maps (with the corrected facts) and on a resolution or page choice; after merge, the fold goes in CLAUDE.md's agent decisions;
+  - repeats the owner questions on character maps (with the corrected facts) and on a resolution or page choice; after merge, the fold and the 1 GB stop go in CLAUDE.md's agent decisions;
   - does not call the tool done.

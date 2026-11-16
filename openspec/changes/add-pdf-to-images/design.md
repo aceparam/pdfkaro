@@ -86,7 +86,7 @@ draw(page, { scale, maxPixels, format: 'jpg' | 'png', quality }): Promise<{ byte
 - **Annotations:** drawn on white, with `annotationMode` set to the loaded PDF.js module's `AnnotationMode.ENABLE_STORAGE`, read from `PdfjsModule`, never imported. Form fields are drawn with their values, and other annotations as their appearance streams show them. Thumbnails keep their current mode.
 - **Encoding:** through `tools.canvas`. `CanvasMaker` here gains `jpeg(canvas, quality)`, and Compress PDF imports that type from here.
 - **Freeing each page:** the canvas is released, then `pdfPage.cleanup()` is called, both in a `finally`, so a page's decoded pictures and operator list are let go before the next page.
-- **A canvas budget:** the `CanvasFactory` given to PDF.js counts the pixels of every live canvas, its own temporary ones for transparency and soft masks included, across `create`, `reset` and `destroy`. Asked to go past 4 × `maxPixels` (about 256 MB as RGBA), it throws, the page fails to draw, and the job fails with the engine sentence.
+- **A canvas budget:** the `CanvasFactory` given to PDF.js, and `draw`'s own output canvas, count the pixels of every live canvas, PDF.js's temporary ones for transparency and soft masks included, across `create`, `reset` and `destroy`. Asked to go past 4 × `maxPixels` (about 256 MB as RGBA), it throws, the page fails to draw, and the job fails with the engine sentence.
 - **The guard:** `tools.pdfjsGuard`, filled in by the worker from `pdfjsLoader.guard`, wraps `openDocument`, `render` and `draw`. A dead PDF.js worker then fails the job at once instead of leaving it on "Page n of m". The worker's thumbnail wrapper uses the same guard through `tools`.
 - **Unchanged:** `safeOptions` stay as they are, with `verbosity: 0`, so PDF.js writes nothing to the console. Errors leave the worker only as a failure kind, never as a message.
 - **Lint:** a rule for `src/engines/**` refuses value imports of `pdfjs-dist`, allowing type imports, so PDF.js can never be bundled into an engine.
@@ -106,7 +106,7 @@ run([file], { format, passwords }, onProgress, tools):
       bytes = (await doc.draw(page, { scale: 150/72, maxPixels, format, quality: 0.85 })).bytes
       total += bytes.length
       if total > zipMaxBytes(pages): throw TooBigForZip('bytes')
-      if total > maxOutputBytes: throw OutOfMemory
+      if total > maxOutputBytes: throw TooManyPictures
       outputs.push(bytes)
   finally:
     doc.close()
@@ -117,7 +117,7 @@ inspect = inspectPdf
 - **Reading the file:** `inspectPdf` (qpdf) reads the page count and asks for a password. PDF.js then opens the file with the same password.
 - **The running checks:**
   - Split's pattern of checking the zip limits as outputs arrive moves into `src/widget/zip-limits.ts` as a small helper both engines use.
-  - `maxOutputBytes` is 1 GB, so the outputs and the copy `zipSync` makes stay well under what a tab can hold. Past it the job fails with the memory sentence (an error the worker already sorts as memory), not by ending the tab.
+  - `maxOutputBytes` is 1 GB, so the outputs and the copy `zipSync` makes stay well under what a computer's tab can hold. Past it the engine throws `TooManyPictures` (in `zip-limits.ts`, recognised by its name, as `TooBigForZip` is), which the worker sorts as a new failure kind, `too-many-pictures`. The page then says, in its own sentence: "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first, or choose JPG." It is a size limit on what a job makes, so it is named among the agent's decisions and put to the owner (CLAUDE.md), as the zip limit was. The input notices are unchanged.
   - This is a guard on what the job makes, not a limit on what a visitor may choose: the input notices are unchanged.
 - **Failures:** a page PDF.js cannot draw, or a file PDF.js cannot open after qpdf could, fails the job with the engine sentence.
 - **Zipping:** the worker zips several outputs as for Split, storing them (level 0). It writes no zip comment or extra field: only the cleaned names and `fflate`'s entry times.
@@ -183,7 +183,7 @@ No change before a pick beyond a few island props. After a pick, the page tools'
 
 - **Missing CJK text,** as §7 says; an owner question.
 - **Every page is converted.** Extract pages gives a subset first.
-- **One resolution** (150 pixels to the inch). Posters are drawn smaller, at most 4096 pixels a side.
+- **One resolution** (150 pixels to the inch). Very large pages, such as posters, are drawn smaller, to at most 16 million pixels (4096 by 4096 for a square page; a tall poster at 1:2 is about 2896 by 5793). The page text says they are drawn smaller, with no number.
 - **The progress bar is full during "Writing the zip",** as for Split today.
 - **A single-picture result has no next steps.** The owner's 12 Nov exemption covers zips only, so the pull request names it.
 

@@ -195,6 +195,8 @@ All but `developer` are read-only.
 
 - **Resolution and page choice for PDF to JPG and PNG.** Pictures are 150 pixels to the inch, every page, no options. Offer a resolution or a choice of pages later?
 
+- **The 1 GB stop in PDF to JPG and PNG.** A job stops once its pictures pass 1 GB, with a sentence naming the limit, so a small hostile file cannot crash the browser tab (`add-pdf-to-images`). A very long ordinary file converted to PNG can reach it too. Keep it, raise it, or remove it?
+
 - **Licence.** The assumed default was AGPL-3.0 because compression would use Ghostscript; the owner has since chosen no Ghostscript (13 Nov 2026). The repo's licence, and whether it is public, are still the owner's to decide ("Source code" in Open decisions). Add no `LICENSE` file until then.
 - **Working doc.** Ask the owner to change "Preact islands" to React in the working doc, so the next export of `SPEC.md` matches the code.
 - **Which pushes publish to the preview.** The owner switched Pages on, on 10 Nov 2026. Should every push to `main` or a `claude/` branch publish, as built, or only chosen branches? The branch rule is under Settings > Environments > github-pages.

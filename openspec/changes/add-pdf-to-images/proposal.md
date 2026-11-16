@@ -14,14 +14,14 @@ PDF to JPG and PDF to PNG are the next Phase 1 tools in catalogue order: the fir
 - **Choosing a file:** one PDF, from the picker, a drop or paste, listed as one row (first-page thumbnail, name, pages, size), as Compress PDF lists it. A protected file asks for its password; a damaged one says so.
 - **The main button:** "Convert to JPG and download" or "Convert to PNG and download". Every page becomes one picture, drawn by PDF.js in the tool worker:
   - at 150 pixels to the inch, a page's own size;
-  - at most 16 million pixels per picture (4096 by 4096, Safari's canvas limit), so a poster-sized page is drawn smaller, never in pieces;
+  - at most 16 million pixels per picture (Safari's canvas limit; 4096 by 4096 for a square page), so a poster-sized page is drawn smaller, never in pieces;
   - on white, with form fields drawn with what was typed in them, and notes and stamps as the page shows them;
   - JPG at quality 85; PNG without loss.
 - **The result:**
   - a one-page PDF gives one picture, named after the file: `report.jpg` or `report.png`;
   - a longer one gives one zip, `report.zip`, holding `report-page-01.jpg` and so on, as Split PDF's zip does.
   - The result gives the name and size ("12 files, 3.4 MB" for a zip) and says the PDF was not changed. A picture holds only the drawn page.
-- **Memory and hostile files:** each page is freed after it is drawn; PDF.js's own canvases share a budget; a dead PDF.js worker fails the job at once; and a job whose pictures pass 1 GB stops with the memory sentence instead of ending the tab.
+- **Memory and hostile files:** each page is freed after it is drawn; PDF.js's own canvases share a budget; a dead PDF.js worker fails the job at once; and a job whose pictures pass 1 GB stops with its own sentence naming that limit, instead of ending the tab.
 - **Progress:** "Page 3 of 12", then "Writing the zip".
 - **Shared code:**
   - **Drawing whole pages:** `src/engines/thumbnail.ts`'s kept document gains `draw`, at a scale and as JPG or PNG, which the thumbnail now uses too, with a canvas budget, per-page cleanup and a guard against a dead PDF.js worker.

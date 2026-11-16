@@ -53,6 +53,11 @@ Pressing the main button SHALL draw every page, in order, as one picture in the 
 - **WHEN** a page is 100 by 100 inches
 - **THEN** its picture is 4096 by 4096 pixels, not 15000 by 15000
 
+#### Scenario: A tall poster
+
+- **WHEN** a page is 50 by 100 inches
+- **THEN** its picture keeps the page's shape at no more than 16,777,216 pixels, about 2896 by 5793
+
 #### Scenario: Nothing but the drawn page
 
 - **WHEN** `tagged.pdf` is converted in the browser
@@ -130,7 +135,7 @@ When drawing fails, the engine cannot be fetched, memory runs out, the pictures 
 #### Scenario: A small file that would make huge pictures
 
 - **WHEN** a small file declares thousands of poster-sized pages
-- **THEN** the job stops once the pictures pass 1 GB, with the memory sentence, and the tab keeps working
+- **THEN** the job stops once the pictures pass 1 GB, saying "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first, or choose JPG.", and the tab keeps working
 
 #### Scenario: A page with deeply nested transparency
 
