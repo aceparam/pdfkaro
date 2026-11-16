@@ -143,4 +143,3 @@ describe('the result line', () => {
     expect(finerSize(1000, 900)).toBe('1,000 bytes');
   });
 });
-});

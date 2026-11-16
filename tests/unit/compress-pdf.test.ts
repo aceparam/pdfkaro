@@ -300,8 +300,9 @@ describe('a large JPG that would come out bigger', () => {
     const dict = { '/Subtype': '/Image', '/Width': 400, '/Height': 400, '/ColorSpace': '/DeviceRGB', '/BitsPerComponent': 8, '/Filter': '/DCTDecode' };
     // An encoder that writes far more than the old picture: quality 100 whatever it is asked for.
     const generous = { ...jpegCanvasMaker, jpeg: (target: unknown) => jpegCanvasMaker.jpeg(target, 1) };
-    const written = await generous.jpeg((() => { const c = createCanvas(300, 300); c.getContext('2d').drawImage(canvas, 0, 0, 300, 300); return c; })(), 1);
-    expect(written.length).toBeGreaterThan(raw.length);
+    const scaled = createCanvas(300, 300);
+    scaled.getContext('2d').drawImage(canvas, 0, 0, 300, 300);
+    expect((await generous.jpeg(scaled)).length).toBeGreaterThan(raw.length);
     expect(await shrinkJpeg(raw, dict, candidate, 300, pictureDecoder, generous)).toBeUndefined();
     // The same picture with an encoder that writes less is made smaller.
     const sparing = { ...jpegCanvasMaker, jpeg: (target: unknown) => jpegCanvasMaker.jpeg(target, 0.01) };

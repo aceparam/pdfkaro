@@ -56,13 +56,14 @@
 - [x] 7.1 The tool's no-upload test:
   - its exact allowlist from the build, including the engine, `qpdf-json`, `picture`, `resample` and `fflate`, with no pdf-lib;
   - a watched run on the scan fixture under a telling name where a JPG and a lossless picture are made smaller and the result is downloaded, with positive checks that the engine and `fflate` were fetched, that the picture code ran (found by its own sentences if the bundler puts it in the engine's chunk), and that the downloaded file's pictures have their new sizes and filters;
-  - runs on `rich.pdf`, `password.pdf`, `tagged.pdf` and `form.pdf`, one ending in "could not be made smaller";
+  - runs on `rich.pdf`, `password.pdf`, `tagged.pdf` and `form.pdf`, each downloaded, and `compress-packed.pdf`, ending in "could not be made smaller";
   - secrets for requests, headers, the console and the page title: the file name, its stem, the password, `rich.pdf`'s bookmark titles, attachment name and document title, `tagged.pdf`'s `SECRET-` markers, `form.pdf`'s field values, and the EXIF markers;
   - storage and traces; the address with no query and no hash.
 
 ## 8. Screenshots
 
 - [x] 8.1 Screenshots of `/compress-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed, working, result with "was", "could not be made smaller", password, damaged, failed (out of memory), the 100 MB notice; check 200% text
+- [x] 8.2 Stage 2 fix round: a too-large JPG replaced only when smaller, with a test; one rule for "smaller" (the engine's 99%), with sizes that would read the same said one unit finer; left-alone Flate pictures described as the same dictionary and decoded data; focus after a pick and the status line in the tool-page delta; the dictionaries' JSON capped while qpdf writes it; hostile tests assert their outcomes; a guarded lookup; a protected fixture with a large JPG; batches and replacements let go early; "Go back to your file" for one-file tools (with the split-pdf delta); the 10% sentence in the page text; screenshots of "Getting ready" retaken
 
 ## 9. Checks and review
 
