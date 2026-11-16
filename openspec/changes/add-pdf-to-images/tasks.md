@@ -47,12 +47,12 @@
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/pdf-to-jpg` at 360px and 1280px, light and dark: empty, getting ready, listed, working, result (zip), result (one picture), password, damaged, failed; `/pdf-to-png` empty and result at 360px; check 200% text
+- [x] 8.1 Screenshots of `/pdf-to-jpg` at 360px and 1280px, light and dark: empty, getting ready, listed, working, result (zip), result (one picture), password, damaged, failed; `/pdf-to-png` empty and result at 360px; check 200% text
 
 ## 9. Checks and review
 
-- [ ] 9.1 No `LICENSES.md` line: no dependency added
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
+- [x] 9.1 No `LICENSES.md` line: no dependency added
+- [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `openspec validate --all --strict`
 - [ ] 9.3 Add the tool's hand checks to issue #7 (pictures opened on Windows, macOS, Android and iOS; a poster-sized page on iOS Safari; the pictures' bytes from Firefox and Safari; a PDF with Hindi, Arabic and Chinese text)
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings. The pull request:
   - names the agent's choices: one tool, two pages; every page; 150 pixels to the inch; the 16 million pixel cap (Safari's canvas limit, down from 25 million); quality 85; the 1 GB stop with its own sentence; a single picture or a zip; the names;
