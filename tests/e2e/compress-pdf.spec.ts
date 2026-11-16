@@ -275,7 +275,7 @@ test.describe('problems with the file', () => {
     await mainButton(page).click();
     await expect(page.getByRole('heading', { name: 'The compression did not finish.' })).toBeFocused({ timeout: 30000 });
     await expect(page.getByText('Your browser ran out of memory. Try on a computer, or split the file first and compress the parts.')).toBeVisible();
-    await page.getByRole('button', { name: 'Go back to your files' }).click();
+    await page.getByRole('button', { name: 'Go back to your file', exact: true }).click();
     await expect(rows(page)).toContainText('text.pdf');
     await expect(mainButton(page)).toBeFocused();
   });
@@ -360,22 +360,23 @@ test.describe('nothing is uploaded', () => {
     await expectNothingHeld(page, context, secrets, consoleText);
   });
 
-  test('rich.pdf: no bookmark title, attachment name or document title reaches a request, the console or the title', async ({ page, context, baseURL }) => {
+  test('rich.pdf under a telling name: no bookmark title, attachment name or document title leaves; both sizes are said in bytes', async ({ page, context, baseURL }) => {
     await open(page);
     const seen = watch(context, page);
-    const consoleText = await watchedRun(page, 'rich.pdf');
-    // 2,064 bytes become 1,676: both read "2 KB", so the page says the file could not be made smaller.
-    await mainButton(page).click();
-    await expect(page.getByRole('heading', { name: noSmaller })).toBeFocused({ timeout: 30000 });
-    const secrets = ['Chapter one', 'Chapter two', 'note.txt', 'Bookmarks, a link and an attachment'];
+    const consoleText = await watchedRun(page, { name: 'qz7rich.pdf', mimeType: 'application/pdf', buffer: readFileSync(fixture('rich.pdf')) });
+    const { download } = await compressAndDownload(page);
+    expect(download.suggestedFilename()).toBe('qz7rich-compressed.pdf');
+    // 2,064 bytes and its result both read "2 KB", so both are said one unit finer.
+    await expect(page.locator('astro-island section')).toContainText(/\d,\d{3} bytes, was 2,064 bytes, 2 pages/);
+    const secrets = ['qz7rich.pdf', 'qz7rich', 'Chapter one', 'Chapter two', 'note.txt', 'Bookmarks, a link and an attachment'];
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await expectNothingHeld(page, context, secrets, consoleText);
   });
 
-  test('tagged.pdf and form.pdf, the second ending in "could not be made smaller": no hidden text, title or field value leaves', async ({ page, context, baseURL }) => {
+  test('tagged.pdf and form.pdf downloaded, then a packed file that could not be made smaller: no hidden text, title or field value leaves', async ({ page, context, baseURL }) => {
     const secrets = [
       'SECRET-ALT-TEXT', 'SECRET-ACTUAL-TEXT', 'SECRET-DEST-NAME', 'SECRET-THREAD-TITLE', 'SECRET-PAGE-TWO-TEXT', 'SECRET-TAGGED-VALUE', 'SECRET-TAGGED-FIELD', 'SECRET-LINK', 'SECRET-NOTE',
-      'A tagged file', 'A fillable form', 'Sample text',
+      'A tagged file', 'A fillable form', 'Sample text', 'An ordinary text document',
     ];
     await open(page);
     const seen = watch(context, page);
@@ -383,12 +384,14 @@ test.describe('nothing is uploaded', () => {
     await compressAndDownload(page);
     await page.getByRole('button', { name: 'Start again' }).click();
     consoleText.push(...(await watchedRun(page, 'form.pdf')));
-    // 3,189 bytes become 2,651: both read "3 KB", so nothing is offered.
+    await compressAndDownload(page);
+    await page.getByRole('button', { name: 'Start again' }).click();
+    consoleText.push(...(await watchedRun(page, 'compress-packed.pdf')));
     await mainButton(page).click();
     await expect(page.getByRole('heading', { name: noSmaller })).toBeFocused({ timeout: 30000 });
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await page.getByRole('button', { name: 'Start again' }).click();
-    await expect(page.locator('astro-island')).not.toContainText('form.pdf');
+    await expect(page.locator('astro-island')).not.toContainText('compress-packed.pdf');
     await expectNothingHeld(page, context, secrets, consoleText);
   });
 });

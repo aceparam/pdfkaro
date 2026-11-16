@@ -52,24 +52,23 @@ export function progressFraction(progress: Progress): number {
 }
 
 /**
- * Whether a result counts as no smaller than its input, for a tool that makes
- * files smaller: not smaller at all, or so little smaller that both sizes read
- * the same ("5.0 MB, was 5.0 MB" is never shown).
- */
-export function isNoSmaller(size: number, was: number): boolean {
-  return size >= was || formatSize(size) === formatSize(was);
-}
-
-/**
  * The line under a result's name: "4.2 MB, was 11.8 MB, 64 pages". A zip says
  * how many files it holds first; `was`, for a tool that makes files smaller, is
- * the input's size.
+ * the input's size. Whether a file counts as smaller is the engine's to say;
+ * the page shows any file it gives.
  */
 export function resultDetail(result: { size: number; pages?: number; parts?: number; was?: number }): string {
+  let size = formatSize(result.size);
+  let was = result.was === undefined ? undefined : formatSize(result.was);
+  // Sizes that would read the same are both said one unit finer, so the difference shows: "1,676 bytes, was 2,064 bytes".
+  if (result.was !== undefined && was === size) {
+    size = finerSize(result.size, result.was);
+    was = finerSize(result.was, result.was);
+  }
   return [
     result.parts ? fileCount(result.parts) : null,
-    formatSize(result.size),
-    result.was !== undefined ? `was ${formatSize(result.was)}` : null,
+    size,
+    was !== undefined ? `was ${was}` : null,
     result.pages ? pageCount(result.pages) : null,
   ]
     .filter(Boolean)
@@ -134,4 +133,14 @@ export function showMoreLabel(shown: number, pages: number, batch: number): stri
 /** What the status region says after more pages are shown. */
 export function shownAnnouncement(shown: number, pages: number): string {
   return `Showing ${number(Math.min(shown, pages))} of ${number(pages)} pages`;
+}
+
+/**
+ * A size one unit finer than `formatSize` gives for `unitOf`, with a thousands
+ * separator: bytes for a size in KB, KB for MB, MB for GB.
+ */
+export function finerSize(bytes: number, unitOf: number): string {
+  if (unitOf < 1024 * 1024) return `${number(bytes)} bytes`;
+  if (unitOf < 1024 * 1024 * 1024) return `${number(Math.round(bytes / 1024))} KB`;
+  return `${number(Math.round(bytes / (1024 * 1024)))} MB`;
 }

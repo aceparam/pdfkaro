@@ -15,6 +15,8 @@ type QpdfModule = {
     readFile(path: string): Uint8Array;
     unlink(path: string): void;
     stat(path: string): { size: number };
+    open(path: string, flags: string): { node?: Record<string, unknown> };
+    close(stream: unknown): void;
   };
 };
 
@@ -31,6 +33,13 @@ export type Qpdf = {
   remove(path: string): void;
   /** A file's length in bytes, read without reading the file. */
   size(path: string): number;
+  /**
+   * Makes an empty file at `path` that refuses any write past `limit` bytes, so
+   * qpdf, writing to it, fails as soon as it passes the limit and never fills
+   * memory with more. Gives false when this build of qpdf does not let the file
+   * be capped; the caller then still checks the size afterwards.
+   */
+  capFile(path: string, limit: number): boolean;
   /**
    * Runs qpdf with these arguments. Gives its exit code, what it wrote as its
    * answer (`out`, standard output) and everything it printed (`printed`,
@@ -67,6 +76,38 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
     read: (path) => module.FS.readFile(path),
     remove: (path) => module.FS.unlink(path),
     size: (path) => module.FS.stat(path).size,
+    capFile(path, limit) {
+      module.FS.writeFile(path, new Uint8Array(0));
+      // The file system's names are shortened in this build, so its parts are found by what they do:
+      // the error a missing file throws, and the file's own table of read and write steps.
+      let ErrnoError: (new (errno: number) => Error) | undefined;
+      try {
+        module.FS.stat('/no such file here');
+      } catch (error) {
+        ErrnoError = (error as { constructor: new (errno: number) => Error }).constructor;
+      }
+      const stream = module.FS.open(path, 'r');
+      const node = stream.node;
+      module.FS.close(stream);
+      if (!node || !ErrnoError) return false;
+      type Write = (stream: unknown, buffer: unknown, offset: number, length: number, position: number, canOwn?: boolean) => number;
+      const key = Object.keys(node).find((name) => {
+        const ops = node[name] as Record<string, unknown> | null;
+        return typeof ops === 'object' && ops !== null && typeof ops.write === 'function' && typeof ops.read === 'function';
+      });
+      if (!key) return false;
+      const ops = node[key] as Record<string, unknown> & { write: Write };
+      const Refusal = ErrnoError;
+      // ENOSPC: no space left. Each file has its own copy of the table, so other files are untouched.
+      node[key] = {
+        ...ops,
+        write(stream: unknown, buffer: unknown, offset: number, length: number, position: number, canOwn?: boolean) {
+          if (position + length > limit) throw new Refusal(51);
+          return ops.write(stream, buffer, offset, length, position, canOwn);
+        },
+      };
+      return true;
+    },
     call(args) {
       out = '';
       printed = '';

@@ -44,3 +44,46 @@ While a job runs the page SHALL show progress in real units, such as "Page 14 of
 
 - **WHEN** the visitor presses Cancel during a job
 - **THEN** the job stops, no result is shown, and the visitor can start again with the same file
+
+### Requirement: Focus goes where the visitor needs it
+
+When a part of the widget appears or goes, focus SHALL move to the next thing the visitor needs, as the table in the `add-tool-widget` design sets out. A change SHALL be announced to a screen reader once: by moving focus to it, or by a status message, not both. (SPEC.md: Definition of done, keyboard and screen reader use)
+
+#### Scenario: The main button is pressed
+
+- **WHEN** a visitor presses the main button with the keyboard
+- **THEN** focus moves to Cancel, and progress is read from a status region
+
+#### Scenario: The result appears
+
+- **WHEN** a job finishes
+- **THEN** focus moves to the result's heading, and no separate status message repeats it
+
+#### Scenario: The last file is removed
+
+- **WHEN** a visitor removes the only file in the list
+- **THEN** the page returns to the file picker alone and focus moves to it
+
+#### Scenario: A one-file tool lists its file as a row
+
+- **WHEN** a visitor chooses a file in a tool that takes one file and lists it as a row, with no summary line above it (Compress PDF)
+- **THEN** focus moves to the main button, and once the file has been read the status region says its name, pages and size once, such as "report.pdf, 64 pages, 11.8 MB."
+
+### Requirement: Failed state
+
+When a job fails the page SHALL say what happened in one sentence and give one thing to try next. (SPEC.md: States every tool handles)
+
+#### Scenario: A job fails
+
+- **WHEN** an engine reports an error it cannot recover from
+- **THEN** the page shows one sentence on what happened and one next step, with no stack trace or error code alone
+
+#### Scenario: A browser tool runs out of memory
+
+- **WHEN** a browser tool runs out of memory on a large file
+- **THEN** the page shows the failed state and suggests a smaller file or a computer with more memory
+
+#### Scenario: Going back to one file
+
+- **WHEN** a job fails in a tool that takes one file
+- **THEN** the way back reads "Go back to your file"; a tool that takes several files says "Go back to your files"

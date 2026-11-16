@@ -16,7 +16,7 @@ Compress PDF is the next Phase 1 tool in catalogue order: the first row of "Make
      - every other picture is left as it is: CMYK and other colour spaces, grey pictures with a colour profile, masks and soft masks, 1-bit scans (CCITT, JBIG2), JPEG 2000, pictures with unusual dictionary entries, JPGs whose own header disagrees with their dictionary, pictures of more than 50 million pixels, and pictures drawn inline in page content.
      - Only candidate pictures are ever read and decoded, in bounded batches, with our own size limits, so a compression bomb elsewhere in the file costs time at most, not memory.
   2. **The whole file is written again by qpdf without loss:** data streams packed into object streams, compressed streams compressed again at the highest level, uncompressed streams compressed, and fonts, pictures and other resources nothing uses removed.
-- **The result** shows the new size beside the old: "4.2 MB, was 11.8 MB" (`SPEC.md` "Details that apply everywhere"). When the file cannot be made at least 1% smaller, or its size would read the same, the page says "This file could not be made smaller." and why it may be ("It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more."), with "Start again" and no download, so the visitor never downloads a "compressed" file that is the same size or larger.
+- **The result** shows the new size beside the old: "4.2 MB, was 11.8 MB" (`SPEC.md` "Details that apply everywhere"); two sizes that would read the same are both shown one unit finer ("1,676 bytes, was 2,064 bytes"). When the file cannot be made at least 1% smaller, the engine gives no file and the page says "This file could not be made smaller." and why it may be ("It may already be compressed, or its pictures are of a kind this tool leaves alone. The questions below say more."), with "Start again" and no download, so the visitor never downloads a "compressed" file that is the same size or larger.
 - **What the file keeps:** pages, text, links, form fields with their values, bookmarks, attached files, tags and the document's details. Pictures that were made smaller are slightly less sharp up close; the page says so. The file is written afresh, so earlier saved versions stored inside it are not kept and a digital signature stops being valid; the page says so.
 - **Passwords and restrictions are kept:** a file opened with its password is written with the same password and restrictions, and a file with restrictions keeps them. Compress PDF is not in the owner's list of page tools that drop them (13 Nov 2026), and "Leaves alone what it was not asked to change" asks for this.
 - **Progress** in real units: "Reading the file", "Picture 3 of 40", then "Writing the compressed file", with the bar not full until the file is written.
@@ -70,7 +70,8 @@ No open decision needs more than its assumed default.
 
 ### Modified Capabilities
 
-- `tool-page`: "Result block" gains the "was" size for a tool that makes files smaller and the result with no new file; "Working state" gains pictures as a unit and "Reading the file".
+- `tool-page`: "Result block" gains the "was" size for a tool that makes files smaller and the result with no new file; "Working state" gains pictures as a unit and "Reading the file"; "Focus goes where the visitor needs it" gains a one-file tool that lists its file as a row; "Failed state" says "Go back to your file" for a tool that takes one file.
+- `split-pdf`: "More parts than a zip can hold" and "A job that fails" say "Go back to your file", as Split PDF takes one file.
 - `tool-engines`: "Engines are pure functions" lets an engine give no file, for a tool whose words say what that means; "The library for each job" records the owner's compression decision of 13 Nov 2026 in place of Ghostscript.
 
 ## Impact
@@ -83,9 +84,9 @@ No open decision needs more than its assumed default.
   - fixtures, unit tests and `tests/e2e/compress-pdf.spec.ts`.
 - **Changed code:**
   - the registry, with the entry and the optional words for the "was" size and the "no smaller file" result;
-  - `src/engines/types.ts`, `src/workers/messages.ts`, `worker-core.ts` and `src/widget/state.ts`, for a run that gives no file, and the "picture" progress unit in `format.ts`;
+  - `src/engines/types.ts` and `src/widget/state.ts`, for a run that gives no file (`messages.ts` and `worker-core.ts` already pass an empty list on, so only their tests change), and the "picture" progress unit and the finer sizes in `format.ts`;
   - `Result` and `ToolWorkspace`, for the "was" size and the "could not be made smaller" result;
   - `tool.worker.ts`, for `decodePicture`'s colour option, the JPG encoder and fflate's `Deflate`;
-  - `outline.ts` and `plain.ts`, which import the moved helpers, and `qpdf.ts`, which gains `remove`;
+  - `outline.ts` and `plain.ts`, which import the moved helpers, and `qpdf.ts`, which gains `remove`, `size` and `capFile`;
   - `check-worker.mjs`, which checks the new shared code loads late, and `page-weight.mjs` only if the build makes a new chunk.
-- **Other tools:** no change in behaviour; their results show no "was" size.
+- **Other tools:** their results show no "was" size. After a failure, the tools that take one file (Split, Extract, Delete, Reorder, Rotate) say "Go back to your file" in place of "Go back to your files" (a stage 2 suggestion).

@@ -287,6 +287,41 @@ describe('data stored without loss', () => {
   });
 });
 
+describe('a large JPG that would come out bigger', () => {
+  it('is left as it was when saving it again at its new size makes it bigger', async () => {
+    const canvas = createCanvas(400, 400);
+    const context = canvas.getContext('2d');
+    for (let index = 0; index < 400; index++) {
+      context.fillStyle = `hsl(${(index * 37) % 360}, 70%, ${30 + (index % 40)}%)`;
+      context.fillRect((index * 97) % 400, (index * 53) % 400, 40, 30);
+    }
+    const raw = new Uint8Array(await canvas.encode('jpeg', 10));
+    const candidate: Candidate = { kind: 'jpeg', width: 400, height: 400, components: 3, deviceGray: false, predictor: false };
+    const dict = { '/Subtype': '/Image', '/Width': 400, '/Height': 400, '/ColorSpace': '/DeviceRGB', '/BitsPerComponent': 8, '/Filter': '/DCTDecode' };
+    // An encoder that writes far more than the old picture: quality 100 whatever it is asked for.
+    const generous = { ...jpegCanvasMaker, jpeg: (target: unknown) => jpegCanvasMaker.jpeg(target, 1) };
+    const written = await generous.jpeg((() => { const c = createCanvas(300, 300); c.getContext('2d').drawImage(canvas, 0, 0, 300, 300); return c; })(), 1);
+    expect(written.length).toBeGreaterThan(raw.length);
+    expect(await shrinkJpeg(raw, dict, candidate, 300, pictureDecoder, generous)).toBeUndefined();
+    // The same picture with an encoder that writes less is made smaller.
+    const sparing = { ...jpegCanvasMaker, jpeg: (target: unknown) => jpegCanvasMaker.jpeg(target, 0.01) };
+    expect(await shrinkJpeg(raw, dict, candidate, 300, pictureDecoder, sparing)).toMatchObject({ dict: { '/Width': 300, '/Height': 300 } });
+  });
+});
+
+describe('a large JPG in a file that needs a password', () => {
+  it('is made smaller, and the file keeps its password and restrictions', async () => {
+    const file = fixture('compress-password.pdf');
+    await expect(compress(file)).rejects.toThrow();
+    const { output } = await compress(file, [password]);
+    expect((await qpdfOn(output!, ['--check'])).code).toBe(2);
+    expect((await qpdfOn(output!, [`--password=${password}`, '--check'])).code).toBe(0);
+    expect((await qpdfOn(output!, [`--password=${password}`, '--show-encryption'])).out).toBe((await qpdfOn(file, [`--password=${password}`, '--show-encryption'])).out);
+    const [picture] = images((await streamsOf(output!, { given: password })).streams);
+    expect(picture!.dict).toMatchObject({ '/Width': 600, '/Height': 600, '/Filter': '/DCTDecode' });
+  });
+});
+
 describe('a JPG whose header disagrees with its dictionary', () => {
   it('is never decoded: a 20,000 by 20,000 frame under 100 by 100, or four colours under RGB', async () => {
     const before = pictureDecoder.calls;
@@ -318,7 +353,7 @@ describe('a JPG whose header disagrees with its dictionary', () => {
 // Real runs.
 
 /** Each file in the test set and what compressing it gives: a smaller file, or none. */
-const outcomes: [string, 'smaller' | 'none' | 'either', string?][] = [
+const outcomes: [string, 'smaller' | 'none', string?][] = [
   ['text.pdf', 'smaller'],
   ['pages-500.pdf', 'smaller'],
   ['scanned.pdf', 'smaller'],
@@ -328,7 +363,7 @@ const outcomes: [string, 'smaller' | 'none' | 'either', string?][] = [
   ['form.pdf', 'smaller'],
   ['mixed.pdf', 'smaller'],
   ['rich.pdf', 'smaller'],
-  ['images.pdf', 'either'],
+  ['images.pdf', 'smaller'],
   ['tagged.pdf', 'smaller'],
   ['compress-scans.pdf', 'smaller'],
   ['compress-lossless.pdf', 'smaller'],
@@ -336,8 +371,9 @@ const outcomes: [string, 'smaller' | 'none' | 'either', string?][] = [
   ['compress-kinds.pdf', 'smaller'],
   ['compress-text.pdf', 'smaller'],
   ['compress-packed.pdf', 'none'],
-  ['compress-jpeg-mismatch.pdf', 'either'],
-  ['compress-flate-bomb.pdf', 'either'],
+  ['compress-jpeg-mismatch.pdf', 'smaller'],
+  ['compress-flate-bomb.pdf', 'none'],
+  ['compress-password.pdf', 'smaller', password],
 ];
 
 describe('compressing every file in the test set', () => {
@@ -466,17 +502,17 @@ describe('pictures that are left alone', () => {
     const before = pictureDecoder.calls;
     const { output } = await compress(file);
     expect(pictureDecoder.calls).toBe(before);
-    if (!output) return;
-    const now = images((await streamsOf(output)).streams);
+    expect(output).toBeDefined();
+    const now = images((await streamsOf(output!)).streams);
     expect(now.map((image) => image.data.toString('base64')).sort()).toEqual(was.map((image) => image.data.toString('base64')).sort());
   }, 60_000);
 
   it('a JPEG 2000 picture stays byte for byte', async () => {
     const file = fixture('images.pdf');
     const { output } = await compress(file);
-    if (!output) return;
+    expect(output).toBeDefined();
     const jpx = (streams: Stream[]) => images(streams).find((image) => image.dict['/Filter'] === '/JPXDecode')!.data;
-    expect(jpx((await streamsOf(output)).streams).equals(jpx((await streamsOf(file)).streams))).toBe(true);
+    expect(jpx((await streamsOf(output!)).streams).equals(jpx((await streamsOf(file)).streams))).toBe(true);
   });
 });
 
@@ -543,25 +579,27 @@ describe('hostile files', () => {
   it('a picture whose data inflates to 100 MB is inflated no further than its size and left as it was', async () => {
     const file = fixture('compress-flate-bomb.pdf');
     inflated.bytes = 0;
-    const { output } = await compress(file);
+    const { outputs } = await compress(file);
     expect(inflated.bytes).toBeLessThan(400 * 400 * 3 + 2 * 1024 * 1024);
-    if (output) expect(images((await streamsOf(output)).streams)[0]!.dict['/Width']).toBe(400);
+    // Left alone, the file is not made 1% smaller, so no file is given.
+    expect(outputs).toEqual([]);
   }, 60_000);
 
   it('an attachment that inflates to 1 GB is never decoded by the pictures step, and the job ends', async () => {
     const file = fixture('compress-bomb-attachment.pdf');
     inflated.calls = 0;
-    const { output } = await compress(file);
+    const { outputs } = await compress(file);
     expect(inflated.calls).toBe(0);
-    if (output) expect((await qpdfOn(output, ['--check'])).code).toBe(0);
+    expect(outputs).toEqual([]);
   }, 180_000);
 
   it('a file whose JSON of dictionaries is over 64 MB skips the pictures step, and is still written again', async () => {
     const file = fixture('compress-json-bomb.pdf');
     inflated.calls = 0;
-    const { output, progress } = await compress(file);
+    const { outputs, progress } = await compress(file);
     expect(inflated.calls).toBe(0);
     expect(progress.some((step) => step.stage === 'working')).toBe(false);
-    if (output) expect(images((await streamsOf(output)).streams)[0]!.dict['/Width']).toBe(400);
+    // Its picture is left at 400 by 400, and the file written again is not 1% smaller.
+    expect(outputs).toEqual([]);
   }, 180_000);
 });

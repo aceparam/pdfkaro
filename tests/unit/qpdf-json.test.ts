@@ -12,6 +12,7 @@ import {
   callWithArgumentFile,
   callWithPassword,
   idOfKey,
+  maxDictionaryJson,
   objectsPerCall,
   passwordArgsFor,
   rawBatches,
@@ -136,8 +137,26 @@ describe('reading every dictionary', () => {
       JSON.parse = parse;
     }
     expect(parsed).toBe(0);
-    expect(qpdf.size('/dicts.json')).toBeGreaterThan(1024);
+    // The file refused to grow past the limit while qpdf wrote it, so qpdf stopped there.
+    expect(qpdf.size('/dicts.json')).toBeLessThanOrEqual(1024);
     expect(readDictionaries(await holding(fixture('damaged-cut.pdf'))(), [])).toBeNull();
+  });
+
+  it('refuses the JSON bomb at the 64 MB cap while qpdf writes it, and the same qpdf still works after', async () => {
+    const qpdf = await holding(fixture('compress-json-bomb.pdf'))();
+    expect(readDictionaries(qpdf, [])).toBeNull();
+    expect(qpdf.size('/dicts.json')).toBeLessThanOrEqual(maxDictionaryJson);
+    expect(qpdf.call(['--check', '/in.pdf']).code).toBe(0);
+  }, 60_000);
+
+  it('caps only the file asked for', async () => {
+    const qpdf = await makeQpdf();
+    expect(qpdf.capFile('/capped', 10)).toBe(true);
+    qpdf.write('/other', new Uint8Array(100));
+    expect(qpdf.size('/other')).toBe(100);
+    qpdf.write('/in.pdf', fixture('text.pdf'));
+    expect(qpdf.call(['--json=2', '/in.pdf', '/capped']).code).not.toBe(0);
+    expect(qpdf.size('/capped')).toBeLessThanOrEqual(10);
   });
 });
 

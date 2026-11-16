@@ -380,7 +380,7 @@ export default function ToolWorkspace({ toolId, accepts, words, firstFiles, onEm
           <p>{failureSentence(state.failure, words)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
-              Go back to your files
+              {words.multiple ? 'Go back to your files' : 'Go back to your file'}
             </button>
           </div>
         </Notice>

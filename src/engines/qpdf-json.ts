@@ -126,13 +126,16 @@ export type Dictionaries = {
 
 /**
  * Every object's dictionary, with no stream data, from a qpdf that holds the
- * file as /in.pdf. qpdf writes the JSON to a file in its own memory; its length
- * is read first, and a JSON over `limit` is not parsed. Gives null when it is
+ * file as /in.pdf. qpdf writes the JSON to a file in its own memory that
+ * refuses writes past `limit`, so qpdf fails there and memory never holds more;
+ * its length is also read before it is read, and a JSON over `limit` is not parsed. Gives null when it is
  * over the limit or cannot be read or parsed, so the caller skips the step that
  * needs it; nothing of the file goes into an error.
  */
 export function readDictionaries(qpdf: Qpdf, passwordArgs: readonly string[], limit = maxDictionaryJson): Dictionaries | null {
   try {
+    // qpdf writes into a file that refuses to grow past the limit, so it fails there; its size is still checked after.
+    qpdf.capFile('/dicts.json', limit);
     const { code } = callWithPassword(qpdf, passwordArgs, ['--json=2', '--json-key=qpdf', '--json-stream-data=none', '/in.pdf', '/dicts.json']);
     if (!finished(code)) return null;
     const size = qpdf.size('/dicts.json');
@@ -205,41 +208,45 @@ export async function* readRawStreams(
   passwordArgs: readonly string[],
   batches: readonly string[][],
 ): AsyncGenerator<Map<string, Uint8Array>> {
-  for (const batch of batches) {
-    const ids = batch.filter(isRef);
-    const found = new Map<string, Uint8Array>();
-    if (ids.length > 0) {
-      const qpdf = await fresh();
-      qpdf.mkdir('/raw');
-      const args = ['--json=2', '--json-key=qpdf', '--decode-level=none', '--json-stream-data=file', `--json-stream-prefix=${dataPrefix}`, ...ids.map(objectArg), '/in.pdf', '/raw.json'];
-      let body: unknown;
-      try {
-        if (finished(callWithPassword(qpdf, passwordArgs, args).code)) {
-          const parsed: unknown = JSON.parse(new TextDecoder().decode(qpdf.read('/raw.json')));
-          qpdf.remove('/raw.json');
-          body = isDict(parsed) && Array.isArray(parsed.qpdf) ? (parsed.qpdf as unknown[])[1] : undefined;
-        }
-      } catch {
-        body = undefined;
-      }
-      if (isDict(body)) {
-        const wanted = new Set(ids);
-        for (const [key, entry] of Object.entries(body)) {
-          const id = idOfKey(key);
-          if (id === undefined || !wanted.has(id) || !isDict(entry) || !isDict(entry.stream)) continue;
-          const path = entry.stream.datafile;
-          if (typeof path !== 'string' || !dataFile.test(path)) continue;
-          try {
-            found.set(id, qpdf.read(path));
-            qpdf.remove(path);
-          } catch {
-            // A data file qpdf did not write gives no data for its stream.
-          }
-        }
-      }
+  for (const batch of batches) yield await readBatch(fresh, passwordArgs, batch.filter(isRef));
+}
+
+/**
+ * One batch of raw data, read by its own qpdf. The qpdf lives only inside this
+ * call, so it, with the file in its memory, is let go before the batch is
+ * handed over; what is handed over are copies taken out of its memory.
+ */
+async function readBatch(fresh: () => Promise<Qpdf>, passwordArgs: readonly string[], ids: string[]): Promise<Map<string, Uint8Array>> {
+  const found = new Map<string, Uint8Array>();
+  if (ids.length === 0) return found;
+  const qpdf = await fresh();
+  qpdf.mkdir('/raw');
+  const args = ['--json=2', '--json-key=qpdf', '--decode-level=none', '--json-stream-data=file', `--json-stream-prefix=${dataPrefix}`, ...ids.map(objectArg), '/in.pdf', '/raw.json'];
+  let body: unknown;
+  try {
+    if (finished(callWithPassword(qpdf, passwordArgs, args).code)) {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(qpdf.read('/raw.json')));
+      qpdf.remove('/raw.json');
+      body = isDict(parsed) && Array.isArray(parsed.qpdf) ? (parsed.qpdf as unknown[])[1] : undefined;
     }
-    yield found;
+  } catch {
+    body = undefined;
   }
+  if (!isDict(body)) return found;
+  const wanted = new Set(ids);
+  for (const [key, entry] of Object.entries(body)) {
+    const id = idOfKey(key);
+    if (id === undefined || !wanted.has(id) || !isDict(entry) || !isDict(entry.stream)) continue;
+    const path = entry.stream.datafile;
+    if (typeof path !== 'string' || !dataFile.test(path)) continue;
+    try {
+      found.set(id, qpdf.read(path));
+      qpdf.remove(path);
+    } catch {
+      // A data file qpdf did not write gives no data for its stream.
+    }
+  }
+  return found;
 }
 
 /** A replaced stream: its new dictionary and its new raw data, which `/Filter` in the dictionary describes. */
@@ -260,14 +267,15 @@ export function streamUpdateJson(maxObjectId: number, streams: ReadonlyMap<strin
 /**
  * Writes the file held by a fresh qpdf as /in.pdf with `options` (and the
  * password, so a protected file keeps its password and restrictions), after
- * replacing the streams in `replacements`, then checks the result with
+ * replacing the streams in `replacements` (each taken out of the map once it
+ * is in qpdf's memory), then checks the result with
  * `qpdf --check`, with the password. The data files go under paths made here.
  */
 export function writeUpdate(
   qpdf: Qpdf,
   passwordArgs: readonly string[],
   maxObjectId: number,
-  replacements: ReadonlyMap<string, StreamReplacement>,
+  replacements: Map<string, StreamReplacement>,
   options: readonly string[],
 ): Uint8Array {
   const args = ['/in.pdf'];
@@ -279,6 +287,8 @@ export function writeUpdate(
       const datafile = `/upd/${index++}`;
       qpdf.write(datafile, data);
       streams.set(id, { dict, datafile });
+      // Once in qpdf's memory, the data is let go here, so it is not held twice while qpdf writes.
+      replacements.delete(id);
     }
     qpdf.write('/update.json', new TextEncoder().encode(streamUpdateJson(maxObjectId, streams)));
     args.push('--update-from-json=/update.json');

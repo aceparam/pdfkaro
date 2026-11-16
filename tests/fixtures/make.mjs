@@ -946,3 +946,12 @@ save('compress-packed.pdf', qpdfRun(textBytes, ['--deterministic-id', '--object-
   // Packed by qpdf, a hundred objects to a compressed object stream, so the file stays small.
   save('compress-json-bomb.pdf', qpdfRun(await doc.save({ useObjectStreams: false }), ['--deterministic-id', '--object-streams=generate', '--compression-level=9']));
 }
+
+// 15h. A large JPG in a file that needs a password (open-sesame), so the whole engine runs on an encrypted file:
+// a 1200 by 1200 photo on a page of 288 by 288 points (4 inches), where 600 pixels is the most it needs.
+{
+  const doc = await newDoc('A protected picture to compress');
+  const photo = withoutProfile(canvasJpeg(1200, 1200, scene, 85));
+  drawPictures(doc, [288, 288], [[imageStream(doc, photo, { Width: 1200, Height: 1200, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [0, 0, 288, 288]]]);
+  save('compress-password.pdf', qpdfRun(await doc.save(), ['--encrypt', 'open-sesame', 'owner-secret', '256', '--print=low']));
+}

@@ -12,7 +12,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 ### What is made smaller?
 
-Pictures in the file. A JPG picture that is sharper than it needs to be for its page is scaled down and saved again. A picture stored without loss, such as a screenshot or a drawing, is scaled down and stored without loss again, so it never gets the blur of a JPG. Then the whole file is written again more tightly, and pictures and fonts that nothing uses are removed.
+Pictures in the file. A JPG picture that is sharper than it needs to be for its page is scaled down and saved again. A JPG of normal sharpness is saved again only when that makes it at least 10% smaller. A picture stored without loss, such as a screenshot or a drawing, is scaled down and stored without loss again, so it never gets the blur of a JPG. Then the whole file is written again more tightly, and pictures and fonts that nothing uses are removed.
 
 ### Why is my file still large after compressing?
 

@@ -277,7 +277,8 @@ const isZlib = (data: Uint8Array) => data.length >= 2 && (data[0]! & 0x0f) === 8
  * match the dictionary (one 8-bit frame, the same width, height and colours)
  * before it is decoded. It is rebuilt without camera details or a colour
  * profile, decoded at its new size, drawn, and saved at quality 75. It replaces
- * the old one when the old one was too large, or when it is at least 10% smaller.
+ * the old one when the old one was too large and the new one is smaller, or
+ * when the new one is at least 10% smaller.
  */
 export async function shrinkJpeg(
   raw: Uint8Array,
@@ -315,6 +316,8 @@ export async function shrinkJpeg(
   const writtenComponents = frame.frame.components;
   if (writtenComponents !== 1 && writtenComponents !== 3) return undefined;
   if (candidate.components === 3 && writtenComponents !== 3) return undefined;
+  // Too large: used only when smaller. Not too large: only when at least 10% smaller.
+  if (written.bytes.length >= raw.length) return undefined;
   if (!tooLarge && written.bytes.length > raw.length * (1 - jpegSaving)) return undefined;
   // A grey picture comes back from the canvas as an RGB JPG; its pixels stay grey.
   const space = candidate.deviceGray && writtenComponents === 3 ? '/DeviceRGB' : undefined;
@@ -385,7 +388,10 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
       let done = 0;
       for await (const batch of readRawStreams(() => freshQpdf(tools, file), passwordArgs, batches)) {
         for (const [id, raw] of batch) {
-          const { dict, candidate } = byId.get(id)!;
+          const found = byId.get(id);
+          // readRawStreams gives only ids it was asked for; anything else is left alone.
+          if (!found) continue;
+          const { dict, candidate } = found;
           onProgress({ stage: 'working', unit: 'picture', done: ++done, total });
           let replacement: StreamReplacement | undefined;
           try {

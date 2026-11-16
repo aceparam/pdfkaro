@@ -294,9 +294,8 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       );
       const output = outputs[0];
       const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
-      // No file, or one whose size reads the same as the input's, is "no smaller", for a tool with words for it.
-      // For any other tool, no file is the engine's failure.
-      const shown = finishedAs(output?.byteLength, inputSize, words.noSmaller !== undefined);
+      // No file is "no smaller", for a tool with words for it; for any other tool, the engine's failure.
+      const shown = finishedAs(output !== undefined, words.noSmaller !== undefined);
       if (shown === 'no-new-file') {
         dispatch({ type: 'finished', result: { none: true } });
         return;

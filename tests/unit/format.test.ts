@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileCount, formatSize, isNoSmaller, outputName, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
+import { fileCount, finerSize, formatSize, outputName, pageCount, partName, progressFraction, progressLine, resultDetail, stem } from '../../src/widget/format';
 
 describe('counts and sizes', () => {
   it('says one page and many pages', () => {
@@ -130,13 +130,17 @@ describe('the result line', () => {
     expect(resultDetail({ size: 3 * mb, parts: 3 })).toBe('3 files, 3.0 MB');
   });
 
-  it('counts a result as no smaller when it is not smaller, or both sizes read the same', () => {
+  it('says both sizes one unit finer when they would read the same, with a thousands separator', () => {
     const mb = 1024 * 1024;
-    expect(isNoSmaller(4.97 * mb, 5.02 * mb)).toBe(true);
+    // rich.pdf: 2,064 bytes become 1,676, both "2 KB".
+    expect(resultDetail({ size: 1676, was: 2064, pages: 2 })).toBe('1,676 bytes, was 2,064 bytes, 2 pages');
+    // 5.02 MB become 4.97 MB, both "5.0 MB".
     expect(formatSize(4.97 * mb)).toBe(formatSize(5.02 * mb));
-    expect(isNoSmaller(5 * mb, 5 * mb)).toBe(true);
-    expect(isNoSmaller(6 * mb, 5 * mb)).toBe(true);
-    expect(isNoSmaller(4.2 * mb, 11.8 * mb)).toBe(false);
-    expect(isNoSmaller(500, 900)).toBe(false);
+    expect(resultDetail({ size: 4.97 * mb, was: 5.02 * mb })).toBe('5,089 KB, was 5,140 KB');
+    expect(resultDetail({ size: 2.51 * 1024 * mb, was: 2.54 * 1024 * mb })).toBe('2,570 MB, was 2,601 MB');
+    // Sizes that read differently are left as they are.
+    expect(resultDetail({ size: 3441, was: 6057, pages: 3 })).toBe('3 KB, was 6 KB, 3 pages');
+    expect(finerSize(1000, 900)).toBe('1,000 bytes');
   });
+});
 });

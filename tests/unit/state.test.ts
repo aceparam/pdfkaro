@@ -174,17 +174,13 @@ describe('a job that gives no new file', () => {
 });
 
 describe('what a finished job shows', () => {
-  const mb = 1024 * 1024;
-  it('with words for "no smaller": no file, or one whose size reads the same, gives those words', () => {
-    expect(finishedAs(undefined, 5 * mb, true)).toBe('no-new-file');
-    expect(finishedAs(4.97 * mb, 5.02 * mb, true)).toBe('no-new-file');
-    expect(finishedAs(5.5 * mb, 5 * mb, true)).toBe('no-new-file');
-    expect(finishedAs(4.2 * mb, 11.8 * mb, true)).toBe('file');
+  it('shows any file the engine gives, whatever its size: the engine says what counts as smaller', () => {
+    expect(finishedAs(true, true)).toBe('file');
+    expect(finishedAs(true, false)).toBe('file');
   });
 
-  it('without them, no file is the engine failure and any file is shown, whatever its size, so other tools are unchanged', () => {
-    expect(finishedAs(undefined, 5 * mb, false)).toBe('engine-failure');
-    expect(finishedAs(5 * mb, 5 * mb, false)).toBe('file');
-    expect(finishedAs(9 * mb, 5 * mb, false)).toBe('file');
+  it('with no file: the words for "no smaller" for a tool that has them, else the engine failure, so other tools are unchanged', () => {
+    expect(finishedAs(false, true)).toBe('no-new-file');
+    expect(finishedAs(false, false)).toBe('engine-failure');
   });
 });

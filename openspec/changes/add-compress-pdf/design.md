@@ -50,14 +50,14 @@ The widget words:
 
 `related`: `merge-pdf`, `split-pdf`, `delete-pdf-pages`, `jpg-to-pdf`, `pdf-to-jpg`.
 
-With one file listed and `multiple: false`, the summary line above the row is left out, so the file is not described twice. That holds for every one-file tool that lists its file as a row, of which this is the first.
+With one file listed and `multiple: false`, the summary line above the row is left out, so the file is not described twice. That holds for every one-file tool that lists its file as a row, of which this is the first. With no summary line to move focus to, focus after a pick goes to the main button (unavailable while the file is read), and once the file has been read the status region says its name, pages and size once: "report.pdf, 64 pages, 11.8 MB.", as the page tools already say their file's line. A password field or a damaged-file notice takes focus as before. After a failure, a tool that takes one file offers "Go back to your file"; one that takes several, "Go back to your files".
 
 ### 2. A run that gives no file (`tool-engines`, `tool-page`)
 
 - **Engine and worker:** an engine may return an empty array, meaning "no smaller file". `worker-core` passes `outputs: []` on, and `isFromWorker` accepts it.
 - **Page:** the state holds a result with no name, size or link. `ToolWorkspace` shows `noSmaller`'s heading and advice, with focus and announcement as for a result, "Start again", and no Download button.
 - **Other tools:** a tool without `noSmaller` that gets no file shows the engine failure, so no other tool changes.
-- **Counting as smaller:** the engine gives `[]` unless the output is at most 99% of the input. The page also treats a result as no smaller when its size and the input's would read the same (`formatSize`), so "5.0 MB, was 5.0 MB" is never shown.
+- **Counting as smaller:** one rule, the engine's: it gives `[]` unless the output is at most 99% of the input, and the page shows any file it gives (`finishedAs`). When the two sizes would read the same in the usual unit, `resultDetail` says both one unit finer, with thousands separators: bytes for KB ("1,676 bytes, was 2,064 bytes"), KB for MB ("5,089 KB, was 5,140 KB"), MB for GB. So "5.0 MB, was 5.0 MB" is never shown, and a real saving is never hidden.
 - **Tests** cover all of this.
 
 ### 3. Progress
@@ -79,17 +79,18 @@ The general helpers move from `outline.ts` and `plain.ts` into this file, unchan
 Added:
 - **`readDictionaries(qpdf, passwordArgs)`:**
   - runs `--json=2 --json-key=qpdf --json-stream-data=none` with qpdf writing to a file in its own memory, not standard output;
-  - reads that file's length first, and does not parse a JSON of more than 64 MB (the pictures step is then skipped; the lossless step still runs);
+  - the file is capped while qpdf writes it: `Qpdf.capFile` gives it its own write step, which refuses any write past 64 MB (ENOSPC), so qpdf fails there and memory never holds more (a stage 2 suggestion). The file system's names are shortened in the WebAssembly build, so the file's table of steps and the error type are found by what they do; if they cannot be found, the cap is skipped and the size check below still holds;
+  - reads that file's length before reading it, and does not parse a JSON of more than 64 MB (the pictures step is then skipped; the lossless step still runs);
   - any failure to read or parse also skips the pictures step;
   - gives every object's dictionary, with no stream data.
 - **`readRawStreams(fresh, passwordArgs, ids)`:**
   - for chosen candidates, in batches, runs `--json=2 --json-key=qpdf --decode-level=none --json-stream-data=file --json-object=…`;
   - uses a fresh qpdf for each batch, as `plain.ts` records that one qpdf writes JSON only once;
   - a batch holds candidates whose compressed data adds up to at most 32 MB, or one candidate when that one is larger, which is still bounded by the file's own size;
-  - each data file is read, handed over, and removed (`Qpdf` gains `remove(path)`).
+  - each data file and the batch's JSON are read and removed (`Qpdf` gains `remove(path)` and `size(path)`); each batch is read inside its own call, so its qpdf, with the file in its memory, is let go before the batch is handed over.
 - **`writeUpdate(fresh, input, passwordArgs, update)`:**
   - uses a fresh qpdf, after the reading ones are let go;
-  - writes the update with `JSON.stringify`, and the data files under paths our code makes;
+  - writes the update with `JSON.stringify`, and the data files under paths our code makes, taking each replacement out of the map once it is in qpdf's memory, so it is not held twice while qpdf writes;
   - runs `--update-from-json=/update.json` with the lossless options, through the argument file;
   - then runs `qpdf --check`, with the password, through the argument file.
 
@@ -136,7 +137,7 @@ inspect = inspectPdf
   - `tools.decodePicture` decodes at the target size (the limit, or the full size when not too large) with `colorSpaceConversion: 'none'` and `resizeQuality: 'high'`;
   - `tools.canvas` draws, and encodes JPG at quality 0.75;
   - a `/DeviceGray` picture comes back as an RGB JPG from the canvas, so its `/ColorSpace` becomes `/DeviceRGB`, and the pixels stay grey;
-  - the new stream replaces the old when the picture was too large, or when it is at least 10% smaller.
+  - the new stream replaces the old when the picture was too large and the new one is smaller, or when it is at least 10% smaller. A large JPG saved at a low quality can come out bigger at quality 75, even scaled down; it is then left alone.
 - **`shrinkLossless`, only when too large:**
   - the raw data is inflated by `inflateLimited`, the one already in `src/engines/picture.ts`, capped at exactly the expected size (width × height × components, plus one byte per row with a predictor); data that inflates to more or less is left alone;
   - PNG predictors are undone by `src/engines/resample.ts`, which then scales by area averaging;
@@ -191,8 +192,9 @@ pdf-lib is not fetched. `check-worker.mjs` checks the engine and the new shared 
 - **Hostile picture data.**
   - A JPG's own frame must match its dictionary in size, components and precision, and stay under 50 million pixels, before the browser decodes it.
   - A CMYK JPG labelled RGB, or a small dictionary over a huge JPG, is left alone.
+  - A dictionary of 100 by 100 over a JPG frame of 20,000 by 20,000 is tested in the unit test, built there, not as a fixture: qpdf's own `--check` refuses a file holding such a JPG, so a fixture of it could not be compressed at all. The test shows it is never decoded, and that the job then fails at the check, as the file itself does. The fixture `compress-jpeg-mismatch.pdf` holds a whole 400 by 300 JPG under a 100 by 100 dictionary instead.
 - **The JSON.**
-  - Only qpdf's own output is parsed, from a file whose size is checked first (64 MB).
+  - Only qpdf's own output is parsed, from a file capped at 64 MB while it is written and whose size is checked again before it is read.
   - Object keys must match `obj:N G R`, and the update is built with `JSON.stringify`.
   - Numbers from the file are checked to be finite and in range before use.
 - **Passwords.** Passed only inside `--password=`, never logged. The output keeps qpdf's encryption, at the input's own strength.

@@ -6,7 +6,7 @@ Every tool is run against every file here. `make.mjs` makes them, with `@cantoo/
 node tests/fixtures/make.mjs
 ```
 
-The encrypted files come out different on each run, because encryption uses random salt. The others come out the same.
+The encrypted files (`password.pdf`, `restricted.pdf`, `compress-password.pdf`) come out different on each run, because encryption uses random salt. The others come out the same.
 
 ## The files
 
@@ -43,6 +43,7 @@ The encrypted files come out different on each run, because encryption uses rand
 | `compress-flate-bomb.pdf` | A picture whose dictionary says 400 by 400 RGB stored without loss, and whose data inflates to 100 MB | 1 |
 | `compress-jpeg-mismatch.pdf` | Two JPGs whose own header disagrees with their dictionary: 100 by 100 RGB over a whole JPG of 400 by 300, and 200 by 100 RGB over `cmyk.jpg` (four colours). A JPG frame of 20,000 by 20,000 under a 100 by 100 dictionary is made in the unit test instead, as qpdf's own check refuses it | 2 |
 | `compress-json-bomb.pdf` | 5,000 objects, each a string of 14,000 characters, packed by qpdf into a file of 140 KB whose JSON of dictionaries is about 70 MB; and a 400 by 400 picture it would make smaller if it read that JSON | 1 |
+| `compress-password.pdf` | A 1200 by 1200 photo (JPG) on a page of 288 by 288 points, in a file that needs the password `open-sesame`, printing at low quality only. Its encryption comes out different on each run | 1 |
 
 ## The pictures, in `pictures/`
 
@@ -385,6 +386,7 @@ Each file was compressed in Node with the same qpdf the browser uses (`tests/uni
 | `compress-bomb-attachment.pdf` | 1,045,278 | none | The pictures step reads no attachment; qpdf compresses its 1 GB again a piece at a time, in about 6 seconds, and the result is not smaller |
 | `compress-flate-bomb.pdf` | 103,018 | none | Inflating the picture stops just past the 480,000 bytes it should hold; it is left alone |
 | `compress-jpeg-mismatch.pdf` | 15,014 | 14,774 | Neither JPG is decoded; both byte for byte. The 20,000 by 20,000 frame made in the test is never decoded either, and that job fails at `qpdf --check`, which the file itself fails |
-| `compress-json-bomb.pdf` | 140,759 | none | The JSON of dictionaries is over 64 MB, so it is not parsed and the pictures step is skipped (its picture stays 400 by 400); the file is still written again, in about 17 seconds in Node, and is not smaller |
+| `compress-json-bomb.pdf` | 140,759 | none | qpdf's JSON of dictionaries is refused at 64 MB while it is written, so qpdf stops there, nothing is parsed and the pictures step is skipped (its picture stays 400 by 400); the file is still written again, in about 17 seconds in Node, and is not smaller |
+| `compress-password.pdf` | 36,730 | 12,707 | With its password: the photo scaled to 600 by 600 (150 to the inch across 4 inches), and the result asks for the same password with the same encryption and restrictions. Without it, the job fails |
 
 The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI. The multilingual file is still missing.
