@@ -32,16 +32,16 @@
 
 ## 4. Worker wiring
 
-- [ ] 4.1 `check-worker.mjs`: the engine and the new shared code stay out of the worker file; `page-weight.mjs` gets a `loadedLater` line only for any new chunk the build makes
+- [x] 4.1 `check-worker.mjs`: the engine and the new shared code stay out of the worker file; `page-weight.mjs` gets a `loadedLater` line only for any new chunk the build makes
 
 ## 5. Page and page text
 
-- [ ] 5.1 Check the page renders with its heading, sentence, title and description, and the home page lists it under "Make smaller and fix"
-- [ ] 5.2 Write `src/content/tools/compress-pdf.md` as the design lists, 250 to 500 words, a draft, with no claim about print quality; check against "Banned patterns"
+- [x] 5.1 Check the page renders with its heading, sentence, title and description, and the home page lists it under "Make smaller and fix"
+- [x] 5.2 Write `src/content/tools/compress-pdf.md` as the design lists, 250 to 500 words, a draft, with no claim about print quality; check against "Banned patterns"
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/compress-pdf.spec.ts` at 360px and 1280px:
+- [x] 6.1 `tests/e2e/compress-pdf.spec.ts` at 360px and 1280px:
   - choosing a file, with one row and no summary line; two files dropped; not a PDF;
   - compressing the scan fixture and checking the download (smaller, `qpdf --check`, page count) and "was" in the result;
   - the text-only packed file giving "This file could not be made smaller." and its advice, with no Download;
@@ -53,7 +53,7 @@
 
 ## 7. No-upload test
 
-- [ ] 7.1 The tool's no-upload test:
+- [x] 7.1 The tool's no-upload test:
   - its exact allowlist from the build, including the engine, `qpdf-json`, `picture`, `resample` and `fflate`, with no pdf-lib;
   - a watched run on the scan fixture under a telling name where a JPG and a lossless picture are made smaller and the result is downloaded, with positive checks that the engine and `fflate` were fetched, that the picture code ran (found by its own sentences if the bundler puts it in the engine's chunk), and that the downloaded file's pictures have their new sizes and filters;
   - runs on `rich.pdf`, `password.pdf`, `tagged.pdf` and `form.pdf`, one ending in "could not be made smaller";
