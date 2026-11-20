@@ -2,6 +2,7 @@
 // links are all generated from this file. Data and types only: no logic here.
 
 import type { CatalogueSlug } from './catalogue';
+import type { OutputExtension } from '../widget/format';
 
 export type GroupId = 'organise' | 'smaller' | 'to-pdf' | 'from-pdf' | 'edit' | 'protect' | 'read';
 
@@ -85,7 +86,7 @@ export type ToolWidgetWords = {
    * The extension of each output, alone or inside a zip, which the download's type follows.
    * Left out, `pdf`. A page whose preset sets the format says it in its own words (PDF to JPG).
    */
-  outputExtension?: 'pdf' | 'jpg' | 'png';
+  outputExtension?: OutputExtension;
   /** How many files the tool needs before it can run. */
   minFiles: number;
   /** Whether the picker takes several files at once. */

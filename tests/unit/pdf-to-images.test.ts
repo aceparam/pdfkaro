@@ -244,6 +244,21 @@ async function nestedGroups(levels: number) {
   return doc.save();
 }
 
+/** A PDF of `count` pages of 72 by 72 points, each painting one full-page image mask twice, which PDF.js caches. */
+async function twiceMasked(count: number) {
+  const doc = await PDFDocument.create();
+  const context = doc.context;
+  // An 8 by 8 checkerboard mask, one bit per pixel, a byte per row.
+  const bits = Uint8Array.from({ length: 8 }, (_, row) => (row % 2 === 0 ? 0xaa : 0x55));
+  const mask = context.register(context.stream(bits, { Type: 'XObject', Subtype: 'Image', ImageMask: true, Width: 8, Height: 8, BitsPerComponent: 1 }));
+  for (let index = 0; index < count; index++) {
+    const page = doc.addPage([72, 72]);
+    page.node.set(PDFName.of('Resources'), context.obj({ XObject: { M: mask } }));
+    page.node.set(PDFName.of('Contents'), context.register(context.stream('0 0 1 rg q 72 0 0 72 0 0 cm /M Do Q q 72 0 0 72 0 0 cm /M Do Q')));
+  }
+  return doc.save();
+}
+
 describe('posters', () => {
   it('draws a 100 by 100 inch page at 4096 by 4096, not 15000 by 15000', async () => {
     const { outputs } = await convert(await pagesOf(7200, 7200), 'png');
@@ -272,7 +287,7 @@ describe('posters', () => {
     expect(progress.at(-1)).toEqual({ stage: 'working', unit: 'page', done: 4, total: 1000 });
     expect(failureKind(failed)).toBe('too-many-pictures');
     expect(failureSentence(failureKind(failed), {})).toBe(
-      'The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.',
+      'The pictures would add up to more than 1 GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts.',
     );
     expect(maxOutputBytes).toBe(1024 * 1024 * 1024);
   }, 120000);
@@ -288,6 +303,15 @@ describe('limits on what one job holds', () => {
     expect(failed).toBeInstanceOf(Error);
     expect((failed as Error).name).toBe('CanvasBudgetError');
     expect(failureKind(failed)).toBe('engine');
+  });
+
+  it("forgets the canvases PDF.js made for a page once it is drawn, though PDF.js drops its cached masks without saying so", async () => {
+    // PDF.js keeps each mask it paints twice in a cache it empties without destroying, so counting them would
+    // refuse a page after a few pages; each drawing's canvases are forgotten once it has settled.
+    const engine = makeRun({ maxPixels: 150 * 150 });
+    const outputs = await engine([await twiceMasked(30)], { format: 'png' }, () => {}, tools);
+    expect(outputs).toHaveLength(30);
+    for (const page of [0, 29]) expect((await decode(outputs[page]!)).ink).toBeGreaterThan(0.3);
   });
 
   it('refuses at once a file of more pages than one zip holds, before drawing any', async () => {

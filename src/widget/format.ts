@@ -107,8 +107,12 @@ export function outputName(input: string, suffix: string, extension = 'pdf'): st
   return suffix === '' ? `${stem(input)}.${extension}` : `${stem(input)}-${suffix}.${extension}`;
 }
 
+/** The extensions a tool's outputs may have, alone or inside a zip: one closed list, read by the registry, the worker's checks and the download's type. */
+export const outputExtensions = ['pdf', 'jpg', 'png'] as const;
+export type OutputExtension = (typeof outputExtensions)[number];
+
 /** The type a download is given, from its extension. */
-export function outputType(extension: 'pdf' | 'jpg' | 'png' | 'zip'): string {
+export function outputType(extension: OutputExtension | 'zip'): string {
   switch (extension) {
     case 'jpg':
       return 'image/jpeg';

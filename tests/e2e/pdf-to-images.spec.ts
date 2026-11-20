@@ -309,16 +309,20 @@ test.describe('converting', () => {
       for (const [name, picture] of Object.entries(entries)) {
         if (on.format === 'png') {
           expect(isPng(picture), name).toBe(true);
+          // Only picture chunks, and the colour notes a browser may add: anything else is refused, text chunks among them.
           const chunks = pngChunks(picture);
-          for (const kind of ['tEXt', 'zTXt', 'iTXt', 'eXIf', 'tIME']) expect(chunks, `${name} ${chunks.join(' ')}`).not.toContain(kind);
+          const allowed = ['IHDR', 'IDAT', 'IEND', 'sRGB', 'gAMA', 'iCCP', 'cHRM', 'pHYs'];
+          expect(chunks.filter((kind) => !allowed.includes(kind)), `${name} ${chunks.join(' ')}`).toEqual([]);
           expect(chunks[0]).toBe('IHDR');
           expect(chunks.at(-1)).toBe('IEND');
         } else {
           expect(isJpg(picture), name).toBe(true);
+          // Only the segments that draw the picture, and APP0 (JFIF) and APP2 (a colour profile) a browser may add:
+          // anything else is refused, APP1 (EXIF, XMP) and COM (a comment) among them. SOI starts it and EOI ends it.
           const { markers } = jpgSegments(picture);
-          // APP1 holds EXIF and XMP; COM is a comment.
-          expect(markers, `${name} ${markers.map((marker) => marker.toString(16)).join(' ')}`).not.toContain(0xe1);
-          expect(markers).not.toContain(0xfe);
+          const allowed = [0xe0, 0xe2, 0xdb, 0xc0, 0xc1, 0xc2, 0xc4, 0xdd, 0xda];
+          expect(markers.filter((marker) => !allowed.includes(marker)), `${name} ${markers.map((marker) => marker.toString(16)).join(' ')}`).toEqual([]);
+          expect([picture[0], picture[1], picture.at(-2), picture.at(-1)]).toEqual([0xff, 0xd8, 0xff, 0xd9]);
         }
         expect(Buffer.from(picture).includes('SECRET-'), name).toBe(false);
         expect(Buffer.from(picture).includes('A tagged file'), name).toBe(false);
@@ -416,7 +420,7 @@ test.describe('problems with the file', () => {
     await pickReady(page, 'text.pdf');
     await mainButton(page, jpgPage).click();
     await expect(failedHeading(page)).toBeFocused({ timeout: 30000 });
-    await expect(page.getByText('The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.')).toBeVisible();
+    await expect(page.getByText('The pictures would add up to more than 1 GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts.')).toBeVisible();
     await page.getByRole('button', { name: 'Go back to your file', exact: true }).click();
     await expect(rows(page)).toContainText('text.pdf');
   });

@@ -135,11 +135,11 @@ When drawing fails, the engine cannot be fetched, memory runs out, the pictures 
 #### Scenario: A small file that would make huge pictures
 
 - **WHEN** a small file declares thousands of poster-sized pages
-- **THEN** the job stops once the pictures pass 1 GB, saying "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.", and the tab keeps working
+- **THEN** the job stops once the pictures pass 1 GB, saying "The pictures would add up to more than 1 GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts.", and the tab keeps working
 
 #### Scenario: A page with deeply nested transparency
 
-- **WHEN** a page asks PDF.js for more than four page-sized canvases at once
+- **WHEN** drawing a page would hold, at once, canvases adding up to more than four times the largest picture (about 256 MB), PDF.js's own canvases and the picture's included
 - **THEN** the page fails to draw and the job fails with one sentence, without the tab running out of memory
 
 ### Requirement: Large files

@@ -2,6 +2,7 @@
 // types, and the worker checks every message it receives against them.
 
 import type { InspectOutcome, Progress } from '../engines/types';
+import { outputExtensions, type OutputExtension } from '../widget/format';
 import type { FailureKind } from '../widget/state';
 
 export type ToWorker =
@@ -24,11 +25,10 @@ export type ToWorker =
  * The cleaned base of the input's name, the word for each file inside a zip, and
  * the files' extension: `pdf` when left out, or a picture's (PDF to JPG).
  */
-export type ZipNaming = { stem: string; partSuffix: string; extension?: ZipExtension };
+export type ZipNaming = { stem: string; partSuffix: string; extension?: OutputExtension };
 
-/** The extensions a file inside a zip may have: a closed set, so no name the page sends can carry anything else. */
-export const zipExtensions = ['pdf', 'jpg', 'png'] as const;
-export type ZipExtension = (typeof zipExtensions)[number];
+/** The extensions a file inside a zip may have: the closed list of output extensions, so no name the page sends can carry anything else. */
+export const zipExtensions: readonly OutputExtension[] = outputExtensions;
 
 /** The most a thumbnail may measure, in pixels; the page fits inside it. */
 export type ThumbnailBox = { width: number; height: number };

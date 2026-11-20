@@ -50,7 +50,7 @@ describe('list links under a sub-path', () => {
 
   it('are at the root when the base is "/"', () => {
     expect(toListItem(tools[0]!.pages[0]!, '/').href).toBe('/merge-pdf');
-    expect(relatedItems(tools, tools[0]!, '/').map((item) => item.href)).toEqual(['/split-pdf']);
+    expect(relatedItems(tools, tools[0]!, '/', tools[0]!.pages[0]!).map((item) => item.href)).toEqual(['/split-pdf']);
   });
 
   it('carry the sub-path in every list', () => {
@@ -59,6 +59,6 @@ describe('list links under a sub-path', () => {
       '/pdfkaro/merge-pdf',
       '/pdfkaro/split-pdf',
     ]);
-    expect(relatedItems(tools, tools[0]!, '/pdfkaro').map((item) => item.href)).toEqual(['/pdfkaro/split-pdf']);
+    expect(relatedItems(tools, tools[0]!, '/pdfkaro', tools[0]!.pages[0]!).map((item) => item.href)).toEqual(['/pdfkaro/split-pdf']);
   });
 });

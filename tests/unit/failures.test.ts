@@ -25,7 +25,7 @@ describe('the failure sentence', () => {
 describe('the sentence for pictures past the most one job makes', () => {
   it('names the 1 GB limit and one thing to try, whatever the tool own advice', async () => {
     const { maxOutputBytes } = await import('../../src/widget/zip-limits');
-    const sentence = 'The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.';
+    const sentence = 'The pictures would add up to more than 1 GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts.';
     expect(failureSentence('too-many-pictures', {})).toBe(sentence);
     expect(failureSentence('too-many-pictures', { memoryAdvice: 'x', zipLimitAdvice: 'y' })).toBe(sentence);
     expect(maxOutputBytes).toBe(1024 ** 3);

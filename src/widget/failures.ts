@@ -5,14 +5,12 @@ import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
 import { fileCount, number, progressLine } from './format';
 import type { FailureKind } from './state';
-import { zipLimitSentence } from './zip-limits';
+import { tooManyPicturesSentence, zipLimitSentence } from './zip-limits';
 
-const shared: Record<'memory' | 'engine-load' | 'engine' | 'too-many-pictures', string> = {
+const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
   memory: 'Your browser ran out of memory. Try fewer or smaller files.',
   'engine-load': 'The tool could not be loaded. Check your connection and try again.',
   engine: 'Something went wrong. Try again.',
-  // PDF to JPG and PDF to PNG stop at maxOutputBytes (zip-limits.ts), so the tab is not ended.
-  'too-many-pictures': 'The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first.',
 };
 
 /** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */
@@ -20,6 +18,8 @@ export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 
   if (kind === 'too-many-files' || kind === 'zip-too-large') {
     return zipLimitSentence(kind === 'too-many-files' ? 'files' : 'bytes', words.zipLimitAdvice ?? 'Try a smaller job.');
   }
+  // PDF to JPG and PDF to PNG stop at maxOutputBytes (zip-limits.ts), so the tab is not ended.
+  if (kind === 'too-many-pictures') return tooManyPicturesSentence();
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
   return shared[kind];
 }

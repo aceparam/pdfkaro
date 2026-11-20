@@ -120,7 +120,8 @@ export function pictureSize(width: number, height: number, maxPixels: number): {
     w = Math.max(1, Math.floor(width * shrink));
     h = Math.max(1, Math.floor(height * shrink));
   }
-  // A page so thin that its narrow side is held at 1: the long side gives way.
+  // A page so thin that its narrow side is held at 1: the long side gives way, so the shape is not kept. Intended:
+  // the cap matters more than the shape of a page no reader could show.
   if (w * h > maxPixels) {
     if (w === 1) h = maxPixels;
     else w = maxPixels;
@@ -158,6 +159,19 @@ function canvasBudget() {
     give(canvas: unknown) {
       total -= live.get(canvas) ?? 0;
       live.delete(canvas);
+    },
+    /**
+     * Forgets every canvas counted, once a drawing has settled. PDF.js does not destroy every canvas it
+     * makes: it empties its cache of image masks at the end of a drawing without telling the factory, and
+     * a drawing that fails part way leaves its temporary canvases behind. None of them is drawn on again.
+     */
+    forgetAll() {
+      live.clear();
+      total = 0;
+    },
+    /** The pixels counted, given back for a canvas whose resize failed. */
+    pixelsOf(canvas: unknown) {
+      return live.get(canvas);
     },
     get total() {
       return total;
@@ -199,8 +213,16 @@ export async function openDocument(file: Uint8Array, password: string | undefine
     }
     reset(pair: CanvasAndContext, width: number, height: number) {
       if (width <= 0 || height <= 0) throw new Error('Invalid canvas size');
+      const before = budget.pixelsOf(pair.canvas);
       budget.take(pair.canvas, width * height);
-      canvases.resize(pair.canvas, width, height);
+      try {
+        canvases.resize(pair.canvas, width, height);
+      } catch (error) {
+        // The canvas keeps its old size, so it keeps its old count.
+        if (before === undefined) budget.give(pair.canvas);
+        else budget.take(pair.canvas, before);
+        throw error;
+      }
     }
     destroy(pair: CanvasAndContext) {
       canvases.release(pair.canvas);
@@ -311,8 +333,11 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       return { bytes, width: size.width, height: size.height };
     } finally {
       // The picture's canvas is let go, then the page's decoded pictures and drawing steps, before the next page.
+      // Every canvas counted for this drawing is forgotten, PDF.js's cached masks and a failed drawing's leftovers
+      // included, so the count starts again from nothing for the next page or thumbnail.
       if (made) canvases.release(made.canvas);
       budget.give(own);
+      budget.forgetAll();
       pdfPage.cleanup();
     }
   }

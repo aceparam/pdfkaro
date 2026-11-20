@@ -28,7 +28,7 @@ A PDF stores text as letters and shapes, which take little room. A picture store
 
 ### What do I download?
 
-A one-page PDF gives a single picture, such as report.png. A longer PDF gives one zip, report.zip, holding report-page-01.png, report-page-02.png and so on, in page order.
+A one-page PDF gives a single picture, such as report.png. A longer PDF gives one zip, report.zip. A 12-page PDF gives report-page-01.png to report-page-12.png: the numbers are padded to the same length, so the files sort in page order.
 
 ### How do I get the pictures out of the zip on a phone?
 

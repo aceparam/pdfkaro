@@ -84,6 +84,11 @@ export function fitsInOneZip(names: readonly string[], sizes: readonly number[])
 
 const number = (value: number) => value.toLocaleString('en-GB');
 
+/** The sentence for a job whose outputs would pass `maxOutputBytes`, built from it so the limit is written once. */
+export function tooManyPicturesSentence(): string {
+  return `The pictures would add up to more than ${number(maxOutputBytes / 1024 ** 3)} GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts.`;
+}
+
 /** The sentence for a job that would not fit in one zip, with the tool's own thing to try. */
 export function zipLimitSentence(reason: 'files' | 'bytes', advice: string): string {
   const what = reason === 'files' ? `more than ${number(zipMaxFiles)} files` : 'a zip over 4 GB';

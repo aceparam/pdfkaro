@@ -408,7 +408,7 @@ Each file was converted in Node through the real PDF.js and the same fixed helpe
 | `mixed.pdf` | 4 | 66,142 | 61,295 | 1240 by 1754; 1650 by 1275 (Letter on its side); 1240 by 875 (A5 turned a quarter, its label down the right-hand side); 1240 by 1754 (upside down) |
 | `rich.pdf` | 2, A4 | 40,245 | 37,042 | Drawn; the link cannot be clicked in a picture |
 | `images.pdf` | 1, A4 | 25,041 | 38,566 | Drawn, with the JPEG 2000 picture and the CMYK colours |
-| `tagged.pdf` | 2, 625 by 625 | 24,823 | 24,416 | Drawn. In the browser, its PNGs hold no text chunk, its JPGs no APP1 or comment segment, and neither holds a `SECRET-` marker (end-to-end test) |
+| `tagged.pdf` | 2, 625 by 625 | 24,823 | 24,416 | Drawn. In the browser, its PNGs hold only picture chunks and colour notes (IHDR, IDAT, IEND, sRGB, gAMA, iCCP, cHRM, pHYs), its JPGs only the segments that draw the picture with APP0 and APP2, and neither holds a `SECRET-` marker (end-to-end test, an allowlist) |
 | `compress-scans.pdf` | 3, A4 | 257,581 | 330,769 | Drawn |
 | `compress-lossless.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf` | 1, 1, 3, 3, A4 | | | Drawn |
 | `compress-kinds.pdf` | 7, 150 by 150 | 16,120 | 29,607 | Drawn, every kind of picture it holds |
@@ -426,6 +426,7 @@ Files made in the test:
 | A page of 50 by 100 inches | 2896 by 5793, under 16,777,216 pixels |
 | 1,000 poster pages sharing one drawing (a small file) | Stopped by the cap on what one job makes (made small in the test; 1 GB on the page) after the fourth page, with `TooManyPictures`, sorted as `too-many-pictures` and its own sentence |
 | A page whose drawing sits in four nested knockout groups | Refused by the canvas budget (four times the picture's pixels) at 150 by 150; the job fails with the engine sentence. One group draws |
+| 30 pages, each painting one full-page image mask twice, which PDF.js caches and drops without destroying | All 30 drawn under a cap of 150 by 150: every canvas counted for a drawing is forgotten once it settles. Before this fix the budget refused the file part way at this cap; the stage 2 review found the same at the real cap, around page 30 |
 | A stand-in PDF.js that claims 70,000 pages | Refused before any page is drawn: more files than one zip holds |
 | A stand-in PDF.js worker that stops while a page is drawn | The job fails at once with "PDF.js stopped.", not left on "Page 1 of 3" |
 

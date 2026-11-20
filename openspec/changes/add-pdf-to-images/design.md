@@ -58,7 +58,7 @@ Per page: `actionLabel` ("Convert to JPG and download" or "… PNG …"), `outpu
 
 **The result line** uses the existing words: a zip reads "12 files, 3.4 MB" (`fileCount`), and a single picture its size only (`resultPages: 'none'`).
 
-`related`: each page links to the other, plus `jpg-to-pdf`, `extract-pdf-pages`, `compress-pdf` and `split-pdf`.
+`related`: each page links to the other, plus `jpg-to-pdf`, `extract-pdf-pages`, `compress-pdf` and `split-pdf`. The entry names all six; `relatedItems` takes the page being built, which it now requires, and leaves that page out, so a tool with several pages links each page to the others and never to itself. Each page shows four to six links, checked on `relatedItems`' output.
 
 ### 2. Presets, extensions and types in the widget
 
@@ -86,7 +86,7 @@ draw(page, { scale, maxPixels, format: 'jpg' | 'png', quality }): Promise<{ byte
 - **Annotations:** drawn on white, with `annotationMode` set to the loaded PDF.js module's `AnnotationMode.ENABLE_STORAGE`, read from `PdfjsModule`, never imported. Form fields are drawn with their values, and other annotations as their appearance streams show them. Thumbnails keep their current mode.
 - **Encoding:** through `tools.canvas`. `CanvasMaker` here gains `jpeg(canvas, quality)`, and Compress PDF imports that type from here.
 - **Freeing each page:** the canvas is released, then `pdfPage.cleanup()` is called, both in a `finally`, so a page's decoded pictures and operator list are let go before the next page.
-- **A canvas budget:** the `CanvasFactory` given to PDF.js, and `draw`'s own output canvas, count the pixels of every live canvas, PDF.js's temporary ones for transparency and soft masks included, across `create`, `reset` and `destroy`. Asked to go past 4 × `maxPixels` (about 256 MB as RGBA), it throws, the page fails to draw, and the job fails with the engine sentence.
+- **A canvas budget:** the `CanvasFactory` given to PDF.js, and `draw`'s own output canvas, count the pixels of every live canvas, PDF.js's temporary ones for transparency and soft masks included, across `create`, `reset` and `destroy`. Asked to go past four times the largest picture, 4 × `maxPixels` (about 256 MB as RGBA), whatever the page's own size, it throws, the page fails to draw, and the job fails with the engine sentence. Once each drawing has settled, drawn or failed, every canvas counted for it is forgotten: PDF.js empties its cache of image masks at the end of a drawing without calling `destroy`, and leaves a failed drawing's temporary canvases behind, so counting them on would refuse later pages and later thumbnails of a document kept open. A `reset` whose resize fails keeps the canvas's old count.
 - **The guard:** `tools.pdfjsGuard`, filled in by the worker from `pdfjsLoader.guard`, wraps `openDocument`, `render` and `draw`. A dead PDF.js worker then fails the job at once instead of leaving it on "Page n of m". The worker's thumbnail wrapper uses the same guard through `tools`.
 - **Unchanged:** `safeOptions` stay as they are, with `verbosity: 0`, so PDF.js writes nothing to the console. Errors leave the worker only as a failure kind, never as a message.
 - **Lint:** a rule for `src/engines/**` refuses value imports of `pdfjs-dist`, allowing type imports, so PDF.js can never be bundled into an engine.
@@ -117,9 +117,10 @@ inspect = inspectPdf
 - **Reading the file:** `inspectPdf` (qpdf) reads the page count and asks for a password. PDF.js then opens the file with the same password.
 - **The running checks:**
   - Split's pattern of checking the zip limits as outputs arrive moves into `src/widget/zip-limits.ts` as a small helper both engines use.
-  - `maxOutputBytes` is 1 GB, so the outputs and the copy `zipSync` makes stay well under what a computer's tab can hold. Past it the engine throws `TooManyPictures` (in `zip-limits.ts`, recognised by its name, as `TooBigForZip` is), which the worker sorts as a new failure kind, `too-many-pictures`. The page then says, in its own sentence: "The pictures would add up to more than 1 GB, the most this tool makes at once. Extract or split the pages first." It is a size limit on what a job makes, so it is named among the agent's decisions and put to the owner (CLAUDE.md), as the zip limit was. The input notices are unchanged.
+  - `maxOutputBytes` is 1 GB, so the outputs and the copy `zipSync` makes stay well under what a computer's tab can hold. Past it the engine throws `TooManyPictures` (in `zip-limits.ts`, recognised by its name, as `TooBigForZip` is), which the worker sorts as a new failure kind, `too-many-pictures`. The page then says, in its own sentence: "The pictures would add up to more than 1 GB, the most this tool makes at once. Use Extract pages or Split PDF first, then convert the parts. The sentence is built from `maxOutputBytes`, so "1 GB" is written once, as the zip-limit sentence is built from its limits." It is a size limit on what a job makes, so it is named among the agent's decisions and put to the owner (CLAUDE.md), as the zip limit was. The input notices are unchanged.
   - This is a guard on what the job makes, not a limit on what a visitor may choose: the input notices are unchanged.
 - **Failures:** a page PDF.js cannot draw, or a file PDF.js cannot open after qpdf could, fails the job with the engine sentence.
+- **Closing:** the engine's `finally` swallows an error from `doc.close()`. Closing fails only when PDF.js's worker has stopped, and then the drawing that failed has already given the job its failure; a close error must not replace it, nor fail a job whose pictures were all drawn.
 - **Zipping:** the worker zips several outputs as for Split, storing them (level 0). It writes no zip comment or extra field: only the cleaned names and `fflate`'s entry times.
 
 ### 5. Memory
@@ -172,7 +173,7 @@ No change before a pick beyond a few island props. After a pick, the page tools'
 
 - **Hostile PDFs.** qpdf reads them for the page count. PDF.js draws them with the safe options every thumbnail uses (no font faces, no fetching, no XFA, pictures inside a page capped), in the worker, which is ended after every job.
 - **Output bombs.** A tiny file can declare tens of thousands of poster-sized pages. Each picture is capped at 16 million pixels, and the running total of output bytes fails the job at 1 GB, or at the zip limits if those come first. So memory stays bounded and the page shows a sentence, not a dead tab.
-- **PDF.js's own canvases.** Nested transparency groups ask for canvases the size of the page. The canvas budget refuses past four page-sized canvases, so one page cannot take gigabytes.
+- **PDF.js's own canvases.** Nested transparency groups ask for canvases the size of the page. The canvas budget refuses once one drawing's canvases pass four times the largest picture (about 256 MB), so one page cannot take gigabytes.
 - **Per-page memory.** `pdfPage.cleanup()` after every page stops decoded pictures from building up across a long file.
 - **A dead PDF.js worker.** The guard fails the job at once.
 - **Form appearances.** `ENABLE_STORAGE` makes PDF.js build appearance streams for fields that have none, using fonts from the file. That is more parsing than thumbnails do, with no scripting; hidden fields stay hidden.

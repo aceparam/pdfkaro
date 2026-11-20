@@ -20,7 +20,7 @@ Almost every phone, chat app and website takes a JPG. It is the simplest way to 
 
 ### What do I get?
 
-One JPG for each page, in page order. A PDF of one page gives one picture named after the file, such as report.jpg. A longer PDF gives one zip file, report.zip, holding report-page-01.jpg, report-page-02.jpg and so on, so they sort in order.
+One JPG for each page, in page order. A PDF of one page gives one picture named after the file, such as report.jpg. A longer PDF gives one zip file, report.zip. A 12-page PDF gives report-page-01.jpg to report-page-12.jpg: the numbers are padded to the same length, so the files sort in page order.
 
 ### How do I open the zip on my phone?
 

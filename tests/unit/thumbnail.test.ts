@@ -201,16 +201,25 @@ describe('drawing a whole page', () => {
     const bytes = await file.save();
     // Counting what the canvas maker holds: every canvas made is released by the end.
     let live = 0;
+    const sizes = new Map<unknown, number>();
+    let pixels = 0;
+    let peak = 0;
     const counting = {
       ...tools,
       canvas: async () => ({
         ...(await tools.canvas!()) as typeof canvasMaker,
         create(width: number, height: number) {
           live++;
-          return canvasMaker.create(width, height);
+          const pair = canvasMaker.create(width, height);
+          sizes.set(pair.canvas, width * height);
+          pixels += width * height;
+          peak = Math.max(peak, pixels);
+          return pair;
         },
         release(canvas: unknown) {
           live--;
+          pixels -= sizes.get(canvas) ?? 0;
+          sizes.delete(canvas);
           canvasMaker.release(canvas);
         },
       }),
@@ -223,8 +232,11 @@ describe('drawing a whole page', () => {
     expect(live).toBe(0);
     const failed = await doc.draw(1, { scale, maxPixels: 150 * 150, format: 'png' }).catch((error: unknown) => error);
     expect(failed).toBeInstanceOf(CanvasBudgetError);
-    // PDF.js does not let go of the canvases a failed drawing held; they stay counted, and go with the worker,
-    // which is ended after every job. The job itself has failed.
+    // PDF.js does not destroy the canvases a failed drawing held, so the count is forgotten once a drawing settles:
+    // the same open document then draws the page again within the larger budget, as a kept thumbnail document would.
+    // A budget of exactly what the drawing needs at its peak: leftovers still counted would refuse it.
+    const again = await doc.draw(1, { scale, maxPixels: Math.ceil(peak / 4), format: 'png' });
+    expect(again).toMatchObject({ width: 150, height: 150 });
     await doc.close();
   });
 

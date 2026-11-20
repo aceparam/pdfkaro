@@ -38,6 +38,7 @@ describe('registry', () => {
       for (const page of tool.pages) {
         const links = relatedItems(tools, tool, '/', page).map((item) => item.href);
         expect(links).not.toContain(`/${page.slug}`);
+        expect(links.length, page.slug).toBeGreaterThanOrEqual(4);
         expect(links.length, page.slug).toBeLessThanOrEqual(6);
       }
     }

@@ -84,12 +84,12 @@ describe('queries', () => {
 
   it('links only to related tools that are published, in the order named', () => {
     const merge = tools[1]!;
-    expect(relatedItems(tools, merge, '/').map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
+    expect(relatedItems(tools, merge, '/', merge.pages[0]!).map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
   });
 
   it('gives no related links when none is published', () => {
     const alone = [tools[1]!];
-    expect(relatedItems(alone, alone[0]!, '/')).toEqual([]);
+    expect(relatedItems(alone, alone[0]!, '/', alone[0]!.pages[0]!)).toEqual([]);
   });
 
   it('leaves out the page being built, so a tool of several pages can link its pages to each other', () => {

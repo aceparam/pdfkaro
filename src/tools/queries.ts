@@ -56,11 +56,11 @@ export function groupsWithItems(groups: Group[], tools: Tool[], base: string): G
  * The related tools of a tool that are published, in the order the tool names them. A tool with
  * several pages may name its own other pages; `current`, the page being built, is never linked.
  */
-export function relatedItems(tools: Tool[], tool: Tool, base: string, current?: ToolPage): ListItem[] {
+export function relatedItems(tools: Tool[], tool: Tool, base: string, current: ToolPage): ListItem[] {
   const published = new Map(allPages(tools).map(({ page }) => [page.slug, page]));
   return tool.related.flatMap((slug) => {
     const page = published.get(slug);
-    return page && slug !== current?.slug ? [toListItem(page, base)] : [];
+    return page && slug !== current.slug ? [toListItem(page, base)] : [];
   });
 }
 
@@ -73,12 +73,13 @@ export const pageWordKeys = ['actionLabel', 'resultNotes', 'outputExtension'] as
  */
 export function pageWords(tool: Tool, page: ToolPage): ToolWidgetWords | undefined {
   if (!tool.widget) return undefined;
-  const own: Record<string, unknown> = {};
-  for (const key of pageWordKeys) {
+  const own: Partial<PageWords> = {};
+  const take = <K extends keyof PageWords>(key: K) => {
     const value = page.words?.[key];
     if (value !== undefined) own[key] = value;
-  }
-  return { ...tool.widget, ...own } as ToolWidgetWords;
+  };
+  for (const key of pageWordKeys) take(key);
+  return { ...tool.widget, ...own };
 }
 
 /** The file types a page accepts: its own list if it has one, else the tool's. */
