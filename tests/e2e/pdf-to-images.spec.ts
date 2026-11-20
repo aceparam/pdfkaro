@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type BrowserContext, type Download, type Page } from '@playwright/test';
 import { unzipSync } from 'fflate';
 import { formatSize } from '../../src/widget/format';
-import { builtFiles, traces, violations, watch, type Seen } from './no-upload';
+import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -504,6 +504,7 @@ test.describe('nothing is uploaded', () => {
       expect((await downloadOnly(page, on)).suggestedFilename()).toBe('qz7report.zip');
 
       const secrets = ['qz7rich.pdf', 'qz7rich', 'qz7report.pdf', 'qz7report', password, ...richSecrets, ...taggedSecrets, ...fontSecrets];
+      await headersRead(seen);
       expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
       const fetched = fetchedPaths(seen);
       // The engine, PDF.js with its worker and data, and fflate were fetched; pdf-lib and the other engines were not.
@@ -525,6 +526,7 @@ test.describe('nothing is uploaded', () => {
       const seen = watch(context, page);
       await watchedRun(page, name);
       await downloadOnly(page, pngPage);
+      await headersRead(seen);
       expect(violations(seen, new URL(baseURL!).origin, [name], filesAfterPick())).toEqual([]);
       const fetched = fetchedPaths(seen).sort();
       await context.close();
