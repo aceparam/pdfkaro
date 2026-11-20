@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef } from '@cantoo/pdf-lib';
 import { expect, test, type FileChooser, type Page } from '@playwright/test';
 import { createQpdf } from '../../src/engines/qpdf';
-import { builtFiles, traces, violations, watch, type Seen } from './no-upload';
+import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -409,6 +409,7 @@ test.describe('nothing is uploaded', () => {
     expect(name).toBe('zx9scan.pdf');
 
     const secrets = ['qz7holiday.jpg', 'qz7holiday', 'zx9scan.png', 'zx9scan', 'SECRET-CAMERA-MAKE', 'SECRET-CAMERA-MODEL', 'SECRET-GPS-PLACE'];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     for (const wanted of [/\/images-to-pdf-/, /\/picture-[A-Za-z0-9_-]{8}\.js$/, /\/picture-thumbnail-/, /\/pdflib-/]) expect(fetched.some((path) => wanted.test(path)), String(wanted)).toBe(true);

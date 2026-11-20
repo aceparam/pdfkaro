@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
 import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
-import { outputName, stem } from '../widget/format';
+import { outputName, outputType, stem } from '../widget/format';
 import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
 import { orderToSend } from '../widget/order';
@@ -52,6 +52,8 @@ type Options = {
   toolId: string;
   accepts: string[];
   words: ToolWidgetWords;
+  /** The page's preset, such as PDF to JPG's `{ format: 'jpg' }`: engine options that every job starts from. */
+  preset?: Readonly<Record<string, string | number | boolean>>;
   createWorker: () => WorkerLike;
   onProgress?: (progress: Progress) => void;
 };
@@ -60,7 +62,7 @@ type Options = {
  * Joins the reducer to the tool worker. The files and any passwords live here,
  * in memory only. They never go into the reducer, storage or the address.
  */
-export function useToolRun({ toolId, accepts, words, createWorker, onProgress }: Options): ToolRun {
+export function useToolRun({ toolId, accepts, words, preset, createWorker, onProgress }: Options): ToolRun {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [result, setResult] = useState<ToolRunResult | null>(null);
   const files = useRef(new Map<string, File>());
@@ -281,11 +283,13 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       keptFile.current = null;
       // A tool that can give several files always says how to name them in a zip, so the worker fetches the
       // zip code on every run, whatever the file gives.
-      const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix } : undefined;
+      const extension = words.outputExtension ?? 'pdf';
+      const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix, extension } : undefined;
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
-        jobOption(),
+        // The page's preset first; what the visitor chose on the page wins over it.
+        { ...preset, ...jobOption() },
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -302,8 +306,10 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       }
       if (shown === 'engine-failure' || !output) throw new ToolError('engine');
       const zipped = parts !== undefined && parts > 1;
-      const blob = new Blob([output as BlobPart], { type: zipped ? 'application/zip' : 'application/pdf' });
-      const name = outputName(inputs[0]!.name, words.outputSuffix, zipped ? 'zip' : 'pdf');
+      // The download's type follows its extension: a zip, or one output of the tool's own kind.
+      const named = zipped ? 'zip' : extension;
+      const blob = new Blob([output as BlobPart], { type: outputType(named) });
+      const name = outputName(inputs[0]!.name, words.outputSuffix, named);
       resultUrl.current = URL.createObjectURL(blob);
       setResult({ url: resultUrl.current, name });
       dispatch({
@@ -320,7 +326,7 @@ export function useToolRun({ toolId, accepts, words, createWorker, onProgress }:
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.noSmaller, words.resultWas, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, preset, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);

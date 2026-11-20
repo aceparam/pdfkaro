@@ -25,6 +25,9 @@ const tools: EngineTools = {
     return createQpdf(() => import('@neslinesli93/qpdf-wasm'), qpdfWasm);
   },
   pdfjs: () => pdfjsLoader.load(),
+  // Races every drawing, and opening and closing a document, against PDF.js's own worker stopping, so
+  // a job or a thumbnail fails at once instead of waiting on a worker that will never answer.
+  pdfjsGuard: async () => pdfjsLoader.guard,
   // Pages are drawn on an OffscreenCanvas: a worker has no page to draw on.
   canvas: async () => ({
     create(width: number, height: number) {
@@ -71,8 +74,8 @@ const tools: EngineTools = {
 };
 
 // PDF.js runs its own worker, started from this one, once. If it fails, PDF.js
-// is unavailable for the rest of this worker's life, and every thumbnail,
-// including one being drawn, gives no picture at once.
+// is unavailable for the rest of this worker's life: every thumbnail, including
+// one being drawn, gives no picture at once, and a job drawing pages fails.
 const pdfjsLoader = createPdfjsLoader(
   () => import('pdfjs-dist'),
   () => new Worker(pdfjsWorkerUrl, { type: 'module' }) as unknown as NestedWorker,
@@ -97,9 +100,10 @@ const handle = createHandler({
       const { openPicture } = await import('../engines/picture-thumbnail');
       return openPicture(file, given);
     }
+    // The guard comes through `tools`, as it does for an engine: opening, drawing and closing are all raced.
     const { openDocument } = await import('../engines/thumbnail');
-    const doc = await pdfjsLoader.guard(openDocument(file, password, given));
-    return { render: (page, box) => pdfjsLoader.guard(doc.render(page, box)), close: () => doc.close() };
+    const doc = await openDocument(file, password, given);
+    return { render: (page, box) => doc.render(page, box), close: () => doc.close() };
   },
   loadZip: async () => (await import('fflate')).zipSync,
 });

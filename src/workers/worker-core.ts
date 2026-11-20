@@ -40,6 +40,8 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'TooBigForZip') {
     return (error as Error & { reason?: unknown }).reason === 'files' ? 'too-many-files' : 'zip-too-large';
   }
+  // An engine's outputs would pass the most it makes at once (PDF to JPG's 1 GB). Known by name, as above.
+  if (error instanceof Error && error.name === 'TooManyPictures') return 'too-many-pictures';
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
   if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
@@ -186,12 +188,12 @@ export function createHandler(deps: WorkerDeps) {
         deps.post({ type: 'progress', requestId, progress: { stage: 'writing', percent: 100 } });
         const entries: Record<string, Uint8Array> = {};
         outputs.forEach((output, index) => {
-          entries[partName(zip.stem, zip.partSuffix, index + 1, total)] = output;
+          entries[partName(zip.stem, zip.partSuffix, index + 1, total, zip.extension ?? 'pdf')] = output;
         });
         // zipSync writes no ZIP64 and does not check: past its limits it would write a broken zip.
         const fit = fitsInOneZip(Object.keys(entries), outputs.map((output) => output.byteLength));
         if (!fit.fits) throw new TooBigForZip(fit.reason);
-        // PDFs are already compressed, so the files are stored, which is fast and keeps memory low.
+        // PDFs, JPGs and PNGs are already compressed, so the files are stored, which is fast and keeps memory low.
         const zipped = zipSync(entries, { level: 0 });
         // The parts and the zip have to exist together while it is made; the parts are let go here.
         outputs.length = 0;

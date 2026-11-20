@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { expect, test, type Download, type Page } from '@playwright/test';
 import { unzipSync } from 'fflate';
-import { builtFiles, traces, violations, watch, type Seen } from './no-upload';
+import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -352,6 +352,7 @@ test.describe('nothing is uploaded', () => {
     expect(Object.keys(entries)).toEqual(['qz7report-part-1.pdf', 'qz7report-part-2.pdf']);
 
     const secrets = ['qz7report.pdf', 'qz7report', password];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     expect(paths(seen).has(fflatePath())).toBe(true);
     expect([...paths(seen)].some((path) => /\/split-pdf-/.test(path))).toBe(true);
@@ -374,6 +375,7 @@ test.describe('nothing is uploaded', () => {
       await expect(page.locator('astro-island ol img')).toHaveCount(pictures, { timeout: 20000 });
       const seen = watch(context, page);
       await splitAndDownload(page);
+      await headersRead(seen);
       expect(violations(seen, new URL(baseURL!).origin, [name], filesAfterPick())).toEqual([]);
       const fetched = paths(seen);
       await context.close();
@@ -394,14 +396,19 @@ test.describe('nothing is uploaded', () => {
     const queried = watch(context, page);
     await page.evaluate((address) => fetch(`${address}?x=1`).catch(() => {}), path);
     await expect.poll(() => queried.some((request) => request.url.includes('?x=1'))).toBe(true);
+    await headersRead(queried);
     const query = queried.filter((request) => request.url.includes('?x=1'));
+    await headersRead(query);
     expect(violations(query, origin, [], filesAfterPick())).toEqual([`data in the address: ${origin}${path}?x=1`]);
 
     const posted = watch(context, page);
     await page.evaluate((address) => fetch(address, { method: 'POST', body: 'x' }).catch(() => {}), path);
     await expect.poll(() => posted.some((request) => request.method === 'POST')).toBe(true);
+    // The browser's own headers are read after the request is seen; judge only once they are in.
+    await headersRead(posted);
     const post = posted.filter((request) => request.method === 'POST');
     // A body brings content-type and content-length headers, which the watcher refuses too: the site's own requests carry no body.
+    await headersRead(post);
     expect(violations(post, origin, [], filesAfterPick())).toEqual([
       `POST ${origin}${path}`,
       `a body: ${origin}${path}`,
@@ -418,6 +425,7 @@ test.describe('nothing is uploaded', () => {
     await pick(page, 'rich.pdf');
     await expect(cells(page)).toHaveCount(2);
     await splitAndDownload(page);
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, ['Chapter one', 'Chapter two', 'note.txt'], filesAfterPick())).toEqual([]);
     for (const line of consoleText) expect(line).not.toMatch(/Chapter (one|two)/);
   });

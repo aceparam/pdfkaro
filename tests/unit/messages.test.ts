@@ -49,6 +49,13 @@ describe('zip naming on a run', () => {
     expect(isToWorker(run('report'))).toBe(false);
   });
 
+  it('accepts the extensions of the closed set, or none, and refuses any other', () => {
+    for (const extension of ['pdf', 'jpg', 'png', undefined]) expect(isToWorker(run({ stem: 'report', partSuffix: 'page', extension })), String(extension)).toBe(true);
+    for (const extension of ['zip', 'JPG', 'jpeg', 'exe', 'jpg/../x', '.jpg', '', 7, null]) {
+      expect(isToWorker(run({ stem: 'report', partSuffix: 'page', extension })), JSON.stringify(extension)).toBe(false);
+    }
+  });
+
   it('accepts a reply that says how many files the zip holds, only above one', () => {
     const done = (parts: unknown) => ({ type: 'done', requestId: 2, outputs: [new Uint8Array([1])], parts });
     expect(isFromWorker(done(2))).toBe(true);
@@ -63,6 +70,7 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'writing', percent: 3 } })).toBe(true);
     expect(isFromWorker({ type: 'done', requestId: 1, outputs: [new Uint8Array(2)] })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'memory' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'too-many-pictures' })).toBe(true);
     // No file: an engine that could not make the file smaller (Compress PDF).
     expect(isFromWorker({ type: 'done', requestId: 1, outputs: [] })).toBe(true);
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'working', unit: 'picture', done: 3, total: 40 } })).toBe(true);

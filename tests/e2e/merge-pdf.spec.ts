@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { expect, test, type FileChooser, type Page } from '@playwright/test';
-import { builtFiles, violations, watch } from './no-upload';
+import { builtFiles, headersRead, violations, watch } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -286,6 +286,7 @@ test.describe('nothing is uploaded', () => {
     await mergeAndDownload(page);
 
     const secrets = ['text.pdf', 'password.pdf', 'rich.pdf', 'images.pdf', password];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     // The workers' own requests are watched too: qpdf's WebAssembly is fetched from the tool worker, and
     // PDF.js's own worker and its helper data from it, after the thumbnails were asked for.

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Download, type Page } from '@playwright/test';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
-import { builtFiles, traces, violations, watch, type Seen } from './no-upload';
+import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -340,6 +340,7 @@ test.describe('nothing is uploaded', () => {
     expect(pictures.map(({ dict }) => `${dict['/Width']}x${dict['/Height']} ${dict['/Filter']}`).sort()).toEqual(['1240x1754 /DCTDecode', '1240x1754 /DCTDecode', '1240x1754 /FlateDecode']);
 
     const secrets = ['qz7scans.pdf', 'qz7scans', 'SECRET-CAMERA-MAKE', 'SECRET-CAMERA-MODEL', 'SECRET-GPS-PLACE', 'Three scans to compress'];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
     // The engine, fflate and the picture reader were fetched; resampling and the qpdf JSON steps ran from what was fetched.
@@ -356,6 +357,7 @@ test.describe('nothing is uploaded', () => {
     const consoleText = await watchedRun(page, { name: 'qz7report.pdf', mimeType: 'application/pdf', buffer: readFileSync(fixture('password.pdf')) }, password);
     await compressAndDownload(page);
     const secrets = ['qz7report.pdf', 'qz7report', password];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await expectNothingHeld(page, context, secrets, consoleText);
   });
@@ -369,6 +371,7 @@ test.describe('nothing is uploaded', () => {
     // 2,064 bytes and its result both read "2 KB", so both are said one unit finer.
     await expect(page.locator('astro-island section')).toContainText(/\d,\d{3} bytes, was 2,064 bytes, 2 pages/);
     const secrets = ['qz7rich.pdf', 'qz7rich', 'Chapter one', 'Chapter two', 'note.txt', 'Bookmarks, a link and an attachment'];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await expectNothingHeld(page, context, secrets, consoleText);
   });
@@ -389,6 +392,7 @@ test.describe('nothing is uploaded', () => {
     consoleText.push(...(await watchedRun(page, 'compress-packed.pdf')));
     await mainButton(page).click();
     await expect(page.getByRole('heading', { name: noSmaller })).toBeFocused({ timeout: 30000 });
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await page.getByRole('button', { name: 'Start again' }).click();
     await expect(page.locator('astro-island')).not.toContainText('compress-packed.pdf');

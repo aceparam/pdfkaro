@@ -30,7 +30,7 @@ const loadedLater = [
   { name: 'plain', type: 'js', why: 'the plain copy, outline and write steps (keepPages, writePages, writeTurned) the page engines share; the bundler gives them a file of their own' },
   { name: 'inspect', type: 'js', why: 'reads one PDF before a job; shared by the engines, so the bundler gives it a file of its own' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
-  { name: 'thumbnail', type: 'js', why: 'draws a page thumbnail, which the worker loads when the first thumbnail is asked for' },
+  { name: 'thumbnail', type: 'js', why: 'draws a page thumbnail, which the worker loads when the first thumbnail is asked for, and whole pages for PDF to JPG and PNG' },
   { name: 'pdf', type: 'js', why: 'PDF.js, which the worker loads when the first thumbnail is asked for' },
   { name: 'pdf.worker.min', type: 'mjs', why: "PDF.js's own worker, started by the tool worker for thumbnails" },
   { name: 'pdfjs-data', type: 'js', why: "PDF.js's fonts and decoders, one fixed set, loaded with PDF.js" },

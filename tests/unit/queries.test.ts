@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Group, Tool } from '../../src/tools/registry';
-import { acceptsFor, allPages, findPage, groupsWithItems, relatedItems } from '../../src/tools/queries';
+import type { Group, Tool, ToolWidgetWords } from '../../src/tools/registry';
+import { acceptsFor, allPages, findPage, groupsWithItems, pageWords, relatedItems } from '../../src/tools/queries';
 
 // A made-up registry: one tool with three URLs, one with one URL, and a group left empty.
 const groups: Group[] = [
@@ -84,11 +84,57 @@ describe('queries', () => {
 
   it('links only to related tools that are published, in the order named', () => {
     const merge = tools[1]!;
-    expect(relatedItems(tools, merge, '/').map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
+    expect(relatedItems(tools, merge, '/', merge.pages[0]!).map((item) => item.href)).toEqual(['/compress-pdf', '/compress-pdf-to-200kb']);
   });
 
   it('gives no related links when none is published', () => {
     const alone = [tools[1]!];
-    expect(relatedItems(alone, alone[0]!, '/')).toEqual([]);
+    expect(relatedItems(alone, alone[0]!, '/', alone[0]!.pages[0]!)).toEqual([]);
+  });
+
+  it('leaves out the page being built, so a tool of several pages can link its pages to each other', () => {
+    const compress = { ...tools[0]!, related: ['compress-pdf', 'compress-pdf-to-100kb', 'merge-pdf', 'split-pdf'] } as Tool;
+    const [first, second] = compress.pages;
+    expect(relatedItems(tools, compress, '/', first).map((item) => item.href)).toEqual(['/compress-pdf-to-100kb', '/merge-pdf']);
+    expect(relatedItems(tools, compress, '/', second).map((item) => item.href)).toEqual(['/compress-pdf', '/merge-pdf']);
+  });
+});
+
+describe('page words', () => {
+  const widget: ToolWidgetWords = {
+    pickerLabel: 'Choose a PDF file',
+    addLabel: 'Choose another file',
+    dropHint: 'Drop.',
+    acceptsName: 'a PDF',
+    actionLabel: 'Convert and download',
+    writingLabel: 'Writing the zip',
+    doneHeading: 'Ready',
+    failedHeading: 'Did not finish.',
+    tooFewFiles: 'Choose a file.',
+    outputSuffix: '',
+    minFiles: 1,
+    multiple: false,
+    resultPages: 'none',
+    resultNotes: ['Shared note.'],
+    items: 'files',
+    itemControls: false,
+    outputs: 'several',
+    partSuffix: 'page',
+  };
+  const tool = { ...tools[0]!, widget } as Tool;
+
+  it("gives a page's own button, notes and extension in place of the tool's", () => {
+    const page = { ...tool.pages[0]!, words: { actionLabel: 'Convert to JPG and download', resultNotes: ['Own note.'], outputExtension: 'jpg' as const } };
+    expect(pageWords(tool, page)).toEqual({ ...widget, actionLabel: 'Convert to JPG and download', resultNotes: ['Own note.'], outputExtension: 'jpg' });
+  });
+
+  it("gives the tool's words to a page with none, and nothing for a tool with no widget", () => {
+    expect(pageWords(tool, tool.pages[0]!)).toEqual(widget);
+    expect(pageWords(tools[1]!, tools[1]!.pages[0]!)).toBeUndefined();
+  });
+
+  it('lets a page change no other word, whatever it carries', () => {
+    const page = { ...tool.pages[0]!, words: { actionLabel: 'Own button', partSuffix: '../x', minFiles: 0, outputs: 'one' } as never };
+    expect(pageWords(tool, page)).toEqual({ ...widget, actionLabel: 'Own button' });
   });
 });

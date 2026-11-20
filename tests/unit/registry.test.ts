@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groups, tools } from '../../src/tools/registry';
-import { allPages } from '../../src/tools/queries';
+import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
 
 const sitePageNames = ['about', 'privacy', 'changes', 'known-problems', 'contact', '404', 'index'];
 const pages = allPages(tools);
@@ -29,12 +29,18 @@ describe('registry', () => {
     for (const tool of tools) expect(groupIds).toContain(tool.group);
   });
 
-  it('names four to six related tools, none twice and never itself', () => {
+  it('names four to six related tools, none twice; a page never links to itself, and only a tool of several pages names its own', () => {
     for (const tool of tools) {
       expect(tool.related.length).toBeGreaterThanOrEqual(4);
       expect(tool.related.length).toBeLessThanOrEqual(6);
       expect(new Set(tool.related).size).toBe(tool.related.length);
-      for (const page of tool.pages) expect(tool.related).not.toContain(page.slug);
+      if (tool.pages.length === 1) expect(tool.related).not.toContain(tool.pages[0]!.slug);
+      for (const page of tool.pages) {
+        const links = relatedItems(tools, tool, '/', page).map((item) => item.href);
+        expect(links).not.toContain(`/${page.slug}`);
+        expect(links.length, page.slug).toBeGreaterThanOrEqual(4);
+        expect(links.length, page.slug).toBeLessThanOrEqual(6);
+      }
     }
   });
 
@@ -334,6 +340,86 @@ describe('Compress PDF', () => {
       if (each.id === 'compress-pdf') continue;
       expect(each.widget?.resultWas).toBeUndefined();
       expect(each.widget?.noSmaller).toBeUndefined();
+    }
+  });
+});
+
+describe('PDF to JPG and PDF to PNG', () => {
+  const tool = tools.find((each) => each.id === 'pdf-to-images')!;
+
+  it('is one tool with two pages under Convert from PDF, taking one PDF, after Compress PDF, each page setting its format', () => {
+    expect(tool).toMatchObject({ group: 'from-pdf', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('compress-pdf') + 1);
+    expect(tool.pages.map(({ slug, name, preset }) => ({ slug, name, preset }))).toEqual([
+      { slug: 'pdf-to-jpg', name: 'PDF to JPG', preset: { format: 'jpg' } },
+      { slug: 'pdf-to-png', name: 'PDF to PNG', preset: { format: 'png' } },
+    ]);
+    for (const page of tool.pages) expect(page.accepts).toBeUndefined();
+  });
+
+  it('gives each page the title, heading, sentence and description of the design', () => {
+    expect(tool.pages.map(({ title, heading, sentence, description }) => ({ title, heading, sentence, description }))).toEqual([
+      {
+        title: 'Convert PDF to JPG in your browser - PDFkaro',
+        heading: 'Convert PDF to JPG',
+        sentence: 'Turn each page of a PDF into a JPG picture. Files stay on your device.',
+        description: 'Turn each page of a PDF into a JPG picture. The file stays on your device and is not uploaded.',
+      },
+      {
+        title: 'Convert PDF to PNG in your browser - PDFkaro',
+        heading: 'Convert PDF to PNG',
+        sentence: 'Turn each page of a PDF into a PNG picture. Files stay on your device.',
+        description: 'Turn each page of a PDF into a PNG picture. The file stays on your device and is not uploaded.',
+      },
+    ]);
+  });
+
+  it('has the shared widget words of the design: one file listed as a row, several outputs as a zip of pages', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      tooFewFiles: 'Choose a PDF file to convert.',
+      outputs: 'several',
+      partSuffix: 'page',
+      outputSuffix: '',
+      resultPages: 'none',
+      writingLabel: 'Writing the zip',
+      doneHeading: 'Your download is ready',
+      failedHeading: 'The conversion did not finish.',
+      memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      zipLimitAdvice: 'Split the file first, then convert the parts.',
+    });
+  });
+
+  it("gives each page its own button, result notes and extension, merged over the tool's words", () => {
+    const [jpg, png] = tool.pages.map((page) => pageWords(tool, page)!);
+    expect(jpg).toMatchObject({ actionLabel: 'Convert to JPG and download', outputExtension: 'jpg', partSuffix: 'page', writingLabel: 'Writing the zip' });
+    expect(jpg!.resultNotes).toEqual(['Each page is a JPG picture at 150 pixels to the inch. The PDF itself was not changed.']);
+    expect(png).toMatchObject({ actionLabel: 'Convert to PNG and download', outputExtension: 'png', partSuffix: 'page' });
+    expect(png!.resultNotes).toEqual(['Each page is a PNG picture at 150 pixels to the inch, without loss. The PDF itself was not changed.']);
+  });
+
+  it('links each page to the other and to the tools of the design, never to itself', () => {
+    const [jpg, png] = tool.pages;
+    expect(relatedItems(tools, tool, '/', jpg).map((item) => item.href)).toEqual(['/pdf-to-png', '/jpg-to-pdf', '/extract-pdf-pages', '/compress-pdf', '/split-pdf']);
+    expect(relatedItems(tools, tool, '/', png).map((item) => item.href)).toEqual(['/pdf-to-jpg', '/jpg-to-pdf', '/extract-pdf-pages', '/compress-pdf', '/split-pdf']);
+  });
+
+  it('leaves every other tool and page without page words or an output extension, so their outputs stay PDFs', () => {
+    for (const each of tools) {
+      if (each.id === 'pdf-to-images') continue;
+      expect(each.widget?.outputExtension).toBeUndefined();
+      for (const page of each.pages) {
+        expect(page.words).toBeUndefined();
+        expect(pageWords(each, page)).toEqual(each.widget);
+      }
     }
   });
 });

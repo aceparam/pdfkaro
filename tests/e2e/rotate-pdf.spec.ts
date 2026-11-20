@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { expect, test, type Download, type Page } from '@playwright/test';
-import { builtFiles, traces, violations, watch, type Seen } from './no-upload';
+import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -285,6 +285,7 @@ test.describe('nothing is uploaded', () => {
     expect(download.suggestedFilename()).toBe('qz7report-rotated.pdf');
 
     const secrets = ['qz7report.pdf', 'qz7report', password];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     expect(fetched.some((path) => /\/rotate-pdf-/.test(path))).toBe(true);
@@ -307,6 +308,7 @@ test.describe('nothing is uploaded', () => {
     await pick(page, 'rich.pdf');
     await right(page, 1).click();
     await turnAndDownload(page);
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, ['Chapter one', 'Chapter two', 'note.txt', 'Bookmarks, a link and an attachment'], filesAfterPick())).toEqual([]);
     for (const line of consoleText) expect(line).not.toMatch(/Chapter (one|two)|note\.txt|Bookmarks, a link and an attachment/);
     expect(await page.title()).not.toContain('Bookmarks, a link');
@@ -321,6 +323,7 @@ test.describe('nothing is uploaded', () => {
     await right(page, 2).click();
     await turnAndDownload(page);
     const secrets = ['SECRET-ALT-TEXT', 'SECRET-ACTUAL-TEXT', 'SECRET-DEST-NAME', 'SECRET-THREAD-TITLE', 'SECRET-PAGE-TWO-TEXT', 'SECRET-TAGGED-VALUE', 'SECRET-LINK', 'SECRET-NOTE'];
+    await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     for (const line of consoleText) for (const secret of secrets) expect(line).not.toContain(secret);
     const address = new URL(page.url());

@@ -83,6 +83,13 @@ describe('the tool worker', () => {
 });
 
 describe('failureKind', () => {
+  it('knows an engine that would pass the most it makes at once by its name, as it knows a zip that is too big', async () => {
+    const { TooManyPictures, TooBigForZip } = await import('../../src/widget/zip-limits');
+    expect(failureKind(new TooManyPictures())).toBe('too-many-pictures');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'TooManyPictures' }))).toBe('too-many-pictures');
+    expect(failureKind(new TooBigForZip('files'))).toBe('too-many-files');
+  });
+
   it('tells running out of memory from other failures', () => {
     expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
     expect(failureKind(new Error('Aborted(OOM)'))).toBe('memory');
@@ -166,6 +173,23 @@ describe('several outputs, zipped in the worker', async () => {
     const entries = unzipSync(done.message.outputs[0]!);
     expect(Object.keys(entries)).toEqual(['report-part-1.pdf', 'report-part-2.pdf', 'report-part-3.pdf']);
     expect(new TextDecoder().decode(entries['report-part-2.pdf'])).toBe('part 2');
+  });
+
+  it('names the files with the extension it is given: pictures inside the zip, padded to the count', async () => {
+    const { handle, posted } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'pdf-to-images', files: [blob('12')], passwords: [undefined], options: {}, zip: { stem: 'report', partSuffix: 'page', extension: 'jpg' } });
+    const done = posted.at(-1)!;
+    if (done.message.type !== 'done') throw new Error('expected done');
+    const names = Object.keys(unzipSync(done.message.outputs[0]!));
+    expect(names[0]).toBe('report-page-01.jpg');
+    expect(names[11]).toBe('report-page-12.jpg');
+  });
+
+  it('ignores a run whose zip extension is not in the closed set', async () => {
+    const { handle, posted, log } = zipSetup();
+    await handle({ type: 'run', requestId: 1, toolId: 'pdf-to-images', files: [blob('3')], passwords: [undefined], options: {}, zip: { stem: 'report', partSuffix: 'page', extension: 'exe' } });
+    expect(posted).toEqual([]);
+    expect(log).toEqual([]);
   });
 
   it('pads the numbers to the count, so 12 parts sort as 01 to 12', async () => {

@@ -45,6 +45,27 @@ export default defineConfig(
           message: 'Engines decode no picture themselves. The worker gives a decoder and a canvas through `tools`.',
         })),
       ],
+      // PDF.js comes in through `tools`, already loaded, so it is never bundled into an engine's file.
+      // Its types may be imported; a value, such as one of its constants, is read from the module given.
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['pdfjs-dist', 'pdfjs-dist/*'],
+              allowTypeImports: true,
+              message: 'Engines take PDF.js from `tools.pdfjs`. Read its constants from the module given; import its types only.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression[source.value=/^pdfjs-dist/]',
+          message: 'Engines take PDF.js from `tools.pdfjs`, never with import().',
+        },
+      ],
     },
   },
   {

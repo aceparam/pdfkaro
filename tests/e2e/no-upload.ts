@@ -52,19 +52,43 @@ export const browserHeaders = new Set([
   'user-agent',
 ]);
 
+/** The header reads still under way for each watched list, so a test can wait for them before judging. */
+const headerReads = new WeakMap<Seen[], Promise<void>[]>();
+
+/** How long to wait for header reads. Playwright never settles some reads (a download's blob request, for one). */
+const headerReadWait = 3000;
+
+/**
+ * Waits until every header read started for these requests has finished, so `violations` sees each header the
+ * browser sent, or until `headerReadWait` passes: a read Playwright never settles has no headers to judge.
+ */
+export async function headersRead(seen: Seen[]): Promise<void> {
+  const reads = headerReads.get(seen) ?? [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, headerReadWait);
+  });
+  await Promise.race([Promise.all(reads), waited]);
+  clearTimeout(timer);
+}
+
 /** Watches every request from the page and its workers, and every WebSocket. */
 export function watch(context: BrowserContext, page: Page): Seen[] {
   const seen: Seen[] = [];
+  const reads: Promise<void>[] = [];
+  headerReads.set(seen, reads);
   const record = (request: Request) => {
     // The headers Playwright knows at once, then every header the browser really sent once they are read.
     const entry: Seen = { url: request.url(), method: request.method(), body: request.postData(), origin: new URL(request.url()).origin, headers: request.headers() };
     seen.push(entry);
-    request
-      .allHeaders()
-      .then((headers) => {
-        entry.headers = { ...entry.headers, ...headers };
-      })
-      .catch(() => {});
+    reads.push(
+      request
+        .allHeaders()
+        .then((headers) => {
+          entry.headers = { ...entry.headers, ...headers };
+        })
+        .catch(() => {}),
+    );
   };
   context.on('request', record);
   page.on('websocket', (socket) => seen.push({ url: socket.url(), method: 'WEBSOCKET', body: null, origin: new URL(socket.url()).origin }));
