@@ -6,7 +6,7 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, focusMovesToOptions, optionsHold, optionsShown, readyKey, typedText } from '../../widget/options';
+import { chosenValue, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, typedText } from '../../widget/options';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
@@ -382,6 +382,12 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const pressMain = () => {
     if (ready) void run.start();
   };
+  // Enter in a text's field: as the main button when it works; else the reason it waits is said, on every press.
+  const enterInField = () => {
+    const action = enterAction(ready, [tiedSentence, fieldHold?.sentence]);
+    if (action.kind === 'start') pressMain();
+    else if (action.kind === 'say') setAnnouncement(action.sentence);
+  };
 
   // More pages: focus goes to the first new page, which sits where the button was.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -552,7 +558,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     raw={typedText(option, state.choices)}
                     error={fieldHold?.key === option.key ? fieldHold.sentence : undefined}
                     onType={(value) => typeText(option.key, value)}
-                    onEnter={pressMain}
+                    onEnter={enterInField}
                     focusRef={index === 0 ? optionRef : undefined}
                   />
                 ),

@@ -15,6 +15,7 @@ import {
 } from '../../src/widget/option-values';
 import {
   chosenValue,
+  enterAction,
   focusMovesToOptions,
   jobOptions,
   optionsHold,
@@ -294,8 +295,10 @@ describe('what is wrong with a text', () => {
 });
 
 describe('a tool\'s own rule for a text, and what its engine takes', () => {
-  it('lists no tool yet', () => {
-    expect(optionTexts).toEqual({});
+  it('lists Watermark only, 50 characters of the standard fonts', () => {
+    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } } });
+    expect(textRule('watermark-pdf', 'text')).toEqual({ maxLength: 50, characters: 'standard-font' });
+    expect(acceptedText('watermark-pdf', 'text', '  Draft ')).toBe('Draft');
     expect(textRule('test-text', 'text')).toBeUndefined();
     expect(acceptedText('test-text', 'text', 'Draft')).toBeUndefined();
   });
@@ -347,14 +350,16 @@ describe('a text in the widget', () => {
   it('says what is wrong in one sentence: refused characters named when one to three Latin letters', () => {
     const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
     expect(ruleAdvice['standard-font']).toBe(advice);
-    expect(characters(['Ł'])).toBe(`Ł cannot be used. ${advice}`);
-    expect(characters(['Ł', 'ź'])).toBe(`Ł and ź cannot be used. ${advice}`);
-    expect(characters(['Ł', 'ź', 'ő'])).toBe(`Ł, ź and ő cannot be used. ${advice}`);
-    expect(characters(['ğ', 'Ǆ'])).toBe(`ğ and Ǆ cannot be used. ${advice}`);
+    // The rule is said by the hint under the field, so the sentence does not repeat it.
+    expect(characters(['Ł'])).not.toContain(advice);
+    expect(characters(['Ł'])).toBe(`Ł cannot be used.`);
+    expect(characters(['Ł', 'ź'])).toBe(`Ł and ź cannot be used.`);
+    expect(characters(['Ł', 'ź', 'ő'])).toBe(`Ł, ź and ő cannot be used.`);
+    expect(characters(['ğ', 'Ǆ'])).toBe(`ğ and Ǆ cannot be used.`);
   });
 
   it('never names a refused character that looks like one the rule takes, or any number, mark or symbol', () => {
-    const some = `Some characters cannot be used. ${advice}`;
+    const some = 'Some characters cannot be used.';
     const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
     // U+2010 hyphen, U+2011 no-break hyphen, U+2212 minus, U+2215 division slash, fullwidth "!" and "A", a modifier apostrophe.
     for (const character of ['\u2010', '\u2011', '\u2212', '\u2215', '\uff01', '\uff21', '\u02bc', '≠', '½', '٣']) {
@@ -365,7 +370,7 @@ describe('a text in the widget', () => {
   });
 
   it('says "Some characters cannot be used." with no list for four or more, another script, an emoji, or anything invisible', () => {
-    const some = `Some characters cannot be used. ${advice}`;
+    const some = 'Some characters cannot be used.';
     const characters = (text: string) => {
       const problem = textProblem(text, rule);
       return problem ? textSentence(watermark, rule, problem) : '';
@@ -390,7 +395,7 @@ describe('a text in the widget', () => {
     expect(optionsHold('test-text', undefined, {}, table)).toBeNull();
     expect(optionsHold('test-text', [position, watermark], {}, table)).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
     expect(optionsHold('test-text', [watermark], { text: '   ' }, table)?.kind).toBe('empty');
-    expect(optionsHold('test-text', [watermark], { text: 'Łódź' }, table)).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used. ${advice}` });
+    expect(optionsHold('test-text', [watermark], { text: 'Łódź' }, table)).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used.` });
     expect(optionsHold('test-text', [watermark], { text: 'x'.repeat(63) }, table)).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
     expect(optionsHold('test-text', [watermark], { text: ' Draft copy ' }, table)).toBeNull();
   });
@@ -429,5 +434,21 @@ describe('a text in the widget', () => {
     expect(sent?.type === 'run' && sent.options).toEqual({ text: 'Café copy' });
     client.end();
     await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+});
+
+describe('Enter in a text field', () => {
+  it('starts the job when the main button works', () => {
+    expect(enterAction(true, ['Type the watermark text first.'])).toEqual({ kind: 'start' });
+  });
+
+  it('says why the main button waits when it does: the sentence tied to it first, then the field\'s own', () => {
+    expect(enterAction(false, ['Type the watermark text first.', undefined])).toEqual({ kind: 'say', sentence: 'Type the watermark text first.' });
+    expect(enterAction(false, [null, 'Ł and ź cannot be used.'])).toEqual({ kind: 'say', sentence: 'Ł and ź cannot be used.' });
+    expect(enterAction(false, [null, 'This text has 63 characters. Use 50 or fewer.'])).toEqual({ kind: 'say', sentence: 'This text has 63 characters. Use 50 or fewer.' });
+  });
+
+  it('does nothing when the button waits with no sentence', () => {
+    expect(enterAction(false, [null, undefined, ''])).toEqual({ kind: 'nothing' });
   });
 });

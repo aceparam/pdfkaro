@@ -82,9 +82,9 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
     case 'too-long':
       return `This text has ${number(problem.length)} characters. Use ${number(rule.maxLength)} or fewer.`;
     case 'characters': {
-      const advice = ruleAdvice[rule.characters];
+      // The rule itself is said by the hint under the field (the registry test checks every hint ends with it), so not again here.
       const named = problem.refused.length >= 1 && problem.refused.length <= 3 && problem.refused.every(nameable);
-      return named ? `${listed(problem.refused)} cannot be used. ${advice}` : `Some characters cannot be used. ${advice}`;
+      return named ? `${listed(problem.refused)} cannot be used.` : 'Some characters cannot be used.';
     }
   }
 }
@@ -144,4 +144,18 @@ export function readyKey(state: Pick<State, 'files'>): string {
  */
 export function focusMovesToOptions(hasOptions: boolean, keyNow: string, keyBefore: string, focusIsFree: boolean): boolean {
   return hasOptions && keyNow !== '' && keyNow !== keyBefore && focusIsFree;
+}
+
+/** What Enter in a text's field does: start the job, say why the main button waits, or nothing. */
+export type EnterAction = { kind: 'start' } | { kind: 'say'; sentence: string } | { kind: 'nothing' };
+
+/**
+ * Enter in a text's field does what the main button does when it works. When the button waits, the
+ * first sentence that says why (the one tied to the button, then the field's own) is said by the status
+ * region, on every press, so Enter is never silent; the page makes a repeated sentence differ, so it is said again.
+ */
+export function enterAction(ready: boolean, sentences: readonly (string | null | undefined)[]): EnterAction {
+  if (ready) return { kind: 'start' };
+  const sentence = sentences.find((each): each is string => typeof each === 'string' && each !== '');
+  return sentence === undefined ? { kind: 'nothing' } : { kind: 'say', sentence };
 }

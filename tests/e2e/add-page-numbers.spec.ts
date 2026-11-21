@@ -422,10 +422,10 @@ test.describe('problems with the file', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Add page numbers' own files that may load after a pick, by exact name, read from the build: with pdf-lib and fflate. */
+/** Add page numbers' own files that may load after a pick, by exact name, read from the build: with the drawing step it shares with Watermark, pdf-lib and fflate. */
 const filesAfterPick = () =>
   builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|add-page-numbers-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|pdflib-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
+    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|add-page-numbers-[A-Za-z0-9_-]{8}\.js|stamp-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|pdflib-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
   );
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))];
 const built = (path: string) => readFileSync(join(here, '../../dist', path), 'utf8');
@@ -471,8 +471,8 @@ test.describe('nothing is uploaded', () => {
     await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
-    // The engine, with the drawing step inside it, and pdf-lib were fetched, and nothing of another tool's.
-    for (const name of [/\/add-page-numbers-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
+    // The engine, the drawing step (in one file, shared with Watermark) and pdf-lib were fetched, and nothing of another tool's.
+    for (const name of [/\/add-page-numbers-/, /\/stamp-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     expect(holding(fetched, 'A drawing used an object that cannot be written.').length).toBe(1);
     for (const other of [/\/compress-pdf-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);

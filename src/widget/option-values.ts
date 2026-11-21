@@ -45,7 +45,9 @@ export type TextRule = { maxLength: number; characters: CharacterRule };
 export type TextTable = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
 
 /** Each tool's texts, by tool id and key. Each tool's change adds its own line, such as `'watermark-pdf': { text: {...} }`. */
-export const optionTexts: TextTable = {};
+export const optionTexts: TextTable = {
+  'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } },
+};
 
 /**
  * The characters the standard PDF fonts Helvetica, Times and Courier, in every weight, draw with

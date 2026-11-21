@@ -36,7 +36,7 @@ The page SHALL take one PDF from the picker, a drop anywhere on the page, or pas
 
 ### Requirement: The file is read, then listed with the text field
 
-While the engine loads, the file's row SHALL show "Getting ready". Once read, the row SHALL show a thumbnail of the first page, the name, the page count and the size, with Remove and no summary line above it; the field "Watermark text" SHALL follow it, empty and focused, then the main button, waiting. (SPEC.md: Tool page anatomy, 4; States every tool handles, Engine loading)
+While the engine loads, the file's row SHALL show "Getting ready". Once read, the row SHALL show a thumbnail of the first page, the name, the page count and the size, with no Remove ("Choose another file" replaces it) and no summary line above it; the field "Watermark text" SHALL follow it, empty and focused, then the main button, waiting. (SPEC.md: Tool page anatomy, 4; States every tool handles, Engine loading)
 
 #### Scenario: A file is being read
 
@@ -46,7 +46,7 @@ While the engine loads, the file's row SHALL show "Getting ready". Once read, th
 #### Scenario: A file has been read
 
 - **WHEN** `report.pdf`, 12 pages and 1.4 MB, has been read
-- **THEN** its row shows its first page, "12 pages, 1.4 MB" and "Remove", then the empty field "Watermark text" with its hint, focused, then "Add watermark and download" with "Type the watermark text first." under it and read with it, and the status region says "report.pdf, 12 pages, 1.4 MB."
+- **THEN** its row shows its first page and "12 pages, 1.4 MB", with no Remove, then the empty field "Watermark text" with its hint, focused, then "Add watermark and download" with "Type the watermark text first." under it and read with it, and the status region says "report.pdf, 12 pages, 1.4 MB."
 
 ### Requirement: The watermark text
 
@@ -55,7 +55,7 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: Nothing is typed
 
 - **WHEN** the visitor presses "Add watermark and download" with the field empty or holding only spaces
-- **THEN** nothing happens, no code for the job is fetched, and the button reads "Type the watermark text first." to a screen reader
+- **THEN** no job starts, no code for the job is fetched, the button reads "Type the watermark text first." to a screen reader, and Enter in the field has the status region say it, on every press
 
 #### Scenario: Text is typed
 
@@ -65,12 +65,12 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: Hindi is typed
 
 - **WHEN** the visitor types "मसौदा"
-- **THEN** the field is marked invalid, the page says "Use letters from English and other Western European languages, numbers and common marks." with no list of characters, the main button does nothing, and no question marks are ever drawn
+- **THEN** the field is marked invalid, the page says "Some characters cannot be used." with no list of characters, the hint under the field saying which characters work, the main button does nothing, and no question marks are ever drawn
 
 #### Scenario: A few characters from other Latin alphabets
 
 - **WHEN** the visitor types "Łódź"
-- **THEN** the page says "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks."
+- **THEN** the page says "Ł and ź cannot be used.", the hint under the field saying which characters work
 
 #### Scenario: Accented Western European letters
 

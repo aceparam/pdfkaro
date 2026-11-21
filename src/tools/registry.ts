@@ -725,4 +725,59 @@ export const tools: Tool[] = [
       ],
     },
   },
+  {
+    id: 'watermark-pdf',
+    group: 'edit',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Sign PDF and Protect are linked once they are published.
+    related: ['add-page-numbers-to-pdf', 'sign-pdf', 'protect-pdf', 'merge-pdf', 'compress-pdf', 'rotate-pdf'],
+    pages: [
+      {
+        slug: 'watermark-pdf',
+        name: 'Watermark',
+        summary: 'Put your own text across every page of a PDF.',
+        title: 'Add a watermark to a PDF in your browser - PDFkaro',
+        description: 'Put a text watermark across every page of a PDF, in your browser. The file stays on your device and is not uploaded.',
+        heading: 'Add a watermark to a PDF',
+        sentence: 'Put your own text across every page of a PDF. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Add watermark and download',
+      writingLabel: 'Writing the watermarked file',
+      doneHeading: 'Your watermarked file is ready',
+      failedHeading: 'The watermark was not added.',
+      tooFewFiles: 'Choose a PDF file to add a watermark.',
+      outputSuffix: 'watermarked',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and add the watermark to each part.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The text's most characters and character rule are in src/widget/option-values.ts, which the engine reads.
+      options: [
+        {
+          kind: 'text',
+          key: 'text',
+          label: 'Watermark text',
+          hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+          emptySentence: 'Type the watermark text first.',
+          refusedSentence: 'The watermark text could not be used. Check it and try again.',
+        },
+      ],
+      // Page tools drop passwords and restrictions (13 Nov 2026), and the decision names Watermark.
+      resultNotes: [
+        'The watermark is on every page. Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
 ];

@@ -37,7 +37,8 @@ const loadedLater = [
   { name: 'fflate', type: 'js', why: "fflate's zip step, which the worker loads at the start of every run of a tool that can give several files, and which pdf-lib imports" },
   { name: 'picture', type: 'js', why: 'reads a JPG or PNG without decoding it, for Image to PDF; shared by its engine and its thumbnails' },
   { name: 'picture-thumbnail', type: 'js', why: "draws a picture's thumbnail with the browser's image decoder, which the worker loads for Image to PDF only" },
-  { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads when Image to PDF runs, at the main button' },
+  { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads when Image to PDF, Add page numbers or Watermark runs, at the main button' },
+  { name: 'stamp', type: 'js', why: 'the drawing step (stamp.ts) that Add page numbers and Watermark share, with the shared option values and text rules (option-values.ts) the bundler puts beside it; a file of its own' },
   ...engineIds.map((id) => ({ name: id, type: 'js', why: `the ${id} engine, which the worker loads` })),
 ].map((entry) => ({ ...entry, pattern: new RegExp(`^_astro/${entry.name.replaceAll('.', '\\.')}[.-][A-Za-z0-9_-]{8}\\.${entry.type}$`) }));
 
