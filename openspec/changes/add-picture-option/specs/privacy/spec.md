@@ -10,3 +10,8 @@ A picture chosen for an option SHALL go only to the tool worker. Its bytes MUST 
 
 - **WHEN** the no-upload test of a tool that takes a picture chooses a picture with a marked name and runs the job
 - **THEN** no request has a body or goes to another origin, the name is in no request, header, address, title, console message or browser storage, and no `blob:` address is made for the picture
+
+#### Scenario: The field's code
+
+- **WHEN** the source of `PictureField` and of the page's picking code is checked by a unit test
+- **THEN** neither calls `URL.createObjectURL` or writes to storage

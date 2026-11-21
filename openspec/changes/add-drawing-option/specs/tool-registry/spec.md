@@ -13,5 +13,5 @@ A drawing SHALL be declared in its tool's registry entry by its words only: a ke
 
 #### Scenario: The engine is sent something that is not a drawing
 
-- **WHEN** an engine is sent, for a drawing, something that is not a list of lines, no lines, a line with an odd count or no points, a number that is not whole or lies outside the pad, or more lines or points than its limits
+- **WHEN** an engine is sent, for a drawing, something that is not a list of lines, no lines, a line with an odd count or no points, a value that is not a whole number (such as NaN, Infinity, text or null) or lies outside the pad, a line that is not a plain list, or more lines or points than its limits
 - **THEN** it refuses before it reads the file with the refused-drawing error, and writes nothing

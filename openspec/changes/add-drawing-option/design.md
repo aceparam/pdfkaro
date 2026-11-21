@@ -70,7 +70,7 @@ export function acceptedDrawing(tool: string, key: string, value: unknown, table
 export class DrawingRefused extends Error { override name = 'DrawingRefused'; }
 ```
 
-- **Whole numbers in a fixed box** make the check simple and the message small: `acceptedDrawing` takes only an array (`Array.isArray`) of 1 to `maxLines` arrays; each of even length, at least 2, read by index so a hole is refused; every x a whole number from 0 to 1,000 and every y from 0 to 400; and no more than `maxPoints` points in all. Anything else gives `undefined`. Own keys only, with `Object.hasOwn`, as `acceptedValue` reads.
+- **Whole numbers in a fixed box** make the check simple and the message small. `acceptedDrawing` (security, stage 1) first checks sizes, before looking at any point: `Array.isArray(value)` and `value.length` from 1 to `maxLines`; each line `Array.isArray` (so a typed array is refused) with an even length of at least 2; and the lines' lengths summed to no more than `2 × maxPoints`. Only then each element, read by index so a hole is refused: `typeof v === 'number' && Number.isInteger(v)` (so `NaN`, `Infinity`, `'5'` and `null` are refused), x from 0 to 1,000 and y from 0 to 400. Anything else gives `undefined`. Own keys only, with `Object.hasOwn`, as `acceptedValue` reads.
 - **5 to 2** (1,000 by 400) is wide enough for a name written across and tall enough for loops below the line on a phone: 328 by 131 CSS pixels at 360px, 704 by 282 at 1280px (the 44rem column).
 - **A line 6 units wide** is 2 CSS pixels at 360px and 4 at 1280px, as a pen line looks at those sizes; the engine scales it with the drawing, so what is seen is what is written.
 - **The registry test** checks each drawing has its line and each line belongs to a drawing the registry shows; `maxLines` from 1 to 1,000 and `maxPoints` from 1 to 100,000; words plain and not empty, with no exclamation mark; and that no tool's first option is a drawing (`add-option-conditions` already keeps the first option unconditional).
@@ -98,11 +98,11 @@ Plain functions, tested in Node, so the component holds only wiring:
   <canvas ref={canvasRef} role="img" aria-labelledby={labelId} aria-describedby={hintId} className={styles.box}
           onPointerDown={…} onPointerMove={…} onPointerUp={…} onPointerCancel={…} onContextMenu={(e) => e.preventDefault()} />
   <p id={hintId} className={styles.note}>{option.hint}</p>
-  <div className="actions"><button type="button" className="button-secondary" onClick={onClear}>{option.clearLabel}</button></div>
+  <div className="actions"><button type="button" className="button-secondary" aria-describedby={hintId} onClick={onClear}>{option.clearLabel}</button></div>
 </div>
 ```
 
-- **A label paragraph, not a `<label>`:** a canvas is not a form control, so it is named with `aria-labelledby`. `role="img"` tells a screen reader the box is a picture and not something to type in; it has no `tabindex`, so it takes no Tab stop, since nothing in it can be done with a keyboard. The tool's hint says what to do instead (decision 1).
+- **A label paragraph, not a `<label>`:** a canvas is not a form control, so it is named with `aria-labelledby`. `role="img"` tells a screen reader the box is a picture and not something to type in; it has no `tabindex`, so it takes no Tab stop, since nothing in it can be done with a keyboard. The tool's hint says what to do instead (decision 1). Clear, the drawing's one Tab stop, is described by the same hint (UX, stage 1), so a keyboard user who reaches it hears the way to do the job without drawing.
 - **Touch:** `.box` has `touch-action: none`, so the browser does not scroll, zoom or turn a finger into mouse events; `user-select: none`, `-webkit-user-select: none` and `-webkit-touch-callout: none`, so a long press selects nothing and opens no menu; and the context menu is prevented on the box only.
 - **One pointer:** a press starts a line only for a primary pointer (`isPrimary`, and for a mouse the main button), captures it (`setPointerCapture`), and ignores every other pointer until it ends. A second finger draws nothing.
 - **No dispatch while drawing:** the line in progress lives in a ref and is painted segment by segment on the canvas; `getCoalescedEvents()`, where the browser has it, gives the points between frames. On `pointerup`, `pointercancel` or lost capture, the line goes through `withLine` and `onDraw(drawing)` is called once. A cancelled line (the browser took the touch) is kept as drawn so far.
@@ -130,7 +130,7 @@ The script before a pick is unchanged: the island's props are the same for every
 ## Tests
 
 - **Unit, `tests/unit/drawing.test.ts`:** `padPoint` (inside, outside on each side, a box of odd size, rounding); `extendLine` (a far point added, a near one not, the first point always); `withLine` (added; cut at `maxPoints` with `full`; refused past `maxLines` with `full`); `paintDrawing` on `@napi-rs/canvas` (already used by the thumbnail tests): a line's pixels where its points are, a one-point line as a dot, the width scaled, nothing outside.
-- **Unit, `tests/unit/options.test.ts`:** `acceptedDrawing` with a filled table (a good drawing; not an array; no lines; a line of odd count or no points; a hole; 1.5; -1; 1,001 across; 401 down; one line too many; one point too many; `__proto__`; `toString`); `optionsToSend` and `optionsHold` with a drawing, shown and hidden.
+- **Unit, `tests/unit/options.test.ts`:** `acceptedDrawing` with a filled table (a good drawing; not an array; no lines; a line of odd count or no points; a hole; 1.5; -1; `NaN`; `Infinity`; `'5'`; `null`; a line that is a typed array; 1,001 across; 401 down; one line too many; one point too many, refused on the summed lengths before any element is read; `__proto__`; `toString`); `optionsToSend` and `optionsHold` with a drawing, shown and hidden.
 - **State:** `drawing-set` only while listing; kept through Cancel, a failure and "Choose another file"; cleared by "Start again" and removing the last file; a non-array refused.
 - **Failure:** `worker-core` maps `DrawingRefused` to `drawing-refused`; `failureSentence` gives the generic sentence and a test entry's own; `messages.ts` accepts the kind.
 - **Worker message:** a test entry's drawing, through the reducer and `jobOptions`, reaches the real `ToolClient`'s run message unchanged, with a fake worker.
@@ -143,6 +143,7 @@ The script before a pick is unchanged: the island's props are the same for every
 - **[Not usable by keyboard or screen reader]** Drawing needs a pointer. → Never a tool's first option; the tool's hint names its other ways, and Sign PDF offers typing and a picture, which the keyboard and a screen reader can use. `SPEC.md` asks that the tool can be used by keyboard alone; the tool can, by those ways.
 - **[Straight segments]** Lines are joined points, not curves. → With round joins and points at least 3 units apart they look smooth at signature size; curves can come later if asked.
 - **[Old browsers]** `getCoalescedEvents` is missing in some browsers. → Points come from the moves alone there; lines are a little coarser, not broken.
+- **[A thumb scrolling over the pad]** The box takes every touch for drawing, so on a phone a visitor who puts a thumb on it to scroll past draws a line instead, and the page does not move. → The box is about 131 pixels tall at 360px, about a fifth of a phone's screen, so there is room above and below it to scroll; a stray line is undone with Clear. Sign PDF's end-to-end test scrolls past the pad after drawing, and its hand checks in issue #7 try it on real phones. If it proves common, the tool's hint gains "To scroll, touch outside the box."
 - **[A palm on a tablet]** A palm that touches first would draw. → Only the first pointer draws; Clear and draw again. The hand checks in issue #7 cover iPad and Android tablets with a pen.
 
 ## Migration Plan

@@ -1,6 +1,6 @@
 # Tasks
 
-Built on `add-tool-options` and `add-text-option` (archived), after `add-watermark` is merged. Merged before `add-drawing-option`, `add-picture-option` and `add-sign-pdf`.
+Built on `add-tool-options` and `add-text-option` (archived), after `add-watermark` (merged and archived, PR #22). Merged before `add-drawing-option`, `add-picture-option` and `add-sign-pdf`.
 
 ## 1. Registry entry
 

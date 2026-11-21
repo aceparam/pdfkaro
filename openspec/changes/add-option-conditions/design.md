@@ -3,7 +3,7 @@
 ## Context
 
 - `add-tool-options` and `add-text-option` (both archived) give the registry `ToolOption = ChoiceOption | TextOption`; `src/widget/options.ts` with `chosenValue`, `typedText`, `optionsToSend`, `jobOptions`, `optionsHold`, `optionsShown`, `readyKey` and `focusMovesToOptions`; the state's `choices`, kept through Cancel, a failure and "Choose another file" and cleared by "Start again" and by removing the last file; and `ToolWorkspace`, which draws every option in registry order once the file is read, puts `optionRef` on the first option's focus target, and ties the first holding text's sentence to the main button.
-- Add page numbers (one choice) and Watermark (one text, PR open) use them. Neither needs a condition.
+- Add page numbers (one choice) and Watermark (one text; merged and archived, PR #22) use them. Neither needs a condition.
 - Sign PDF (`add-sign-pdf`) needs a choice of how the signature is made, then one of three inputs: a text (`add-text-option`), a drawing (`add-drawing-option`) or a picture (`add-picture-option`). The drawing and picture changes come after this one and use its rule, so each new kind is hidden, held and sent through one place.
 
 ## Goals / Non-Goals

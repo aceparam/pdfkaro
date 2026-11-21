@@ -84,7 +84,7 @@ The field "Your name" SHALL take up to 50 characters on one line, of the standar
 #### Scenario: A name in another script
 
 - **WHEN** the visitor types "सीता"
-- **THEN** the field is marked invalid, the page says "Some characters cannot be used.", the hint saying which characters work, the main button does nothing, and no question marks are ever drawn
+- **THEN** the field is marked invalid, the page says "Some characters cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above.", the hint saying which characters work, the main button does nothing, and no question marks are ever drawn
 
 #### Scenario: The engine is sent a name it does not accept
 
@@ -117,7 +117,7 @@ With "Draw it" chosen, the drawing pad SHALL be shown with the label "Draw your 
 
 ### Requirement: A picture of the signature
 
-With "Use a picture of it" chosen, the field "Picture of your signature" SHALL take one JPG or PNG of up to 8 MB and 16 million pixels, read in the worker. The picture SHALL be drawn with its own colours and see-through parts, upright by its camera turn, keeping its shape. None of its details SHALL be copied into the file. (SPEC.md: Scope notes, Sign PDF; Privacy, limits and security)
+With "Use a picture of it" chosen, the field "Picture of your signature" SHALL take one JPG or PNG, read in the worker, with no size limit and a notice over 8 MB or 16 million pixels. It SHALL be drawn with its own colours and see-through parts, upright by its camera turn, keeping its shape. None of its details SHALL be copied into the file. (SPEC.md: Scope notes, Sign PDF; Privacy, limits and security)
 
 #### Scenario: A PNG with a see-through background
 
@@ -136,8 +136,18 @@ With "Use a picture of it" chosen, the field "Picture of your signature" SHALL t
 
 #### Scenario: A picture that cannot be used
 
-- **WHEN** the visitor chooses a damaged picture, a JPG with arithmetic coding, a picture over 8 MB or one over 16 million pixels
+- **WHEN** the visitor chooses a damaged picture or a JPG with arithmetic coding
 - **THEN** the field says so in one sentence naming the picture and what to do, and the main button does nothing
+
+#### Scenario: A very large picture
+
+- **WHEN** the visitor chooses `photo.jpg`, 12.4 MB and 24 million pixels
+- **THEN** a notice names its size and pixels and says "A picture this large makes the signed file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.", the main button works, and the new file holds the picture once, compressed
+
+#### Scenario: A picture too large for the file
+
+- **WHEN** a picture whose data alone passes the size budget of a small PDF is placed
+- **THEN** the job stops before anything is drawn, and the page says "The signature was not added." and "photo.jpg (24.6 MB) is too large to place on these pages. Crop it to the signature, or save a smaller copy."
 
 #### Scenario: The engine is sent a picture it does not accept
 
@@ -316,7 +326,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7contract.pdf`, types its password, types "Jq5name Vx2sig", signs, then does it again with a drawing and with a picture named `qz7sig.png`, and downloads each result, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, the same for the three ways, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7contract`, the password, `Jq5name`, `Vx2sig` or `qz7sig`; no `blob:` address is made for the picture; and storage, the title, the address and the console hold none of them
+- **THEN** after the pick only an exact list of the site's own files is requested, the same for the three ways, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7contract`, the password, `Jq5name`, `Vx2sig` or `qz7sig`; no `blob:` address is made for the picture (each Blob given to `URL.createObjectURL` is a thumbnail or the result, never `image/*` or the picture's size), a marker inside the picture's bytes is in no request; and storage, the title, the address and the console hold none of them
 
 #### Scenario: No hidden text reaches a request
 
@@ -325,7 +335,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft for the owner, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover uploading, the three ways, which characters a typed name takes, what this signature is and is not, pictures with a background, what is kept, passwords, and that the page forgets the file and the signature. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft, with no banned pattern and no question restating the title. They SHALL cover uploading, the three ways, where it can go (an edge of the first, last or every page, not a line mid-page), a typed name's characters, what this signature is not, pictures with a background, what is kept, passwords, and forgetting the file. (SPEC.md: Tool page anatomy, 7; SEO)
 
 #### Scenario: The text is in the served page
 

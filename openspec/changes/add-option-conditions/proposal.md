@@ -33,7 +33,7 @@ No file is processed by this change, and no request is added. What the visitor c
 ## Open decisions and owner questions touched
 
 - **Shared pieces in tool pull requests** (waiting for the owner): this change follows `SPEC.md`'s rule and comes in its own pull request, ahead of `add-drawing-option`, `add-picture-option` and `add-sign-pdf`.
-- **Rotate's and Watermark's waiting main buttons** (waiting for the owner): touched only in that a hidden text no longer holds the button; nothing that holds it today changes.
+- **Waiting main buttons** (waiting for the owner): touched only in that a hidden text no longer holds the button; nothing that holds it today changes.
 - **The agent's own choices,** named in the pull request: one condition per option, on one earlier choice's value; the option shown after the group, not inside it; nothing announced and focus not moved when it appears; a hidden option keeps what it holds and is not sent; the first option has no condition.
 
 No open decision needs more than its assumed default.

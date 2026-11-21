@@ -39,12 +39,12 @@ A drawing SHALL be a box the width of the column with a visible label, a hint an
 #### Scenario: A keyboard user reaches the drawing
 
 - **WHEN** a keyboard user presses Tab through the working area
-- **THEN** the box takes no Tab stop, Clear does, and the hint above names the tool's way to do the job without drawing
+- **THEN** the box takes no Tab stop, Clear does, and Clear is read with the drawing's hint, which names the tool's way to do the job without drawing
 
 #### Scenario: A screen reader user reaches the drawing
 
 - **WHEN** a screen reader user moves through the working area
-- **THEN** the box is read as a picture named by the drawing's label and described by its hint, and Clear as a button with its words
+- **THEN** the box is read as a picture named by the drawing's label and described by its hint, and Clear as a button with its words, described by the same hint
 
 #### Scenario: How the drawing looks
 

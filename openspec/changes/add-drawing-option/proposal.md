@@ -40,7 +40,7 @@ No file is processed by this change, and no request is added. What the visitor d
 ## Open decisions and owner questions touched
 
 - **Shared pieces in tool pull requests** (waiting for the owner): this change follows `SPEC.md`'s rule and gives the pad its own pull request, ahead of Sign PDF.
-- **Rotate's and Watermark's waiting main buttons** (waiting for the owner): touched in kind. A drawing makes the main button wait while it is empty, as a text does.
+- **Waiting main buttons** (waiting for the owner): touched in kind. A drawing makes the main button wait while it is empty, as a text does.
 - **"Defaults are set so the main button works without touching any option"** (`SPEC.md` "Tool page anatomy", 4): a drawing is read as the job's input, as `add-text-option` read a typed text, after the owner's decision on Extract pages (13 Nov 2026). The reading is the agent's and is named in the pull request.
 - **The agent's own choices,** named in the pull request: the drawing kind and its words; lines of whole-number points in a 1,000 by 400 box; a 5 to 2 box the column's width; a line 6 units wide in the text colour; one pointer at a time; 3 units between points; most lines and points written once in `option-values.ts`; a drawing never first and never made into a picture; Clear with no undo; the `drawing-refused` failure; `DrawingPad` in its own folder.
 

@@ -4,7 +4,7 @@
 
 ### Requirement: A picture option is read in the worker
 
-A picture chosen for an option SHALL be read in the tool worker, not on the page, with the shared picture reader, before the job, and the page SHALL be told only whether it is ready, damaged, saved in a way the tool cannot read, or too large. With the job, each shown, ready picture SHALL go to the worker beside the files and reach the engine as bytes under its option's key. (SPEC.md: Rules for the code, 2 to 4)
+A picture chosen for an option SHALL be read in the tool worker, not on the page, with the shared picture reader, before the job, and the page SHALL be told only whether it is ready, with its pixels, damaged, or saved in a way the tool cannot read. With the job, each shown, ready picture SHALL go to the worker beside the files and reach the engine as bytes under its option's key. (SPEC.md: Rules for the code, 2 to 4)
 
 #### Scenario: A picture is checked
 
