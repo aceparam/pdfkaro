@@ -74,7 +74,10 @@ export type State = {
   /**
    * What each of the tool's options shows, by key (`options` in its registry words). `{}` is every
    * option at its start, so a tool with no options holds nothing. Kept through Cancel, a failure and
-   * a replaced file; only "Start again" clears it. Never written to storage or the address.
+   * a file replaced through "Choose another file" while listing (the new file is listed before the
+   * old one is removed). Not kept when the last file is removed, which ends the working area,
+   * including a damaged or password file replaced from its notice; "Start again" clears it too.
+   * Never written to storage or the address.
    */
   choices: Readonly<Record<string, string>>;
 };
@@ -167,7 +170,7 @@ export function reducer(state: State, action: Action): State {
     }
     case 'removed': {
       const files = state.files.filter((file) => file.id !== action.id);
-      return files.length === 0 ? { ...initialState, choices: state.choices } : { ...state, files };
+      return files.length === 0 ? initialState : { ...state, files };
     }
     case 'started':
       return { ...state, step: 'working', progress: null, fraction: 0, result: null, failure: null, refused: [] };

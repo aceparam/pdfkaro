@@ -11,7 +11,7 @@ export type Choices = Readonly<Record<string, string>>;
 /** The value an option shows: the one chosen when it is among the option's values, else its starting value. */
 export function chosenValue(option: ToolOption, choices: Choices): string {
   const chosen = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
-  return option.choices.some((choice) => choice.value === chosen) ? chosen! : option.initial;
+  return chosen !== undefined && option.choices.some((choice) => choice.value === chosen) ? chosen : option.initial;
 }
 
 /** What the engine is sent for the tool's options: every option's value by its key, or `{}` for a tool with none. */
@@ -41,7 +41,12 @@ export function jobOptions(
  * cannot be read; not during the job or on the result.
  */
 export function optionsShown(state: Pick<State, 'step' | 'files'>): boolean {
-  return state.step === 'listing' && state.files.length > 0 && state.files.every((file) => file.status === 'ready' && !file.checking);
+  return state.step === 'listing' && everyFileOpen(state);
+}
+
+/** Whether files are listed and every one has been read and opened, with no password being tried. */
+function everyFileOpen(state: Pick<State, 'files'>): boolean {
+  return state.files.length > 0 && state.files.every((file) => file.status === 'ready' && !file.checking);
 }
 
 /**
@@ -50,7 +55,7 @@ export function optionsShown(state: Pick<State, 'step' | 'files'>): boolean {
  * back to your file" keep it and focus is not moved again after them.
  */
 export function readyKey(state: Pick<State, 'files'>): string {
-  return state.files.length > 0 && state.files.every((file) => file.status === 'ready' && !file.checking) ? state.files.map((file) => file.id).join(' ') : '';
+  return everyFileOpen(state) ? state.files.map((file) => file.id).join(' ') : '';
 }
 
 /**
@@ -58,6 +63,10 @@ export function readyKey(state: Pick<State, 'files'>): string {
  * a new set of files has just been read, and only if focus is still where the widget put it (the
  * main button, the file's line or summary) or on the page body, so a visitor who went elsewhere
  * while a large file was read is left there.
+ *
+ * Built for a tool that takes one file. In a tool of several files, adding a file or "Leave this
+ * file out" (which puts focus on the summary) gives a new key with focus still free, so focus would
+ * move to the options again: the change that first gives such a tool options must handle that.
  */
 export function focusMovesToOptions(hasOptions: boolean, keyNow: string, keyBefore: string, focusIsFree: boolean): boolean {
   return hasOptions && keyNow !== '' && keyNow !== keyBefore && focusIsFree;

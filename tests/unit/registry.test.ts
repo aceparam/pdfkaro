@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { groups, tools, type Tool, type ToolOption } from '../../src/tools/registry';
 import { optionValues } from '../../src/widget/option-values';
+import { toggleRules } from '../../src/widget/toggles';
+import { turnRules } from '../../src/widget/turns';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
 
 const sitePageNames = ['about', 'privacy', 'changes', 'known-problems', 'contact', '404', 'index'];
@@ -425,6 +427,17 @@ describe('PDF to JPG and PDF to PNG', () => {
   });
 });
 
+/**
+ * The keys a job is sent for what the page's items say (jobOption in src/hooks/useToolRun.ts): every
+ * toggle kind's key, the turns, and `order` for pages that move. An option never uses one, so a
+ * choice never replaces them.
+ */
+const itemKeys = new Set([
+  ...Object.values(toggleRules).flatMap((rules) => Object.keys(rules.option([]))),
+  ...Object.keys(turnRules.option(null, 1)),
+  'order',
+]);
+
 type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 
 /**
@@ -449,6 +462,7 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
     if (!accepted || accepted.length !== listed.length || [...accepted].sort().join('\n') !== [...listed].sort().join('\n')) {
       problems.push(`${option.key}: the values are not those of option-values.ts`);
     }
+    if (itemKeys.has(option.key)) problems.push(`${option.key}: the key is one the page's items send`);
     for (const page of tool.pages) {
       if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
     }
@@ -518,6 +532,15 @@ describe('options', () => {
     expect(optionProblems(entry([position]), { 'test-options': { position: values['test-options']!.position!, size: ['small'] } })).toContain(
       'size: in option-values.ts but not an option of the tool',
     );
+  });
+
+  it("fail when an option key is one the page's items send: cuts, pages, turns or order", () => {
+    expect([...itemKeys].sort()).toEqual(['cuts', 'order', 'pages', 'turns']);
+    for (const key of itemKeys) {
+      expect(optionProblems(entry([{ ...position, key }]), { 'test-options': { [key]: values['test-options']!.position! } })).toContain(
+        `${key}: the key is one the page's items send`,
+      );
+    }
   });
 
   it('fail when a page preset uses an option key, so a choice never replaces what the page promises', () => {

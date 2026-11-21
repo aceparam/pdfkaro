@@ -4,7 +4,7 @@
 
 ### Requirement: Options a tool needs
 
-A tool with options SHALL show them once its file has been read, below the file and above the main button, each starting at a value with which the main button works. A choice SHALL be a group of radio buttons, one per line, named by a visible legend. Focus SHALL then move to the chosen button of the first option. Choices SHALL be kept through Cancel, failure and a replaced file, and reset on "Start again". (SPEC.md: Tool page anatomy, 4; Definition of done)
+A tool with options SHALL show them once its file has been read, below the file and above the main button, each starting at a value with which the main button works. A choice SHALL be a group of radio buttons, one per line, named by a visible legend. Focus SHALL then move to the chosen button of the first option. Choices SHALL be kept and reset as the scenarios below say. (SPEC.md: Tool page anatomy, 4; Definition of done)
 
 #### Scenario: A file is read in a tool with options
 
@@ -30,6 +30,11 @@ A tool with options SHALL show them once its file has been read, below the file 
 
 - **WHEN** the visitor changes a choice, starts the job and presses Cancel, then later gets a result and presses "Start again"
 - **THEN** after Cancel the choice is as the visitor left it, and after "Start again" the next file shows every option at its starting value
+
+#### Scenario: Another file
+
+- **WHEN** the visitor changes a choice, then picks another file with "Choose another file" while the file is listed
+- **THEN** the new file shows the choice as the visitor left it; but when the only file is removed, including a damaged or password-protected file left out from its notice, the next file shows every option at its starting value
 
 #### Scenario: A tool with no options
 

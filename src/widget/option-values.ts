@@ -21,7 +21,8 @@ export function acceptedValue(
   values: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = optionValues,
 ): string | undefined {
   if (typeof value !== 'string' || !Object.hasOwn(values, tool)) return undefined;
-  const byKey = values[tool]!;
-  if (!Object.hasOwn(byKey, key)) return undefined;
-  return byKey[key]!.includes(value) ? value : undefined;
+  const byKey = values[tool];
+  if (byKey === undefined || !Object.hasOwn(byKey, key)) return undefined;
+  const accepted = byKey[key];
+  return accepted !== undefined && accepted.includes(value) ? value : undefined;
 }

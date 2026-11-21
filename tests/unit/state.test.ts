@@ -213,7 +213,7 @@ describe('what the options show', () => {
     expect(Object.getPrototypeOf(odd.choices)).toBe(Object.prototype);
   });
 
-  it('keeps a choice through Cancel, a failure, going back and a replaced file', () => {
+  it('keeps a choice through Cancel, a failure, going back and a file replaced while listing', () => {
     const chosen = play(add('a'), ready(), set('top-right'));
     const kept = { position: 'top-right' };
     expect(play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'back-to-files' }).choices).toEqual(kept);
@@ -223,7 +223,11 @@ describe('what the options show', () => {
     const replaced = [add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, chosen);
     expect(replaced.files.map((file) => file.id)).toEqual(['b']);
     expect(replaced.choices).toEqual(kept);
-    expect(reducer(chosen, { type: 'removed', id: 'a' }).choices).toEqual(kept);
+  });
+
+  it('forgets a choice when the last file is removed, which ends the working area', () => {
+    const chosen = play(add('a'), ready(), set('top-right'));
+    expect(reducer(chosen, { type: 'removed', id: 'a' })).toBe(initialState);
   });
 
   it('goes back to every option at its start on Start again', () => {
