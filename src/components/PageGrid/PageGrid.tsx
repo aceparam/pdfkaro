@@ -240,7 +240,7 @@ type ChunkProps = {
 export function sameItem(item: GridItem, other: GridItem): boolean {
   if (item === other) return true;
   const keys = Object.keys(item) as (keyof GridItem)[];
-  return keys.length === Object.keys(other).length && keys.every((key) => item[key] === other[key]);
+  return keys.length === Object.keys(other).length && keys.every((key) => Object.hasOwn(other, key) && item[key] === other[key]);
 }
 
 /** Whether two runs of items show the same: the same items, field by field, in the same order. */
