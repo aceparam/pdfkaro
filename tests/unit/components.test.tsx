@@ -517,7 +517,7 @@ describe('DrawingPad, a drawing of a test entry', () => {
     expect(button).toMatch(/>Clear the drawing<\/button>$/);
   });
 
-  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2, at most 60% of a short screen tall', () => {
+  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2, at most 60% of a short screen tall, and the column\'s width where the small viewport unit is missing', () => {
     const css = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.module.css', import.meta.url), 'utf8');
     const box = css.match(/\.box \{([^}]*)\}/)?.[1] ?? '';
     for (const rule of [
@@ -535,6 +535,8 @@ describe('DrawingPad, a drawing of a test entry', () => {
     ]) {
       expect(box, rule).toContain(rule);
     }
+    // A browser without the small viewport unit drops that width, and still gives the box the column's width.
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).toMatch(/@supports not \(width: 1svh\) \{\s*\.box \{\s*width: 100%;\s*\}\s*\}/);
     expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/shadow|gradient|animation|transition/);
   });
 

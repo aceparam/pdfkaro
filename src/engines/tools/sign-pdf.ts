@@ -34,6 +34,7 @@
 // pdf-lib is imported for its types only: its values come from `tools.pdflib()`.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
+import { outOfMemory } from '../../widget/memory';
 import {
   acceptedDrawing,
   acceptedText,
@@ -206,13 +207,14 @@ function encodedOf(lib: Lib, stream: PdfLib.PDFObject | undefined): PdfLib.PDFRa
 
 /**
  * pdf-lib's reading of a picture that passed every check before it, refused as a picture if pdf-lib still cannot read
- * it, so the page names the picture and not the PDF. Running out of memory, and any RangeError, go through unchanged.
+ * it, so the page names the picture and not the PDF. Only running out of memory goes through unchanged, by the same
+ * test the worker uses to say so (`outOfMemory`); anything else, a RangeError from a bad offset included, is refused.
  */
 async function asPicture<T>(read: () => Promise<T>): Promise<T> {
   try {
     return await read();
   } catch (error) {
-    if (error instanceof RangeError || (error instanceof Error && /memory|allocat/i.test(`${error.name} ${error.message}`))) throw error;
+    if (outOfMemory(error)) throw error;
     throw new PictureRefused();
   }
 }
@@ -265,19 +267,23 @@ function registerPart(lib: Lib, doc: PdfLib.PDFDocument, part: StreamPart, mask?
   return doc.context.register(lib.PDFRawStream.of(dict, part.bytes));
 }
 
-/** A drawing's or a picture's form: its content and size, made once per job, the same in every run. */
-type Made = { width: number; height: number; content: string };
+/**
+ * A form's content and size, and its content as bytes. A drawing's and a picture's are made once per job, so every run
+ * registers its form over the same byte array and the drawing step, which knows a stream over 64 KB by its bytes'
+ * identity, writes it once however large it is (a drawing at its 20,000-point limit is about 190 KB).
+ */
+type Made = { width: number; height: number; content: string; bytes: Uint8Array };
+
+/** A form's content as bytes: it is ASCII, so one byte a character, as pdf-lib's own `context.stream` makes them. */
+const asciiBytes = (content: string) => new TextEncoder().encode(content);
 
 /** The form's size and content for a typed name: the name's advance widened by Times Italic's reach on both sides, and its full height, so no glyph is cut. */
 export function typedContent(advance: number, encoded: string): Made {
   const unit = typedSize / 1000;
   const reach = timesItalicReach;
-  return {
-    width: advance + (reach.left + reach.right) * unit,
-    height: (reach.top - reach.bottom) * unit,
-    // pdf-lib's own encoding writes the name as a hex string, so no character can close a string or start an operator.
-    content: `q 0 g BT /F1 ${typedSize} Tf ${pdfNumber(reach.left * unit)} ${pdfNumber(-reach.bottom * unit)} Td ${encoded} Tj ET Q\n`,
-  };
+  // pdf-lib's own encoding writes the name as a hex string, so no character can close a string or start an operator.
+  const content = `q 0 g BT /F1 ${typedSize} Tf ${pdfNumber(reach.left * unit)} ${pdfNumber(-reach.bottom * unit)} Td ${encoded} Tj ET Q\n`;
+  return { width: advance + (reach.left + reach.right) * unit, height: (reach.top - reach.bottom) * unit, content, bytes: asciiBytes(content) };
 }
 
 /** A signature ready for the runs: a drawing's and a picture's form made once per job; a typed name's needs each run's font. */
@@ -285,16 +291,24 @@ export type Planned = { kind: 'text'; text: string } | { kind: 'lines'; made: Ma
 
 /** Makes what can be made once per job: a drawing's form, or a picture's, drawn upright with the matrix for its camera turn. */
 export function planned(signature: Signature): Planned {
-  if (signature.kind === 'lines') return { kind: 'lines', made: drawingContent(signature.drawing) };
+  if (signature.kind === 'lines') {
+    const drawing = drawingContent(signature.drawing);
+    return { kind: 'lines', made: { ...drawing, bytes: asciiBytes(drawing.content) } };
+  }
   if (signature.kind === 'picture') {
     const shown = shownSize(signature.parts);
     const matrix = orientedMatrix(signature.parts.orientation, { x: 0, y: 0, width: shown.width, height: shown.height }).map(pdfNumber).join(' ');
-    return { kind: 'picture', parts: signature.parts, made: { width: shown.width, height: shown.height, content: `q ${matrix} cm /Im Do Q\n` } };
+    const content = `q ${matrix} cm /Im Do Q\n`;
+    return { kind: 'picture', parts: signature.parts, made: { width: shown.width, height: shown.height, content, bytes: asciiBytes(content) } };
   }
   return signature;
 }
 
-/** The signature's form for one run, identical in every run, so the drawing step writes it once. */
+/**
+ * The signature's form for one run, identical in every run, so the drawing step writes it once: registered over the
+ * plan's own bytes, as `registerPart` does a picture's, never over bytes made afresh in each run. A typed name's form is
+ * small, so the step knows it by its text.
+ */
 export async function signatureForm(doc: PdfLib.PDFDocument, lib: Lib, plan: Planned): Promise<SignatureForm> {
   const context = doc.context;
   let form: Made;
@@ -311,8 +325,8 @@ export async function signatureForm(doc: PdfLib.PDFDocument, lib: Lib, plan: Pla
     const maskRef = plan.parts.mask ? registerPart(lib, doc, plan.parts.mask) : undefined;
     resources = context.obj({ XObject: { Im: registerPart(lib, doc, plan.parts.image, maskRef) } });
   }
-  const { width, height, content } = form;
-  const stream = context.stream(content, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, width, height], Resources: resources });
+  const { width, height, bytes } = form;
+  const stream = lib.PDFRawStream.of(context.obj({ Type: 'XObject', Subtype: 'Form', BBox: [0, 0, width, height], Resources: resources }), bytes);
   return { ref: context.register(stream), width, height, typed: plan.kind === 'text' };
 }
 

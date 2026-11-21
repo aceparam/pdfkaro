@@ -28,6 +28,15 @@
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+/* A browser without the small viewport unit drops the width above; it still gets the column's width.
+   Without one the canvas would take its drawing buffer's width, which the pad sets from the box, and
+   on a sharp screen could keep growing. A plain `width: 100%` before the other is not used: the
+   minifier keeps only the last of two widths. */
+@supports not (width: 1svh) {
+  .box {
+    width: 100%;
+  }
+}
 /* The hint under the box, muted. The same rule as TextField's note, copied on purpose: each
    component owns its CSS Module. */
 .note {

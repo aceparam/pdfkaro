@@ -16,7 +16,7 @@ import { pictureOutcome } from '../../src/engines/picture';
 import { plainCopy } from '../../src/engines/plain';
 import { drawingContent, drawingLine, inspect, inspectPicture, pictureParts, run, signaturePlace, timesItalicReach, typedContent, type Position } from '../../src/engines/tools/sign-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
-import { optionPictures, pad, pictureRule } from '../../src/widget/option-values';
+import { optionDrawings, optionPictures, pad, pictureRule } from '../../src/widget/option-values';
 import { failureKind } from '../../src/workers/worker-core';
 import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools as stampTools, type Picture } from './stamp-helpers';
 
@@ -182,7 +182,6 @@ describe('what the job is sent', { timeout: 60_000 }, () => {
 // ---------------------------------------------------------------------------
 // Drawing pages to look at what changed.
 
-/** A page drawn by PDF.js at `scale`, as a function from a point on the page as shown (from its bottom left) to its colour. */
 /** One page drawn by PDF.js on white at `scale` pixels a point, as a picture. */
 async function render(bytes: Uint8Array, number: number, scale: number): Promise<Picture> {
   const doc = await open(bytes);
@@ -198,6 +197,7 @@ async function render(bytes: Uint8Array, number: number, scale: number): Promise
   return { data, width: canvas.width, height: canvas.height };
 }
 
+/** A page drawn by PDF.js at `scale`, as a function from a point on the page as shown (from its bottom left) to its colour. */
 async function colours(bytes: Uint8Array, number: number, scale: number) {
   const doc = await open(bytes);
   const page = await doc.getPage(number);
@@ -394,8 +394,8 @@ describe('a drawing', { timeout: 60_000 }, () => {
     const place = signaturePlace(a4, content, 'bottom-right', false);
     expect(content.line * place.scale).toBeCloseTo(fullLine, 6);
     const scale = 8;
-    const box = changed(await render(input, 1, scale), await render(output, 1, scale));
     const after = await render(output, 1, scale);
+    const box = changed(await render(input, 1, scale), after);
     const w = (box.right - box.left) * after.width;
     const h = (box.bottom - box.top) * after.height;
     // About 7 pixels across at 8 pixels a point, not the 476 a dot filling its box would be.
@@ -428,7 +428,7 @@ describe('the line\'s width', () => {
 });
 
 describe('a picture', { timeout: 60_000 }, () => {
-  it('one that passed every check but that pdf-lib still cannot read is refused as a picture; running out of memory and a RangeError go through unchanged', async () => {
+  it('one that passed every check but that pdf-lib still cannot read is refused as a picture, a RangeError from a bad offset included; only running out of memory goes through unchanged', async () => {
     const lib = (await stampTools.pdflib!()) as typeof PdfLib;
     // pdf-lib reads every PNG and JPG that passes the checks before it, so its failures are made here, one at each step.
     const failing = (error: Error, at: 'for' | 'embed') => {
@@ -446,11 +446,17 @@ describe('a picture', { timeout: 60_000 }, () => {
         const refused = await failure(pictureParts(bytes, failing(new Error('Corrupt picture data.'), at)));
         expect(refused?.name, at).toBe('PictureRefused');
         expect(failureKind(refused), at).toBe('picture-refused');
+        // A RangeError the worker would not call running out of memory is the picture's fault.
         const range = new RangeError('Offset is outside the bounds of the DataView');
-        expect(await failure(pictureParts(bytes, failing(range, at))), at).toBe(range);
-        const memory = new Error('Array buffer allocation failed');
-        expect(await failure(pictureParts(bytes, failing(memory, at))), at).toBe(memory);
-        expect(failureKind(memory)).toBe('memory');
+        expect(failureKind(range)).toBe('engine');
+        expect((await failure(pictureParts(bytes, failing(range, at))))?.name, at).toBe('PictureRefused');
+        const stack = new RangeError('Maximum call stack size exceeded');
+        expect((await failure(pictureParts(bytes, failing(stack, at))))?.name, at).toBe('PictureRefused');
+        // What the worker calls running out of memory goes through unchanged, so the page says so.
+        for (const memory of [new Error('Array buffer allocation failed'), new RangeError('Invalid typed array length: 4294967296'), new RangeError('Array buffer allocation failed')]) {
+          expect(failureKind(memory)).toBe('memory');
+          expect(await failure(pictureParts(bytes, failing(memory, at))), at).toBe(memory);
+        }
       }
     }
   });
@@ -1056,6 +1062,39 @@ describe('content that tries to move the signature, long files and large picture
     expect(shared.size).toBe(1);
     expect(streamText(objects, [...shared][0]!)).toBe('0 0 0 rg 20 20 160 160 re f');
   }, 120_000);
+
+  it('a drawing at its 20,000-point limit, a typed name and a picture, on every page of 2,100 (two runs of the drawing step): the signature\'s form, and the picture, written once', async () => {
+    const rule = optionDrawings['sign-pdf']!.drawing!;
+    // 200 lines of 100 points each, zigzags across the pad with odd steps, so the form's numbers are long: about 190 KB.
+    const largest = Array.from({ length: rule.maxLines }, (_, line) =>
+      Array.from({ length: (rule.maxPoints / rule.maxLines) * 2 }, (_, index) => (index % 2 === 0 ? (line * 7 + index * 37) % 1001 : (line * 3 + index * 13) % 401)));
+    expect(largest.reduce((sum, line) => sum + line.length / 2, 0)).toBe(rule.maxPoints);
+    const formSize = drawingContent(largest).content.length;
+    // Well past the 64 KB above which the drawing step knows a stream by its bytes' identity, not its text.
+    expect(formSize).toBeGreaterThan(150 * 1024);
+    const input = await packed(handMade(2100));
+    const signature = /^q 0 G 0 g |^q 0 g BT \/F1 |\/Im Do Q\n$/;
+    for (const [what, options] of [
+      ['the largest drawing', drawn(largest, { page: 'every' })],
+      ['a typed name', typed(undefined, { page: 'every' })],
+      ['alpha.png', pictured(picture('alpha.png'), { page: 'every' })],
+    ] as const) {
+      const { output, progress } = await sign(input, options);
+      expect(progress.filter((step) => step.stage === 'working').at(-1), what).toMatchObject({ done: 2100, total: 2100 });
+      expect((await qpdfOn(output, ['--check'])).code, what).toBe(0);
+      const { forms, images, objects } = await kinds(output);
+      const signed = forms.filter(([id]) => signature.test(streamText(objects, id.replace(/^obj:/, ''))));
+      expect(signed, what).toHaveLength(1);
+      // alpha.png is its picture and its soft mask, each once.
+      expect(images, what).toHaveLength(what === 'alpha.png' ? 2 : 0);
+      if (what === 'alpha.png') expect(images.filter(([, entry]) => '/SMask' in entry.stream!.dict)).toHaveLength(1);
+      if (what === 'the largest drawing') {
+        expect(streamText(objects, signed[0]![0].replace(/^obj:/, ''))).toBe(drawingContent(largest).content);
+        // The form once, and a few hundred bytes a page for each page's layer.
+        expect(output.length - input.length).toBeLessThan(formSize + 2100 * 400 + 64 * 1024);
+      }
+    }
+  }, 240_000);
 
   it('a 16-million-pixel gradient PNG, a photo of paper: decoded and compressed once per job, written once and compressed, on the last page of a small file and on every page of 2,100', async () => {
     const png = paperPng(4000, 4000);
