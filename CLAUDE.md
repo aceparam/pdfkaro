@@ -189,10 +189,14 @@ All but `developer` are read-only.
 
 - **Tagged reading order after Reorder pages.** Raised at its review (14 Nov 2026): in a file with accessibility tags, the tags keep the original reading order, so a screen reader may read reordered pages in their old order. The page says so. Should the reading order follow the new page order?
 
-- **Waiting main buttons.** Rotate's and Watermark's main buttons wait until something is done (a page turned, text typed), as Extract's does, while Reorder's works untouched (PR #13, `add-watermark`). Keep them as they are, or make them match?
+- **Waiting main buttons.** Rotate's, Watermark's and Sign PDF's main buttons wait until something is done (a page turned, text typed, a signature typed, drawn or chosen), as Extract's does, while Reorder's works untouched (PR #13, `add-watermark`, `add-sign-pdf`). Keep them as they are, or make them match?
 
-- **Signed files.** Every page tool writes the file afresh, so a digital signature stops being valid. Rotate's page says so. Is saying so enough, or should page tools keep signed files intact later?
+- **Signed files.** Every page tool writes the file afresh, so a digital signature stops being valid. Rotate's and Sign PDF's pages say so. Is saying so enough, or should page tools keep signed files intact later?
 
+- **Redoing a signature.** Sign PDF's result has no "Go back to your file", so a badly placed signature means picking the file again (`add-sign-pdf`). Add it to the result?
+- **Signature font.** A typed name is set in Times Italic, a standard font not put inside the file. Keep it, or ship a handwriting-style font (with the fonts for other scripts, issue #20)?
+- **Tagging the signature.** In a file with accessibility tags, the signature is drawn above the content and is neither tagged nor marked as an artifact, so a screen reader may skip it. Tag it as a figure with the signer's words?
+- **Large signature pictures at job time.** A picture whose compressed data alone is larger than the file can take (about 16 MB once compressed, on a PDF under about 2.5 MB) stops the job with a sentence naming the picture's size, after about 11 seconds on a fast computer. The notice for very large pictures still shows first. Keep that stop, or let such files grow without limit?
 - **Image to PDF page size and margin.** Pages are A4 with no margin and no options (PR #14). Offer a page size (A4, Letter, the picture's own size) and a margin?
 
 - **Picture details.** Image to PDF copies no picture details (camera, date, place) into the PDF. Keep it that way, or keep some?
