@@ -32,9 +32,12 @@ export function chosenValue(option: ChoiceOption, choices: Choices): string {
 }
 
 /** What a drawing's box shows: its lines, else none. A string under its key is never taken for a drawing. */
+/** One shared empty drawing, so an empty pad is not given a new array, and repainted, on every render. */
+const noDrawing: Drawing = Object.freeze([]) as Drawing;
+
 export function drawnLines(option: DrawingOption, choices: Choices): Drawing {
   const drawn = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
-  return Array.isArray(drawn) ? drawn : [];
+  return Array.isArray(drawn) ? drawn : noDrawing;
 }
 
 /** What a text's field shows: the text exactly as typed, else ''. */

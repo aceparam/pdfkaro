@@ -91,11 +91,11 @@ export function DrawingPad({ option, id, drawing, rule, onDraw, onClear }: Props
   };
 
   /** Paints one new segment of the line in progress, or a dot for its first point. */
-  const paintStep = (canvas: HTMLCanvasElement, line: readonly number[]) => {
+  const paintStep = (canvas: HTMLCanvasElement, line: readonly number[], colour: string) => {
     const context = canvas.getContext('2d');
     if (!context) return;
     const segment = line.length >= 4 ? [line.slice(-4)] : [line];
-    paintDrawing(context, segment, canvas.width / pad.width, getComputedStyle(canvas).color);
+    paintDrawing(context, segment, canvas.width / pad.width, colour);
   };
 
   const start = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -109,7 +109,7 @@ export function DrawingPad({ option, id, drawing, rule, onDraw, onClear }: Props
     canvas.setPointerCapture(event.pointerId);
     const line = extendLine([], pointOf(canvas, event.clientX, event.clientY));
     drawnRef.current = { pointer: event.pointerId, line };
-    paintStep(canvas, line);
+    paintStep(canvas, line, getComputedStyle(canvas).color);
   };
 
   const move = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -121,11 +121,13 @@ export function DrawingPad({ option, id, drawing, rule, onDraw, onClear }: Props
     const coalesced = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : [];
     const moves = coalesced.length > 0 ? coalesced : [native];
     let line = drawn.line;
+    // The colour is read once per move, not once per point: pointer moves are the hot path on a slow phone.
+    const colour = getComputedStyle(canvas).color;
     for (const each of moves) {
       const next = extendLine(line, pointOf(canvas, each.clientX, each.clientY));
       if (next !== line) {
         line = next;
-        paintStep(canvas, line);
+        paintStep(canvas, line, colour);
       }
     }
     drawnRef.current = { pointer: drawn.pointer, line };
