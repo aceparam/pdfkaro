@@ -14,9 +14,9 @@ import { Inflate } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 import { pictureOutcome } from '../../src/engines/picture';
 import { plainCopy } from '../../src/engines/plain';
-import { drawingContent, inspect, inspectPicture, pictureParts, run, signaturePlace, type Position } from '../../src/engines/tools/sign-pdf';
+import { drawingContent, drawingLine, inspect, inspectPicture, pictureParts, run, signaturePlace, timesItalicReach, typedContent, type Position } from '../../src/engines/tools/sign-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
-import { optionPictures, pictureRule } from '../../src/widget/option-values';
+import { optionPictures, pad, pictureRule } from '../../src/widget/option-values';
 import { failureKind } from '../../src/workers/worker-core';
 import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools as stampTools, type Picture } from './stamp-helpers';
 
@@ -183,6 +183,21 @@ describe('what the job is sent', { timeout: 60_000 }, () => {
 // Drawing pages to look at what changed.
 
 /** A page drawn by PDF.js at `scale`, as a function from a point on the page as shown (from its bottom left) to its colour. */
+/** One page drawn by PDF.js on white at `scale` pixels a point, as a picture. */
+async function render(bytes: Uint8Array, number: number, scale: number): Promise<Picture> {
+  const doc = await open(bytes);
+  const page = await doc.getPage(number);
+  const viewport = page.getViewport({ scale });
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: context as unknown as CanvasRenderingContext2D, viewport, canvas: canvas as unknown as HTMLCanvasElement }).promise;
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  await doc.loadingTask.destroy();
+  return { data, width: canvas.width, height: canvas.height };
+}
+
 async function colours(bytes: Uint8Array, number: number, scale: number) {
   const doc = await open(bytes);
   const page = await doc.getPage(number);
@@ -245,7 +260,8 @@ describe('a typed name', { timeout: 60_000 }, () => {
     expect(data).not.toContain('(');
     expect(data).not.toContain(')');
     expect([...data.matchAll(/<([^<>]*)>/g)].map((match) => match[1])).toEqual([hex]);
-    expect(data).toMatch(new RegExp(`^q 0 g BT /F1 100 Tf 0 [\\d.]+ Td <${hex}> Tj ET Q\\n?$`));
+    // Set in from the form's left and bottom edges by Times Italic's reach, so no glyph is cut.
+    expect(data).toMatch(new RegExp(`^q 0 g BT /F1 100 Tf 16\\.9 21\\.7 Td <${hex}> Tj ET Q\\n?$`));
   });
 
   it('"Zoë Ångström-Núñez" is drawn as typed, in Times Italic, not put inside the file, no more than 30 points tall on A4', async () => {
@@ -265,6 +281,60 @@ describe('a typed name', { timeout: 60_000 }, () => {
     expect(box.right).toBeLessThanOrEqual(595.28 - m + 1);
     expect(box.bottom).toBeGreaterThanOrEqual(m - 1);
     expect(box.left).toBeGreaterThan(595.28 / 2);
+  });
+
+  it('nothing is cut: the form reaches as far as Times Italic\'s glyphs, so "Ú" and "Å" draw clearly taller than "U" and "A", and "fj" and "jaf" keep their tails', async () => {
+    const reach = timesItalicReach;
+    // The font's own box, as pdf-lib holds it: the form's bottom, top and left come from it.
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.TimesRomanItalic);
+    const fontBox = (font as unknown as { embedder: { font: { FontBBox: number[] } } }).embedder.font.FontBBox;
+    expect([-reach.left, reach.bottom, reach.top]).toEqual([fontBox[0], fontBox[1], fontBox[3]]);
+    const input = await onePage();
+    const scale = 4;
+    const blank = await render(input, 1, scale);
+    const a4 = { width: 595.28, height: 841.89 };
+    const ink = async (name: string) => {
+      const { output } = await sign(input, typed(name));
+      const after = await render(output, 1, scale);
+      const box = changed(blank, after);
+      const advance = font.widthOfTextAtSize(name, 100);
+      const form = typedContent(advance, '<>');
+      const place = signaturePlace(a4, form, 'bottom-right', true);
+      const px = (points: number) => points * scale;
+      return {
+        left: box.left * after.width,
+        right: box.right * after.width,
+        top: box.top * after.height,
+        bottom: box.bottom * after.height,
+        height: (box.bottom - box.top) * after.height,
+        // The form's box and the name's own start and end, in pixels from the left and from the top.
+        formLeft: px(place.x),
+        formRight: px(place.x + place.width),
+        formTop: px(a4.height - place.y - place.height),
+        formBottom: px(a4.height - place.y),
+        origin: px(place.x + (reach.left / 10) * place.scale),
+        end: px(place.x + (reach.left / 10 + advance) * place.scale),
+      };
+    };
+    const [u, uAcute, a, aRing] = await Promise.all(['U', 'Ú', 'A', 'Å'].map(ink));
+    // The accent and the ring reach 876 to 883 thousandths, U and A about 660: cut at the old box's 683 they would add a few percent.
+    expect(uAcute!.height / u!.height).toBeGreaterThan(1.2);
+    expect(aRing!.height / a!.height).toBeGreaterThan(1.15);
+    for (const name of ['fj', 'jaf']) {
+      const seen = await ink(name);
+      // Nothing reaches the form's left, right or top edge, where it would be cut; the bottom is the font's lowest point.
+      expect(seen.left, name).toBeGreaterThanOrEqual(seen.formLeft + 1);
+      expect(seen.right, name).toBeLessThanOrEqual(seen.formRight - 1);
+      expect(seen.top, name).toBeGreaterThanOrEqual(seen.formTop + 1);
+      expect(seen.bottom, name).toBeLessThanOrEqual(seen.formBottom + 1);
+      if (name === 'jaf') {
+        // j's tail is drawn left of where the name starts, and f's right of where it ends: the old box cut both.
+        expect(seen.left, name).toBeLessThan(seen.origin - 4);
+        expect(seen.right, name).toBeGreaterThan(seen.end + 4);
+      }
+    }
+    // The size rule takes the whole box: the box is no more than a twentieth of the shorter side tall.
+    expect(u!.formBottom - u!.formTop).toBeCloseTo((595.28 / 20) * scale, 6);
   });
 
   it('a name with spaces at its ends is drawn cleaned', async () => {
@@ -309,26 +379,82 @@ describe('a drawing', { timeout: 60_000 }, () => {
     expect(close(colour(place.x + (500 - 100 + 3) * s, place.y + 3 * s), [255, 255, 255], 20)).toBe(true);
   });
 
-  it('a line of one point is a round dot the width of a line', async () => {
+  it('a line of one point is a round dot the width of a full drawing\'s line, not scaled up to fill the signature box', async () => {
     const input = await onePage();
     const { output } = await sign(input, drawn([[500, 200]]));
     const content = drawingContent([[500, 200]]);
     expect([content.width, content.height]).toEqual([6, 6]);
     expect(content.content).toMatch(/ c\n/);
     expect(content.content).toMatch(/\nf\n/);
-    const before = (await pictures(input))[0]!;
-    const after = (await pictures(output))[0]!;
-    const box = changed(before, after);
+    // On A4 a full drawing's line is about 0.88 points; the dot is that wide, at the middle of its 59.5-point box.
+    const a4 = { width: 595.28, height: 841.89 };
+    const full = signaturePlace(a4, { width: pad.width + pad.line, height: pad.height + pad.line }, 'bottom-right', false);
+    const fullLine = pad.line * full.scale;
+    expect(fullLine).toBeCloseTo(0.879, 2);
+    const place = signaturePlace(a4, content, 'bottom-right', false);
+    expect(content.line * place.scale).toBeCloseTo(fullLine, 6);
+    const scale = 8;
+    const box = changed(await render(input, 1, scale), await render(output, 1, scale));
+    const after = await render(output, 1, scale);
     const w = (box.right - box.left) * after.width;
     const h = (box.bottom - box.top) * after.height;
+    // About 7 pixels across at 8 pixels a point, not the 476 a dot filling its box would be.
     expect(Math.abs(w - h)).toBeLessThan(2);
-    // A filled circle covers about π/4 of its square.
-    expect(box.n / (w * h)).toBeGreaterThan(0.7);
-    expect(box.n / (w * h)).toBeLessThan(0.85);
+    expect(w).toBeGreaterThan(fullLine * scale - 2.5);
+    expect(w).toBeLessThan(fullLine * scale + 2.5);
+    // At the middle of the box.
+    expect(Math.abs(box.middleX * a4.width - (place.x + place.width / 2))).toBeLessThan(0.5);
+  });
+});
+
+describe('the line\'s width', () => {
+  it('is the pad\'s line for a drawing that fills the pad, and thinner for a smaller one, so on the page every drawing\'s line is as thick as a full drawing\'s at the same box, on every page size', () => {
+    expect(drawingLine(pad.width + pad.line, pad.height + pad.line)).toBe(pad.line);
+    // Larger than the pad never happens, but would not thicken the line.
+    expect(drawingLine(5000, 5000)).toBe(pad.line);
+    const drawings = [wave, [[60, 200, 120, 60, 260, 40, 380, 120]], [[500, 200, 510, 205]], [[500, 200]], [[0, 0, 1000, 0]], [[0, 0, 0, 400]]];
+    for (const area of [{ width: 595.28, height: 841.89 }, { width: 297.64, height: 419.53 }, { width: 2383.94, height: 3370.39 }, { width: 841.89, height: 595.28 }]) {
+      const full = pad.line * signaturePlace(area, { width: pad.width + pad.line, height: pad.height + pad.line }, 'bottom-right', false).scale;
+      for (const drawing of drawings) {
+        const content = drawingContent(drawing);
+        const onPage = content.line * signaturePlace(area, content, 'bottom-right', false).scale;
+        expect(onPage, JSON.stringify(drawing)).toBeCloseTo(full, 9);
+        expect(content.content.startsWith(`q 0 G 0 g ${Number(content.line.toFixed(6))} w 1 J 1 j`), JSON.stringify(drawing)).toBe(true);
+        // Never wider than the pad's line, so the round ends stay inside the box widened by half of it.
+        expect(content.line).toBeLessThanOrEqual(pad.line);
+      }
+    }
   });
 });
 
 describe('a picture', { timeout: 60_000 }, () => {
+  it('one that passed every check but that pdf-lib still cannot read is refused as a picture; running out of memory and a RangeError go through unchanged', async () => {
+    const lib = (await stampTools.pdflib!()) as typeof PdfLib;
+    // pdf-lib reads every PNG and JPG that passes the checks before it, so its failures are made here, one at each step.
+    const failing = (error: Error, at: 'for' | 'embed') => {
+      const wrap = (real: { for(bytes: Uint8Array): Promise<{ width: number; height: number }> }) => ({
+        for: async (bytes: Uint8Array) => {
+          if (at === 'for') throw error;
+          const { width, height } = await real.for(bytes);
+          return { width, height, embedIntoContext: async () => { throw error; } };
+        },
+      });
+      return { ...lib, PngEmbedder: wrap(lib.PngEmbedder), JpegEmbedder: wrap(lib.JpegEmbedder) } as unknown as typeof PdfLib;
+    };
+    for (const at of ['for', 'embed'] as const) {
+      for (const bytes of [picture('alpha.png'), picture('turn-6.jpg')]) {
+        const refused = await failure(pictureParts(bytes, failing(new Error('Corrupt picture data.'), at)));
+        expect(refused?.name, at).toBe('PictureRefused');
+        expect(failureKind(refused), at).toBe('picture-refused');
+        const range = new RangeError('Offset is outside the bounds of the DataView');
+        expect(await failure(pictureParts(bytes, failing(range, at))), at).toBe(range);
+        const memory = new Error('Array buffer allocation failed');
+        expect(await failure(pictureParts(bytes, failing(memory, at))), at).toBe(memory);
+        expect(failureKind(memory)).toBe('memory');
+      }
+    }
+  });
+
   it('alpha.png: drawn at the place chosen with the page showing through its see-through parts', async () => {
     const input = await onePage([1, 0, 0]);
     const { output } = await sign(input, pictured(picture('alpha.png')));

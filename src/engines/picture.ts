@@ -1,7 +1,11 @@
 // Reads a JPG or a PNG from its bytes, without decoding a pixel: its size, its
 // camera turn, whether it can be converted, and the parts of it that may go
-// into a PDF. Shared by the Image to PDF engine and its thumbnails. A pure
-// module with no library: fflate's streaming inflater comes in as an argument.
+// into a PDF. Shared by the Image to PDF engine and its thumbnails, and by
+// Sign PDF, which reads its signature picture with it (`readPicture`,
+// `pictureOutcome`, `acceptedPicture`, `jpegForPdf`, `pngForPdf`) and draws
+// it upright at its `shownSize` with `orientedMatrix`, the camera-turn table
+// Image to PDF's pages use too. A pure module with no library: fflate's
+// streaming inflater comes in as an argument.
 //
 // Every read is bounds-checked and every loop capped. Anything that does not
 // add up is `damaged`; a JPG coded in a way many PDF readers cannot draw is

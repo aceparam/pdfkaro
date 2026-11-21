@@ -70,6 +70,13 @@ export const heightShare = 1 / 10;
 export const typedHeightShare = 1 / 20;
 /** The size at which a typed name is set inside its form, which is then scaled. */
 const typedSize = 100;
+/**
+ * How far Times Italic's glyphs reach, in thousandths of the size, so a typed name's form clips nothing: down and up,
+ * its FontBBox (-217 and 883: Å's ring and Ú's accent reach 876 to 883, far above the ascender of 683); left of where a
+ * glyph starts, the FontBBox's left (169: f starts at -147); right of a glyph's advance, the most any glyph in the font
+ * reaches past it (170, the fraction; f reaches 146 past its 278). From the font's metrics file (Times-Italic.afm).
+ */
+export const timesItalicReach = { left: 169, right: 170, bottom: -217, top: 883 } as const;
 
 /**
  * Where the signature goes on a layer of `area` points, the page as shown, upright, and how large: the margin is a
@@ -111,17 +118,30 @@ export type Signature = { kind: 'text'; text: string } | { kind: 'lines'; drawin
 /** What each run draws with: the form's reference and its own size. */
 export type SignatureForm = { ref: PdfLib.PDFRef; width: number; height: number; typed: boolean };
 
-/** Half the pad's line: what the drawing's box is widened by on every side, so its round ends are inside it. */
+/** Half the pad's line: what the drawing's box is widened by on every side, so its round ends, never wider than the pad's line, are inside it. */
 const halfLine = pad.line / 2;
 /** How far a Bézier control point sits from the end of a quarter circle, as a share of the radius. */
 const kappa = 0.5522847498;
 
 /**
- * A drawing's form: its box is the drawing's bounds in pad units, widened by half a line on every side, so the empty
- * part of the pad is left out; its content draws each line in black, 6 units wide with round ends and joins, y turned
- * to count up. A line whose points are all one point is a filled round dot the width of a line.
+ * The line's width inside a drawing's form of `width × height` pad units: the pad's line (6 units) for a drawing that
+ * fills the pad, and thinner for a smaller drawing, by as much as the smaller drawing is scaled up more, so on the page
+ * every drawing's line is as thick as a full drawing's at the same signature box (about 0.9 points on A4), however
+ * small it was drawn. The scale `signaturePlace` gives is the shorter side times a factor of the box alone, so the share
+ * is the same on every page.
  */
-export function drawingContent(drawing: Drawing): { content: string; width: number; height: number } {
+export function drawingLine(width: number, height: number): number {
+  const fit = (w: number, h: number) => Math.min(widthShare / w, heightShare / h);
+  return pad.line * Math.min(1, fit(pad.width + pad.line, pad.height + pad.line) / fit(width, height));
+}
+
+/**
+ * A drawing's form: its box is the drawing's bounds in pad units, widened by half the pad's line on every side, so the
+ * empty part of the pad is left out and the round ends are inside it; its content draws each line in black with round
+ * ends and joins, y turned to count up, at the width `drawingLine` gives. A line whose points are all one point is a
+ * filled round dot of that same width.
+ */
+export function drawingContent(drawing: Drawing): { content: string; width: number; height: number; line: number } {
   let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const line of drawing) {
     for (let index = 0; index < line.length; index += 2) {
@@ -131,17 +151,20 @@ export function drawingContent(drawing: Drawing): { content: string; width: numb
       bottom = Math.max(bottom, line[index + 1]!);
     }
   }
-  const x = (value: number) => pdfNumber(value - left + halfLine);
-  const y = (value: number) => pdfNumber(bottom - value + halfLine);
-  const parts = [`q 0 G 0 g ${pad.line} w 1 J 1 j`];
+  const width = right - left + pad.line;
+  const height = bottom - top + pad.line;
+  const stroke = drawingLine(width, height);
+  const n = pdfNumber;
+  const x = (value: number) => n(value - left + halfLine);
+  const y = (value: number) => n(bottom - value + halfLine);
+  const parts = [`q 0 G 0 g ${n(stroke)} w 1 J 1 j`];
   for (const line of drawing) {
     const dot = line.every((value, index) => value === line[index % 2]);
     if (dot) {
       const cx = line[0]! - left + halfLine;
       const cy = bottom - line[1]! + halfLine;
-      const r = halfLine;
+      const r = stroke / 2;
       const k = kappa * r;
-      const n = pdfNumber;
       parts.push(
         `${n(cx + r)} ${n(cy)} m`,
         `${n(cx + r)} ${n(cy + k)} ${n(cx + k)} ${n(cy + r)} ${n(cx)} ${n(cy + r)} c`,
@@ -157,7 +180,7 @@ export function drawingContent(drawing: Drawing): { content: string; width: numb
     parts.push(...steps, 'S');
   }
   parts.push('Q');
-  return { content: `${parts.join('\n')}\n`, width: right - left + pad.line, height: bottom - top + pad.line };
+  return { content: `${parts.join('\n')}\n`, width, height, line: stroke };
 }
 
 /** A stream's dictionary entries, leaving out /Length and the one reference allowed (/SMask), refusing any other reference. */
@@ -182,6 +205,19 @@ function encodedOf(lib: Lib, stream: PdfLib.PDFObject | undefined): PdfLib.PDFRa
 }
 
 /**
+ * pdf-lib's reading of a picture that passed every check before it, refused as a picture if pdf-lib still cannot read
+ * it, so the page names the picture and not the PDF. Running out of memory, and any RangeError, go through unchanged.
+ */
+async function asPicture<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof RangeError || (error instanceof Error && /memory|allocat/i.test(`${error.name} ${error.message}`))) throw error;
+    throw new PictureRefused();
+  }
+}
+
+/**
  * Reads a picture once, before the PDF: a JPG rebuilt from the parts needed to draw it, with no details, or a PNG's
  * picture chunks only, decoded once by pdf-lib; embedded once into a scratch document, whose compressed streams
  * (the picture, and a PNG's soft mask) are kept as bytes, and the decoded pixels and the scratch document let go.
@@ -197,17 +233,17 @@ export async function pictureParts(bytes: Uint8Array, lib: Lib): Promise<Picture
   if (picture.type === 'jpeg') {
     const cleaned = jpegForPdf(bytes);
     if (!cleaned) throw new PictureRefused();
-    embedder = await lib.JpegEmbedder.for(cleaned.bytes);
+    embedder = await asPicture(() => lib.JpegEmbedder.for(cleaned.bytes));
     // pdf-lib writes inverted values for every CMYK JPG; without an Adobe segment its values are not inverted.
     dropDecode = picture.components === 4 && !cleaned.adobe;
   } else {
     // acceptedPicture has checked its data inflates to no more than its header says, so the decode is no larger than its stated size.
     const forPdf = pngForPdf(bytes);
     if (!forPdf) throw new PictureRefused();
-    embedder = await lib.PngEmbedder.for(forPdf);
+    embedder = await asPicture(() => lib.PngEmbedder.for(forPdf));
   }
   if (embedder.width !== picture.width || embedder.height !== picture.height) throw new PictureRefused();
-  const ref = await embedder.embedIntoContext(scratch.context);
+  const ref = await asPicture(() => embedder.embedIntoContext(scratch.context));
   const image = encodedOf(lib, scratch.context.lookup(ref));
   if (dropDecode) image.dict.delete(lib.PDFName.of('Decode'));
   const maskRef = image.dict.get(lib.PDFName.of('SMask'));
@@ -229,54 +265,63 @@ function registerPart(lib: Lib, doc: PdfLib.PDFDocument, part: StreamPart, mask?
   return doc.context.register(lib.PDFRawStream.of(dict, part.bytes));
 }
 
-/** The form's content and resources for a signature, before any run: for a drawing and a picture they are the same in every run. */
-type Made = { width: number; height: number; content: string; typed: boolean };
+/** A drawing's or a picture's form: its content and size, made once per job, the same in every run. */
+type Made = { width: number; height: number; content: string };
 
-/** The signature's form for one run, identical in every run, so the drawing step writes it once. */
-export async function signatureForm(doc: PdfLib.PDFDocument, lib: Lib, signature: Signature, made: Made | undefined): Promise<SignatureForm> {
-  const context = doc.context;
-  let width: number;
-  let height: number;
-  let content: string;
-  let resources: PdfLib.PDFDict = context.obj({});
-  if (signature.kind === 'text') {
-    const font = await doc.embedFont(lib.StandardFonts.TimesRomanItalic);
-    const full = font.heightAtSize(typedSize, { descender: true });
-    const descent = full - font.heightAtSize(typedSize, { descender: false });
-    width = font.widthOfTextAtSize(signature.text, typedSize);
-    height = full;
+/** The form's size and content for a typed name: the name's advance widened by Times Italic's reach on both sides, and its full height, so no glyph is cut. */
+export function typedContent(advance: number, encoded: string): Made {
+  const unit = typedSize / 1000;
+  const reach = timesItalicReach;
+  return {
+    width: advance + (reach.left + reach.right) * unit,
+    height: (reach.top - reach.bottom) * unit,
     // pdf-lib's own encoding writes the name as a hex string, so no character can close a string or start an operator.
-    content = `q 0 g BT /F1 ${typedSize} Tf 0 ${pdfNumber(descent)} Td ${font.encodeText(signature.text).toString()} Tj ET Q\n`;
-    resources = context.obj({ Font: { F1: font.ref } });
-  } else if (signature.kind === 'lines') {
-    ({ width, height, content } = made!);
-  } else {
-    const { parts } = signature;
-    const maskRef = parts.mask ? registerPart(lib, doc, parts.mask) : undefined;
-    const imageRef = registerPart(lib, doc, parts.image, maskRef);
-    ({ width, height, content } = made!);
-    resources = context.obj({ XObject: { Im: imageRef } });
-  }
-  const form = context.stream(content, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, width, height], Resources: resources });
-  return { ref: context.register(form), width, height, typed: signature.kind === 'text' };
+    content: `q 0 g BT /F1 ${typedSize} Tf ${pdfNumber(reach.left * unit)} ${pdfNumber(-reach.bottom * unit)} Td ${encoded} Tj ET Q\n`,
+  };
 }
 
-/** What a drawing's or a picture's form holds, made once per job. A typed name's needs the run's font, so it is made in each run. */
-function madeOnce(signature: Signature): Made | undefined {
-  if (signature.kind === 'lines') return { ...drawingContent(signature.drawing), typed: false };
+/** A signature ready for the runs: a drawing's and a picture's form made once per job; a typed name's needs each run's font. */
+export type Planned = { kind: 'text'; text: string } | { kind: 'lines'; made: Made } | { kind: 'picture'; parts: PictureParts; made: Made };
+
+/** Makes what can be made once per job: a drawing's form, or a picture's, drawn upright with the matrix for its camera turn. */
+export function planned(signature: Signature): Planned {
+  if (signature.kind === 'lines') return { kind: 'lines', made: drawingContent(signature.drawing) };
   if (signature.kind === 'picture') {
     const shown = shownSize(signature.parts);
     const matrix = orientedMatrix(signature.parts.orientation, { x: 0, y: 0, width: shown.width, height: shown.height }).map(pdfNumber).join(' ');
-    return { width: shown.width, height: shown.height, content: `q ${matrix} cm /Im Do Q\n`, typed: false };
+    return { kind: 'picture', parts: signature.parts, made: { width: shown.width, height: shown.height, content: `q ${matrix} cm /Im Do Q\n` } };
   }
-  return undefined;
+  return signature;
+}
+
+/** The signature's form for one run, identical in every run, so the drawing step writes it once. */
+export async function signatureForm(doc: PdfLib.PDFDocument, lib: Lib, plan: Planned): Promise<SignatureForm> {
+  const context = doc.context;
+  let form: Made;
+  let resources: PdfLib.PDFDict;
+  if (plan.kind === 'text') {
+    const font = await doc.embedFont(lib.StandardFonts.TimesRomanItalic);
+    form = typedContent(font.widthOfTextAtSize(plan.text, typedSize), font.encodeText(plan.text).toString());
+    resources = context.obj({ Font: { F1: font.ref } });
+  } else if (plan.kind === 'lines') {
+    form = plan.made;
+    resources = context.obj({});
+  } else {
+    form = plan.made;
+    const maskRef = plan.parts.mask ? registerPart(lib, doc, plan.parts.mask) : undefined;
+    resources = context.obj({ XObject: { Im: registerPart(lib, doc, plan.parts.image, maskRef) } });
+  }
+  const { width, height, content } = form;
+  const stream = context.stream(content, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, width, height], Resources: resources });
+  return { ref: context.register(stream), width, height, typed: plan.kind === 'text' };
 }
 
 /** The encoded size of what every run makes and the file holds once: the form, and a picture's streams. */
-function sharedSize(signature: Signature, made: Made | undefined): number {
-  const forms = (made?.content.length ?? 1024) + 1024;
-  if (signature.kind !== 'picture') return forms;
-  return forms + signature.parts.image.bytes.length + (signature.parts.mask?.bytes.length ?? 0);
+function sharedSize(plan: Planned): number {
+  if (plan.kind === 'text') return 2048;
+  const forms = plan.made.content.length + 1024;
+  if (plan.kind === 'lines') return forms;
+  return forms + plan.parts.image.bytes.length + (plan.parts.mask?.bytes.length ?? 0);
 }
 
 /** Places the form on a layer page: `q s 0 0 s x y cm /Sig Do Q`, rounded to a thousandth of a point. */
@@ -333,15 +378,15 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   const position = acceptedValue('sign-pdf', 'position', options.position) as Position | undefined;
   if (page === undefined || position === undefined) throw new Error('The place for the signature is not valid.');
   const signature = await chosenSignature(options, tools);
-  const made = madeOnce(signature);
+  const plan = planned(signature);
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 });
   // The plain copy is handed over in an object, so the drawing step can let go of it once qpdf holds it.
   const copy: { plain?: Uint8Array; pages: number } = await plainCopy(tools, file, passwordFrom(options));
   try {
     const output = await stampPages(tools, copy, {
       only: (index, total) => page === 'every' || index === (page === 'first' ? 0 : total - 1),
-      sharedBytes: sharedSize(signature, made),
-      prepare: (doc, lib) => signatureForm(doc, lib, signature, made),
+      sharedBytes: sharedSize(plan),
+      prepare: (doc, lib) => signatureForm(doc, lib, plan),
       draw: (layer, area, _index, form, lib) => placeForm(lib, layer, area, form, position),
       // Pages are counted only when every page is signed; one page needs no count. They fill the bar to 0.8.
       ...(page === 'every' ? { onPage: (done: number, total: number) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true }) } : {}),
