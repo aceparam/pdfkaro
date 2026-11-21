@@ -71,6 +71,12 @@ export type State = {
   order: number[] | null;
   /** The turns of the one file's pages, for a tool whose pages turn: Rotate PDF. `null` is nothing turned. */
   turns: Turns | null;
+  /**
+   * What each of the tool's options shows, by key (`options` in its registry words). `{}` is every
+   * option at its start, so a tool with no options holds nothing. Kept through Cancel, a failure and
+   * a replaced file; only "Start again" clears it. Never written to storage or the address.
+   */
+  choices: Readonly<Record<string, string>>;
 };
 
 /** How many pages a page list shows at first, and adds each time. */
@@ -93,6 +99,7 @@ export type Action =
   | { type: 'page-moved'; page: number; to: number }
   | { type: 'page-turned'; page: number; by: 1 | -1 }
   | { type: 'all-turned'; by: 1 | -1 }
+  | { type: 'option-set'; key: string; value: string }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -107,6 +114,7 @@ export const initialState: State = {
   shown: pageBatch,
   order: null,
   turns: null,
+  choices: {},
 };
 
 const statusFor: Record<InspectOutcome['kind'], FileStatus> = {
@@ -122,7 +130,8 @@ export function reducer(state: State, action: Action): State {
     case 'added': {
       if (action.files.length === 0) return state;
       const added = action.files.map((file): FileEntry => ({ ...file, status: 'reading' }));
-      return { ...initialState, step: 'listing', files: [...state.files, ...added], refused: [] };
+      // A new file starts its page marks, order and turns afresh, but keeps what the options show.
+      return { ...initialState, step: 'listing', files: [...state.files, ...added], refused: [], choices: state.choices };
     }
     case 'refused':
       return { ...state, refused: action.names };
@@ -158,7 +167,7 @@ export function reducer(state: State, action: Action): State {
     }
     case 'removed': {
       const files = state.files.filter((file) => file.id !== action.id);
-      return files.length === 0 ? initialState : { ...state, files };
+      return files.length === 0 ? { ...initialState, choices: state.choices } : { ...state, files };
     }
     case 'started':
       return { ...state, step: 'working', progress: null, fraction: 0, result: null, failure: null, refused: [] };
@@ -202,6 +211,12 @@ export function reducer(state: State, action: Action): State {
     case 'all-turned': {
       if (state.step !== 'listing' || !(state.files[0]?.pages) || (action.by !== 1 && action.by !== -1)) return state;
       return { ...state, turns: turnedAll(state.turns, action.by) };
+    }
+    case 'option-set': {
+      if (state.step !== 'listing' || typeof action.key !== 'string' || typeof action.value !== 'string') return state;
+      if (Object.hasOwn(state.choices, action.key) && state.choices[action.key] === action.value) return state;
+      // A computed key is always the object's own, even "__proto__".
+      return { ...state, choices: { ...state.choices, [action.key]: action.value } };
     }
     case 'reset':
       return initialState;

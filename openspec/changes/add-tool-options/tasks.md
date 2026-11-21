@@ -2,19 +2,19 @@
 
 ## 1. Registry entry
 
-- [ ] 1.1 Add `ToolOption` (the `choice` kind) and `options?: ToolOption[]` to the widget words in `src/tools/registry.ts`, and `src/widget/option-values.ts` with an empty `optionValues` and `acceptedValue`; the registry test checks unique keys, at least two labelled values, `initial` among them, values exactly those of `optionValues`, and no preset key that is an option key, with a failing case built in the test for each; verify with `npm test` and `npm run check`
+- [x] 1.1 Add `ToolOption` (the `choice` kind) and `options?: ToolOption[]` to the widget words in `src/tools/registry.ts`, and `src/widget/option-values.ts` with an empty `optionValues` and `acceptedValue`; the registry test checks unique keys, at least two labelled values, `initial` among them, values exactly those of `optionValues`, and no preset key that is an option key, with a failing case built in the test for each; verify with `npm test` and `npm run check`
 
 ## 2. Engine
 
-- [ ] 2.1 No engine changes: no tool has options yet. `acceptedValue` is unit tested in `tests/unit/options.test.ts` (a listed value, an unlisted one, a number, `__proto__`, `toString`); verify the test passes
+- [x] 2.1 No engine changes: no tool has options yet. `acceptedValue` is unit tested in `tests/unit/options.test.ts` (a listed value, an unlisted one, a number, `__proto__`, `toString`); verify the test passes
 
 ## 3. State and rules
 
-- [ ] 3.1 `State.choices` (`{}` is every option at its start) with `option-set { key, value }` acting only while listing and cleared only by `reset`; `src/widget/options.ts` with `chosenValue` and `optionsToSend`; verify with `tests/unit/options.test.ts` and new cases in `tests/unit/state.test.ts`, the existing state tests passing unchanged
+- [x] 3.1 `State.choices` (`{}` is every option at its start) with `option-set { key, value }` acting only while listing and cleared only by `reset`; `src/widget/options.ts` with `chosenValue` and `optionsToSend`; verify with `tests/unit/options.test.ts` and new cases in `tests/unit/state.test.ts`, the existing state tests passing unchanged
 
 ## 4. Worker wiring
 
-- [ ] 4.1 `useToolRun` sends `{ ...preset, ...jobOption(), ...optionsToSend(words.options, state.choices) }`; no change to the worker or its messages, which already carry an options object; verify with a hook or component test that a test entry's choice reaches the client's start message, and the worker-core and messages tests passing unchanged
+- [x] 4.1 `useToolRun` sends `{ ...preset, ...jobOption(), ...optionsToSend(words.options, state.choices) }`; no change to the worker or its messages, which already carry an options object; verify with a hook or component test that a test entry's choice reaches the client's start message, and the worker-core and messages tests passing unchanged
 
 ## 5. Page
 

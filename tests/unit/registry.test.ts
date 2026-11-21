@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { groups, tools } from '../../src/tools/registry';
+import { groups, tools, type Tool, type ToolOption } from '../../src/tools/registry';
+import { optionValues } from '../../src/widget/option-values';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
 
 const sitePageNames = ['about', 'privacy', 'changes', 'known-problems', 'contact', '404', 'index'];
@@ -421,5 +422,105 @@ describe('PDF to JPG and PDF to PNG', () => {
         expect(pageWords(each, page)).toEqual(each.widget);
       }
     }
+  });
+});
+
+type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
+
+/**
+ * What is wrong with a tool's options, as plain sentences; none for a tool whose options are sound.
+ * Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
+ */
+function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values): string[] {
+  const options = tool.widget?.options ?? [];
+  const problems: string[] = [];
+  const keys = options.map((option) => option.key);
+  if (new Set(keys).size !== keys.length) problems.push('an option key is used twice');
+  for (const option of options) {
+    const listed = option.choices.map((choice) => choice.value);
+    if (option.kind !== 'choice') problems.push(`${option.key}: unknown kind`);
+    if (!/^[a-z][a-zA-Z0-9]*$/.test(option.key)) problems.push(`${option.key}: the key is not a plain word`);
+    if (option.legend.trim() === '' || option.legend.includes('!')) problems.push(`${option.key}: the legend is empty or not plain`);
+    if (listed.length < 2) problems.push(`${option.key}: fewer than two values`);
+    if (new Set(listed).size !== listed.length) problems.push(`${option.key}: a value is listed twice`);
+    if (option.choices.some((choice) => choice.label.trim() === '' || choice.label.includes('!'))) problems.push(`${option.key}: a value has no plain label`);
+    if (!listed.includes(option.initial)) problems.push(`${option.key}: the starting value is not among the values`);
+    const accepted = Object.hasOwn(values, tool.id) && Object.hasOwn(values[tool.id]!, option.key) ? values[tool.id]![option.key]! : undefined;
+    if (!accepted || accepted.length !== listed.length || [...accepted].sort().join('\n') !== [...listed].sort().join('\n')) {
+      problems.push(`${option.key}: the values are not those of option-values.ts`);
+    }
+    for (const page of tool.pages) {
+      if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
+    }
+  }
+  // Every accepted-values line belongs to an option the registry shows.
+  if (Object.hasOwn(values, tool.id)) {
+    for (const key of Object.keys(values[tool.id]!)) {
+      if (!keys.includes(key)) problems.push(`${key}: in option-values.ts but not an option of the tool`);
+    }
+  }
+  return problems;
+}
+
+describe('options', () => {
+  const position: ToolOption = {
+    kind: 'choice',
+    key: 'position',
+    legend: 'Where the numbers go',
+    choices: [
+      { value: 'bottom-centre', label: 'Bottom, in the middle' },
+      { value: 'bottom-right', label: 'Bottom right' },
+      { value: 'top-right', label: 'Top right' },
+    ],
+    initial: 'bottom-centre',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf')!;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({
+    ...merge,
+    id: 'test-options',
+    pages: [{ ...merge.pages[0]!, preset }],
+    widget: { ...merge.widget!, options },
+  });
+  const values: Values = { 'test-options': { position: ['top-right', 'bottom-centre', 'bottom-right'] } };
+
+  it('are sound for every tool, and option-values.ts names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues), tool.id).toEqual([]);
+    for (const id of Object.keys(optionValues)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry, with its values in any order', () => {
+    expect(optionProblems(entry([position]), values)).toEqual([]);
+  });
+
+  it('fail when a key is used twice', () => {
+    expect(optionProblems(entry([position, { ...position, legend: 'Again' }]), values)).toContain('an option key is used twice');
+  });
+
+  it('fail with fewer than two values, a value twice or a value with no label', () => {
+    const one = { ...position, choices: [position.choices[0]!] };
+    expect(optionProblems(entry([one]), { 'test-options': { position: ['bottom-centre'] } })).toContain('position: fewer than two values');
+    const twice = { ...position, choices: [...position.choices, position.choices[0]!] };
+    expect(optionProblems(entry([twice]), values)).toContain('position: a value is listed twice');
+    const unlabelled = { ...position, choices: position.choices.map((choice, index) => (index === 1 ? { ...choice, label: ' ' } : choice)) };
+    expect(optionProblems(entry([unlabelled]), values)).toContain('position: a value has no plain label');
+  });
+
+  it('fail when the starting value is not among the values', () => {
+    expect(optionProblems(entry([{ ...position, initial: 'middle' }]), values)).toContain('position: the starting value is not among the values');
+  });
+
+  it('fail when the values are not exactly those of option-values.ts', () => {
+    const wrong = 'position: the values are not those of option-values.ts';
+    expect(optionProblems(entry([position]), {})).toContain(wrong);
+    expect(optionProblems(entry([position]), { 'test-options': { position: ['bottom-centre', 'bottom-right'] } })).toContain(wrong);
+    expect(optionProblems(entry([position]), { 'test-options': { position: ['bottom-centre', 'bottom-right', 'top-left'] } })).toContain(wrong);
+    expect(optionProblems(entry([position]), { 'test-options': { position: [...values['test-options']!.position!, 'top-left'] } })).toContain(wrong);
+    expect(optionProblems(entry([position]), { 'test-options': { position: values['test-options']!.position!, size: ['small'] } })).toContain(
+      'size: in option-values.ts but not an option of the tool',
+    );
+  });
+
+  it('fail when a page preset uses an option key, so a choice never replaces what the page promises', () => {
+    expect(optionProblems(entry([position], { position: 'top-right' }), values)).toContain('position: the preset of merge-pdf uses the key');
   });
 });

@@ -41,6 +41,24 @@ export type ToolPage = {
 /** The widget words a page may say differently from its tool's. */
 export type PageWords = Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>;
 
+/**
+ * An option a tool's working area shows once its file has been read, below the file and above
+ * the main button. Only one kind for now: a choice of one value from several, drawn as radio
+ * buttons. The values each tool accepts are also written in src/widget/option-values.ts, which
+ * its engine reads; the registry test checks the two lists are the same.
+ */
+export type ToolOption = {
+  kind: 'choice';
+  /** The key the engine receives: `position`. No page preset of the tool uses it. */
+  key: string;
+  /** The group's visible name: "Where the numbers go". */
+  legend: string;
+  /** The values, in the order shown, each with its label. */
+  choices: { value: string; label: string }[];
+  /** The value chosen at first, with which the main button works. */
+  initial: string;
+};
+
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';
 
@@ -119,6 +137,8 @@ export type ToolWidgetWords = {
   noSmaller?: { heading: string; advice: string };
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
+  /** The options the working area shows, in order. Left out, none. */
+  options?: ToolOption[];
   /** What the list shows: one item per file, or the pages of one file. */
   items: 'files' | 'pages';
   /** Whether items have Move up, Move down and Remove, and can be dragged. */

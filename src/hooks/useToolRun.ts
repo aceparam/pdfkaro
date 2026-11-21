@@ -5,6 +5,7 @@ import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, outputType, stem } from '../widget/format';
 import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
+import { jobOptions } from '../widget/options';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
@@ -38,6 +39,8 @@ export type ToolRun = {
   turnAll(by: 1 | -1): void;
   /** Shows the next batch of pages. */
   showMore(): void;
+  /** Sets what one of the tool's options shows. */
+  setOption(key: string, value: string): void;
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
@@ -288,8 +291,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       const { outputs, parts } = await getClient().run(
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
-        // The page's preset first; what the visitor chose on the page wins over it.
-        { ...preset, ...jobOption() },
+        // The page's preset, what the page's items say, then the options chosen; no preset key is an option key.
+        jobOptions(preset, jobOption(), words.options, stateRef.current.choices),
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -326,13 +329,14 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, preset, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
   const turnPage = useCallback((page: number, by: 1 | -1) => dispatch({ type: 'page-turned', page, by }), []);
   const turnAll = useCallback((by: 1 | -1) => dispatch({ type: 'all-turned', by }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
+  const setOption = useCallback((key: string, value: string) => dispatch({ type: 'option-set', key, value }), []);
 
   const cancel = useCallback(() => {
     client.current?.end();
@@ -374,5 +378,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, start, cancel, backToFiles, clear };
 }

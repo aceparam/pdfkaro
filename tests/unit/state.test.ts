@@ -184,3 +184,51 @@ describe('what a finished job shows', () => {
     expect(finishedAs(false, false)).toBe('engine-failure');
   });
 });
+
+describe('what the options show', () => {
+  const ready = (id = 'a'): Action => ({ type: 'inspected', id, outcome: { kind: 'ready', pages: 3 } });
+  const set = (value: string, key = 'position'): Action => ({ type: 'option-set', key, value });
+
+  it('starts with every option at its start, holding nothing', () => {
+    expect(initialState.choices).toEqual({});
+    expect(play(add('a'), ready()).choices).toEqual({});
+  });
+
+  it('records a choice only while listing', () => {
+    expect(play(add('a'), ready(), set('top-right')).choices).toEqual({ position: 'top-right' });
+    expect(play(set('top-right')).choices).toEqual({});
+    const working = play(add('a'), ready(), { type: 'started' });
+    expect(reducer(working, set('top-right'))).toBe(working);
+    const done = reducer(working, { type: 'finished', result: { name: 'a.pdf', size: 1 } });
+    expect(reducer(done, set('top-right'))).toBe(done);
+    const failed = reducer(working, { type: 'failed', failure: 'engine' });
+    expect(reducer(failed, set('top-right'))).toBe(failed);
+  });
+
+  it('changes nothing when the same value is chosen again, and keeps a key such as __proto__ as its own', () => {
+    const chosen = play(add('a'), ready(), set('top-right'));
+    expect(reducer(chosen, set('top-right'))).toBe(chosen);
+    const odd = reducer(chosen, set('x', '__proto__'));
+    expect(Object.hasOwn(odd.choices, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(odd.choices)).toBe(Object.prototype);
+  });
+
+  it('keeps a choice through Cancel, a failure, going back and a replaced file', () => {
+    const chosen = play(add('a'), ready(), set('top-right'));
+    const kept = { position: 'top-right' };
+    expect(play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'back-to-files' }).choices).toEqual(kept);
+    expect(play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'failed', failure: 'engine' }, { type: 'back-to-files' }).choices).toEqual(kept);
+    expect(play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'progressed', progress: { stage: 'writing', percent: 5 } }).choices).toEqual(kept);
+    // A one-file tool replaces its file: the new one is listed, then the old one removed.
+    const replaced = [add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, chosen);
+    expect(replaced.files.map((file) => file.id)).toEqual(['b']);
+    expect(replaced.choices).toEqual(kept);
+    expect(reducer(chosen, { type: 'removed', id: 'a' }).choices).toEqual(kept);
+  });
+
+  it('goes back to every option at its start on Start again', () => {
+    const state = play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'finished', result: { name: 'a.pdf', size: 1 } }, { type: 'reset' });
+    expect(state).toEqual(initialState);
+    expect(state.choices).toEqual({});
+  });
+});
