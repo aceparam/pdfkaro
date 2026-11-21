@@ -50,7 +50,7 @@ describe('PageGrid', () => {
   });
 
   it('shows blank paper in a hidden slot until a thumbnail is drawn', () => {
-    expect(html.match(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*blank[^"]*"><\/div><\/div>/g)).toHaveLength(2);
+    expect(html.match(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*picture[^"]*"><div class="[^"]*blank[^"]*"><\/div><\/div><\/div>/g)).toHaveLength(2);
     expect(html).not.toContain('<img');
   });
 
@@ -58,7 +58,7 @@ describe('PageGrid', () => {
     const drawn = renderToStaticMarkup(
       <PageGrid items={[{ ...items[0]!, thumbnail: 'blob:http://localhost/1' }, items[1]!]} onMove={noop} onRemove={noop} />,
     );
-    expect(drawn).toMatch(/<div class="[^"]*slot[^"]*" aria-hidden="true"><img class="[^"]*thumb[^"]*" src="blob:http:\/\/localhost\/1" alt="" draggable="false"\/><\/div>/);
+    expect(drawn).toMatch(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*picture[^"]*"><img class="[^"]*thumb[^"]*" src="blob:http:\/\/localhost\/1" alt="" draggable="false"\/><\/div><\/div>/);
     expect(drawn).not.toMatch(/<img[^>]*tabindex/);
     expect(drawn.match(/blank/g)).toHaveLength(1);
   });

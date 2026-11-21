@@ -325,7 +325,10 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     [pageTurns, state.turns, turnFront, run, setAnnouncement],
   );
   const turnEveryPage = (by: 1 | -1) => {
-    setTurnFront({ before: turnFront ? turnFront.before : state.turns, front: turnChunk });
+    // The front starts before the first page, so the press itself changes no cell and the first chunk
+    // is drawn in the next frame. The press can already lay out the whole grid once (focus leaving a
+    // page does), and drawing the first chunk in the same task laid it out a second time.
+    setTurnFront({ before: turnFront ? turnFront.before : state.turns, front: 0 });
     run.turnAll(by);
     setAnnouncement(allAnnouncement(turnedAll(state.turns, by), by));
   };
