@@ -34,6 +34,7 @@ import {
   optionsHold,
   pictureLine,
   pictureNotice,
+  picturePicked,
   pictureReadingSentence,
   pictureRereads,
   pictureSentence,
@@ -781,10 +782,16 @@ describe('a picture in the widget', () => {
   });
 
   it('names a chosen picture with its size once read, says it is getting ready while read, and has no line for a problem', () => {
-    expect(pictureLine(ready)).toBe('signature.png, 120 KB');
-    expect(pictureLine(entry('reading'))).toBe('signature.png, Getting ready');
+    expect(pictureLine(ready)).toBe('signature.png, 120 KB.');
+    expect(pictureLine(entry('reading'))).toBe('signature.png, Getting ready.');
     for (const status of ['refused', 'damaged', 'unsupported'] as const) expect(pictureLine(entry(status))).toBeNull();
     expect(pictureLine(undefined)).toBeNull();
+  });
+
+  it('words the button for a second pick once a picture is chosen or tried, but not after a wrong pick, which leaves none', () => {
+    expect(picturePicked(undefined)).toBe(false);
+    expect(picturePicked(entry('refused'))).toBe(false);
+    for (const status of ['reading', 'ready', 'damaged', 'unsupported'] as const) expect(picturePicked(entry(status)), status).toBe(true);
   });
 
   it('gives a notice only for a ready picture over either notice size, naming its size and pixels', () => {
@@ -858,12 +865,24 @@ describe('a picture in the widget', () => {
 
   it('reads a cut-short picture again while it is still held and being read, up to twice, then calls it damaged', () => {
     expect(pictureRereads).toBe(2);
-    expect(rereadPicture(entry('reading'), true, 0)).toBe('read-again');
-    expect(rereadPicture(entry('reading'), true, 1)).toBe('read-again');
-    expect(rereadPicture(entry('reading'), true, 2)).toBe('damaged');
-    expect(rereadPicture(entry('reading'), false, 0)).toBe('nothing');
-    expect(rereadPicture(ready, true, 0)).toBe('nothing');
-    expect(rereadPicture(undefined, true, 0)).toBe('nothing');
+    expect(rereadPicture(entry('reading'), true, 0, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 1, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 2, true)).toBe('damaged');
+    expect(rereadPicture(entry('reading'), false, 0, true)).toBe('nothing');
+    expect(rereadPicture(ready, true, 0, true)).toBe('nothing');
+    expect(rereadPicture(undefined, true, 0, true)).toBe('nothing');
+  });
+
+  it('never reads a picture again once the files are no longer listed: the job, its result or a failure', () => {
+    // The job's own end cancels a read of a hidden picture still being read; reading it again would start a worker.
+    for (const tries of [0, 1, 2]) expect(rereadPicture(entry('reading'), true, tries, false)).toBe('nothing');
+  });
+
+  it('never reads a replaced file again, and the newer pick counts its own tries from 0', () => {
+    // The old read is cancelled when the worker is ended for the new pick: the old file is no longer held.
+    const newer = entry('reading', { name: 'second.png' });
+    expect(rereadPicture(newer, false, 0, true)).toBe('nothing');
+    expect(rereadPicture(newer, true, 0, true)).toBe('read-again');
   });
 
   it('lists every picture still being read, for "Go back to your file"', () => {
@@ -922,7 +941,7 @@ describe('the picture field and the picking code, by their source', () => {
   const source = (path: string) => readFileSync(join(__dirname, '../..', path), 'utf8');
   const hook = source('src/hooks/useToolRun.ts');
   const from = hook.indexOf('const readChosenPicture = useCallback(');
-  const to = hook.indexOf('[readChosenPicture, toolId],');
+  const to = hook.indexOf('[endReplacedRead, readChosenPicture, toolId],');
   const picking = hook.slice(from, to);
   const field = source('src/components/PictureField/PictureField.tsx');
 
@@ -930,6 +949,7 @@ describe('the picture field and the picking code, by their source', () => {
     expect(from).toBeGreaterThan(0);
     expect(to).toBeGreaterThan(from);
     expect(picking).toContain('const pickPicture = useCallback(');
+    expect(picking).toContain('const endReplacedRead = useCallback(');
   });
 
   it('never makes an address for a picture or writes one to storage', () => {

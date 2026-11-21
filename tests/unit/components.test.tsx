@@ -577,8 +577,8 @@ describe('PictureField, a picture of a test entry', () => {
     renderToStaticMarkup(<PictureField option={option} id="r5-picture" types={types} picked={more.picked ?? false} chosen={more.chosen} error={more.error} onPick={noop} />);
   const input = (markup: string) => markup.match(/<input [^>]*\/>/)?.[0] ?? '';
   const before = draw({});
-  const reading = draw({ picked: true, chosen: 'signature.png, Getting ready' });
-  const ready = draw({ picked: true, chosen: 'signature.png, 120 KB' });
+  const reading = draw({ picked: true, chosen: 'signature.png, Getting ready.' });
+  const ready = draw({ picked: true, chosen: 'signature.png, 120 KB.' });
   const problems = [
     'notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.',
     'broken.png is damaged and cannot be read. Choose another picture.',
@@ -586,7 +586,9 @@ describe('PictureField, a picture of a test entry', () => {
   ];
 
   it('before a pick: the label, a secondary button for one picture of the tool types, and the hint, in that order', () => {
-    expect(before).toMatch(/^<div class="field [^"]+"><p id="r5-picture-label" class="[^"]+">Picture of your signature<\/p><label class="button-secondary [^"]+"><input /);
+    // Not the site's `field` class, whose rules would make the button bold and full width and undo the hidden input's size.
+    expect(before).toMatch(/^<div class="[^"]+"><p id="r5-picture-label" class="[^"]+">Picture of your signature<\/p><label class="button-secondary [^"]+"><input /);
+    expect(before).not.toMatch(/class="field[ "]/);
     expect(before).toContain('Choose a picture</label>');
     expect(before).toMatch(/<\/label><p id="r5-picture-hint" class="[^"]+">A JPG or PNG picture\./);
     const field = input(before);
@@ -599,11 +601,17 @@ describe('PictureField, a picture of a test entry', () => {
 
   it('while read and once ready: the line naming it, the button "Choose another picture", read in order', () => {
     expect(reading).toContain('<p id="r5-picture-chosen" class="');
-    expect(reading).toContain('signature.png, Getting ready</p>');
-    expect(ready).toContain('signature.png, 120 KB</p>');
+    expect(reading).toContain('signature.png, Getting ready.</p>');
+    expect(ready).toContain('signature.png, 120 KB.</p>');
     expect(ready).toContain('Choose another picture</label>');
     expect(input(ready)).toContain('aria-describedby="r5-picture-label r5-picture-chosen r5-picture-hint"');
     expect(ready.indexOf('r5-picture-chosen')).toBeLessThan(ready.indexOf('<input'));
+  });
+
+  it('after a wrong pick the button reads its first words again, as no picture is chosen', () => {
+    const refused = draw({ picked: false, error: problems[0] });
+    expect(refused).toContain('Choose a picture</label>');
+    expect(draw({ picked: true, error: problems[1] })).toContain('Choose another picture</label>');
   });
 
   it.each(problems)('with a problem, the sentence between the label and the button, read before the hint: %s', (sentence) => {
@@ -644,7 +652,7 @@ describe('PictureField, a picture of a test entry', () => {
 
   it('takes its look from its own stylesheet: the label as field labels, the sentence bold in the text colour, a long name wrapping', () => {
     const css = readFileSync(new URL('../../src/components/PictureField/PictureField.module.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/\.picture\s*{\s*margin-top: 1\.5rem;/);
+    expect(css).toMatch(/\.picture\s*{\s*margin-top: 1\.5rem;\s*margin-bottom: 0\.75rem;/);
     expect(css).toMatch(/\.label\s*{[^}]*font-weight: 700;/);
     expect(css).toMatch(/\.error\s*{[^}]*font-weight: 700;[^}]*color: var\(--text\);[^}]*overflow-wrap: anywhere;/);
     expect(css).toMatch(/\.chosen\s*{[^}]*overflow-wrap: anywhere;/);

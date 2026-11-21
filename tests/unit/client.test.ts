@@ -176,3 +176,21 @@ describe('a picture chosen for an option', () => {
     await expect(again).resolves.toEqual({ kind: 'damaged' });
   });
 });
+
+describe('a picture picked again while the last one is still being read', () => {
+  it('starts the new read on a fresh worker once the old one is ended, not behind it', async () => {
+    const { client, workers } = setup();
+    const slow = client.inspectPicture(new File(['\x89PNG slow'], 'hostile.png'), 'picture');
+    slow.catch(() => {});
+    // The hook ends the worker before reading the new pick (endReplacedRead).
+    client.end();
+    await expect(slow).rejects.toEqual(new ToolError('cancelled'));
+    expect(workers[0]?.ended).toBe(true);
+    const fresh = client.inspectPicture(new File(['\x89PNG'], 'second.png'), 'picture');
+    expect(workers).toHaveLength(2);
+    const sent = workers[1]?.sent[0];
+    expect(sent?.type === 'inspect-picture' && (sent.file as File).name).toBe('second.png');
+    workers[1]?.reply({ type: 'picture-inspected', requestId: sent?.requestId, outcome: { kind: 'ready', pixels: 1 } });
+    await expect(fresh).resolves.toEqual({ kind: 'ready', pixels: 1 });
+  });
+});

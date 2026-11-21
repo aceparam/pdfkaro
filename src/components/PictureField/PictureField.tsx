@@ -10,9 +10,9 @@ type Props = {
   id: string;
   /** The tool's types for this picture, offered in the system's chooser. */
   types: readonly PictureMime[];
-  /** Whether a picture has been picked, so the button reads "Choose another picture". */
+  /** Whether a picture is chosen or was tried (`picturePicked`), so the button reads "Choose another picture". Not after a wrong pick, which leaves none chosen. */
   picked: boolean;
-  /** The line naming the chosen picture: "signature.png, 120 KB". Left out when none is chosen, or for a problem. */
+  /** The line naming the chosen picture: "signature.png, 120 KB." Left out when none is chosen, or for a problem. */
   chosen?: string | null;
   /** What is wrong with the picture picked, shown between the label and the button. */
   error?: string | null;
@@ -30,14 +30,16 @@ export const pictureErrorId = (id: string) => `${id}-error`;
  * naming the picture (if one is chosen), a secondary button that opens the system's chooser for one picture of the
  * tool's types, and the hint. The button reads its words, then the label, the line, the sentence and the hint, in
  * that order, each once. The picture itself is never shown, decoded or given an address: "Look and feel" allows no
- * image but the visitor's own page thumbnails. No hooks, so it can be drawn and tested on its own.
+ * image but the visitor's own page thumbnails. Not inside the site's `field` class, whose input and label rules
+ * would make the button bold and full width and undo the hidden input's 1px size. No hooks, so it can be drawn and
+ * tested on its own.
  */
 export function PictureField({ option, id, types, picked, chosen, error, onPick, focusRef }: Props) {
   const labelId = `${id}-label`;
   const chosenId = `${id}-chosen`;
   const hintId = `${id}-hint`;
   return (
-    <div className={`field ${styles.picture}`}>
+    <div className={styles.picture}>
       <p id={labelId} className={styles.label}>
         {option.label}
       </p>

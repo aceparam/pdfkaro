@@ -227,12 +227,23 @@ export function pictureSentence(option: Pick<PictureOption, 'acceptsName'>, entr
   }
 }
 
-/** The line naming a chosen picture: "signature.png, 120 KB" when ready, "signature.png, Getting ready" while read; none for a problem, which its sentence names. */
+/**
+ * The line naming a chosen picture: "signature.png, 120 KB." when ready, "signature.png, Getting ready." while read;
+ * none for a problem, which its sentence names. It ends with a full stop, so a screen reader pauses before the hint.
+ */
 export function pictureLine(entry: PictureEntry | undefined): string | null {
   if (entry === undefined) return null;
-  if (entry.status === 'ready') return `${entry.name}, ${formatSize(entry.size)}`;
-  if (entry.status === 'reading') return `${entry.name}, Getting ready`;
+  if (entry.status === 'ready') return `${entry.name}, ${formatSize(entry.size)}.`;
+  if (entry.status === 'reading') return `${entry.name}, Getting ready.`;
   return null;
+}
+
+/**
+ * Whether the field's button reads its words for a second pick ("Choose another picture"): a picture is chosen,
+ * being read, or was read and cannot be used. Not after a wrong pick, which leaves no picture chosen.
+ */
+export function picturePicked(entry: PictureEntry | undefined): boolean {
+  return entry !== undefined && entry.status !== 'refused';
 }
 
 /** What the notice for a very large picture says under its heading, for a tool with no words of its own. */
@@ -283,11 +294,14 @@ export const pictureRereads = 2;
 
 /**
  * What to do when a picture's read was cut short (the worker was ended, such as by a thumbnail's time limit):
- * read it again while the same file is still held and its entry still being read, up to `pictureRereads` times,
- * then call it damaged, so a picture never stays "Getting ready"; else nothing.
+ * read it again while the files are listed, the same file is still held and its entry still being read, up to
+ * `pictureRereads` times, then call it damaged, so a picture never stays "Getting ready"; else nothing. Never during
+ * the job or on its result, where the job's own end cancels the read: a read again there would start a worker
+ * holding the picture. "Go back to your file" reads it again after a failure (`picturesToReread`). A file replaced
+ * by a newer pick is not held, so it is never read again, and the newer pick counts its own tries from 0.
  */
-export function rereadPicture(entry: PictureEntry | undefined, stillHeld: boolean, tries: number): 'read-again' | 'damaged' | 'nothing' {
-  if (!stillHeld || entry?.status !== 'reading') return 'nothing';
+export function rereadPicture(entry: PictureEntry | undefined, stillHeld: boolean, tries: number, listing: boolean): 'read-again' | 'damaged' | 'nothing' {
+  if (!listing || !stillHeld || entry?.status !== 'reading') return 'nothing';
   return tries < pictureRereads ? 'read-again' : 'damaged';
 }
 

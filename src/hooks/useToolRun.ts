@@ -81,6 +81,10 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const passwords = useRef(new Map<string, string>());
   // Each picture option's chosen picture, by key: the one place its bytes are held on the page.
   const pictures = useRef(new Map<string, File>());
+  // The file each key's read in the worker is for, while one is in flight; and a count of picks per key, so a pick
+  // whose first bytes come back after a later pick's is dropped.
+  const picturesInFlight = useRef(new Map<string, File>());
+  const pictureTickets = useRef(new Map<string, number>());
   const nextId = useRef(1);
   const client = useRef<ToolClient | null>(null);
   const stateRef = useRef(state);
@@ -276,6 +280,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     async (key: string, file: File): Promise<void> => {
       for (let tries = 0; ; tries += 1) {
         stopThumbnail();
+        picturesInFlight.current.set(key, file);
         try {
           const outcome = await getClient().inspectPicture(file, key);
           if (pictures.current.get(key) === file) dispatch({ type: 'picture-read', key, outcome });
@@ -284,7 +289,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
           const held = pictures.current.get(key) === file;
           if (error instanceof ToolError && error.kind === 'cancelled') {
             const entry = Object.hasOwn(stateRef.current.pictures, key) ? stateRef.current.pictures[key] : undefined;
-            const step = rereadPicture(entry, held, tries);
+            // Only while listing: the job's own end cancels a read too, and a read again then would start a worker.
+            const step = rereadPicture(entry, held, tries, stateRef.current.step === 'listing');
             if (step === 'read-again') continue;
             if (step === 'damaged') dispatch({ type: 'picture-read', key, outcome: { kind: 'damaged' } });
             return;
@@ -292,28 +298,51 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
           // The engine could not be loaded, or the worker ran out of memory: the tool's failure, as for a file.
           if (held) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
           return;
+        } finally {
+          if (picturesInFlight.current.get(key) === file) picturesInFlight.current.delete(key);
         }
       }
     },
     [getClient, stopThumbnail],
   );
 
+  // A read still in flight for a key that was just picked again is for a file no longer held. Reading a hostile PNG
+  // can take minutes, and the next read would wait behind it, so the worker is ended and the new read starts on a
+  // fresh one. The old read's answer is "cancelled" for a file not held, so it is not read again; the new pick
+  // counts its own tries from 0. No file is being read then: the field is shown only once every file has been read.
+  const endReplacedRead = useCallback(
+    (key: string) => {
+      const inFlight = picturesInFlight.current.get(key);
+      if (inFlight === undefined || pictures.current.get(key) === inFlight) return;
+      picturesInFlight.current.delete(key);
+      stopThumbnail();
+      client.current?.end();
+    },
+    [stopThumbnail],
+  );
+
   const pickPicture = useCallback(
     async (key: string, file: File) => {
       if (stateRef.current.step !== 'listing') return;
+      const ticket = (pictureTickets.current.get(key) ?? 0) + 1;
+      pictureTickets.current.set(key, ticket);
       const head = new Uint8Array(await file.slice(0, sniffLength).arrayBuffer());
+      // "Start again", leaving or a later pick while the first bytes were read: this pick is dropped.
+      if (stateRef.current.step !== 'listing' || pictureTickets.current.get(key) !== ticket) return;
       const types = pictureRule(toolId, key)?.types ?? [];
       if (!looksAccepted(head, [...types])) {
         // A wrong pick leaves no picture chosen, even if one was ready before: the field holds the last pick.
         pictures.current.delete(key);
         dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'refused' });
+        endReplacedRead(key);
         return;
       }
       pictures.current.set(key, file);
       dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'reading' });
+      endReplacedRead(key);
       await readChosenPicture(key, file);
     },
-    [readChosenPicture, toolId],
+    [endReplacedRead, readChosenPicture, toolId],
   );
 
   // How many pages the one result has: from the toggle kind when it knows (Extract: the pages chosen);
@@ -430,6 +459,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     files.current.clear();
     passwords.current.clear();
     pictures.current.clear();
+    picturesInFlight.current.clear();
     for (const url of thumbnailUrls.current.values()) URL.revokeObjectURL(url);
     thumbnailUrls.current.clear();
     queue.current = emptyQueue;

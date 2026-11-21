@@ -17,6 +17,7 @@ import {
   optionsShown,
   pictureLine,
   pictureNotice,
+  picturePicked,
   pictureSentence,
   readyKey,
   shownOptions,
@@ -263,7 +264,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
       pictureSaid.current[option.key] = entry;
       const said = entry.status === 'ready' ? pictureLine(entry) : pictureSentence(option, entry);
       // eslint-disable-next-line react-hooks/set-state-in-effect -- the worker's answer reaches the page through the state, so it is said here
-      if (said) setAnnouncement(entry.status === 'ready' ? `${said}.` : said);
+      if (said) setAnnouncement(said);
     }
   }, [showOptions, drawnOptions, state.pictures, setAnnouncement]);
   const pictureNoticeId = (key: string) => `${fieldId(key)}-notice`;
@@ -635,7 +636,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     option={option}
                     id={fieldId(option.key)}
                     types={pictureRule(toolId, option.key)?.types ?? []}
-                    picked={chosenPicture(option, state.pictures) !== undefined}
+                    picked={picturePicked(chosenPicture(option, state.pictures))}
                     chosen={pictureLine(chosenPicture(option, state.pictures))}
                     error={(() => {
                       const entry = chosenPicture(option, state.pictures);

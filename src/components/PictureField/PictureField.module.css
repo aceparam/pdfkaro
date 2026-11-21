@@ -1,6 +1,8 @@
-/* A tool's picture (its registry `options`), placed as a typed text or a drawing is. */
+/* A tool's picture (its registry `options`), placed as a typed text or a drawing is. Not inside the site's
+   `field` class, whose rules would make the button bold and full width; the same gap below as a field. */
 .picture {
   margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 /* As the field labels: bold, the body size, the same gap below. The same rule as DrawingPad's label,
    copied on purpose: each component owns its CSS Module. */
