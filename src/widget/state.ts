@@ -23,7 +23,7 @@ export type FileEntry = {
 
 export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
 
-export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large' | 'too-many-pictures' | 'output-limit';
+export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large' | 'too-many-pictures' | 'output-limit' | 'text-refused';
 
 /**
  * The finished result. `parts` is set when it is a zip holding that many files;
@@ -72,8 +72,10 @@ export type State = {
   /** The turns of the one file's pages, for a tool whose pages turn: Rotate PDF. `null` is nothing turned. */
   turns: Turns | null;
   /**
-   * What each of the tool's options shows, by key (`options` in its registry words). `{}` is every
-   * option at its start, so a tool with no options holds nothing. Kept through Cancel, a failure and
+   * What each of the tool's options shows, by key (`options` in its registry words): a choice's value,
+   * or a text's raw value exactly as typed, so its field shows what the visitor typed (it is cleaned
+   * only when it is checked and sent). `{}` is every option at its start, a text empty, so a tool with
+   * no options holds nothing. No cap on a text's length: a long paste is held, refused and never sent. Kept through Cancel, a failure and
    * a file replaced through "Choose another file" while listing (the new file is listed before the
    * old one is removed). Not kept when the last file is removed, which ends the working area,
    * including a damaged or password file replaced from its notice; "Start again" clears it too.

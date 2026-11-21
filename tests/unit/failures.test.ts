@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { failureSentence, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -144,5 +144,29 @@ describe('the running count of outputs that Split and PDF to JPG share', async (
     expect(() => one.add(1)).toThrow(TooManyPictures);
     const several = outputTally(5, { most: 10 });
     expect(() => several.add(11)).toThrow(expect.objectContaining({ name: 'TooManyPictures' }));
+  });
+});
+
+describe('the sentence for a text the engine refused', () => {
+  const text = {
+    kind: 'text' as const,
+    key: 'text',
+    label: 'Watermark text',
+    hint: 'Up to 50 characters, on one line.',
+    emptySentence: 'Type the watermark text first.',
+  };
+  const position = { kind: 'choice' as const, key: 'position', legend: 'Where', choices: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], initial: 'a' };
+
+  it('says what happened and what to try, in the shared words or the first text\'s own', () => {
+    expect(textRefusedSentence).toBe('The text could not be used. Check it and try again.');
+    expect(failureSentence('text-refused', {})).toBe(textRefusedSentence);
+    expect(failureSentence('text-refused', { options: [position, text] })).toBe(textRefusedSentence);
+    const own = 'This watermark text could not be used. Check it and try again.';
+    expect(failureSentence('text-refused', { options: [position, { ...text, refusedSentence: own }] })).toBe(own);
+    expect(failureSentence('text-refused', { options: [{ ...text, refusedSentence: own }, { ...text, key: 'other', refusedSentence: 'Not this.' }] })).toBe(own);
+  });
+
+  it('leaves the other failures as they were for a tool with a text', () => {
+    expect(failureSentence('engine', { options: [text] })).toBe('Something went wrong. Try again.');
   });
 });

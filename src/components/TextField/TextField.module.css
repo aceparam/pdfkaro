@@ -1,0 +1,18 @@
+/* A tool's typed text (its registry `options`): the site's own field style (`field field-short`
+   in site.css), placed as a choice group is. */
+.text {
+  margin-top: 1.5rem;
+}
+/* The hint under the field, muted. The same rule as PasswordField's note, copied on purpose: each
+   component owns its CSS Module. */
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+/* What is wrong, between the label and the field, where a phone keyboard does not hide it: bold in
+   the text colour, as a wrong password's sentence is. */
+.error {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}

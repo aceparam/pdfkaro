@@ -1,23 +1,37 @@
 // The rules for the options a tool shows (`options` in its registry words), as
 // plain functions. A choice always holds a value with which the main button
-// works, so no option ever holds it back and there is no "not valid" state.
+// works, so it never holds the button back. A text is the job's input: it starts
+// empty, and it holds the button back while it is empty, too long, or has a
+// character its rule does not take (src/widget/option-values.ts).
 
-import type { ToolOption } from '../tools/registry';
+import type { ChoiceOption, TextOption, ToolOption } from '../tools/registry';
+import { number } from './format';
+import { cleanText, textProblem, textRule, type CharacterRule, type TextProblem, type TextRule, type TextTable } from './option-values';
 import type { State } from './state';
 
-/** What the visitor has chosen, by option key. `{}` is every option at its start. */
+/** What each option holds, by option key: a choice's value, or a text as typed. `{}` is every option at its start. */
 export type Choices = Readonly<Record<string, string>>;
 
-/** The value an option shows: the one chosen when it is among the option's values, else its starting value. */
-export function chosenValue(option: ToolOption, choices: Choices): string {
+/** The value a choice shows: the one chosen when it is among the option's values, else its starting value. */
+export function chosenValue(option: ChoiceOption, choices: Choices): string {
   const chosen = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
   return chosen !== undefined && option.choices.some((choice) => choice.value === chosen) ? chosen : option.initial;
 }
 
-/** What the engine is sent for the tool's options: every option's value by its key, or `{}` for a tool with none. */
+/** What a text's field shows: the text exactly as typed, else ''. */
+export function typedText(option: TextOption, choices: Choices): string {
+  const typed = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
+  return typeof typed === 'string' ? typed : '';
+}
+
+/**
+ * What the engine is sent for the tool's options: a choice's value and a text cleaned (composed and
+ * trimmed), by key, or `{}` for a tool with none. The main button cannot start a job while a text has
+ * a problem, and the engine checks the text again.
+ */
 export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices): Record<string, string> {
   const sent: Record<string, string> = {};
-  for (const option of options ?? []) sent[option.key] = chosenValue(option, choices);
+  for (const option of options ?? []) sent[option.key] = option.kind === 'choice' ? chosenValue(option, choices) : cleanText(typedText(option, choices));
   return sent;
 }
 
@@ -33,6 +47,66 @@ export function jobOptions(
   choices: Choices,
 ): Record<string, unknown> {
   return { ...preset, ...itemOption, ...optionsToSend(options, choices) };
+}
+
+/** What each character rule takes, in words: the second sentence when characters are refused, and the end of each tool's hint. */
+export const ruleAdvice: Readonly<Record<CharacterRule, string>> = {
+  'standard-font': 'Use letters from English and other Western European languages, numbers and common marks.',
+};
+
+/**
+ * Whether a refused character is shown back to the visitor by name: only a Latin letter of one code
+ * point, capital, small or title case (Ł, ő, ğ), and not a fullwidth one (U+FF00 to U+FFEF), which
+ * looks like a letter the rule takes. Never a number, punctuation or symbol, since a refused one
+ * often looks like one the rule takes (U+2010 hyphen beside "-", U+2212 minus, fullwidth marks);
+ * never a modifier letter, mark, space, control or format character, a letter of another script or
+ * an emoji. So the page never prints an invisible or direction-changing mark, or a name that looks
+ * like an allowed character; the rest get "Some characters cannot be used."
+ */
+function nameable(character: string): boolean {
+  const point = character.codePointAt(0) ?? 0;
+  return /^[\p{Lu}\p{Ll}\p{Lt}]$/u.test(character) && /^\p{Script=Latin}$/u.test(character) && !(point >= 0xff00 && point <= 0xffef);
+}
+
+/** "Ł", "Ł and ź", "Ł, ź and ő". */
+function listed(characters: readonly string[]): string {
+  if (characters.length === 1) return characters[0] ?? '';
+  return `${characters.slice(0, -1).join(', ')} and ${characters[characters.length - 1] ?? ''}`;
+}
+
+/** The one sentence for a text's problem, in the tool's words where it has them. */
+export function textSentence(option: TextOption, rule: TextRule, problem: TextProblem): string {
+  switch (problem.kind) {
+    case 'empty':
+      return option.emptySentence;
+    case 'too-long':
+      return `This text has ${number(problem.length)} characters. Use ${number(rule.maxLength)} or fewer.`;
+    case 'characters': {
+      const advice = ruleAdvice[rule.characters];
+      const named = problem.refused.length >= 1 && problem.refused.length <= 3 && problem.refused.every(nameable);
+      return named ? `${listed(problem.refused)} cannot be used. ${advice}` : `Some characters cannot be used. ${advice}`;
+    }
+  }
+}
+
+/** A text holding the main button back: its key, what is wrong, and the sentence. */
+export type OptionHold = { key: string; kind: TextProblem['kind']; sentence: string };
+
+/**
+ * The first text, in registry order, that holds the main button back, or null. A choice never holds
+ * it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
+ * and tied to the main button from there. A text with no line in optionTexts (which the registry test
+ * forbids) always holds, with its empty sentence, so a text is never sent unchecked.
+ */
+export function optionsHold(tool: string, options: readonly ToolOption[] | undefined, choices: Choices, texts?: TextTable): OptionHold | null {
+  for (const option of options ?? []) {
+    if (option.kind !== 'text') continue;
+    const rule = textRule(tool, option.key, texts);
+    if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };
+    const problem = textProblem(cleanText(typedText(option, choices)), rule);
+    if (problem) return { key: option.key, kind: problem.kind, sentence: textSentence(option, rule, problem) };
+  }
+  return null;
 }
 
 /**
@@ -59,7 +133,7 @@ export function readyKey(state: Pick<State, 'files'>): string {
 }
 
 /**
- * Whether focus moves to the chosen radio button of the first option: in a tool with options, when
+ * Whether focus moves to the first option (a choice's chosen radio button, or a text's field): in a tool with options, when
  * a new set of files has just been read, and only if focus is still where the widget put it (the
  * main button, the file's line or summary) or on the page body, so a visitor who went elsewhere
  * while a large file was read is left there.

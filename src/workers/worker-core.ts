@@ -44,6 +44,8 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'TooManyPictures') return 'too-many-pictures';
   // The drawing step's new file, or its update, would pass their size budget (stamp.ts). Known by name, as above.
   if (error instanceof Error && error.name === 'OutputLimit') return 'output-limit';
+  // An engine refused the text it was sent (option-values.ts's `TextRefused`). Known by name, as above.
+  if (error instanceof Error && error.name === 'TextRefused') return 'text-refused';
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
   if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {

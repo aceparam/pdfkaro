@@ -1,4 +1,5 @@
 import { useId, useState, type Ref } from 'react';
+import { pressesButton } from '../../widget/keys';
 import styles from './PasswordField.module.css';
 
 type Props = {
@@ -36,7 +37,7 @@ export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef,
           aria-describedby={`${id}-note`}
           onChange={(event) => setValue(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
+            if (pressesButton(event)) {
               event.preventDefault();
               submit();
             }

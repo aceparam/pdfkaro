@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolOption } from '../../src/tools/registry';
-import { acceptedValue, optionValues } from '../../src/widget/option-values';
-import { chosenValue, focusMovesToOptions, jobOptions, optionsShown, optionsToSend, readyKey } from '../../src/widget/options';
+import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
+import type { TextOption, ToolOption } from '../../src/tools/registry';
+import {
+  acceptedText,
+  acceptedValue,
+  characterRules,
+  cleanText,
+  optionTexts,
+  optionValues,
+  TextRefused,
+  textProblem,
+  textRule,
+  type TextRule,
+} from '../../src/widget/option-values';
+import {
+  chosenValue,
+  focusMovesToOptions,
+  jobOptions,
+  optionsHold,
+  optionsShown,
+  optionsToSend,
+  readyKey,
+  ruleAdvice,
+  textSentence,
+  typedText,
+} from '../../src/widget/options';
 import { initialState, reducer, type Action, type State } from '../../src/widget/state';
 import { ToolClient, type WorkerLike } from '../../src/workers/client';
 import type { ToWorker } from '../../src/workers/messages';
@@ -172,5 +195,239 @@ describe('when the options are shown, and where focus goes', () => {
     expect(focusMovesToOptions(true, readyKey(cancelled), before, true)).toBe(false);
     const replaced = [add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, read);
     expect(focusMovesToOptions(true, readyKey(replaced), before, true)).toBe(true);
+  });
+});
+
+const watermark: TextOption = {
+  kind: 'text',
+  key: 'text',
+  label: 'Watermark text',
+  hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+  emptySentence: 'Type the watermark text first.',
+};
+const rule: TextRule = { maxLength: 50, characters: 'standard-font' };
+const table = { 'test-text': { text: rule } };
+const advice = 'Use letters from English and other Western European languages, numbers and common marks.';
+const at = (point: number) => String.fromCodePoint(point);
+
+describe('cleaning a text', () => {
+  it('composes accents typed as their own mark', () => {
+    const separate = 'Cafe\u0301';
+    expect([...separate]).toHaveLength(5);
+    expect(cleanText(separate)).toBe('Café');
+    expect([...cleanText(separate)]).toHaveLength(4);
+  });
+
+  it('trims spaces and no-break spaces at both ends, and keeps spaces inside as typed', () => {
+    expect(cleanText('  Draft copy  ')).toBe('Draft copy');
+    expect(cleanText('\u00a0Draft\u00a0')).toBe('Draft');
+    expect(cleanText('Draft   copy')).toBe('Draft   copy');
+    expect(cleanText('   ')).toBe('');
+  });
+});
+
+describe('the standard fonts\' characters', () => {
+  const takes = characterRules['standard-font'];
+
+  it('are the 217 of Windows Western, less the soft hyphen', () => {
+    expect(takes.size).toBe(217);
+    expect(takes.has(0xad)).toBe(false);
+    for (const character of ['a', 'Z', '0', ' ', '~', '\u00a0', 'é', 'ÿ', '€', '“', '—', '™', 'Œ', 'Ÿ']) expect(takes.has(character.codePointAt(0) ?? -1), character).toBe(true);
+  });
+
+  it('are each drawn by pdf-lib\'s standard Helvetica, Helvetica Bold, Times and Courier as itself, not as a question mark', async () => {
+    const document = await PDFDocument.create();
+    const fonts = await Promise.all([StandardFonts.Helvetica, StandardFonts.HelveticaBold, StandardFonts.TimesRoman, StandardFonts.Courier].map((font) => document.embedFont(font)));
+    expect(fonts.map((font) => font.name)).toEqual(['Helvetica', 'Helvetica-Bold', 'Times-Roman', 'Courier']);
+    for (const font of fonts) {
+      for (const point of takes) {
+        const character = at(point);
+        const code = font.encodeText(character).toString();
+        if (character !== '?') expect(code, `${font.name} U+${point.toString(16)}`).not.toBe('<3F>');
+        if (point !== 0x20 && point !== 0xa0) expect(font.widthOfTextAtSize(character, 10), `${font.name} U+${point.toString(16)}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('do not include what the fonts draw as a question mark', async () => {
+    // The experiment the rule rests on: pdf-lib draws a character outside its encoding as "?" without a word.
+    const helvetica = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    expect(helvetica.encodeText('Ł').toString()).toBe('<3F>');
+    for (const character of ['न', 'త', 'م', '中', 'Ł', 'ő', 'ğ', '😀', '\t', '\u00ad', '\u202e', '\u200b', '\n']) {
+      expect(takes.has(character.codePointAt(0) ?? -1), character).toBe(false);
+    }
+  });
+});
+
+describe('what is wrong with a text', () => {
+  it('is nothing for a text the rule takes, up to the limit', () => {
+    expect(textProblem('Draft copy', rule)).toBeNull();
+    expect(textProblem('x'.repeat(50), rule)).toBeNull();
+    expect(textProblem(cleanText('Cafe\u0301'), rule)).toBeNull();
+    expect(textProblem('Ça coûte 5 € — “déjà vu”', rule)).toBeNull();
+  });
+
+  it('is empty for no text, or only spaces once cleaned', () => {
+    expect(textProblem('', rule)).toEqual({ kind: 'empty' });
+    expect(textProblem(cleanText('   '), rule)).toEqual({ kind: 'empty' });
+  });
+
+  it('is too long past the limit, counted by character', () => {
+    expect(textProblem('x'.repeat(51), rule)).toEqual({ kind: 'too-long', length: 51 });
+    expect(textProblem('é'.repeat(63), rule)).toEqual({ kind: 'too-long', length: 63 });
+  });
+
+  it('names each refused character once, in the order typed', () => {
+    expect(textProblem('Łódź', rule)).toEqual({ kind: 'characters', refused: ['Ł', 'ź'] });
+    expect(textProblem('ŁŁŁ ź Ł', rule)).toEqual({ kind: 'characters', refused: ['Ł', 'ź'] });
+    expect(textProblem('a😀b', rule)).toEqual({ kind: 'characters', refused: ['😀'] });
+    expect(textProblem('a\tb', rule)).toEqual({ kind: 'characters', refused: ['\t'] });
+    expect(textProblem('co\u00adop', rule)).toEqual({ kind: 'characters', refused: ['\u00ad'] });
+    expect(textProblem('ab\u202ecd', rule)).toEqual({ kind: 'characters', refused: ['\u202e'] });
+    for (const text of ['नमस्ते', 'తెలుగు', 'مرحبا', '中文']) expect(textProblem(text, rule)?.kind, text).toBe('characters');
+  });
+
+  it('counts an emoji as one character, and says characters before length', () => {
+    expect(textProblem('😀'.repeat(50), rule)).toEqual({ kind: 'characters', refused: ['😀'] });
+    expect(textProblem('नमस्ते '.repeat(20), rule)?.kind).toBe('characters');
+  });
+});
+
+describe('a tool\'s own rule for a text, and what its engine takes', () => {
+  it('lists no tool yet', () => {
+    expect(optionTexts).toEqual({});
+    expect(textRule('test-text', 'text')).toBeUndefined();
+    expect(acceptedText('test-text', 'text', 'Draft')).toBeUndefined();
+  });
+
+  it('finds the rule by tool and key, own keys only', () => {
+    expect(textRule('test-text', 'text', table)).toEqual(rule);
+    expect(textRule('test-text', 'other', table)).toBeUndefined();
+    expect(textRule('merge-pdf', 'text', table)).toBeUndefined();
+    expect(textRule('__proto__', 'text', table)).toBeUndefined();
+    expect(textRule('toString', 'text', table)).toBeUndefined();
+    expect(textRule('test-text', '__proto__', table)).toBeUndefined();
+    expect(textRule('test-text', 'toString', table)).toBeUndefined();
+  });
+
+  it('takes a good text, cleaned', () => {
+    expect(acceptedText('test-text', 'text', '  Draft copy ', table)).toBe('Draft copy');
+    expect(acceptedText('test-text', 'text', 'Cafe\u0301', table)).toBe('Café');
+  });
+
+  it('refuses what is not a string, empty, only spaces, too long, a refused character, or another tool or key', () => {
+    for (const value of [3, null, undefined, ['Draft'], { text: 'Draft' }, '', '   ', 'x'.repeat(51), 'Łódź', 'a\u202eb']) {
+      expect(acceptedText('test-text', 'text', value, table), String(value)).toBeUndefined();
+    }
+    expect(acceptedText('test-text', '__proto__', 'Draft', table)).toBeUndefined();
+    expect(acceptedText('toString', 'text', 'Draft', table)).toBeUndefined();
+  });
+
+  it('refuses with an error known by its name, which never holds the text', () => {
+    const refused = new TextRefused();
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused.name).toBe('TextRefused');
+    expect(refused.message).not.toMatch(/Draft/);
+    expect(String(refused)).toBe('TextRefused: The text was refused.');
+  });
+});
+
+describe('a text in the widget', () => {
+  it('shows the text exactly as typed, or nothing', () => {
+    expect(typedText(watermark, {})).toBe('');
+    expect(typedText(watermark, { text: ' Draft ' })).toBe(' Draft ');
+    expect(typedText({ ...watermark, key: 'toString' }, {})).toBe('');
+  });
+
+  it('is sent cleaned, beside a choice', () => {
+    expect(optionsToSend([position, watermark], { text: ' Cafe\u0301 copy ', position: 'top-right' })).toEqual({ position: 'top-right', text: 'Café copy' });
+    expect(jobOptions({ format: 'jpg' }, {}, [watermark], { text: ' Draft ' })).toEqual({ format: 'jpg', text: 'Draft' });
+  });
+
+  it('says what is wrong in one sentence: refused characters named when one to three Latin letters', () => {
+    const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
+    expect(ruleAdvice['standard-font']).toBe(advice);
+    expect(characters(['Ł'])).toBe(`Ł cannot be used. ${advice}`);
+    expect(characters(['Ł', 'ź'])).toBe(`Ł and ź cannot be used. ${advice}`);
+    expect(characters(['Ł', 'ź', 'ő'])).toBe(`Ł, ź and ő cannot be used. ${advice}`);
+    expect(characters(['ğ', 'Ǆ'])).toBe(`ğ and Ǆ cannot be used. ${advice}`);
+  });
+
+  it('never names a refused character that looks like one the rule takes, or any number, mark or symbol', () => {
+    const some = `Some characters cannot be used. ${advice}`;
+    const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
+    // U+2010 hyphen, U+2011 no-break hyphen, U+2212 minus, U+2215 division slash, fullwidth "!" and "A", a modifier apostrophe.
+    for (const character of ['\u2010', '\u2011', '\u2212', '\u2215', '\uff01', '\uff21', '\u02bc', '≠', '½', '٣']) {
+      expect(characters([character]), `U+${(character.codePointAt(0) ?? 0).toString(16)}`).toBe(some);
+    }
+    // One lookalike among Latin letters sends the whole list to the plain sentence.
+    expect(characters(['Ł', '\u2212'])).toBe(some);
+  });
+
+  it('says "Some characters cannot be used." with no list for four or more, another script, an emoji, or anything invisible', () => {
+    const some = `Some characters cannot be used. ${advice}`;
+    const characters = (text: string) => {
+      const problem = textProblem(text, rule);
+      return problem ? textSentence(watermark, rule, problem) : '';
+    };
+    expect(characters('ŁźőĞ')).toBe(some);
+    for (const text of ['नमस्ते', 'مرحبا', '中文', 'తెలుగు', 'Łódź नम', 'a😀', 'a\tb', 'a\u202eb', 'a\u200bb', 'co\u00adop', 'e\u0301\u0301']) {
+      expect(characters(text), text).toBe(some);
+    }
+  });
+
+  it('gives the numbers for a text too long, written as numbers are on the page', () => {
+    expect(textSentence(watermark, rule, { kind: 'too-long', length: 63 })).toBe('This text has 63 characters. Use 50 or fewer.');
+    expect(textSentence(watermark, { maxLength: 200, characters: 'standard-font' }, { kind: 'too-long', length: 1204 })).toBe('This text has 1,204 characters. Use 200 or fewer.');
+  });
+
+  it("gives the tool's own sentence for an empty text", () => {
+    expect(textSentence(watermark, rule, { kind: 'empty' })).toBe('Type the watermark text first.');
+  });
+
+  it('holds the main button while the first text has a problem, and never for a choice', () => {
+    expect(optionsHold('test-text', [position], {}, table)).toBeNull();
+    expect(optionsHold('test-text', undefined, {}, table)).toBeNull();
+    expect(optionsHold('test-text', [position, watermark], {}, table)).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+    expect(optionsHold('test-text', [watermark], { text: '   ' }, table)?.kind).toBe('empty');
+    expect(optionsHold('test-text', [watermark], { text: 'Łódź' }, table)).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used. ${advice}` });
+    expect(optionsHold('test-text', [watermark], { text: 'x'.repeat(63) }, table)).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
+    expect(optionsHold('test-text', [watermark], { text: ' Draft copy ' }, table)).toBeNull();
+  });
+
+  it('holds with the empty sentence for a text with no rule, so a text is never sent unchecked', () => {
+    expect(optionsHold('test-text', [watermark], { text: 'Draft' }, {})).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+    expect(optionsHold('test-text', [watermark], { text: 'Draft' })).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+  });
+
+  it("reaches the real ToolClient's run message cleaned, set through the reducer, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-text', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'option-set', key: 'text', value: '  Cafe\u0301 copy ' },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    expect(state.choices).toEqual({ text: '  Cafe\u0301 copy ' });
+    expect(optionsHold('test-text', [watermark], state.choices, table)).toBeNull();
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, [watermark], state.choices), () => {});
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type).toBe('run');
+    expect(sent?.type === 'run' && sent.options).toEqual({ text: 'Café copy' });
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
   });
 });
