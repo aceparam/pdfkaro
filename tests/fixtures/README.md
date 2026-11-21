@@ -547,3 +547,81 @@ Measured as for Add page numbers, with a 50-character text: in Node, each file i
 | `make-large.mjs`'s file | 110.1 MB | 110.1 MB (110.1) | 1.8 s (1.7): 1.2, 0.0, 0.5 | 1.16 GB (1.19) | 2.4 s (2.3) | 1.32 GB (1.36) |
 
 The bytes added per page differ between the tables because the text and the files differ: about 300 a page on `pages-500.pdf` with 50 characters, about 500 on the 6,000-page file made in the test, whose pages hold almost nothing else, so each page's own layer form is most of what qpdf writes for it, and about 370 on the 120,000-page file, whose object streams pack the changed page dictionaries more tightly. Every time and peak is within 20% of Add page numbers' (the largest gap is the 120,000-page file: 19% in Node, 17% in Chromium, 11% and 5% in memory). The output of the 120,000-page file is 50% larger: each page's layer holds the text, so the file grows by about 370 bytes a page (61,050,227 bytes against 16,578,179), against about 200 for a page number, and the extra time is mostly qpdf writing those bytes. It stays far inside the size budget, which is over 262 MB for this file (2 KB a page and 16 MB, before twice the plain copy is added). Sharing one form among pages of the same size could cut it (design, section 3); left for a later change if a real file shows the need. The multilingual file is still missing; Watermark leaves existing text alone, so it would change nothing there.
+
+### Sign PDF (`src/engines/tools/sign-pdf.ts`, with `src/engines/stamp.ts`)
+
+Each file was signed in Node with the same qpdf and pdf-lib the browser gets (`tests/unit/sign-pdf.test.ts`), and each result read back by qpdf and by PDF.js's legacy build. Every result passes `qpdf --check`, has the same pages and is not encrypted. With the name "Jane Doe" typed and the last page chosen, the last page's text through PDF.js is its text as before followed by the name, and every other page's dictionary and content are exactly those of the plain copy: no layer, its own content alone. The signature is drawn by the same step as Add page numbers and Watermark, so a chosen page's own content streams are kept unchanged between a shared `q` and `Q`, and no stored turn, box or user unit changes. Sizes in bytes, from a run on 21 Nov 2026, at "Bottom right": typed on the last page, drawn (a wave across the pad) on the last page, `alpha.png` on the last page, and typed on every page.
+
+| File | Before | Typed, last | Drawn, last | Picture, last | Typed, every | Outcome |
+| --- | --- | --- | --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 4,338 | 4,297 | 7,440 | 4,828 | The name on page 3 only; progress "Reading the file", then writing from 75% to 95%, and 100 once checked, with no page count for one page; on every page, "Page 1 of 3" to "Page 3 of 3". `a) Tj (b \ % <x>` is read back exactly, inside one hex string of the one signature form; "Zoë Ångström-Núñez" is read back as typed, in Times Italic, not put inside the file. qpdf's warning does not stop the job |
+| `pages-500.pdf` | 198,025 | 102,380 | 102,280 | 105,433 | 225,965 | The last page only: 869 bytes more than the plain copy written with object streams. With `alpha.png` on every page, all 500 pages draw one signature form, which holds the picture and its soft mask once |
+| `scanned.pdf` | 6,191 | 6,778 | 6,708 | 9,851 | 7,025 | The signature shows over the whole-page picture of the last page, inside its bottom-right margin; the other pages are unchanged pixel for pixel |
+| `password.pdf` | 7,178 | 4,375 | 4,332 | 7,475 | 4,865 | With `open-sesame`: signed, with no password and no restrictions. Without it, or with a wrong one, the job fails |
+| `restricted.pdf` | 7,181 | 4,375 | 4,332 | 7,475 | 4,865 | Signed, with no restrictions |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | | | | Read as damaged before any job; a run fails as the engine's failure and hands back nothing |
+| `form.pdf` | 3,189 | 3,434 | 3,394 | 6,538 | 3,434 | Both fields kept, with the value `Sample text` (one page, so the last page is every page) |
+| `mixed.pdf` | 2,257 | 2,403 | 2,361 | 5,504 | 3,352 | On every page as PDF.js shows it (A4, Letter on its side, A5 turned a quarter, A4 upside down), drawn, typed and with `turn-6.jpg`: the changed pixels sit at its bottom right inside the margin of a twentieth of the shorter side, a drawing's and a picture's edges on that margin; the typed name runs left to right as shown; at "Top left", at its top left. Stored turns and boxes unchanged |
+| `rich.pdf` | 2,064 | 2,472 | 2,431 | 5,574 | 2,715 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
+| `images.pdf` | 1,642 | 2,345 | 2,298 | 5,442 | 2,345 | Signed; the JPEG 2000 picture kept |
+| `tagged.pdf` | 5,118 | 3,310 | 3,266 | 6,410 | 3,543 | Tags, destination, thread, the tagged field and its value, note and link kept, with the same kinds of tag; the signature is in no tag. A page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1`: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags |
+| `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | | | | Signed on the last page; pictures are not read. `compress-text.pdf` (21,019 to 3,209) and `compress-small-jpg.pdf` (12,852 to 9,582) come out smaller, as qpdf compresses their uncompressed streams |
+| `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,654 | 1,045,613 | 1,048,758 | 1,045,654 | Signed in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
+| `compress-password.pdf` | 36,730 | 36,730 | 36,669 | 39,809 | 36,730 | With `open-sesame`: signed, with no password |
+| `compress-json-bomb.pdf` | 140,759 | | | | | Not signed: its JSON of dictionaries is refused at 64 MB, so the pages cannot be read, and the job fails with the engine's sentence after about 14 seconds in Node |
+
+Pictures, each on the last page of a white A4 page unless said (`tests/unit/sign-pdf.test.ts`):
+
+| Picture | Outcome |
+| --- | --- |
+| `alpha.png` | On a red page: its opaque blue rectangle is blue, its see-through corners show the red page, its half see-through red circle is red; the file holds the picture and its soft mask |
+| `turn-6.jpg`, `turn-3.jpg`, `turn-8.jpg`, `turn-6.png` | Upright, as a photo viewer shows them: red top left, green top right, blue bottom left, yellow bottom right, 160 by 100 as shown |
+| `cmyk.jpg` | Kept as its own JPG data with `/DeviceCMYK` and `/Decode [1 0 1 0 1 0 1 0]`, as it has an Adobe segment, and each block drawn on the same side of the middle in every channel as a browser draws it. The same picture with its Adobe segment taken out has its `/Decode` dropped, as Image to PDF does |
+| `details.jpg`, `details.png`, `details-progressive.jpg` | No `SECRET-` marker, `Exif`, `xmpmeta` or `GPS` anywhere in the new file, in its bytes or in any stream decoded |
+| Every picture in `pictures/`, read before the job (`inspectPicture`) | Exactly `pictureOutcome` under the tool's rule (JPG and PNG, a notice over 8 MB or 16 million pixels), as the table for a picture chosen for an option gives; another key is damaged; fflate is asked for a JPG as for a PNG |
+| `broken.png`, `broken.jpg`, `arithmetic.jpg`, `data-bomb.png`, `p3.icc`, a PDF, no bytes, a string, an array | Refused with `PictureRefused` (`picture-refused`) before qpdf is asked for |
+
+Files and inputs made in the test (`tests/unit/sign-pdf.test.ts`, `tests/unit/stamp.test.ts`):
+
+| File or input | Outcome |
+| --- | --- |
+| A page whose content leaves `/ca 0.1`, a scaling `cm` (3 times, moved 40 points) and a red fill set | The pixels each way changes are exactly those of the same page with no such content, and a drawn line is black |
+| 6,000 pages that share one tiny content stream (packed by qpdf), a drawing on every page | Done in a few seconds; every page still draws the one shared stream, unchanged; under 300 bytes a page more, as each page's own layer only places the one signature form |
+| A crop box showing 300 by 400 points of a 600 by 800 page | The signature inside the part shown, its right edge 15 points (a twentieth) from the shown edge |
+| A loop in the left half of the pad | Drawn in black at the bottom right, its box 346 by 326 pad units (the empty right half left out), filling exactly the place `signaturePlace` gives, in the same proportions |
+| A one-point line | A filled round dot the width of a line, about π/4 of its square |
+| Three pages, the last chosen (`only`); the first of 120,000 chosen; pages 0 to 1,999 and 4,000 to 4,499 of 4,500 chosen; no page chosen | Only the chosen pages get a layer, the others' dictionaries and content as in the plain copy; one run for the first of 120,000, under 4 KB more than the plain copy with object streams; two runs for the 2,500 pages, none for the stretch with none chosen; no page chosen refused before anything is written ("No page was chosen to draw on.", the engine failure) |
+| A 12 MB shared stream on `text.pdf`; shared bytes as large as the budget | Inside the budget at its own size, written once though the update carries it as base64; `OutputLimit` with the reason `shared` before any run is prepared |
+| A 16-million-pixel gradient PNG, a photo of paper (made in the test, 0.2 MB as a PNG, 0.4 MB once compressed for the PDF) | On the last page of `text.pdf` and on every page of 2,100: decoded once and compressed once per job (spies on pdf-lib's PNG reader and its compressor), one image object in the new file, still compressed, no larger than its encoded bytes |
+| A noise PNG of 2,600 by 2,400 pixels, about 19 MB once compressed, on `text.pdf` | `PictureTooLarge` (`picture-too-large`) before any run's document is made: only the document that read the picture was made |
+| The way, the pages or the place as a label, an unknown value, a number, `null`, missing or under `__proto__` | Refused before qpdf is asked for, as the engine failure |
+| With "Type your name" chosen: no name, empty, spaces, 51 characters, "सीता", "Łukasz", a tab, a number, `null`, an array, an object, a direction override; also no name beside a drawing and a picture | Refused with `TextRefused` (`text-refused`) before qpdf is asked for; no error holds the name, and the drawing or picture beside it is never taken instead |
+| With "Draw it" chosen: no drawing, an empty one, an empty line, an odd count, points outside the pad, 1.5, `NaN`, text, `null`, 201 lines, 20,001 points, a string, a typed array; a name beside it | Refused with `DrawingRefused` (`drawing-refused`) before qpdf is asked for |
+
+Measured as for Watermark: in Node, each case in a process of its own under the test runner, with qpdf and pdf-lib loaded first on `text.pdf`; peak is the process's highest resident memory, including the runner's own (about 0.14 GB); the time is split at qpdf's first write progress (to the write, then the write and check); the update is the bytes appended to qpdf's `/update.json`. In Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press (about 0.5 GB). "Typed, last" is "Jane Doe" on the last page; "8 MB picture, every" is a noise PNG of 1,680 by 1,680 pixels (8,471,528 bytes, 8,468,926 once compressed for the PDF) on every page. Watermark's figures for every page, with a 50-character text, are in brackets.
+
+| File | Case | In | Out | Node: time (to the write, write and check) | Node: peak | Node: update | Chromium: time | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | Typed, last | 0.20 MB | 102,380 bytes, 869 more than the plain copy with object streams | 0.3 s (0.2, 0.1) | 0.16 GB | | 0.8 s | 0.03 GB |
+| `pages-500.pdf` | 8 MB picture, every | 0.20 MB | 8.7 MB | 2.2 s (1.7, 0.5) (0.44) | 0.35 GB (0.17) | 11.6 MB | 2.3 s (0.9) | 0.13 GB (0.04) |
+| 120,000 pages (`make-many-pages.mjs`) | Typed, last | 16.6 MB | 1,131,624 bytes, 899 more than the plain copy with object streams | 18.8 s (13.9, 4.9) | 0.63 GB | 1,166 bytes | 12.9 s | 0.36 GB |
+| 120,000 pages | 8 MB picture, every | 16.6 MB | 39.4 MB (61.1) | 51.8 s (32.8, 18.9) (64.6) | 1.04 to 1.10 GB (1.05) | 69.1 MB | 34.6 s (45.2) | 0.83 GB (0.81) |
+| `make-large.mjs`'s file | Typed, last | 110.1 MB | 110,124,853 bytes, 799 more than the plain copy with object streams | 1.5 s (1.0, 0.5) | 1.16 GB | | 1.9 s | 1.27 GB |
+| `make-large.mjs`'s file | 8 MB picture, every | 110.1 MB | 118.6 MB | 3.0 s (2.2, 0.8) (1.8) | 1.23 GB (1.16) | | 3.4 s (2.4) | 1.00 GB (1.32) |
+
+The 16-million-pixel pictures, 4,000 by 4,000 pixels, as photos of a signature on paper (a paper-coloured gradient with a pen stroke): the gradient as made (215,411 bytes as a PNG, 400,012 once compressed for the PDF, as pdf-lib stores it without the PNG's row filters), and the same with camera-like grain (17,670,485 bytes as a PNG, 21,003,719 once compressed):
+
+| File | Picture, pages | Out | Node: time | Node: peak | Node: update | Chromium: time | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `text.pdf` (6,057 bytes) | Gradient, last | 404,467 bytes | 2.2 s | 0.31 GB | 535,489 bytes | 2.8 s | 0.23 GB |
+| `text.pdf` | Gradient, every | 404,946 bytes | 2.1 s | 0.30 GB | | 2.8 s | |
+| 2,100 pages sharing one content stream (283,745 bytes) | Gradient, every | 919,423 bytes | 2.8 s | 0.35 GB | 1,429,331 bytes | 3.3 s | 0.17 GB |
+| `text.pdf` | Grain, last or every | Not made: `PictureTooLarge`, "noisy-16mp.png (16.9 MB) is too large to place on these pages. Crop it to the signature, or save a smaller copy." | 4.0 s | 0.39 GB | none written | 11.3 s | 0.20 GB |
+| 2,100 pages | Grain, every | Not made: `PictureTooLarge` | 4.5 s | 0.38 GB | none written | | |
+| 120,000 pages | Grain, every | 51.1 MB | 55.2 s | 1.20 GB | 81.0 MB | 47.6 s | 0.93 GB |
+
+The two 8 MB picture, every page rows were measured again after the stage 2 review, once a large stream was keyed by its bytes rather than its text (21 Nov 2026). The machine ran slower that day: the code before the change, measured beside it, took 2.3 s and 0.33 GB on `pages-500.pdf`, and 56.6 and 59.4 s, 1.11 and 1.07 GB on the 120,000-page file, against 2.2 s and 0.35 GB, and 51.8 and 57.7 s, 1.10 and 1.04 GB after it, so the change saves a few seconds on the long file and leaves the peak about where it was; the table gives the faster run and both peaks. Output and update sizes are unchanged to the byte.
+
+On the last page, each file grows by under 1 KB over the plain copy written with object streams, as the design asks. Every page stays inside the size budget; the update carries the picture once, as base64. Two every-page figures are more than 20% worse than Watermark's, both on small and medium files: `pages-500.pdf` (2.2 s against 0.44 s in Node, 2.3 s against 0.9 s in Chromium, and 0.35 GB against 0.17 GB) and `make-large.mjs`'s file (3.0 s against 1.8 s, 3.4 s against 2.4 s). The difference is reading the 8 MB picture once: pdf-lib decodes the PNG and compresses its pixels again (about 1.4 s in Node for this picture), which no Watermark job does; the pages themselves take what Watermark's take. On the 120,000-page file Sign PDF is faster than Watermark and its file 35% smaller, as each page's layer only places the one shared signature form. A grainy 16-million-pixel photo compresses to 21 MB, past the budget of any file under about 2.5 MB or a few thousand pages, so the job stops with the picture's own sentence after the picture is read (4 s in Node, 11 s in Chromium, where reading it before the job also takes time), and never writes the file; on a long file it fits and is written once.
+
+The multilingual file is still missing; Sign PDF leaves existing text alone, so it would change nothing there.

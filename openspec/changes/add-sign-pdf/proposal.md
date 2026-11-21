@@ -61,7 +61,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **Waiting main buttons** (waiting for the owner): touched. Sign PDF's main button waits until a signature is made. When the pull request opens, that question in `CLAUDE.md` is widened to name Sign PDF.
 - **"Defaults are set so the main button works without touching any option"** (`SPEC.md` "Tool page anatomy", 4): the signature is read as the job's input, not an option, as the watermark text was; the agent's reading, named in the pull request. The choices (how, which pages, where) start at values that work.
 - **Picture details** (waiting for the owner): the signature picture's details are not copied, as Image to PDF does.
-- **No fixed size limit** and **Very large PNGs** (waiting for the owner): kept. The signature picture is never refused for its size; over 8 MB or 16 million pixels it gets a notice, as Image to PDF's pictures do (the owner's decision of 21 Nov 2026: keep the notice).
+- **No fixed size limit** and **Very large PNGs** (waiting for the owner): kept. The signature picture is never refused for its size when picked; over 8 MB or 16 million pixels it gets a notice, as Image to PDF's pictures do (the owner's decision of 21 Nov 2026: keep the notice). At job time, a picture whose compressed data alone passes the drawing step's size budget stops the job with a sentence naming its size; this is put to the owner in the pull request.
 - **Shared pieces in tool pull requests** (waiting for the owner): the three shared components come first in their own pull requests; the small shared pieces that ride along are named: `stampPages`' `only` and its budget for shared objects, the turn table, and a text option's optional `charactersAdvice`.
 - **Tagged reading order** and **tagged fields of left-out pages** (waiting for the owner): not touched. The signature is not added to a tagged file's tags; the page says a screen reader may not announce it there (a new question below).
 - **20,000 pages:** the notice is shown, by the owner's decision of 13 Nov 2026.
@@ -84,7 +84,7 @@ The agent's own choices, named in the pull request: the three ways and "Type you
 
 ### Modified Capabilities
 
-- `tool-engines`: a new requirement, "Drawing on some pages only": the drawing step can be told which pages to draw on, and leaves every other page exactly as it was.
+- `tool-engines`: a new requirement, "Drawing on some pages only": the drawing step can be told which pages to draw on, and leaves every other page exactly as it was. A second, "What every page shares, counted once": what every run shares is counted once against the size budget, and blamed only when the chosen pages alone fit.
 
 ## Impact
 
@@ -96,7 +96,8 @@ The agent's own choices, named in the pull request: the three ways and "Type you
   - the registry entry, third under "Edit and sign", and its lines in `optionValues`, `optionTexts`, `optionDrawings` and `optionPictures` in `src/widget/option-values.ts`;
   - `src/engines/stamp.ts` (`only`, with tests in `tests/unit/stamp.test.ts`);
   - `src/engines/picture.ts` and `src/engines/tools/images-to-pdf.ts` (the turn table moved, Image to PDF's tests unchanged);
-  - `check-worker.mjs`, which checks the engine loads late and holds no pdf-lib code;
+  - `src/engines/stamp.ts` also gains `sharedBytes` (what every run shares, counted once against the size budget);
+  - `check-worker.mjs` is not changed: it was run and confirmed to check that the engine loads late and holds no pdf-lib code;
   - `tests/fixtures/README.md`, with each fixture's outcome;
   - the `@cantoo/pdf-lib` line in `LICENSES.md`, whose reason names this tool too;
   - `CLAUDE.md` "Questions waiting for the owner", when the pull request opens.

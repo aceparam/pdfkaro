@@ -84,6 +84,12 @@ export type TextOption = {
   emptySentence: string;
   /** When the engine refuses the text. Left out: "The text could not be used. Check it and try again." */
   refusedSentence?: string;
+  /**
+   * Said after every refused-characters sentence, whether letters are named or not: the tool's way forward for a
+   * text in another script. Sign PDF: "To use other letters, choose “Draw it” or “Use a picture of it” above."
+   * Left out, the sentence stands alone (Watermark).
+   */
+  charactersAdvice?: string;
   /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
   when?: OptionCondition;
 };
@@ -847,6 +853,125 @@ export const tools: Tool[] = [
       // Page tools drop passwords and restrictions (13 Nov 2026), and the decision names Watermark.
       resultNotes: [
         'The watermark is on every page. Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    // The third row of "Edit and sign": the visitor's signature, typed, drawn or from a picture, on the first, last or every page.
+    id: 'sign-pdf',
+    group: 'edit',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Protect is linked once it is published.
+    related: ['watermark-pdf', 'add-page-numbers-to-pdf', 'protect-pdf', 'merge-pdf', 'compress-pdf', 'jpg-to-pdf'],
+    pages: [
+      {
+        slug: 'sign-pdf',
+        name: 'Sign PDF',
+        summary: 'Put your signature on a PDF.',
+        title: 'Sign a PDF in your browser - PDFkaro',
+        description: 'Add your signature to a PDF: type your name, draw it or use a picture. The file stays on your device and is not uploaded.',
+        heading: 'Sign a PDF',
+        sentence: 'Put your signature on a PDF: type your name, draw it, or use a picture of it. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Sign and download',
+      writingLabel: 'Writing the signed file',
+      doneHeading: 'Your signed file is ready',
+      failedHeading: 'The signature was not added.',
+      tooFewFiles: 'Choose a PDF file to sign.',
+      outputSuffix: 'signed',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or sign the last page only.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The values, the name's rule, the drawing's limits and the picture's rule are in src/widget/option-values.ts, which the engine reads.
+      // Only the input of the way chosen is shown, holds the main button and is sent (src/widget/options.ts).
+      options: [
+        {
+          kind: 'choice',
+          key: 'source',
+          legend: 'How to add your signature',
+          initial: 'type',
+          choices: [
+            { value: 'type', label: 'Type your name' },
+            { value: 'draw', label: 'Draw it' },
+            { value: 'picture', label: 'Use a picture of it' },
+          ],
+        },
+        {
+          kind: 'text',
+          key: 'name',
+          when: { key: 'source', value: 'type' },
+          label: 'Your name',
+          hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+          charactersAdvice: 'To use other letters, choose “Draw it” or “Use a picture of it” above.',
+          emptySentence: 'Type your name first.',
+          refusedSentence: 'Your name could not be used. Check it and try again.',
+        },
+        {
+          kind: 'drawing',
+          key: 'drawing',
+          when: { key: 'source', value: 'draw' },
+          label: 'Draw your signature',
+          hint: 'Use a finger, a mouse or a pen in the box. To use a keyboard, choose “Type your name” above.',
+          clearLabel: 'Clear the drawing',
+          emptySentence: 'Draw your signature first.',
+        },
+        {
+          kind: 'picture',
+          key: 'picture',
+          when: { key: 'source', value: 'picture' },
+          label: 'Picture of your signature',
+          pickLabel: 'Choose a picture',
+          againLabel: 'Choose another picture',
+          acceptsName: 'a JPG or PNG picture',
+          hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.',
+          largeAdvice:
+            'A picture this large makes the signed file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.',
+          tooLargeAdvice: 'Crop it to the signature, or save a smaller copy.',
+          emptySentence: 'Choose a picture of your signature first.',
+        },
+        {
+          kind: 'choice',
+          key: 'page',
+          legend: 'Which pages to sign',
+          initial: 'last',
+          choices: [
+            { value: 'last', label: 'Last page' },
+            { value: 'first', label: 'First page' },
+            { value: 'every', label: 'Every page' },
+          ],
+        },
+        {
+          kind: 'choice',
+          key: 'position',
+          legend: 'Where on the page',
+          initial: 'bottom-right',
+          choices: [
+            { value: 'bottom-left', label: 'Bottom left' },
+            { value: 'bottom-centre', label: 'Bottom centre' },
+            { value: 'bottom-right', label: 'Bottom right' },
+            { value: 'top-left', label: 'Top left' },
+            { value: 'top-centre', label: 'Top centre' },
+            { value: 'top-right', label: 'Top right' },
+          ],
+        },
+      ],
+      // Page tools drop passwords and restrictions (13 Nov 2026), and the decision names Sign PDF.
+      resultNotes: [
+        'Your signature is drawn on the page. It is not a digital signature.',
+        'Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature already in the file will no longer be valid.',
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },

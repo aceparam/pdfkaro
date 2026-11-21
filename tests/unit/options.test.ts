@@ -138,8 +138,14 @@ describe('a test entry with a choice', () => {
 describe('the accepted values of an option', () => {
   const values = { 'test-options': { position: ['bottom-centre', 'bottom-right', 'top-right'] } };
 
-  it("lists Add page numbers' six places, and no other tool", () => {
-    expect(optionValues).toEqual({ 'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] } });
+  it("lists Add page numbers' six places and Sign PDF's three choices, and no other tool", () => {
+    const six = ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'];
+    expect(optionValues).toEqual({
+      'add-page-numbers': { position: six },
+      'sign-pdf': { source: ['type', 'draw', 'picture'], page: ['last', 'first', 'every'], position: six },
+    });
+    expect(acceptedValue('sign-pdf', 'source', 'draw')).toBe('draw');
+    expect(acceptedValue('sign-pdf', 'source', 'Draw it')).toBeUndefined();
     expect(acceptedValue('add-page-numbers', 'position', 'top-left')).toBe('top-left');
     expect(acceptedValue('add-page-numbers', 'position', 'Top left')).toBeUndefined();
     expect(acceptedValue('test-options', 'position', 'top-right')).toBeUndefined();
@@ -319,8 +325,10 @@ describe('what is wrong with a text', () => {
 });
 
 describe('a tool\'s own rule for a text, and what its engine takes', () => {
-  it('lists Watermark only, 50 characters of the standard fonts', () => {
-    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } } });
+  it("lists Watermark's text and Sign PDF's name, each 50 characters of the standard fonts", () => {
+    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } }, 'sign-pdf': { name: { maxLength: 50, characters: 'standard-font' } } });
+    expect(acceptedText('sign-pdf', 'name', ' Łukasz ')).toBeUndefined();
+    expect(acceptedText('sign-pdf', 'name', ' Zoë Ångström-Núñez ')).toBe('Zoë Ångström-Núñez');
     expect(textRule('watermark-pdf', 'text')).toEqual({ maxLength: 50, characters: 'standard-font' });
     expect(acceptedText('watermark-pdf', 'text', '  Draft ')).toBe('Draft');
     expect(textRule('test-text', 'text')).toBeUndefined();
@@ -412,6 +420,24 @@ describe('a text in the widget', () => {
 
   it("gives the tool's own sentence for an empty text", () => {
     expect(textSentence(watermark, rule, { kind: 'empty' })).toBe('Type the watermark text first.');
+  });
+
+  it("says the tool's charactersAdvice after every refused-characters sentence, named or not, and never after another problem", () => {
+    const name = tools.find((tool) => tool.id === 'sign-pdf')!.widget!.options!.find((option): option is TextOption => option.kind === 'text')!;
+    const advice = 'To use other letters, choose “Draw it” or “Use a picture of it” above.';
+    expect(name.charactersAdvice).toBe(advice);
+    expect(textSentence(name, rule, { kind: 'characters', refused: ['स', 'ी', 'त', 'ा'] })).toBe(`Some characters cannot be used. ${advice}`);
+    expect(textSentence(name, rule, { kind: 'characters', refused: ['Ł'] })).toBe(`Ł cannot be used. ${advice}`);
+    const problem = textProblem('Łukasz', rule)!;
+    expect(textSentence(name, rule, problem)).toBe(`Ł cannot be used. ${advice}`);
+    expect(textSentence(name, rule, textProblem('सीता', rule)!)).toBe(`Some characters cannot be used. ${advice}`);
+    expect(textSentence(name, rule, { kind: 'too-long', length: 63 })).toBe('This text has 63 characters. Use 50 or fewer.');
+    expect(textSentence(name, rule, { kind: 'empty' })).toBe('Type your name first.');
+    // Watermark gives none, so its sentences are unchanged.
+    const published = tools.find((tool) => tool.id === 'watermark-pdf')!.widget!.options![0] as TextOption;
+    expect(published.charactersAdvice).toBeUndefined();
+    expect(textSentence(published, rule, { kind: 'characters', refused: ['Ł'] })).toBe('Ł cannot be used.');
+    expect(textSentence(published, rule, textProblem('मसौदा', rule)!)).toBe('Some characters cannot be used.');
   });
 
   it('holds the main button while the first text has a problem, and never for a choice', () => {
@@ -582,8 +608,8 @@ describe('a drawing: what its engine takes', () => {
     [500, 200],
   ];
 
-  it('has no tool yet, and reads a rule by own keys only', () => {
-    expect(optionDrawings).toEqual({});
+  it("has Sign PDF's drawing only, and reads a rule by own keys only", () => {
+    expect(optionDrawings).toEqual({ 'sign-pdf': { drawing: { maxLines: 200, maxPoints: 20000 } } });
     expect(drawingRule('test-drawing', 'drawing', table)).toEqual({ maxLines: 3, maxPoints: 6 });
     expect(drawingRule('test-drawing', 'other', table)).toBeUndefined();
     expect(drawingRule('test-drawing', 'drawing')).toBeUndefined();
@@ -759,7 +785,7 @@ describe('a picture in the widget', () => {
     label: 'Picture of your signature',
     pickLabel: 'Choose a picture',
     againLabel: 'Choose another picture',
-    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
     acceptsName: 'a JPG or PNG picture',
     emptySentence: 'Choose a picture of your signature first.',
   };

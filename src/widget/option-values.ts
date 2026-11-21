@@ -8,6 +8,11 @@
 /** Each tool's accepted values for each option, by tool id and option key. */
 export const optionValues: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] },
+  'sign-pdf': {
+    source: ['type', 'draw', 'picture'],
+    page: ['last', 'first', 'every'],
+    position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'],
+  },
 };
 
 /**
@@ -47,6 +52,7 @@ export type TextTable = Readonly<Record<string, Readonly<Record<string, TextRule
 /** Each tool's texts, by tool id and key. Each tool's change adds its own line, such as `'watermark-pdf': { text: {...} }`. */
 export const optionTexts: TextTable = {
   'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } },
+  'sign-pdf': { name: { maxLength: 50, characters: 'standard-font' } },
 };
 
 /**
@@ -137,7 +143,10 @@ export type DrawingRule = { maxLines: number; maxPoints: number };
 export type DrawingTable = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
 
 /** Each tool's drawings, by tool id and key. Each tool's change adds its own line, such as `'sign-pdf': { drawing: {...} }`. */
-export const optionDrawings: DrawingTable = {};
+export const optionDrawings: DrawingTable = {
+  // Far past a signature (a slow one at 120 points a second for ten seconds is 1,200), and small enough that its form stays a few hundred kilobytes.
+  'sign-pdf': { drawing: { maxLines: 200, maxPoints: 20000 } },
+};
 
 /** A tool's own rule for one of its drawings, or `undefined`. Only own keys count, as in `acceptedValue`. */
 export function drawingRule(tool: string, key: string, table: DrawingTable = optionDrawings): DrawingRule | undefined {
@@ -204,7 +213,10 @@ export type PictureRule = { types: readonly PictureMime[]; noticeBytes: number; 
 export type PictureTable = Readonly<Record<string, Readonly<Record<string, PictureRule>>>>;
 
 /** Each tool's pictures, by tool id and key. Each tool's change adds its own line, such as `'sign-pdf': { picture: {...} }`. */
-export const optionPictures: PictureTable = {};
+export const optionPictures: PictureTable = {
+  // A notice, not a limit: 16 million pixels is the cap PDF to JPG sets on each picture it makes, and 8 MB is half the drawing step's fixed 16 MB of room.
+  'sign-pdf': { picture: { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1024 * 1024, noticePixels: 16_000_000 } },
+};
 
 /** A tool's own rule for one of its pictures, or `undefined`. Only own keys count, as in `acceptedValue`. */
 export function pictureRule(tool: string, key: string, table: PictureTable = optionPictures): PictureRule | undefined {

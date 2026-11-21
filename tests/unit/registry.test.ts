@@ -623,6 +623,7 @@ function textProblems(toolId: string, option: TextOption, texts: Texts): string[
   if (!plain(option.hint)) problems.push(`${option.key}: the hint is empty or not plain`);
   if (!plain(option.emptySentence)) problems.push(`${option.key}: the empty sentence is empty or not plain`);
   if (option.refusedSentence !== undefined && !plain(option.refusedSentence)) problems.push(`${option.key}: the refused sentence is empty or not plain`);
+  if (option.charactersAdvice !== undefined && !plain(option.charactersAdvice)) problems.push(`${option.key}: the characters advice is empty or not plain`);
   const rule = textRule(toolId, option.key, texts);
   if (rule === undefined) {
     problems.push(`${option.key}: no line in optionTexts`);
@@ -745,6 +746,9 @@ describe('texts', () => {
     expect(optionProblems(entry([{ ...words, hint: '' }]), {}, texts)).toContain('text: the hint is empty or not plain');
     expect(optionProblems(entry([{ ...words, emptySentence: 'Type it first!' }]), {}, texts)).toContain('text: the empty sentence is empty or not plain');
     expect(optionProblems(entry([{ ...words, refusedSentence: ' ' }]), {}, texts)).toContain('text: the refused sentence is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: ' ' }]), {}, texts)).toContain('text: the characters advice is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: 'Draw it instead!' }]), {}, texts)).toContain('text: the characters advice is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: 'To sign in another script, draw it.' }]), {}, texts)).toEqual([]);
   });
 
   it('fail when the key is not a plain word, is used twice, is a preset key or one the items send', () => {
@@ -936,7 +940,7 @@ describe('pictures', () => {
     label: 'Picture of your signature',
     pickLabel: 'Choose a picture',
     againLabel: 'Choose another picture',
-    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
     acceptsName: 'a JPG or PNG picture',
     emptySentence: 'Choose a picture of your signature first.',
   };

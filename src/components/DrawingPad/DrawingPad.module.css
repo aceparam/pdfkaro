@@ -10,11 +10,13 @@
 /* The box: the column's width at 5 to 2, the site's control edge and 4px corners, no fill, no
    shadow and no guide line. Lines are painted in its text colour, read at each paint, so dark mode
    needs no colour of its own. It takes touch for itself: a finger drawing in it never scrolls or
-   zooms the page, selects text or opens the long-press menu. */
+   zooms the page, selects text or opens the long-press menu. On a screen wider than tall and short,
+   such as a phone turned sideways, it is at most 60% of the screen's height, still 5 to 2, so there
+   is room above or below it to scroll. The small viewport unit leaves out the browser's own bars. */
 .box {
   display: block;
   box-sizing: border-box;
-  width: 100%;
+  width: min(100%, 150svh);
   aspect-ratio: 5 / 2;
   border: 1px solid var(--control);
   border-radius: 4px;
@@ -25,6 +27,15 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+/* A browser without the small viewport unit drops the width above; it still gets the column's width.
+   Without one the canvas would take its drawing buffer's width, which the pad sets from the box, and
+   on a sharp screen could keep growing. A plain `width: 100%` before the other is not used: the
+   minifier keeps only the last of two widths. */
+@supports not (width: 1svh) {
+  .box {
+    width: 100%;
+  }
 }
 /* The hint under the box, muted. The same rule as TextField's note, copied on purpose: each
    component owns its CSS Module. */

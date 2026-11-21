@@ -4,6 +4,7 @@
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FailureKind } from '../widget/state';
 import { partName } from '../widget/format';
+import { outOfMemory } from '../widget/memory';
 import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
 import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
 
@@ -52,11 +53,8 @@ export function failureKind(error: unknown): FailureKind {
   // new file's size budget (`PictureTooLarge`). Known by name, as above; the page names the picture from its own state.
   if (error instanceof Error && error.name === 'PictureRefused') return 'picture-refused';
   if (error instanceof Error && error.name === 'PictureTooLarge') return 'picture-too-large';
-  const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
-  if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
-    return 'memory';
-  }
+  if (outOfMemory(error)) return 'memory';
   return 'engine';
 }
 
