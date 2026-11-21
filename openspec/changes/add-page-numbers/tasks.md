@@ -35,7 +35,7 @@ Built on `add-tool-options`, merged first.
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/add-page-numbers-to-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with the option, working, result, password, damaged, failed, the 20,000-page notice; check the option group at 200% text size and that nothing overflows sideways; verify by looking at each and adding them to the change folder
+- [x] 8.1 Screenshots of `/add-page-numbers-to-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with the option, working, result, password, damaged, failed, the 20,000-page notice; check the option group at 200% text size and that nothing overflows sideways; verify by looking at each and adding them to the change folder
 
 ## 9. Checks and review
 
