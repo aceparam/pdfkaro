@@ -158,7 +158,7 @@ No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 S
 
 ## Risks / Trade-offs
 
-- **[Only Western European characters]** Visitors who write in Hindi, Telugu, Arabic or Chinese cannot make a watermark in their language. → Refused with a plain sentence and said in the hint and the page text; the font question goes to the owner (proposal). Not a blocker under `SPEC.md` in the agent's reading.
+- **[Only Western European characters]** Visitors who write in Hindi, Telugu, Arabic or Chinese cannot make a watermark in their language. → Refused with a plain sentence and said in the hint and the page text; fonts for other scripts are to be taken up later (owner, 21 Nov 2026; issue #20).
 - **[Readers that ignore opacity]** A reader or printer that draws no transparency would show the grey solid over the text it crosses. → Every reader `SPEC.md` names supports fill opacity; the hand checks in issue #7 include printing to PDF from one of them. A watermark under the content was considered and dropped: it would be hidden by any whole-page scan or white box, which is where people most often want one.
 - **[Words in copied text]** Readers that do not skip artifacts (PDF.js among them) include the watermark's words when a page's text is copied or searched. → Marked as an artifact for the readers that do; the page text says so.
 - **[Not protection]** Anyone with a PDF editor can remove the watermark's form or cover it. → The page text says a watermark marks a file and does not protect it.
