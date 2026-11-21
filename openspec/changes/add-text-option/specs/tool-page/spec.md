@@ -75,7 +75,7 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: Text in another script
 
 - **WHEN** the visitor types "नमस्ते" or "مرحبا" into such a field
-- **THEN** the field is marked invalid, and only "Use letters from English and other Western European languages, numbers and common marks." is shown, with no list of characters, tied to the main button; nothing is ever drawn as question marks
+- **THEN** the field is marked invalid, and "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, with no list of characters, tied to the main button; nothing is ever drawn as question marks
 
 #### Scenario: Accented letters in composed or separate form
 
