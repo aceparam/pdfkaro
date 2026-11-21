@@ -14,7 +14,7 @@ A tool with options SHALL show them once its file has been read, below the file 
 #### Scenario: A keyboard user goes through the options
 
 - **WHEN** a keyboard user is on the chosen radio button and presses the arrow keys, then Tab
-- **THEN** the arrow keys change the choice within the group, and Tab leaves the group, which takes one Tab stop, for the next option or the main button
+- **THEN** the arrow keys change the choice within the group, and Tab leaves the group, which takes one Tab stop, for the next option, then the rest of the working area in page order and the main button
 
 #### Scenario: A screen reader user reaches a group
 
