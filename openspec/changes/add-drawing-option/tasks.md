@@ -46,3 +46,4 @@ Built on `add-option-conditions`, merged first. Merged before `add-picture-optio
 ## Workflow follow-up
 
 - After merge, archive the change with `/opsx:archive` and note it in "Where the project stands" in `CLAUDE.md`; then build `add-picture-option` on top of it.
+- [x] 9.5 Stage 2 review fix (UX): Clear on an empty pad changes nothing and announces nothing (`clearDrawing` in `ToolWorkspace` checks `drawnLines` first). No render harness runs it; Sign PDF's end-to-end test covers it. Left for Sign PDF's review (UX note): on a phone turned sideways the pad fills most of the screen height; a height cap such as `max-height: 60vh`, keeping 5 to 2, may be worth adding there

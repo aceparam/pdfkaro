@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Progress } from '../../engines/types';
-import type { ToolWidgetWords } from '../../tools/registry';
+import type { DrawingOption, ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
@@ -239,8 +239,10 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     run.setDrawing(key, drawing);
     if (full) setAnnouncement('The drawing is full. Clear it to start again.');
   };
-  const clearDrawing = (key: string) => {
-    run.setDrawing(key, []);
+  const clearDrawing = (option: DrawingOption) => {
+    // Clear on an empty pad changes nothing, so it says nothing (UX, stage 2).
+    if (drawnLines(option, state.choices).length === 0) return;
+    run.setDrawing(option.key, []);
     setAnnouncement('The drawing is cleared.');
   };
 
@@ -568,7 +570,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     drawing={drawnLines(option, state.choices)}
                     rule={drawingRule(toolId, option.key) ?? { maxLines: 0, maxPoints: 0 }}
                     onDraw={(drawing, full) => draw(option.key, drawing, full)}
-                    onClear={() => clearDrawing(option.key)}
+                    onClear={() => clearDrawing(option)}
                   />
                 ) : option.kind === 'choice' ? (
                   <ChoiceGroup
