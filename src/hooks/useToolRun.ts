@@ -6,6 +6,7 @@ import { outputName, outputType, stem } from '../widget/format';
 import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
 import { jobOptions } from '../widget/options';
+import type { Drawing } from '../widget/option-values';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
@@ -41,6 +42,8 @@ export type ToolRun = {
   showMore(): void;
   /** Sets what one of the tool's options shows. */
   setOption(key: string, value: string): void;
+  /** Sets a drawing's lines, once per finished line or on Clear. */
+  setDrawing(key: string, drawing: Drawing): void;
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
@@ -337,6 +340,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const turnAll = useCallback((by: 1 | -1) => dispatch({ type: 'all-turned', by }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
   const setOption = useCallback((key: string, value: string) => dispatch({ type: 'option-set', key, value }), []);
+  const setDrawing = useCallback((key: string, drawing: Drawing) => dispatch({ type: 'drawing-set', key, drawing }), []);
 
   const cancel = useCallback(() => {
     client.current?.end();
@@ -378,5 +382,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, start, cancel, backToFiles, clear };
 }

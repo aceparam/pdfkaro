@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Progress } from '../../engines/types';
-import type { ToolWidgetWords } from '../../tools/registry';
+import type { DrawingOption, ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, shownOptions, typedText } from '../../widget/options';
+import { chosenValue, drawnLines, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, shownOptions, typedText } from '../../widget/options';
+import { drawingRule, type Drawing } from '../../widget/option-values';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
+import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
@@ -229,6 +231,19 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     run.setOption(key, value);
     const next = optionsHold(toolId, options, { ...state.choices, [key]: value });
     if (next && next.kind !== 'empty' && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
+  };
+  // A drawing: the widget is told once per finished line. When a line fills the drawing, the status line says
+  // so once; the pad takes no more lines until it is cleared, so it is not said again. An empty drawing's
+  // sentence is tied to the main button, as an empty text's is.
+  const draw = (key: string, drawing: Drawing, full: boolean) => {
+    run.setDrawing(key, drawing);
+    if (full) setAnnouncement('The drawing is full. Clear it to start again.');
+  };
+  const clearDrawing = (option: DrawingOption) => {
+    // Clear on an empty pad changes nothing, so it says nothing (UX, stage 2).
+    if (drawnLines(option, state.choices).length === 0) return;
+    run.setDrawing(option.key, []);
+    setAnnouncement('The drawing is cleared.');
   };
 
   const count = totals(state);
@@ -545,7 +560,19 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
           {showOptions
             ? drawnOptions.map((option, index) =>
-                option.kind === 'choice' ? (
+                option.kind === 'drawing' ? (
+                  // Never first (the registry test), so never the focus target. With no rule (which the registry
+                  // test forbids) it takes no lines, and holds the main button back.
+                  <DrawingPad
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    drawing={drawnLines(option, state.choices)}
+                    rule={drawingRule(toolId, option.key) ?? { maxLines: 0, maxPoints: 0 }}
+                    onDraw={(drawing, full) => draw(option.key, drawing, full)}
+                    onClear={() => clearDrawing(option)}
+                  />
+                ) : option.kind === 'choice' ? (
                   <ChoiceGroup
                     key={option.key}
                     option={option}

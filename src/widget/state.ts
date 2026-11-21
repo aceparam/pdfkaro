@@ -4,6 +4,7 @@
 
 import type { InspectOutcome, Progress } from '../engines/types';
 import { progressFraction } from './format';
+import type { Drawing } from './option-values';
 import { toggledMarks } from './toggles';
 import { turnedAll, turnedPage, type Turns } from './turns';
 
@@ -23,7 +24,7 @@ export type FileEntry = {
 
 export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
 
-export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large' | 'too-many-pictures' | 'output-limit' | 'text-refused';
+export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large' | 'too-many-pictures' | 'output-limit' | 'text-refused' | 'drawing-refused';
 
 /**
  * The finished result. `parts` is set when it is a zip holding that many files;
@@ -73,15 +74,16 @@ export type State = {
   turns: Turns | null;
   /**
    * What each of the tool's options shows, by key (`options` in its registry words): a choice's value,
-   * or a text's raw value exactly as typed, so its field shows what the visitor typed (it is cleaned
-   * only when it is checked and sent). `{}` is every option at its start, a text empty, so a tool with
-   * no options holds nothing. No cap on a text's length: a long paste is held, refused and never sent. Kept through Cancel, a failure and
+   * a text's raw value exactly as typed, so its field shows what the visitor typed (it is cleaned
+   * only when it is checked and sent), or a drawing's finished lines, as numbers in the pad's units
+   * (set once per finished line, never while a line is drawn). `{}` is every option at its start, a
+   * text and a drawing empty, so a tool with no options holds nothing. No cap on a text's length: a long paste is held, refused and never sent. Kept through Cancel, a failure and
    * a file replaced through "Choose another file" while listing (the new file is listed before the
    * old one is removed). Not kept when the last file is removed, which ends the working area,
    * including a damaged or password file replaced from its notice; "Start again" clears it too.
    * Never written to storage or the address.
    */
-  choices: Readonly<Record<string, string>>;
+  choices: Readonly<Record<string, string | Drawing>>;
 };
 
 /** How many pages a page list shows at first, and adds each time. */
@@ -105,6 +107,7 @@ export type Action =
   | { type: 'page-turned'; page: number; by: 1 | -1 }
   | { type: 'all-turned'; by: 1 | -1 }
   | { type: 'option-set'; key: string; value: string }
+  | { type: 'drawing-set'; key: string; drawing: Drawing }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -223,9 +226,19 @@ export function reducer(state: State, action: Action): State {
       // A computed key is always the object's own, even "__proto__".
       return { ...state, choices: { ...state.choices, [action.key]: action.value } };
     }
+    case 'drawing-set': {
+      // A light check that it is lines of numbers: the pad keeps to the tool's rule, and the engine checks it fully.
+      if (state.step !== 'listing' || typeof action.key !== 'string' || !looksLikeDrawing(action.drawing)) return state;
+      return { ...state, choices: { ...state.choices, [action.key]: action.drawing } };
+    }
     case 'reset':
       return initialState;
   }
+}
+
+/** Whether a value is an array of arrays of numbers: the shape of a drawing, not yet checked against a rule. */
+function looksLikeDrawing(value: unknown): value is Drawing {
+  return Array.isArray(value) && value.every((line) => Array.isArray(line) && line.every((point) => typeof point === 'number'));
 }
 
 /** The first file in list order that needs the visitor, or none. Problems are shown one at a time. */

@@ -116,3 +116,72 @@ export class TextRefused extends Error {
     super('The text was refused.');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Drawings. What a drawing is, written once: lines of whole-number points in the
+// pad's own units. The pad (src/components/DrawingPad) makes it, the widget holds
+// and sends it, and the tool's engine checks it here, through `acceptedDrawing`,
+// before it reads the file. Each tool's most lines and points are written once
+// too, by tool id and key; the registry holds only a drawing's words. A drawing
+// is numbers only: nothing turns it into a picture.
+
+/** The pad's own units: 1,000 across and 400 down, y counted down from the top; its line is 6 units wide. */
+export const pad = { width: 1000, height: 400, line: 6 } as const;
+
+/** A drawing: its lines, each a flat list of whole-number points [x0, y0, x1, y1, …] in the pad's units. */
+export type Drawing = readonly (readonly number[])[];
+
+/** What one drawing takes: the most lines and the most points in all. */
+export type DrawingRule = { maxLines: number; maxPoints: number };
+
+export type DrawingTable = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
+
+/** Each tool's drawings, by tool id and key. Each tool's change adds its own line, such as `'sign-pdf': { drawing: {...} }`. */
+export const optionDrawings: DrawingTable = {};
+
+/** A tool's own rule for one of its drawings, or `undefined`. Only own keys count, as in `acceptedValue`. */
+export function drawingRule(tool: string, key: string, table: DrawingTable = optionDrawings): DrawingRule | undefined {
+  if (!Object.hasOwn(table, tool)) return undefined;
+  const byKey = table[tool];
+  if (byKey === undefined || !Object.hasOwn(byKey, key)) return undefined;
+  return byKey[key];
+}
+
+/**
+ * For an engine: the drawing when `value` is one under the tool's own rule for `key`; else
+ * `undefined`, and the engine throws `DrawingRefused` before it reads the file. Sizes are checked
+ * before any point is read: a plain array of 1 to `maxLines` lines, each a plain array (so a typed
+ * array is refused) of an even length of at least 2, their lengths summed to no more than
+ * `2 × maxPoints`. Only then each point, read by index so a hole is refused: a whole number (so NaN,
+ * Infinity, text and null are refused), x from 0 to 1,000 and y from 0 to 400.
+ */
+export function acceptedDrawing(tool: string, key: string, value: unknown, table: DrawingTable = optionDrawings): Drawing | undefined {
+  const rule = drawingRule(tool, key, table);
+  if (rule === undefined || !Array.isArray(value)) return undefined;
+  const lines: unknown[] = value;
+  if (lines.length < 1 || lines.length > rule.maxLines) return undefined;
+  let total = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line: unknown = lines[index];
+    if (!Array.isArray(line) || line.length < 2 || line.length % 2 !== 0) return undefined;
+    total += line.length;
+    if (total > 2 * rule.maxPoints) return undefined;
+  }
+  for (const line of lines as unknown[][]) {
+    for (let index = 0; index < line.length; index += 1) {
+      const v: unknown = line[index];
+      if (typeof v !== 'number' || !Number.isInteger(v)) return undefined;
+      const most = index % 2 === 0 ? pad.width : pad.height;
+      if (v < 0 || v > most) return undefined;
+    }
+  }
+  return lines as Drawing;
+}
+
+/** Thrown by an engine that refuses its drawing, before it reads the file. Known to the worker by its name. Its message never holds the drawing. */
+export class DrawingRefused extends Error {
+  override name = 'DrawingRefused';
+  constructor() {
+    super('The drawing was refused.');
+  }
+}

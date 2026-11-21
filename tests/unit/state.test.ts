@@ -275,3 +275,50 @@ describe('what the options show', () => {
     expect(state.choices).toEqual({});
   });
 });
+
+describe('a drawing in the state', () => {
+  const ready = (id = 'a'): Action => ({ type: 'inspected', id, outcome: { kind: 'ready', pages: 3 } });
+  const lines = [[10, 20, 30, 40], [500, 200]];
+  const draw = (drawing: unknown, key = 'drawing'): Action => ({ type: 'drawing-set', key, drawing } as Action);
+
+  it('records a drawing only while listing', () => {
+    const drawn = play(add('a'), ready(), draw(lines));
+    expect(drawn.choices).toEqual({ drawing: lines });
+    expect(play(draw(lines)).choices).toEqual({});
+    const working = reducer(drawn, { type: 'started' });
+    expect(reducer(working, draw([[1, 1]]))).toBe(working);
+    const done = reducer(working, { type: 'finished', result: { name: 'a.pdf', size: 1 } });
+    expect(reducer(done, draw([[1, 1]]))).toBe(done);
+    // Clear: an empty drawing.
+    expect(reducer(drawn, draw([])).choices).toEqual({ drawing: [] });
+  });
+
+  it('refuses what is not lines of numbers: not an array, a line that is not, or a point that is not a number', () => {
+    const listing = play(add('a'), ready());
+    for (const value of [undefined, null, 'lines', 5, {}, [5], [[1, '2']], [[1, null]], [null]]) {
+      expect(reducer(listing, draw(value)), JSON.stringify(value) ?? String(value)).toBe(listing);
+    }
+    expect(reducer(listing, { type: 'drawing-set', key: 5, drawing: lines } as unknown as Action)).toBe(listing);
+  });
+
+  it('keeps a drawing through Cancel, a failure, going back and a file replaced while listing', () => {
+    const drawn = play(add('a'), ready(), draw(lines));
+    const kept = { drawing: lines };
+    expect(play(add('a'), ready(), draw(lines), { type: 'started' }, { type: 'back-to-files' }).choices).toEqual(kept);
+    expect(play(add('a'), ready(), draw(lines), { type: 'started' }, { type: 'failed', failure: 'drawing-refused' }, { type: 'back-to-files' }).choices).toEqual(kept);
+    expect([add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, drawn).choices).toEqual(kept);
+  });
+
+  it('forgets a drawing when the last file is removed and on Start again', () => {
+    const drawn = play(add('a'), ready(), draw(lines));
+    expect(reducer(drawn, { type: 'removed', id: 'a' })).toBe(initialState);
+    const again = [{ type: 'started' } as Action, { type: 'finished', result: { name: 'a.pdf', size: 1 } } as Action, { type: 'reset' } as Action].reduce(reducer, drawn);
+    expect(again.choices).toEqual({});
+  });
+
+  it('keeps a key such as __proto__ as its own', () => {
+    const odd = play(add('a'), ready(), draw(lines, '__proto__'));
+    expect(Object.hasOwn(odd.choices, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(odd.choices)).toBe(Object.prototype);
+  });
+});

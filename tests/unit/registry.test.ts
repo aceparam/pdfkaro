@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
-import { characterRules, optionTexts, optionValues, textRule, type TextRule } from '../../src/widget/option-values';
+import { groups, tools, type DrawingOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import { characterRules, drawingRule, optionDrawings, optionTexts, optionValues, textRule, type DrawingRule, type TextRule } from '../../src/widget/option-values';
 import { ruleAdvice } from '../../src/widget/options';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
@@ -441,6 +441,7 @@ const itemKeys = new Set([
 
 type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 type Texts = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
+type Drawings = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
 
 /** A word the widget shows: not empty, and plain (no exclamation mark). */
 const plain = (words: string | undefined) => words !== undefined && words.trim() !== '' && !words.includes('!');
@@ -449,7 +450,7 @@ const plain = (words: string | undefined) => words !== undefined && words.trim()
  * What is wrong with a tool's options, as plain sentences; none for a tool whose options are sound.
  * Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
  */
-function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values, texts: Texts = optionTexts): string[] {
+function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values, texts: Texts = optionTexts, drawings: Drawings = optionDrawings): string[] {
   const options = tool.widget?.options ?? [];
   const problems: string[] = [];
   const keys = options.map((option) => option.key);
@@ -468,6 +469,8 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       }
     } else if (option.kind === 'text') {
       problems.push(...textProblems(tool.id, option, texts));
+    } else if (option.kind === 'drawing') {
+      problems.push(...drawingProblems(tool.id, option, drawings));
     } else {
       problems.push(`${(option as { key: string }).key}: unknown kind`);
     }
@@ -478,7 +481,11 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
     }
   }
   problems.push(...conditionProblems(options));
-  // Every accepted-values line belongs to a choice the registry shows, and every text line to a text.
+  // A drawing needs a pointer, so it is never first: focus moves to the first option once the file is read,
+  // and a keyboard user meets the tool's other ways before it.
+  const first = options[0];
+  if (first !== undefined && first.kind === 'drawing') problems.push(`${first.key}: the first option is a drawing`);
+  // Every accepted-values line belongs to a choice the registry shows, every text line to a text, and every drawing line to a drawing.
   const kindOf = (key: string) => options.find((option) => option.key === key)?.kind;
   if (Object.hasOwn(values, tool.id)) {
     for (const key of Object.keys(values[tool.id]!)) {
@@ -490,6 +497,29 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       if (kindOf(key) !== 'text') problems.push(`${key}: in optionTexts but not a text of the tool`);
     }
   }
+  if (Object.hasOwn(drawings, tool.id)) {
+    for (const key of Object.keys(drawings[tool.id] ?? {})) {
+      if (kindOf(key) !== 'drawing') problems.push(`${key}: in optionDrawings but not a drawing of the tool`);
+    }
+  }
+  return problems;
+}
+
+/** What is wrong with one drawing: its words, and its line in optionDrawings. */
+function drawingProblems(toolId: string, option: DrawingOption, drawings: Drawings): string[] {
+  const problems: string[] = [];
+  if (!plain(option.label)) problems.push(`${option.key}: the label is empty or not plain`);
+  if (!plain(option.hint)) problems.push(`${option.key}: the hint is empty or not plain`);
+  if (!plain(option.clearLabel)) problems.push(`${option.key}: the clear label is empty or not plain`);
+  if (!plain(option.emptySentence)) problems.push(`${option.key}: the empty sentence is empty or not plain`);
+  if (option.refusedSentence !== undefined && !plain(option.refusedSentence)) problems.push(`${option.key}: the refused sentence is empty or not plain`);
+  const rule = drawingRule(toolId, option.key, drawings);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionDrawings`);
+    return problems;
+  }
+  if (!Number.isInteger(rule.maxLines) || rule.maxLines < 1 || rule.maxLines > 1000) problems.push(`${option.key}: the most lines is not a whole number from 1 to 1,000`);
+  if (!Number.isInteger(rule.maxPoints) || rule.maxPoints < 1 || rule.maxPoints > 100_000) problems.push(`${option.key}: the most points is not a whole number from 1 to 100,000`);
   return problems;
 }
 
@@ -748,5 +778,81 @@ describe('conditions', () => {
   it('fail when the first option has a condition', () => {
     const problems = optionProblems(entry([{ ...forA, when: { key: 'way', value: 'a' } }, way]), values, { 'test-options': { textA: rule } });
     expect(problems).toContain('textA: the first option has a condition');
+  });
+});
+
+describe('drawings', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'type', label: 'Type it' }], initial: 'draw' };
+  const drawing: DrawingOption = {
+    kind: 'drawing',
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['draw', 'type'] } };
+  const rule: DrawingRule = { maxLines: 50, maxPoints: 5000 };
+  const drawings: Drawings = { 'test-options': { drawing: rule } };
+
+  it('are sound for every tool, and optionDrawings names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings), tool.id).toEqual([]);
+    for (const id of Object.keys(optionDrawings)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry after a choice, with its own refused sentence, or shown by that choice', () => {
+    expect(optionProblems(entry([way, drawing]), values, {}, drawings)).toEqual([]);
+    expect(optionProblems(entry([way, { ...drawing, refusedSentence: 'This signature could not be used. Clear it and draw again.' }]), values, {}, drawings)).toEqual([]);
+    expect(optionProblems(entry([way, { ...drawing, when: { key: 'way', value: 'draw' } }]), values, {}, drawings)).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(optionProblems(entry([way, { ...drawing, label: ' ' }]), values, {}, drawings)).toContain('drawing: the label is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, hint: '' }]), values, {}, drawings)).toContain('drawing: the hint is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, clearLabel: 'Clear!' }]), values, {}, drawings)).toContain('drawing: the clear label is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, emptySentence: 'Draw it first!' }]), values, {}, drawings)).toContain('drawing: the empty sentence is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, refusedSentence: ' ' }]), values, {}, drawings)).toContain('drawing: the refused sentence is empty or not plain');
+  });
+
+  it('fail with no line in optionDrawings, or a line that belongs to no drawing', () => {
+    expect(optionProblems(entry([way, drawing]), values, {}, {})).toContain('drawing: no line in optionDrawings');
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { other: rule } })).toContain('drawing: no line in optionDrawings');
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: rule, size: rule } })).toContain('size: in optionDrawings but not a drawing of the tool');
+    // A choice's key is not a drawing's line, a drawing's key not a text's line.
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: rule, way: rule } })).toContain('way: in optionDrawings but not a drawing of the tool');
+    expect(optionProblems(entry([way, drawing]), values, { 'test-options': { drawing: { maxLength: 50, characters: 'standard-font' } } }, drawings)).toContain(
+      'drawing: in optionTexts but not a text of the tool',
+    );
+    // An inherited name is never taken for a tool's or a drawing's line.
+    expect(optionProblems(entry([way, { ...drawing, key: 'toString' }]), values, {}, drawings)).toContain('toString: no line in optionDrawings');
+  });
+
+  it('fail when the most lines or points is not a whole number within its bounds', () => {
+    const lines = 'drawing: the most lines is not a whole number from 1 to 1,000';
+    const points = 'drawing: the most points is not a whole number from 1 to 100,000';
+    for (const maxLines of [0, 1001, 2.5, Number.NaN]) {
+      expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { ...rule, maxLines } } })).toContain(lines);
+    }
+    for (const maxPoints of [0, 100_001, 2.5, Number.POSITIVE_INFINITY]) {
+      expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { ...rule, maxPoints } } })).toContain(points);
+    }
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { maxLines: 1, maxPoints: 1 } } })).toEqual([]);
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { maxLines: 1000, maxPoints: 100_000 } } })).toEqual([]);
+  });
+
+  it('fail when the key is used twice, is a preset key or one the items send', () => {
+    expect(optionProblems(entry([way, drawing, { ...drawing, label: 'Again' }]), values, {}, drawings)).toContain('an option key is used twice');
+    expect(optionProblems(entry([way, drawing], { drawing: 'yes' }), values, {}, drawings)).toContain(`drawing: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(optionProblems(entry([way, { ...drawing, key: 'turns' }]), values, {}, { 'test-options': { turns: rule } })).toContain("turns: the key is one the page's items send");
+  });
+
+  it('fail when the first option is a drawing, alone or before a choice', () => {
+    expect(optionProblems(entry([drawing]), {}, {}, drawings)).toContain('drawing: the first option is a drawing');
+    expect(optionProblems(entry([drawing, way]), values, {}, drawings)).toContain('drawing: the first option is a drawing');
+    expect(optionProblems(entry([way, drawing]), values, {}, drawings)).not.toContain('drawing: the first option is a drawing');
   });
 });

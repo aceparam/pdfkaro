@@ -89,11 +89,35 @@ export type TextOption = {
 };
 
 /**
- * An option a tool's working area shows once its file has been read, below the file and above
- * the main button, in registry order: a choice or a text. One with a condition (`when`) is shown,
- * held and sent only while its condition holds.
+ * A drawing on a pad, with a finger, a mouse or a pen. It is the job's input: it starts empty, and the
+ * main button waits until something is drawn. It needs a pointer, so it is never a tool's first option
+ * (the registry test), and its hint names the tool's way to do the job without drawing. Its limits are
+ * written once, in src/widget/option-values.ts (`optionDrawings`); the registry holds only its words.
  */
-export type ToolOption = ChoiceOption | TextOption;
+export type DrawingOption = {
+  kind: 'drawing';
+  /** The key the engine receives: `drawing`. No page preset of the tool uses it. */
+  key: string;
+  /** Above the box, naming it: "Draw your signature". */
+  label: string;
+  /** Under the box, describing it: how to draw, and the way to do the job without drawing. */
+  hint: string;
+  /** The button that empties the box: "Clear the drawing". */
+  clearLabel: string;
+  /** Tied to the main button while nothing is drawn: "Draw your signature first." */
+  emptySentence: string;
+  /** When the engine refuses the drawing. Left out: "The drawing could not be used. Clear it and draw again." */
+  refusedSentence?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
+ * An option a tool's working area shows once its file has been read, below the file and above
+ * the main button, in registry order: a choice, a text or a drawing. One with a condition (`when`)
+ * is shown, held and sent only while its condition holds.
+ */
+export type ToolOption = ChoiceOption | TextOption | DrawingOption;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';

@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import { tools, type TextOption, type ToolOption } from '../../src/tools/registry';
+import { tools, type DrawingOption, type TextOption, type ToolOption } from '../../src/tools/registry';
 import {
+  acceptedDrawing,
   acceptedText,
   acceptedValue,
   characterRules,
   cleanText,
+  DrawingRefused,
+  drawingRule,
+  optionDrawings,
   optionTexts,
   optionValues,
   TextRefused,
   textProblem,
   textRule,
+  type Drawing,
+  type DrawingTable,
   type TextRule,
 } from '../../src/widget/option-values';
 import {
   chosenValue,
+  drawnLines,
   enterAction,
   focusMovesToOptions,
   jobOptions,
@@ -547,6 +554,183 @@ describe('options shown for one choice', () => {
     const sentOptions = sent?.type === 'run' ? sent.options : undefined;
     expect(sentOptions).toEqual({ format: 'pdf', way: 'b', textB: 'Initials', size: 'small' });
     expect(sentOptions !== undefined && Object.hasOwn(sentOptions, 'textA')).toBe(false);
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+});
+
+describe('a drawing: what its engine takes', () => {
+  const table: DrawingTable = { 'test-drawing': { drawing: { maxLines: 3, maxPoints: 6 } } };
+  const take = (value: unknown) => acceptedDrawing('test-drawing', 'drawing', value, table);
+  const good: Drawing = [
+    [0, 0, 1000, 400],
+    [500, 200],
+  ];
+
+  it('has no tool yet, and reads a rule by own keys only', () => {
+    expect(optionDrawings).toEqual({});
+    expect(drawingRule('test-drawing', 'drawing', table)).toEqual({ maxLines: 3, maxPoints: 6 });
+    expect(drawingRule('test-drawing', 'other', table)).toBeUndefined();
+    expect(drawingRule('test-drawing', 'drawing')).toBeUndefined();
+    for (const key of ['__proto__', 'toString', 'constructor']) {
+      expect(drawingRule('test-drawing', key, table)).toBeUndefined();
+      expect(drawingRule(key, 'drawing', table)).toBeUndefined();
+      expect(acceptedDrawing(key, 'drawing', good, table)).toBeUndefined();
+      expect(acceptedDrawing('test-drawing', key, good, table)).toBeUndefined();
+    }
+  });
+
+  it('takes a drawing within the box and the limits, as it was sent', () => {
+    expect(take(good)).toBe(good);
+    expect(take([[0, 0]])).toEqual([[0, 0]]);
+    expect(take([[1000, 400, 0, 0], [1, 1, 2, 2], [3, 3, 4, 4]])).toBeTruthy();
+  });
+
+  it('refuses what is not a list of lines, or no lines', () => {
+    for (const value of [undefined, null, 5, 'lines', {}, { length: 1, 0: [0, 0] }, [], new Set([[0, 0]])]) expect(take(value), String(value)).toBeUndefined();
+  });
+
+  it('refuses a line with an odd count or no points, or a line that is not a plain list', () => {
+    expect(take([[0, 0, 5]])).toBeUndefined();
+    expect(take([[]])).toBeUndefined();
+    expect(take([[0, 0], 7])).toBeUndefined();
+    expect(take([[0, 0], null])).toBeUndefined();
+    expect(take([new Int32Array([0, 0])])).toBeUndefined();
+    expect(take([new Float64Array([0, 0, 1, 1])])).toBeUndefined();
+    expect(take([{ length: 2, 0: 0, 1: 0 }])).toBeUndefined();
+  });
+
+  it('refuses a hole, and any value that is not a whole number: 1.5, NaN, Infinity, "5", null', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    expect(take([[0, , 1, 1]])).toBeUndefined();
+    for (const value of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '5', null, undefined, true, 5n, {}, [5]]) {
+      expect(take([[0, 0, value, 10]]), String(value)).toBeUndefined();
+      expect(take([[0, 0, 10, value]]), String(value)).toBeUndefined();
+    }
+  });
+
+  it('refuses a point outside the box: -1, 1,001 across, 401 down', () => {
+    expect(take([[-1, 0]])).toBeUndefined();
+    expect(take([[0, -1]])).toBeUndefined();
+    expect(take([[1001, 0]])).toBeUndefined();
+    expect(take([[0, 401]])).toBeUndefined();
+    // 401 is fine across, 1,000 is not down.
+    expect(take([[401, 400]])).toBeTruthy();
+    expect(take([[0, 1000]])).toBeUndefined();
+  });
+
+  it('refuses one line too many, or one point too many in all', () => {
+    expect(take([[0, 0], [1, 1], [2, 2], [3, 3]])).toBeUndefined();
+    expect(take([[0, 0, 1, 1, 2, 2, 3, 3], [4, 4, 5, 5, 6, 6]])).toBeUndefined();
+    expect(take([[0, 0, 1, 1, 2, 2, 3, 3], [4, 4, 5, 5]])).toBeTruthy();
+  });
+
+  it('refuses too many lines or points before it reads any point', () => {
+    let read = 0;
+    const counted = (length: number) =>
+      new Proxy(Array.from({ length }, () => 0), {
+        get(target, key, receiver) {
+          if (typeof key === 'string' && /^\d+$/.test(key)) read += 1;
+          return Reflect.get(target, key, receiver);
+        },
+      });
+    expect(take([counted(2), counted(2), counted(2), counted(2)])).toBeUndefined();
+    expect(take([counted(8), counted(6)])).toBeUndefined();
+    expect(read).toBe(0);
+    // A huge line is refused on its length alone.
+    expect(take([counted(1_000_000)])).toBeUndefined();
+    expect(read).toBe(0);
+  });
+
+  it('is refused with DrawingRefused, whose message never holds the drawing', () => {
+    const refused = new DrawingRefused();
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused.name).toBe('DrawingRefused');
+    expect(refused.message).toBe('The drawing was refused.');
+    expect(String(refused)).toBe('DrawingRefused: The drawing was refused.');
+  });
+});
+
+describe('a drawing in the widget', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'type', label: 'Type it' }], initial: 'draw' };
+  const drawing: DrawingOption = {
+    kind: 'drawing',
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+    when: { key: 'way', value: 'draw' },
+  };
+  const table: DrawingTable = { 'test-drawing': { drawing: { maxLines: 50, maxPoints: 5000 } } };
+  const lines: Drawing = [[10, 20, 30, 40], [500, 200]];
+
+  it('shows its lines, or none; a string under its key is never taken for a drawing', () => {
+    expect(drawnLines(drawing, {})).toEqual([]);
+    expect(drawnLines(drawing, { drawing: lines })).toBe(lines);
+    expect(drawnLines(drawing, { drawing: 'lines' })).toEqual([]);
+    expect(drawnLines({ ...drawing, key: 'toString' }, {})).toEqual([]);
+    // Nor is a drawing taken for a choice's value or a text.
+    expect(chosenValue(way as Extract<ToolOption, { kind: 'choice' }>, { way: lines })).toBe('draw');
+    expect(typedText(watermark, { text: lines })).toBe('');
+  });
+
+  it('is sent as its lines while shown, and not at all while hidden', () => {
+    expect(optionsToSend([way, drawing], { drawing: lines })).toEqual({ way: 'draw', drawing: lines });
+    expect(optionsToSend([way, drawing], {})).toEqual({ way: 'draw', drawing: [] });
+    expect(optionsToSend([way, drawing], { way: 'type', drawing: lines })).toEqual({ way: 'type' });
+    expect(jobOptions({ format: 'jpg' }, {}, [way, drawing], { drawing: lines })).toEqual({ format: 'jpg', way: 'draw', drawing: lines });
+  });
+
+  it('holds the main button while shown and empty, with its sentence; not while hidden or drawn', () => {
+    const empty = { key: 'drawing', kind: 'empty', sentence: 'Draw your signature first.' };
+    expect(optionsHold('test-drawing', [way, drawing], {}, {}, table)).toEqual(empty);
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: [] }, {}, table)).toEqual(empty);
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines }, {}, table)).toBeNull();
+    expect(optionsHold('test-drawing', [way, drawing], { way: 'type' }, {}, table)).toBeNull();
+  });
+
+  it('holds with the empty sentence for a drawing with no rule, so a drawing is never sent unchecked', () => {
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines }, {}, {})?.sentence).toBe('Draw your signature first.');
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines })?.sentence).toBe('Draw your signature first.');
+  });
+
+  it('holds for the first in registry order, a text before a drawing or a drawing before a text', () => {
+    const texts = { 'test-drawing': { text: rule } };
+    expect(optionsHold('test-drawing', [way, watermark, drawing], {}, texts, table)?.key).toBe('text');
+    expect(optionsHold('test-drawing', [way, drawing, watermark], {}, texts, table)?.key).toBe('drawing');
+    expect(optionsHold('test-drawing', [way, drawing, watermark], { drawing: lines }, texts, table)?.key).toBe('text');
+  });
+
+  it("reaches the real ToolClient's run message unchanged, set through the reducer, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-drawing', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'drawing-set', key: 'drawing', drawing: lines },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    expect(state.choices).toEqual({ drawing: lines });
+    expect(optionsHold('test-drawing', [way, drawing], state.choices, {}, table)).toBeNull();
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, [way, drawing], state.choices), () => {});
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type).toBe('run');
+    expect(sent?.type === 'run' && sent.options).toEqual({ way: 'draw', drawing: [[10, 20, 30, 40], [500, 200]] });
+    // What the engine reads from it is the same drawing.
+    expect(sent?.type === 'run' && acceptedDrawing('test-drawing', 'drawing', sent.options.drawing, table)).toEqual(lines);
     client.end();
     await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
   });
