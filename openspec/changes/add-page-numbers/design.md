@@ -138,7 +138,8 @@ The original content streams are referenced, not copied or changed, so marked co
 #### 3f. Writing: `writeUpdate`
 
 1. The update's opening, each run's entries and its closing are appended to `/update.json` in the stamping qpdf as they are made (`Qpdf.append`, new: `FS.open` with append and `FS.write`).
-2. `/out.pdf` is capped with `capFile` at `2 × plain + 2 KB × pages + 16 MB` (the security reviewer, stage 1). Numbers add about 120 bytes a page on `pages-500.pdf` and 190 on the 120,000-page file, so only a broken write could reach it.
+2. `/out.pdf` is capped with `capFile` at `2 × plain + 2 KB × pages + 16 MB` (the security reviewer, stage 1). Numbers add about 120 bytes a page on `pages-500.pdf` and 190 on the 120,000-page file.
+   The update has the same budget (the security reviewer, stage 1 round 2). Each page carries a direct copy of its resources, so a small file whose pages all inherit one large `/Resources` would build gigabytes of update. Before a run's entries are turned into text, `writeUpdate` estimates them (the copied resources' size × the run's pages, plus the layer) and adds them to a running count of the bytes passed to `Qpdf.append`; once the total would pass the budget, it throws the output-limit error before building the run. Only a broken or crafted file reaches either limit.
 3. One call through `callWithArgumentFile`: `--progress`, `/in.pdf`, `--update-from-json=/update.json`, `--object-streams=generate`, `/out.pdf`. qpdf's write progress lines go to `onWriting`.
 4. A write refused at the cap throws the output-limit error; any other failure is the engine failure. Document text never goes into an error.
 5. `/in.pdf` and `/update.json` are removed, then `qpdf --check` runs on `/out.pdf`, then its bytes are read and returned.
@@ -147,7 +148,7 @@ The plain copy is decrypted, so the result has no password and no restrictions; 
 
 ### 4. The output-limit failure
 
-- `FailureKind` gains `output-limit`; `failures.ts` says "The new file would be far larger than expected, so it was not made." followed by its own advice, "The file may be damaged. Try another copy of it." The cap is a fixed formula only a broken write reaches, so it fails the same way on a computer and `memoryAdvice` would send the visitor somewhere that does not help.
+- `FailureKind` gains `output-limit`; `failures.ts` says "The new file would be far larger than expected, so it was not made." followed by its own advice, "The file may be damaged. Try another copy of it." The limits are a fixed formula only a broken or crafted file reaches, so it fails the same way on a computer and `memoryAdvice` would send the visitor somewhere that does not help.
 - The engine throws an error whose message `worker-core` recognises, as it recognises running out of memory; a test covers the worker's mapping and the sentence. Other tools never throw it.
 
 ### 5. Progress
@@ -158,7 +159,7 @@ The plain copy is decrypted, so the result has no password and no restrictions; 
 
 Copies of the file at each stage, for a file of size F:
 - **Reading:** the input from the page (F), the plain copy in JavaScript (F), the reading qpdf's copy (F) and its JSON (up to 64 MB each for pages and dictionaries, and their parsed form). The reading qpdf and the full JSON are let go before drawing.
-- **Order:** the stamping qpdf is made first, from the plain copy, before reading; once reading is done, the JavaScript plain copy is let go, so only the stamping qpdf holds it.
+- **Order:** the reading qpdf is let go first; then the stamping qpdf is made from the plain copy, and the JavaScript plain copy is let go straight after, so reading holds three copies at most, not four (the architect, stage 1 round 2).
 - **Drawing:** one run of 2,000 pdf-lib pages and its entries at a time, each appended to the stamping qpdf and let go.
 - **Writing:** inside the stamping qpdf, the plain copy, the update JSON and what qpdf parses from it, and the output (capped). `/in.pdf` and `/update.json` are removed before the check, so the check works with the output alone.
 
@@ -183,7 +184,7 @@ No new dependency. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 Sep 2026, abou
 
 - **Hostile PDFs.** qpdf parses them in the worker, which is ended after every job. Only qpdf's own JSON is parsed, from files capped at 64 MB while written and checked before reading. Object keys must match `obj:N G R`; numbers must be finite; the page tree is walked with a depth limit and a visited set. The update is built from plain objects with `JSON.stringify`, never by joining strings.
 - **Huge page counts.** Layers are drawn 2,000 pages at a time and let go; progress for every page, and Cancel ends the worker. qpdf's arguments go through the argument file. Over 20,000 pages, the shared notice. Measured: 120,000 pages in about 46 s and 1.46 GB in Node; a phone may run out of memory, which gives the memory failure and its advice. The pages and dictionaries JSON was 58 MB there, near its caps; a file well past that fails with the engine failure.
-- **A result that balloons.** Nothing is copied per page, and a test numbers thousands of pages that share one tiny content stream, checking it finishes fast and grows by no more than a few hundred bytes a page; the output cap is the backstop (section 3f).
+- **A result that balloons.** Nothing is copied per page, and a test numbers thousands of pages that share one tiny content stream, checking it finishes fast and grows by no more than a few hundred bytes a page; the output cap is the backstop (section 3f). Pages that inherit one large `/Resources` grow by its size each, so the update is held to the same budget, and a test with thousands of pages sharing a large inherited resources dictionary fails fast with the output-limit failure.
 - **Odd page boxes and turns.** Zero, negative, reversed, inherited, missing or non-finite boxes, a crop box off the paper, `/Rotate` of -90, 450, 45 or a reference, `/UserUnit` of 0 or negative, read as PDF.js reads them; the 1-point and 10^8-point limits stop the rest. Each has a unit test drawing the result through PDF.js.
 - **Content that tries to move the number.** The page's own content is wrapped in `q … Q` before the number is drawn; tested with an unbalanced `q`, a scaling `cm` and a fill colour. Content with more `Q` than `q` is not valid PDF and can still move it (see risks).
 - **Option abuse.** `acceptedValue` takes only a listed string from the tool's own line; anything else is refused before the file is read (`'__proto__'`, a number, a missing key, `'Bottom centre'` as a label).
