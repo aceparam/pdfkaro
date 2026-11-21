@@ -120,3 +120,70 @@ describe('what reading a file found', () => {
     }
   });
 });
+
+describe('pictures chosen for an option', () => {
+  const picture = new Blob(['\x89PNG']);
+  const run = (pictures: unknown) => ({ type: 'run', requestId: 2, toolId: 'test-picture', files: [file], passwords: [undefined], options: {}, pictures });
+
+  it('accepts a read of one picture by a plain key, and a run with its pictures by plain keys', () => {
+    expect(isToWorker({ type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: 'picture', file: picture })).toBe(true);
+    expect(isToWorker(run(undefined))).toBe(true);
+    expect(isToWorker(run({}))).toBe(true);
+    expect(isToWorker(run({ picture }))).toBe(true);
+    expect(isToWorker(run({ a: picture, b: picture, c: picture, d: picture }))).toBe(true);
+  });
+
+  it('ignores a read with a bad key or no Blob', () => {
+    for (const bad of [
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: '__proto__', file: picture },
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: 'the picture', file: picture },
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: '', file: picture },
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: 7, file: picture },
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: 'picture', file: 'bytes' },
+      { type: 'inspect-picture', requestId: 1, toolId: 'test-picture', key: 'picture' },
+      { type: 'inspect-picture', requestId: 1, toolId: '../evil', key: 'picture', file: picture },
+    ]) {
+      expect(isToWorker(bad), JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('ignores a run whose pictures are not a plain object of at most 4 plain keys to Blobs', () => {
+    const inherited = Object.create({ picture }) as Record<string, unknown>;
+    const withProto = JSON.parse('{"__proto__": 1}') as Record<string, unknown>;
+    for (const bad of [
+      null,
+      'picture',
+      [picture],
+      { picture: 'bytes' },
+      { picture: new Uint8Array([1]) },
+      { 'the picture': picture },
+      { Picture: picture },
+      { a: picture, b: picture, c: picture, d: picture, e: picture },
+      withProto,
+      inherited,
+      new Map([['picture', picture]]),
+    ]) {
+      expect(isToWorker(run(bad)), String(bad)).toBe(false);
+    }
+  });
+});
+
+describe('a picture read, from the worker', () => {
+  it('accepts each outcome, with whole pixels above 0 when ready', () => {
+    expect(isFromWorker({ type: 'picture-inspected', requestId: 1, outcome: { kind: 'ready', pixels: 1 } })).toBe(true);
+    expect(isFromWorker({ type: 'picture-inspected', requestId: 1, outcome: { kind: 'ready', pixels: 256_000_000 } })).toBe(true);
+    expect(isFromWorker({ type: 'picture-inspected', requestId: 1, outcome: { kind: 'damaged' } })).toBe(true);
+    expect(isFromWorker({ type: 'picture-inspected', requestId: 1, outcome: { kind: 'unsupported' } })).toBe(true);
+  });
+
+  it('refuses any other outcome', () => {
+    for (const outcome of [undefined, null, {}, { kind: 'ready' }, { kind: 'ready', pixels: 0 }, { kind: 'ready', pixels: 1.5 }, { kind: 'ready', pixels: '9' }, { kind: 'needs-password' }, { kind: 'refused' }]) {
+      expect(isFromWorker({ type: 'picture-inspected', requestId: 1, outcome }), JSON.stringify(outcome)).toBe(false);
+    }
+  });
+
+  it('accepts the two picture failures', () => {
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'picture-refused' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'picture-too-large' })).toBe(true);
+  });
+});

@@ -322,3 +322,56 @@ describe('a drawing in the state', () => {
     expect(Object.getPrototypeOf(odd.choices)).toBe(Object.prototype);
   });
 });
+
+describe('a picture chosen for an option', () => {
+  const listing = play(add('a'), { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } });
+  const chosen: Action = { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5000, status: 'reading' };
+  const read: Action = { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 300_000 } };
+  const withPicture = [chosen, read].reduce(reducer, listing);
+
+  it('starts with none, and records a pick being read, then what reading it found, never its bytes', () => {
+    expect(initialState.pictures).toEqual({});
+    expect(reducer(listing, chosen).pictures).toEqual({ picture: { name: 'signature.png', size: 5000, status: 'reading' } });
+    expect(withPicture.pictures).toEqual({ picture: { name: 'signature.png', size: 5000, status: 'ready', pixels: 300_000 } });
+    for (const kind of ['damaged', 'unsupported'] as const) {
+      expect(reducer(reducer(listing, chosen), { type: 'picture-read', key: 'picture', outcome: { kind } }).pictures).toEqual({ picture: { name: 'signature.png', size: 5000, status: kind } });
+    }
+  });
+
+  it('records a pick the page turned away as refused, replacing a ready one', () => {
+    const refused = reducer(withPicture, { type: 'picture-chosen', key: 'picture', name: 'notes.png', size: 10, status: 'refused' });
+    expect(refused.pictures).toEqual({ picture: { name: 'notes.png', size: 10, status: 'refused' } });
+  });
+
+  it('takes an answer only for a picture still being read', () => {
+    expect(reducer(withPicture, { type: 'picture-read', key: 'picture', outcome: { kind: 'damaged' } })).toBe(withPicture);
+    expect(reducer(listing, read)).toBe(listing);
+    expect(reducer(reducer(listing, chosen), { type: 'picture-read', key: 'other', outcome: { kind: 'damaged' } }).pictures.picture?.status).toBe('reading');
+    expect(reducer(listing, { type: 'picture-read', key: 'toString', outcome: { kind: 'damaged' } })).toBe(listing);
+  });
+
+  it('takes both actions only while listing', () => {
+    const working = reducer(withPicture, { type: 'started' });
+    expect(reducer(working, { ...chosen, name: 'other.png' })).toBe(working);
+    expect(reducer(initialState, chosen)).toBe(initialState);
+    const failed = reducer(reducer(listing, chosen), { type: 'failed', failure: 'engine-load' });
+    expect(reducer(failed, read)).toBe(failed);
+    expect(reducer(listing, { ...chosen, status: 'ready' } as unknown as Action)).toBe(listing);
+  });
+
+  it('keeps the picture through Cancel, a failure, another file and removing a file that is not the last', () => {
+    const cancelled = [{ type: 'started' }, { type: 'back-to-files' }].reduce((now, action) => reducer(now, action as Action), withPicture);
+    expect(cancelled.pictures).toEqual(withPicture.pictures);
+    const failed = [{ type: 'started' }, { type: 'failed', failure: 'picture-refused' }, { type: 'back-to-files' }].reduce((now, action) => reducer(now, action as Action), withPicture);
+    expect(failed.pictures).toEqual(withPicture.pictures);
+    // "Choose another file": the new file is listed before the old one goes.
+    const replaced = [add('b'), { type: 'removed', id: 'a' }].reduce((now, action) => reducer(now, action as Action), withPicture);
+    expect(replaced.files.map((file) => file.id)).toEqual(['b']);
+    expect(replaced.pictures).toEqual(withPicture.pictures);
+  });
+
+  it('forgets the picture on "Start again" and on removing the last file', () => {
+    expect(reducer(withPicture, { type: 'reset' }).pictures).toEqual({});
+    expect(reducer(withPicture, { type: 'removed', id: 'a' }).pictures).toEqual({});
+  });
+});

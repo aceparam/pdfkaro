@@ -10,6 +10,7 @@ import { Result } from '../../src/components/Result/Result';
 import { ChoiceGroup } from '../../src/components/ChoiceGroup/ChoiceGroup';
 import { errorId, TextField } from '../../src/components/TextField/TextField';
 import { DrawingPad } from '../../src/components/DrawingPad/DrawingPad';
+import { PictureField, pictureErrorId } from '../../src/components/PictureField/PictureField';
 import { readFileSync } from 'node:fs';
 
 const noop = () => {};
@@ -26,6 +27,13 @@ describe('FilePicker', () => {
 
   it('takes the plainer look once files are listed', () => {
     expect(renderToStaticMarkup(<FilePicker label="Add more files" accepts={[]} multiple onFiles={noop} look="secondary" />)).toMatch(/^<label class="button-secondary /);
+  });
+
+  it('reads no paragraph with the button unless told which, in order, leaving out empty ones', () => {
+    expect(html).not.toContain('aria-describedby');
+    const described = renderToStaticMarkup(<FilePicker label="Choose a picture" accepts={['image/png']} multiple={false} onFiles={noop} describedBy={['a', null, '', undefined, 'b']} />);
+    expect(described).toContain('aria-describedby="a b"');
+    expect(renderToStaticMarkup(<FilePicker label="Choose a picture" accepts={[]} multiple={false} onFiles={noop} describedBy={[null]} />)).not.toContain('aria-describedby');
   });
 });
 
@@ -550,5 +558,105 @@ describe('DrawingPad, a drawing of a test entry', () => {
     expect(source).toContain('devicePixelRatio');
     expect(source).toContain('ResizeObserver');
     expect(source).toContain('prefers-color-scheme');
+  });
+});
+
+describe('PictureField, a picture of a test entry', () => {
+  const option = {
+    kind: 'picture' as const,
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const types = ['image/jpeg', 'image/png'] as const;
+  const draw = (more: { picked?: boolean; chosen?: string | null; error?: string | null }) =>
+    renderToStaticMarkup(<PictureField option={option} id="r5-picture" types={types} picked={more.picked ?? false} chosen={more.chosen} error={more.error} onPick={noop} />);
+  const input = (markup: string) => markup.match(/<input [^>]*\/>/)?.[0] ?? '';
+  const before = draw({});
+  const reading = draw({ picked: true, chosen: 'signature.png, Getting ready.' });
+  const ready = draw({ picked: true, chosen: 'signature.png, 120 KB.' });
+  const problems = [
+    'notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.',
+    'broken.png is damaged and cannot be read. Choose another picture.',
+    'arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.',
+  ];
+
+  it('before a pick: the label, a secondary button for one picture of the tool types, and the hint, in that order', () => {
+    // Not the site's `field` class, whose rules would make the button bold and full width and undo the hidden input's size.
+    expect(before).toMatch(/^<div class="[^"]+"><p id="r5-picture-label" class="[^"]+">Picture of your signature<\/p><label class="button-secondary [^"]+"><input /);
+    expect(before).not.toMatch(/class="field[ "]/);
+    expect(before).toContain('Choose a picture</label>');
+    expect(before).toMatch(/<\/label><p id="r5-picture-hint" class="[^"]+">A JPG or PNG picture\./);
+    const field = input(before);
+    expect(field).toContain('type="file"');
+    expect(field).toContain('accept="image/jpeg,image/png"');
+    expect(field).not.toContain('multiple');
+    expect(field).toContain('id="r5-picture"');
+    expect(field).toContain('aria-describedby="r5-picture-label r5-picture-hint"');
+  });
+
+  it('while read and once ready: the line naming it, the button "Choose another picture", read in order', () => {
+    expect(reading).toContain('<p id="r5-picture-chosen" class="');
+    expect(reading).toContain('signature.png, Getting ready.</p>');
+    expect(ready).toContain('signature.png, 120 KB.</p>');
+    expect(ready).toContain('Choose another picture</label>');
+    expect(input(ready)).toContain('aria-describedby="r5-picture-label r5-picture-chosen r5-picture-hint"');
+    expect(ready.indexOf('r5-picture-chosen')).toBeLessThan(ready.indexOf('<input'));
+  });
+
+  it('after a wrong pick the button reads its first words again, as no picture is chosen', () => {
+    const refused = draw({ picked: false, error: problems[0] });
+    expect(refused).toContain('Choose a picture</label>');
+    expect(draw({ picked: true, error: problems[1] })).toContain('Choose another picture</label>');
+  });
+
+  it.each(problems)('with a problem, the sentence between the label and the button, read before the hint: %s', (sentence) => {
+    const html = draw({ picked: true, error: sentence });
+    expect(pictureErrorId('r5-picture')).toBe('r5-picture-error');
+    expect(html).toMatch(/<\/p><p id="r5-picture-error" class="[^"]+">/);
+    expect(html).toContain(`${sentence.replaceAll('<', '&lt;')}</p>`);
+    expect(html.indexOf('r5-picture-error')).toBeLessThan(html.indexOf('<label'));
+    expect(input(html)).toContain('aria-describedby="r5-picture-label r5-picture-error r5-picture-hint"');
+    expect(html).not.toContain('r5-picture-chosen');
+  });
+
+  it('never shows the picture, and shows a hostile name as text', () => {
+    for (const html of [before, reading, ready]) {
+      expect(html).not.toContain('<img');
+      expect(html).not.toContain('blob:');
+      expect(html).not.toContain('<canvas');
+    }
+    const hostile = draw({ picked: true, chosen: '<img src=x onerror=alert(1)>.png, 1 KB' });
+    expect(hostile).not.toContain('<img');
+    expect(hostile).toContain('&lt;img src=x onerror=alert(1)&gt;.png, 1 KB');
+  });
+
+  it('passes on the one picture chosen, and puts the focus ref on the file input', () => {
+    const picked: File[] = [];
+    const ref = { current: null };
+    const field = PictureField({ option, id: 'r5-picture', types, picked: false, onPick: (file) => picked.push(file), focusRef: ref });
+    const children = (field.props as { children: (ReactElement | null)[] }).children;
+    const picker = children.find((child): child is ReactElement => child !== null && child.type === FilePicker);
+    const props = picker?.props as { onFiles(files: File[]): void; inputRef: unknown; multiple: boolean };
+    expect(props.inputRef).toBe(ref);
+    expect(props.multiple).toBe(false);
+    const one = new File(['x'], 'signature.png');
+    props.onFiles([one, new File(['y'], 'other.png')]);
+    props.onFiles([]);
+    expect(picked).toEqual([one]);
+  });
+
+  it('takes its look from its own stylesheet: the label as field labels, the sentence bold in the text colour, a long name wrapping', () => {
+    const css = readFileSync(new URL('../../src/components/PictureField/PictureField.module.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.picture\s*{\s*margin-top: 1\.5rem;\s*margin-bottom: 0\.75rem;/);
+    expect(css).toMatch(/\.label\s*{[^}]*font-weight: 700;/);
+    expect(css).toMatch(/\.error\s*{[^}]*font-weight: 700;[^}]*color: var\(--text\);[^}]*overflow-wrap: anywhere;/);
+    expect(css).toMatch(/\.chosen\s*{[^}]*overflow-wrap: anywhere;/);
+    expect(css).toMatch(/\.note\s*{[^}]*color: var\(--muted\);/);
+    expect(css).not.toMatch(/shadow|gradient|border-radius: (?:[5-9]|\d{2})/);
   });
 });

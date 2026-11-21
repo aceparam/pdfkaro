@@ -27,12 +27,18 @@ export function want(queue: ThumbnailQueue, id: string): ThumbnailQueue {
 /**
  * The next item to draw, in list order, or none. An item is a file or a page
  * of one; it is drawn once its file has been read. Nothing is drawn while
- * another is, while any file is being read, or outside the list of files,
- * so a thumbnail never stands in the way of reading or of the job.
+ * another is, while any file or a picture chosen for an option is being read,
+ * or outside the list of files, so a thumbnail never stands in the way of
+ * reading or of the job, and a thumbnail's time limit never ends a read.
  */
-export function next(queue: ThumbnailQueue, state: Pick<State, 'step' | 'files'>, items: readonly { id: string; fileId: string }[]): string | undefined {
+export function next(
+  queue: ThumbnailQueue,
+  state: Pick<State, 'step' | 'files'> & Partial<Pick<State, 'pictures'>>,
+  items: readonly { id: string; fileId: string }[],
+): string | undefined {
   if (queue.drawing !== null || state.step !== 'listing') return undefined;
   if (state.files.some((file) => file.status === 'reading' || file.checking)) return undefined;
+  if (Object.values(state.pictures ?? {}).some((picture) => picture.status === 'reading')) return undefined;
   const ready = new Set(state.files.filter((file) => file.status === 'ready').map((file) => file.id));
   return items.find(
     (item) => ready.has(item.fileId) && queue.wanted.has(item.id) && !queue.drawn.has(item.id) && !queue.failed.has(item.id),

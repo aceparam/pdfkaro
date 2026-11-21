@@ -4,23 +4,28 @@
 // empty, and it holds the button back while it is empty, too long, or has a
 // character its rule does not take (src/widget/option-values.ts). A drawing is
 // the job's input too: it starts empty, and it holds the button back while
-// nothing is drawn.
+// nothing is drawn. A picture is the job's input as well: it holds the button
+// back until one is chosen and read, and while the one chosen cannot be used.
 
-import type { ChoiceOption, DrawingOption, TextOption, ToolOption } from '../tools/registry';
-import { number } from './format';
+import type { ChoiceOption, DrawingOption, PictureOption, TextOption, ToolOption } from '../tools/registry';
+import { formatSize, number } from './format';
 import {
   cleanText,
   drawingRule,
+  optionPictures,
+  pictureRule,
   textProblem,
   textRule,
   type CharacterRule,
   type Drawing,
   type DrawingTable,
+  type PictureRule,
+  type PictureTable,
   type TextProblem,
   type TextRule,
   type TextTable,
 } from './option-values';
-import type { State } from './state';
+import type { PictureEntry, State } from './state';
 
 /** What each option holds, by option key: a choice's value, a text as typed, or a drawing's lines. `{}` is every option at its start. */
 export type Choices = Readonly<Record<string, string | Drawing>>;
@@ -80,7 +85,8 @@ export function optionsToSend(options: readonly ToolOption[] | undefined, choice
   for (const option of shownOptions(options, choices)) {
     if (option.kind === 'choice') sent[option.key] = chosenValue(option, choices);
     else if (option.kind === 'text') sent[option.key] = cleanText(typedText(option, choices));
-    else sent[option.key] = drawnLines(option, choices);
+    else if (option.kind === 'drawing') sent[option.key] = drawnLines(option, choices);
+    // A picture's bytes go beside the files (`picturesToSend`), never in the options.
   }
   return sent;
 }
@@ -139,14 +145,30 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
   }
 }
 
-/** A text or a drawing holding the main button back: its key, what is wrong, and the sentence. A drawing is only ever `empty`. */
-export type OptionHold = { key: string; kind: TextProblem['kind']; sentence: string };
+/**
+ * What holds the main button back. A text's problem kinds; `reading` for a picture still being read; a picture's
+ * problem by its status (`refused`, `damaged`, `unsupported`). `empty` and `reading` are said under the main button.
+ */
+export type HoldKind = TextProblem['kind'] | 'reading' | 'refused' | 'damaged' | 'unsupported';
+
+/** A text, a drawing or a picture holding the main button back: its key, what is wrong, and the sentence. A drawing is only ever `empty`. */
+export type OptionHold = { key: string; kind: HoldKind; sentence: string };
+
+/** Whether a hold's sentence goes under the main button (nothing chosen yet, or a picture still being read), not by its field. */
+export function holdsUnderButton(hold: Pick<OptionHold, 'kind'>): boolean {
+  return hold.kind === 'empty' || hold.kind === 'reading';
+}
+
+/** Tied to the main button while a picture is being read. */
+export const pictureReadingSentence = 'The picture is still being read.';
 
 /**
- * The first shown text or drawing, in registry order, that holds the main button back, or null. A
- * hidden one and a choice never hold it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
- * and tied to the main button from there. A drawing holds while it has no lines. A text with no line in optionTexts, or a drawing with
- * none in optionDrawings (which the registry test forbids), always holds, with its empty sentence, so neither is sent unchecked.
+ * The first shown text, drawing or picture, in registry order, that holds the main button back, or null. A
+ * hidden one and a choice never hold it. `empty` and `reading` are tied to the main button under it; a text's `characters` and
+ * `too-long`, and a picture's problem, are shown by the field and tied to the main button from there. A drawing holds while it has
+ * no lines. A picture holds until it is chosen and read, and while it cannot be used; a ready one never holds, however large. A text,
+ * drawing or picture with no line in its table (which the registry test forbids) always holds, with its empty sentence, so none is
+ * sent unchecked. `pictures` and `pictureTable` come last and may be left out, so callers that pass only texts keep working.
  */
 export function optionsHold(
   tool: string,
@@ -154,6 +176,8 @@ export function optionsHold(
   choices: Choices,
   texts?: TextTable,
   drawings?: DrawingTable,
+  pictures: Readonly<Record<string, PictureEntry>> = {},
+  pictureTable: PictureTable = optionPictures,
 ): OptionHold | null {
   for (const option of shownOptions(options, choices)) {
     if (option.kind === 'drawing') {
@@ -162,6 +186,13 @@ export function optionsHold(
       }
       continue;
     }
+    if (option.kind === 'picture') {
+      const entry = chosenPicture(option, pictures);
+      if (pictureRule(tool, option.key, pictureTable) === undefined || entry === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };
+      if (entry.status === 'ready') continue;
+      if (entry.status === 'reading') return { key: option.key, kind: 'reading', sentence: pictureReadingSentence };
+      return { key: option.key, kind: entry.status, sentence: pictureSentence(option, entry) ?? option.emptySentence };
+    }
     if (option.kind !== 'text') continue;
     const rule = textRule(tool, option.key, texts);
     if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };
@@ -169,6 +200,114 @@ export function optionsHold(
     if (problem) return { key: option.key, kind: problem.kind, sentence: textSentence(option, rule, problem) };
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Pictures. Their bytes never reach the state: useToolRun holds them beside the files.
+
+/** A picture option's chosen picture, or none. Only own keys count. */
+export function chosenPicture(option: Pick<PictureOption, 'key'>, pictures: Readonly<Record<string, PictureEntry>>): PictureEntry | undefined {
+  return Object.hasOwn(pictures, option.key) ? pictures[option.key] : undefined;
+}
+
+/**
+ * The one sentence for a chosen picture's problem, naming the file, or null when it has none. Shown between the
+ * field's label and its button, as React text, so a hostile name is shown, never run.
+ */
+export function pictureSentence(option: Pick<PictureOption, 'acceptsName'>, entry: PictureEntry): string | null {
+  switch (entry.status) {
+    case 'refused':
+      return `${entry.name} is not ${option.acceptsName}, so it was not used. No picture is chosen.`;
+    case 'damaged':
+      return `${entry.name} is damaged and cannot be read. Choose another picture.`;
+    case 'unsupported':
+      return `${entry.name} is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The line naming a chosen picture: "signature.png, 120 KB." when ready, "signature.png, Getting ready." while read;
+ * none for a problem, which its sentence names. It ends with a full stop, so a screen reader pauses before the hint.
+ */
+export function pictureLine(entry: PictureEntry | undefined): string | null {
+  if (entry === undefined) return null;
+  if (entry.status === 'ready') return `${entry.name}, ${formatSize(entry.size)}.`;
+  if (entry.status === 'reading') return `${entry.name}, Getting ready.`;
+  return null;
+}
+
+/**
+ * Whether the field's button reads its words for a second pick ("Choose another picture"): a picture is chosen,
+ * being read, or was read and cannot be used. Not after a wrong pick, which leaves no picture chosen.
+ */
+export function picturePicked(entry: PictureEntry | undefined): boolean {
+  return entry !== undefined && entry.status !== 'refused';
+}
+
+/** What the notice for a very large picture says under its heading, for a tool with no words of its own. */
+export const largePictureAdvice =
+  'A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.';
+
+/** Pixels in words: "24 million", "16.5 million", or the count under a million. */
+function pixelWords(pixels: number): string {
+  if (pixels < 1_000_000) return `${number(pixels)}`;
+  return `${number(Math.floor(pixels / 100_000) / 10)} million`;
+}
+
+/**
+ * The notice for a ready picture over the tool's notice size in bytes or in pixels, or null: a heading naming its
+ * size and pixels, and what to try. It holds nothing back: the job still runs.
+ */
+export function pictureNotice(
+  option: Pick<PictureOption, 'largeAdvice'>,
+  entry: PictureEntry | undefined,
+  rule: Pick<PictureRule, 'noticeBytes' | 'noticePixels'> | undefined,
+): { heading: string; advice: string } | null {
+  if (entry === undefined || rule === undefined || entry.status !== 'ready' || entry.pixels === undefined) return null;
+  if (entry.size <= rule.noticeBytes && entry.pixels <= rule.noticePixels) return null;
+  return { heading: `${entry.name} is ${formatSize(entry.size)}, with ${pixelWords(entry.pixels)} pixels.`, advice: option.largeAdvice ?? largePictureAdvice };
+}
+
+/**
+ * What a job sends beside the files: for each shown picture option whose entry is ready, its held file, by key.
+ * A hidden, unchosen or unready picture is not sent.
+ */
+export function picturesToSend<T>(
+  options: readonly ToolOption[] | undefined,
+  choices: Choices,
+  pictures: Readonly<Record<string, PictureEntry>>,
+  held: ReadonlyMap<string, T>,
+): Record<string, T> {
+  const sent: Record<string, T> = {};
+  for (const option of shownOptions(options, choices)) {
+    if (option.kind !== 'picture' || chosenPicture(option, pictures)?.status !== 'ready') continue;
+    const file = held.get(option.key);
+    if (file !== undefined) sent[option.key] = file;
+  }
+  return sent;
+}
+
+/** How many times a picture's read, cut short by the worker being ended, is started again before it is called damaged. */
+export const pictureRereads = 2;
+
+/**
+ * What to do when a picture's read was cut short (the worker was ended, such as by a thumbnail's time limit):
+ * read it again while the files are listed, the same file is still held and its entry still being read, up to
+ * `pictureRereads` times, then call it damaged, so a picture never stays "Getting ready"; else nothing. Never during
+ * the job or on its result, where the job's own end cancels the read: a read again there would start a worker
+ * holding the picture. "Go back to your file" reads it again after a failure (`picturesToReread`). A file replaced
+ * by a newer pick is not held, so it is never read again, and the newer pick counts its own tries from 0.
+ */
+export function rereadPicture(entry: PictureEntry | undefined, stillHeld: boolean, tries: number, listing: boolean): 'read-again' | 'damaged' | 'nothing' {
+  if (!listing || !stillHeld || entry?.status !== 'reading') return 'nothing';
+  return tries < pictureRereads ? 'read-again' : 'damaged';
+}
+
+/** The keys of the pictures still being read, which "Go back to your file" reads again. */
+export function picturesToReread(state: Pick<State, 'pictures'>): string[] {
+  return Object.keys(state.pictures).filter((key) => state.pictures[key]?.status === 'reading');
 }
 
 /**

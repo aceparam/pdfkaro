@@ -5,8 +5,8 @@ import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, outputType, stem } from '../widget/format';
 import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
-import { jobOptions } from '../widget/options';
-import type { Drawing } from '../widget/option-values';
+import { jobOptions, picturesToReread, picturesToSend, rereadPicture } from '../widget/options';
+import { pictureRule, type Drawing } from '../widget/option-values';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
@@ -44,6 +44,11 @@ export type ToolRun = {
   setOption(key: string, value: string): void;
   /** Sets a drawing's lines, once per finished line or on Clear. */
   setDrawing(key: string, drawing: Drawing): void;
+  /**
+   * Chooses a picture for the picture option `key`, replacing any chosen before. One of the wrong type, by its
+   * first bytes, leaves no picture chosen; any other is held in memory beside the files and read in the worker.
+   */
+  pickPicture(key: string, file: File): Promise<void>;
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
@@ -65,14 +70,22 @@ type Options = {
 };
 
 /**
- * Joins the reducer to the tool worker. The files and any passwords live here,
- * in memory only. They never go into the reducer, storage or the address.
+ * Joins the reducer to the tool worker. The files, any passwords and any pictures
+ * chosen for options live here, in memory only. They never go into the reducer,
+ * storage or the address, and no address is made for a picture.
  */
 export function useToolRun({ toolId, accepts, words, preset, createWorker, onProgress }: Options): ToolRun {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [result, setResult] = useState<ToolRunResult | null>(null);
   const files = useRef(new Map<string, File>());
   const passwords = useRef(new Map<string, string>());
+  // Each picture option's chosen picture, by key: the one place its bytes are held on the page.
+  const pictures = useRef(new Map<string, File>());
+  // The file each key's read in the worker is for, while one is in flight; and a count of picks per key, so a pick
+  // whose first bytes come back after a later pick's is dropped.
+  // Each attempt has its own token, so an attempt that ends never clears the mark of a newer read of the same file.
+  const picturesInFlight = useRef(new Map<string, { file: File }>());
+  const pictureTickets = useRef(new Map<string, number>());
   const nextId = useRef(1);
   const client = useRef<ToolClient | null>(null);
   const stateRef = useRef(state);
@@ -216,6 +229,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       }
       files.current.delete(id);
       passwords.current.delete(id);
+      // Removing the last file ends the working area and resets the state, so the pictures go with it.
+      if (files.current.size === 0) pictures.current.clear();
       forgetThumbnails(id);
       dispatch({ type: 'removed', id });
     },
@@ -259,6 +274,79 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);
 
+  // Reads a held picture in the worker, and records the answer only if the same file is still held for its key.
+  // A read cut short by the worker being ended (a thumbnail's time limit, or `stopThumbnail`) is read again while
+  // the picture is still chosen and still being read, at most twice, then called damaged (`rereadPicture`).
+  const readChosenPicture = useCallback(
+    async (key: string, file: File): Promise<void> => {
+      for (let tries = 0; ; tries += 1) {
+        stopThumbnail();
+        const attempt = { file };
+        picturesInFlight.current.set(key, attempt);
+        try {
+          const outcome = await getClient().inspectPicture(file, key);
+          if (pictures.current.get(key) === file) dispatch({ type: 'picture-read', key, outcome });
+          return;
+        } catch (error) {
+          const held = pictures.current.get(key) === file;
+          if (error instanceof ToolError && error.kind === 'cancelled') {
+            const entry = Object.hasOwn(stateRef.current.pictures, key) ? stateRef.current.pictures[key] : undefined;
+            // Only while listing: the job's own end cancels a read too, and a read again then would start a worker.
+            const step = rereadPicture(entry, held, tries, stateRef.current.step === 'listing');
+            if (step === 'read-again') continue;
+            if (step === 'damaged') dispatch({ type: 'picture-read', key, outcome: { kind: 'damaged' } });
+            return;
+          }
+          // The engine could not be loaded, or the worker ran out of memory: the tool's failure, as for a file.
+          if (held) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
+          return;
+        } finally {
+          if (picturesInFlight.current.get(key) === attempt) picturesInFlight.current.delete(key);
+        }
+      }
+    },
+    [getClient, stopThumbnail],
+  );
+
+  // A read still in flight for a key that was just picked again is for a file no longer held. Reading a hostile PNG
+  // can take minutes, and the next read would wait behind it, so the worker is ended and the new read starts on a
+  // fresh one. The old read's answer is "cancelled" for a file not held, so it is not read again; the new pick
+  // counts its own tries from 0. No file is being read then: the field is shown only once every file has been read.
+  const endReplacedRead = useCallback(
+    (key: string) => {
+      const inFlight = picturesInFlight.current.get(key);
+      if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
+      picturesInFlight.current.delete(key);
+      stopThumbnail();
+      client.current?.end();
+    },
+    [stopThumbnail],
+  );
+
+  const pickPicture = useCallback(
+    async (key: string, file: File) => {
+      if (stateRef.current.step !== 'listing') return;
+      const ticket = (pictureTickets.current.get(key) ?? 0) + 1;
+      pictureTickets.current.set(key, ticket);
+      const head = new Uint8Array(await file.slice(0, sniffLength).arrayBuffer());
+      // "Start again", leaving or a later pick while the first bytes were read: this pick is dropped.
+      if (stateRef.current.step !== 'listing' || pictureTickets.current.get(key) !== ticket) return;
+      const types = pictureRule(toolId, key)?.types ?? [];
+      if (!looksAccepted(head, [...types])) {
+        // A wrong pick leaves no picture chosen, even if one was ready before: the field holds the last pick.
+        pictures.current.delete(key);
+        dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'refused' });
+        endReplacedRead(key);
+        return;
+      }
+      pictures.current.set(key, file);
+      dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'reading' });
+      endReplacedRead(key);
+      await readChosenPicture(key, file);
+    },
+    [endReplacedRead, readChosenPicture, toolId],
+  );
+
   // How many pages the one result has: from the toggle kind when it knows (Extract: the pages chosen);
   // else 'sum' adds the inputs up and 'input' is the one input as it was, both the listed total.
   const resultPageCount = useCallback((): number | undefined => {
@@ -301,6 +389,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
           onProgress?.(progress);
         },
         zip,
+        // Each shown, ready picture beside the files; a hidden or unready one is not sent.
+        picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
       );
       const output = outputs[0];
       const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
@@ -342,20 +432,38 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const setOption = useCallback((key: string, value: string) => dispatch({ type: 'option-set', key, value }), []);
   const setDrawing = useCallback((key: string, drawing: Drawing) => dispatch({ type: 'drawing-set', key, drawing }), []);
 
+  // Reads again, in turn, each picture still held among `keys`: those a failure or Cancel left being read.
+  const rereadPictures = useCallback(
+    async (keys: readonly string[]) => {
+      for (const key of keys) {
+        const file = pictures.current.get(key);
+        if (file) await readChosenPicture(key, file);
+      }
+    },
+    [readChosenPicture],
+  );
+
+  // Cancel ends the worker, which cancels a hidden picture's read still running; that read's own answer comes
+  // before the page is listing again, so it is not read again there (`rereadPicture`). Cancel reads it again
+  // here, as "Go back to your file" does, so it never stays "Getting ready" and thumbnails are not held back.
   const cancel = useCallback(() => {
+    const unreadPictures = picturesToReread(stateRef.current);
     client.current?.end();
     dispatch({ type: 'back-to-files' });
-  }, []);
+    void rereadPictures(unreadPictures);
+  }, [rereadPictures]);
 
-  // Going back after a failure reads again any file the failure left unread,
-  // such as when the engine could not be fetched while files were being read.
+  // Going back after a failure reads again any file or picture the failure left unread,
+  // such as when the engine could not be fetched while they were being read.
   const backToFiles = useCallback(() => {
     const unread = stateRef.current.files.filter((file) => file.status === 'reading' || file.checking).map((file) => file.id);
+    const unreadPictures = picturesToReread(stateRef.current);
     dispatch({ type: 'back-to-files' });
     void (async () => {
       for (const id of unread) await inspect(id);
+      await rereadPictures(unreadPictures);
     })();
-  }, [inspect]);
+  }, [inspect, rereadPictures]);
 
   const clear = useCallback(() => {
     if (drawing.current) drawing.current.stopped = true;
@@ -365,6 +473,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     client.current = null;
     files.current.clear();
     passwords.current.clear();
+    pictures.current.clear();
+    picturesInFlight.current.clear();
     for (const url of thumbnailUrls.current.values()) URL.revokeObjectURL(url);
     thumbnailUrls.current.clear();
     queue.current = emptyQueue;
@@ -382,5 +492,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, pickPicture, start, cancel, backToFiles, clear };
 }

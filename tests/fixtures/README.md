@@ -348,6 +348,34 @@ Each picture was converted in Node with the same pdf-lib the browser gets (`test
 
 The multilingual file does not apply: pictures carry no text the tool reads.
 
+### A picture chosen for an option (`pictureOutcome` in `src/engines/picture.ts`)
+
+What a tool's picture option (Sign PDF's uploaded signature, first) is told about each picture before the job, read in the worker without decoding a pixel (`tests/unit/picture.test.ts`). Under a rule that takes JPG and PNG; under a rule of JPG only, every PNG is damaged and every JPG reads the same. Size never refuses: a ready picture over the tool's notice sizes gets a notice on the page and is still used.
+
+| File | Outcome |
+| --- | --- |
+| `tall.jpg`, `wide.jpg` | Ready, 3,000,000 pixels |
+| `grey-scan.jpg` | Ready, 8,699,840 pixels |
+| `details.jpg` | Ready, 120,000 pixels |
+| `progressive.jpg`, `details-progressive.jpg` | Ready, 76,800 pixels |
+| `cmyk.jpg`, `p3.jpg`, `bad-profile.jpg` | Ready, 20,000 pixels |
+| `turn-1.jpg` to `turn-8.jpg`, `turn-6.png` | Ready, 16,000 pixels (as stored, before the camera turn) |
+| `screenshot.png` | Ready, 921,600 pixels |
+| `small.png` | Ready, 60,000 pixels |
+| `alpha.png` | Ready, 38,400 pixels |
+| `details.png` | Ready, 30,000 pixels |
+| `profile.png`, `bad-profile.png` | Ready, 20,000 pixels |
+| `palette.png` | Ready, 9,600 pixels |
+| `grey16.png` | Ready, 8,192 pixels |
+| `grey-profile.png` | Ready, 4,800 pixels |
+| `animated.png`, `bomb-profile.png` | Ready, 2,400 pixels |
+| `text-bomb.png` | Ready, 1 pixel; its text chunk is never inflated |
+| `huge.jpg`, `huge.png` | Ready, 256,000,000 pixels, so over any notice size: a notice, not a refusal. `huge.png`'s image data is counted (it fits its header) |
+| `data-bomb.png` | Damaged: its image data passes what its header allows, and counting stops there |
+| `arithmetic.jpg` | Saved in a way the tool cannot read (unsupported) |
+| `broken.jpg`, `broken.png`, `zero-size.png` | Damaged |
+| `scan-g4.tif`, `p3.icc` | Damaged if read; on the page each is turned away by its first bytes before that ("… is not a JPG or PNG picture, so it was not used. No picture is chosen.") |
+
 ### Picture thumbnails (`src/engines/picture-thumbnail.ts`)
 
 Drawn in Node with `@napi-rs/canvas` in place of the worker's `createImageBitmap` (`tests/unit/picture-thumbnail.test.ts`); the camera turn in a real browser is checked by the end-to-end test.

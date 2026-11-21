@@ -6,8 +6,24 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, drawnLines, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, shownOptions, typedText } from '../../widget/options';
-import { drawingRule, type Drawing } from '../../widget/option-values';
+import {
+  chosenPicture,
+  chosenValue,
+  drawnLines,
+  enterAction,
+  focusMovesToOptions,
+  holdsUnderButton,
+  optionsHold,
+  optionsShown,
+  pictureLine,
+  pictureNotice,
+  picturePicked,
+  pictureSentence,
+  readyKey,
+  shownOptions,
+  typedText,
+} from '../../widget/options';
+import { drawingRule, pictureRule, type Drawing } from '../../widget/option-values';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
@@ -19,6 +35,7 @@ import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
 import { PasswordField } from '../PasswordField/PasswordField';
+import { PictureField, pictureErrorId } from '../PictureField/PictureField';
 import { ProgressBar } from '../ProgressBar/ProgressBar';
 import { Result } from '../Result/Result';
 import { errorId, TextField } from '../TextField/TextField';
@@ -219,19 +236,45 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
   // A shown text that holds the main button back: empty, too long, or with characters its rule does not take.
   // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
-  const hold = useMemo(() => optionsHold(toolId, options, state.choices), [toolId, options, state.choices]);
+  // A shown picture holds it too, until one is chosen and read, and while the one chosen cannot be used.
+  const hold = useMemo(() => optionsHold(toolId, options, state.choices, undefined, undefined, state.pictures), [toolId, options, state.choices, state.pictures]);
   const fieldId = (key: string) => `${optionName}-${key}`;
-  // Too long or refused characters: the sentence is shown by the field, and tied to the main button from there.
-  const fieldHold = showOptions && hold && hold.kind !== 'empty' ? hold : null;
+  // Too long or refused characters, or a picture's problem: the sentence is shown by the field, and tied to the main button from there.
+  const fieldHold = showOptions && hold && !holdsUnderButton(hold) ? hold : null;
   const fieldHoldKey = fieldHold ? `${fieldHold.key}:${fieldHold.kind}` : '';
   // Typing in a text's field. The sentence by the field is said once by the status line when it first appears
   // or changes kind; not again for each character typed past the limit, and nothing when it goes, or for an
   // empty text, which is tied to the main button from the start. Focus never moves for it.
   const typeText = (key: string, value: string) => {
     run.setOption(key, value);
-    const next = optionsHold(toolId, options, { ...state.choices, [key]: value });
-    if (next && next.kind !== 'empty' && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
+    const next = optionsHold(toolId, options, { ...state.choices, [key]: value }, undefined, undefined, state.pictures);
+    if (next && !holdsUnderButton(next) && next.key === key && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
   };
+
+  // A picture: the line naming it is said once when it is ready ("signature.png, 120 KB."), and each problem's
+  // sentence once when it appears. Each pick gives a new entry, so the same file picked again is said again.
+  // Focus never moves for it: it stays on the button.
+  const pictureSaid = useRef<Record<string, unknown>>({});
+  useEffect(() => {
+    if (!showOptions) return;
+    for (const option of drawnOptions) {
+      if (option.kind !== 'picture') continue;
+      const entry = chosenPicture(option, state.pictures);
+      if (entry === undefined || entry.status === 'reading' || pictureSaid.current[option.key] === entry) continue;
+      pictureSaid.current[option.key] = entry;
+      const said = entry.status === 'ready' ? pictureLine(entry) : pictureSentence(option, entry);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the worker's answer reaches the page through the state, so it is said here
+      if (said) setAnnouncement(said);
+    }
+  }, [showOptions, drawnOptions, state.pictures, setAnnouncement]);
+  const pictureNoticeId = (key: string) => `${fieldId(key)}-notice`;
+  const pictureNotices = showOptions
+    ? drawnOptions.flatMap((option) => {
+        if (option.kind !== 'picture') return [];
+        const notice = pictureNotice(option, chosenPicture(option, state.pictures), pictureRule(toolId, option.key));
+        return notice ? [{ key: option.key, notice }] : [];
+      })
+    : [];
   // A drawing: the widget is told once per finished line. When a line fills the drawing, the status line says
   // so once; the pad takes no more lines until it is cleared, so it is not said again. An empty drawing's
   // sentence is tied to the main button, as an empty text's is.
@@ -395,8 +438,12 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
   const ready = canRun(state, words.minFiles, blocked === null) && hold === null;
   // An empty text's sentence goes under the main button once its field is shown, after too few files and the toggles' sentence.
-  const tiedSentence = tooFew ? words.tooFewFiles : (blocked ?? (showOptions && hold?.kind === 'empty' ? hold.sentence : null));
-  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHold ? errorId(fieldId(fieldHold.key)) : null, ...huge.map(hugeId)].filter(Boolean).join(' ');
+  // A picture still being read says so there too.
+  const tiedSentence = tooFew ? words.tooFewFiles : (blocked ?? (showOptions && hold && holdsUnderButton(hold) ? hold.sentence : null));
+  const fieldHoldId = fieldHold ? (options.find((option) => option.key === fieldHold.key)?.kind === 'picture' ? pictureErrorId : errorId)(fieldId(fieldHold.key)) : null;
+  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHoldId, ...huge.map(hugeId), ...pictureNotices.map(({ key }) => pictureNoticeId(key))]
+    .filter(Boolean)
+    .join(' ');
   // The main button's press, and Enter in a text's field: starts the job only when the button works.
   const pressMain = () => {
     if (ready) void run.start();
@@ -450,7 +497,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>
-          <p>{failureSentence(state.failure, words, state.choices)}</p>
+          <p>{failureSentence(state.failure, words, state.choices, state.pictures)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
               {words.multiple ? 'Go back to your files' : 'Go back to your file'}
@@ -581,6 +628,23 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     onChoose={(value) => run.setOption(option.key, value)}
                     chosenRef={index === 0 ? optionRef : undefined}
                   />
+                ) : option.kind === 'picture' ? (
+                  // Its types come from its line in optionPictures; with none (which the registry test forbids) the
+                  // chooser offers nothing named and every pick is turned away, so the main button waits.
+                  <PictureField
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    types={pictureRule(toolId, option.key)?.types ?? []}
+                    picked={picturePicked(chosenPicture(option, state.pictures))}
+                    chosen={pictureLine(chosenPicture(option, state.pictures))}
+                    error={(() => {
+                      const entry = chosenPicture(option, state.pictures);
+                      return entry ? pictureSentence(option, entry) : null;
+                    })()}
+                    onPick={(file) => void run.pickPicture(option.key, file)}
+                    focusRef={index === 0 ? optionRef : undefined}
+                  />
                 ) : (
                   <TextField
                     key={option.key}
@@ -595,6 +659,14 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 ),
               )
             : null}
+
+          {pictureNotices.map(({ key, notice }) => (
+            <div key={key} id={pictureNoticeId(key)}>
+              <Notice heading={notice.heading}>
+                <p>{notice.advice}</p>
+              </Notice>
+            </div>
+          ))}
 
           {askingPassword && problem ? (
             <PasswordField

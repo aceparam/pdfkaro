@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import { tools, type DrawingOption, type TextOption, type ToolOption } from '../../src/tools/registry';
+import { tools, type DrawingOption, type PictureOption, type TextOption, type ToolOption } from '../../src/tools/registry';
 import {
   acceptedDrawing,
   acceptedText,
@@ -17,15 +19,28 @@ import {
   textRule,
   type Drawing,
   type DrawingTable,
+  type PictureTable,
   type TextRule,
 } from '../../src/widget/option-values';
 import {
+  chosenPicture,
   chosenValue,
   drawnLines,
   enterAction,
   focusMovesToOptions,
+  holdsUnderButton,
   jobOptions,
+  largePictureAdvice,
   optionsHold,
+  pictureLine,
+  pictureNotice,
+  picturePicked,
+  pictureReadingSentence,
+  pictureRereads,
+  pictureSentence,
+  picturesToReread,
+  picturesToSend,
+  rereadPicture,
   optionsShown,
   optionShown,
   optionsToSend,
@@ -35,7 +50,7 @@ import {
   textSentence,
   typedText,
 } from '../../src/widget/options';
-import { initialState, reducer, type Action, type State } from '../../src/widget/state';
+import { initialState, reducer, type Action, type PictureEntry, type State } from '../../src/widget/state';
 import { ToolClient, type WorkerLike } from '../../src/workers/client';
 import type { ToWorker } from '../../src/workers/messages';
 
@@ -733,5 +748,251 @@ describe('a drawing in the widget', () => {
     expect(sent?.type === 'run' && acceptedDrawing('test-drawing', 'drawing', sent.options.drawing, table)).toEqual(lines);
     client.end();
     await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+});
+
+describe('a picture in the widget', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const picture: PictureOption = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const shownByWay: PictureOption = { ...picture, when: { key: 'way', value: 'picture' } };
+  const table: PictureTable = { 'test-picture': { picture: { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 } } };
+  const rule = table['test-picture']?.picture;
+  const entry = (status: PictureEntry['status'], more: Partial<PictureEntry> = {}): PictureEntry => ({ name: 'signature.png', size: 120 * 1024, status, ...more });
+  const ready = entry('ready', { pixels: 300_000 });
+  const hold = (pictures: Record<string, PictureEntry>, options: ToolOption[] = [picture], choices = {}) =>
+    optionsHold('test-picture', options, choices, undefined, undefined, pictures, table);
+
+  it('names each problem in one sentence, saying no picture is chosen when one was turned away', () => {
+    expect(pictureSentence(picture, entry('refused', { name: 'notes.png' }))).toBe('notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.');
+    expect(pictureSentence(picture, entry('damaged', { name: 'broken.png' }))).toBe('broken.png is damaged and cannot be read. Choose another picture.');
+    expect(pictureSentence(picture, entry('unsupported', { name: 'arithmetic.jpg' }))).toBe(
+      'arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.',
+    );
+    expect(pictureSentence(picture, entry('reading'))).toBeNull();
+    expect(pictureSentence(picture, ready)).toBeNull();
+  });
+
+  it('names a chosen picture with its size once read, says it is getting ready while read, and has no line for a problem', () => {
+    expect(pictureLine(ready)).toBe('signature.png, 120 KB.');
+    expect(pictureLine(entry('reading'))).toBe('signature.png, Getting ready.');
+    for (const status of ['refused', 'damaged', 'unsupported'] as const) expect(pictureLine(entry(status))).toBeNull();
+    expect(pictureLine(undefined)).toBeNull();
+  });
+
+  it('words the button for a second pick once a picture is chosen or tried, but not after a wrong pick, which leaves none', () => {
+    expect(picturePicked(undefined)).toBe(false);
+    expect(picturePicked(entry('refused'))).toBe(false);
+    for (const status of ['reading', 'ready', 'damaged', 'unsupported'] as const) expect(picturePicked(entry(status)), status).toBe(true);
+  });
+
+  it('gives a notice only for a ready picture over either notice size, naming its size and pixels', () => {
+    expect(pictureNotice(picture, ready, rule)).toBeNull();
+    expect(pictureNotice(picture, entry('ready', { size: 8 * 1_048_576, pixels: 16_000_000 }), rule)).toBeNull();
+    const photo = entry('ready', { name: 'photo.jpg', size: Math.round(12.4 * 1_048_576), pixels: 24_000_000 });
+    expect(pictureNotice(picture, photo, rule)).toEqual({
+      heading: 'photo.jpg is 12.4 MB, with 24 million pixels.',
+      advice: 'A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.',
+    });
+    expect(largePictureAdvice).toContain('You can still go ahead.');
+    // Over the bytes alone, or the pixels alone.
+    expect(pictureNotice(picture, entry('ready', { name: 'big.png', size: 9 * 1_048_576, pixels: 400_000 }), rule)?.heading).toBe('big.png is 9.0 MB, with 400,000 pixels.');
+    expect(pictureNotice(picture, entry('ready', { name: 'wide.png', size: 2 * 1_048_576, pixels: 16_500_000 }), rule)?.heading).toBe('wide.png is 2.0 MB, with 16.5 million pixels.');
+    // The tool's own words.
+    expect(pictureNotice({ largeAdvice: 'Save a smaller copy. You can still go ahead.' }, photo, rule)?.advice).toBe('Save a smaller copy. You can still go ahead.');
+    // Not while read, for a problem, or with no rule.
+    expect(pictureNotice(picture, entry('reading', { size: 50 * 1_048_576 }), rule)).toBeNull();
+    expect(pictureNotice(picture, entry('damaged', { size: 50 * 1_048_576 }), rule)).toBeNull();
+    expect(pictureNotice(picture, photo, undefined)).toBeNull();
+  });
+
+  it('holds the main button until a picture is chosen and read, under the button, and by the field for a problem', () => {
+    expect(hold({})).toEqual({ key: 'picture', kind: 'empty', sentence: 'Choose a picture of your signature first.' });
+    expect(hold({ picture: entry('reading') })).toEqual({ key: 'picture', kind: 'reading', sentence: pictureReadingSentence });
+    expect(hold({ picture: entry('refused', { name: 'notes.png' }) })).toEqual({
+      key: 'picture',
+      kind: 'refused',
+      sentence: 'notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.',
+    });
+    expect(hold({ picture: entry('damaged') })?.kind).toBe('damaged');
+    expect(hold({ picture: entry('unsupported') })?.kind).toBe('unsupported');
+    expect(hold({ picture: ready })).toBeNull();
+    // A ready picture never holds, however large.
+    expect(hold({ picture: entry('ready', { size: 40 * 1_048_576, pixels: 256_000_000 }) })).toBeNull();
+    expect(holdsUnderButton({ kind: 'empty' })).toBe(true);
+    expect(holdsUnderButton({ kind: 'reading' })).toBe(true);
+    for (const kind of ['refused', 'damaged', 'unsupported', 'characters', 'too-long'] as const) expect(holdsUnderButton({ kind })).toBe(false);
+  });
+
+  it('holds nothing while hidden, and holds with the empty sentence with no rule', () => {
+    expect(hold({}, [way, shownByWay])).toBeNull();
+    expect(hold({}, [way, shownByWay], { way: 'picture' })?.kind).toBe('empty');
+    expect(optionsHold('test-picture', [picture], {}, undefined, undefined, { picture: ready }, {})).toEqual({ key: 'picture', kind: 'empty', sentence: picture.emptySentence });
+    // The real table has no picture yet.
+    expect(optionsHold('test-picture', [picture], {}, undefined, undefined, { picture: ready })?.kind).toBe('empty');
+  });
+
+  it('keeps working for callers that pass no pictures: a tool with none holds as before', () => {
+    expect(optionsHold('test-picture', [way], {})).toBeNull();
+    expect(optionsHold('test-picture', [picture], {})?.kind).toBe('empty');
+  });
+
+  it('sends no picture in the options', () => {
+    expect(optionsToSend([way, picture], { way: 'picture' })).toEqual({ way: 'picture' });
+    expect(jobOptions(undefined, {}, [picture], {})).toEqual({});
+  });
+
+  it('sends beside the files only each shown, ready picture held for its key', () => {
+    const file = new Blob(['x']);
+    const held = new Map([['picture', file]]);
+    expect(picturesToSend([picture], {}, { picture: ready }, held)).toEqual({ picture: file });
+    expect(picturesToSend([picture], {}, { picture: entry('reading') }, held)).toEqual({});
+    expect(picturesToSend([picture], {}, { picture: entry('damaged') }, held)).toEqual({});
+    expect(picturesToSend([picture], {}, {}, held)).toEqual({});
+    expect(picturesToSend([picture], {}, { picture: ready }, new Map())).toEqual({});
+    expect(picturesToSend([way, shownByWay], {}, { picture: ready }, held)).toEqual({});
+    expect(picturesToSend([way, shownByWay], { way: 'picture' }, { picture: ready }, held)).toEqual({ picture: file });
+    expect(picturesToSend(undefined, {}, { picture: ready }, held)).toEqual({});
+  });
+
+  it('reads a cut-short picture again while it is still held and being read, up to twice, then calls it damaged', () => {
+    expect(pictureRereads).toBe(2);
+    expect(rereadPicture(entry('reading'), true, 0, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 1, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 2, true)).toBe('damaged');
+    expect(rereadPicture(entry('reading'), false, 0, true)).toBe('nothing');
+    expect(rereadPicture(ready, true, 0, true)).toBe('nothing');
+    expect(rereadPicture(undefined, true, 0, true)).toBe('nothing');
+  });
+
+  it('never reads a picture again once the files are no longer listed: the job, its result or a failure', () => {
+    // The job's own end cancels a read of a hidden picture still being read; reading it again would start a worker.
+    for (const tries of [0, 1, 2]) expect(rereadPicture(entry('reading'), true, tries, false)).toBe('nothing');
+  });
+
+  it('never reads a replaced file again, and the newer pick counts its own tries from 0', () => {
+    // The old read is cancelled when the worker is ended for the new pick: the old file is no longer held.
+    const newer = entry('reading', { name: 'second.png' });
+    expect(rereadPicture(newer, false, 0, true)).toBe('nothing');
+    expect(rereadPicture(newer, true, 0, true)).toBe('read-again');
+  });
+
+  it('lists every picture still being read, for "Go back to your file"', () => {
+    expect(picturesToReread({ pictures: { a: entry('reading'), b: ready, c: entry('reading'), d: entry('damaged') } })).toEqual(['a', 'c']);
+    expect(picturesToReread({ pictures: {} })).toEqual([]);
+  });
+
+  it('never takes an inherited name for a chosen picture', () => {
+    expect(chosenPicture({ key: 'toString' }, {})).toBeUndefined();
+    expect(chosenPicture({ key: '__proto__' }, {})).toBeUndefined();
+  });
+
+  it("reaches the real ToolClient's run message when ready and shown, and not when hidden, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const options: ToolOption[] = [way, shownByWay];
+    const file = new File(['\x89PNG'], 'signature.png');
+    const held = new Map([['picture', file]]);
+    const play = (...actions: Action[]) => actions.reduce(reducer, initialState);
+    const listed = play(
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'option-set', key: 'way', value: 'picture' },
+      { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5, status: 'reading' },
+      { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 100 } },
+    );
+    for (const [choices, wanted] of [
+      [listed.choices, { picture: file }],
+      [{ way: 'type' }, undefined],
+    ] as const) {
+      const workers: FakeWorker[] = [];
+      const client = new ToolClient('test-picture', () => {
+        const worker = new FakeWorker();
+        workers.push(worker);
+        return worker;
+      });
+      const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, options, choices), () => {}, undefined, picturesToSend(options, choices, listed.pictures, held));
+      const sent = workers[0]?.sent[0];
+      expect(sent?.type).toBe('run');
+      expect(sent?.type === 'run' && sent.pictures).toEqual(wanted);
+      expect(sent?.type === 'run' && sent.options).not.toHaveProperty('picture');
+      client.end();
+      await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+    }
+  });
+});
+
+describe('the picture field and the picking code, by their source', () => {
+  const source = (path: string) => readFileSync(join(__dirname, '../..', path), 'utf8');
+  const hook = source('src/hooks/useToolRun.ts');
+  const from = hook.indexOf('const readChosenPicture = useCallback(');
+  const to = hook.indexOf('[endReplacedRead, readChosenPicture, toolId],');
+  const picking = hook.slice(from, to);
+  const field = source('src/components/PictureField/PictureField.tsx');
+
+  it('finds the picking code', () => {
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    expect(picking).toContain('const pickPicture = useCallback(');
+    expect(picking).toContain('const endReplacedRead = useCallback(');
+  });
+
+  it('never makes an address for a picture or writes one to storage', () => {
+    for (const [name, code] of [['PictureField', field], ['picking code', picking]] as const) {
+      for (const banned of ['createObjectURL', 'localStorage', 'sessionStorage', 'indexedDB', 'document.cookie', 'history.', 'location.', 'console.', '<img', 'FileReader']) {
+        expect(code.includes(banned), `${name}: ${banned}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('Cancel with a hidden picture still being read', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const play = (...actions: Action[]) => actions.reduce(reducer, initialState);
+  const working = play(
+    { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+    { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+    { type: 'option-set', key: 'way', value: 'picture' },
+    { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5, status: 'reading' },
+    // The picture is hidden by the choice while it is read, so the main button works, and the job starts.
+    { type: 'option-set', key: 'way', value: 'type' },
+    { type: 'started' },
+  );
+
+  it("is listed for reading again when Cancel is pressed, since its own cancelled read comes while the job's step still holds", () => {
+    expect(way.key).toBe('way');
+    expect(working.step).toBe('working');
+    // Its read is cancelled by Cancel ending the worker before the page lists the file again, so it is not read again there.
+    expect(rereadPicture(working.pictures.picture, true, 0, working.step === 'listing')).toBe('nothing');
+    // So Cancel takes the pictures still being read before it ends the worker, and reads each again.
+    expect(picturesToReread(working)).toEqual(['picture']);
+    const cancelled = reducer(working, { type: 'back-to-files' });
+    expect(cancelled.step).toBe('listing');
+    expect(cancelled.pictures.picture?.status).toBe('reading');
+    // Read again, its answer is taken.
+    expect(reducer(cancelled, { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 9 } }).pictures.picture?.status).toBe('ready');
+  });
+
+  it('is read again by cancel, as by "Go back to your file", in the hook source', () => {
+    const hook = readFileSync(join(__dirname, '../../src/hooks/useToolRun.ts'), 'utf8');
+    const cancel = hook.slice(hook.indexOf('const cancel = useCallback('), hook.indexOf('[rereadPictures]);'));
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeGreaterThan(-1);
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeLessThan(cancel.indexOf('client.current?.end()'));
+    expect(cancel).toContain('void rereadPictures(unreadPictures);');
   });
 });

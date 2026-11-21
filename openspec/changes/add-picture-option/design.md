@@ -45,8 +45,10 @@ export type PictureOption = {
   emptySentence: string;
   /** When the engine refuses the picture. Left out: "The picture could not be used. Choose another picture." */
   refusedSentence?: string;
-  /** The notice's text for a very large picture. Left out: "A picture this large makes the new file larger, and a phone may run out of memory. Save a smaller copy. You can still go ahead." */
+  /** The notice's text for a very large picture. Left out: "A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead." (decision 7) */
   largeAdvice?: string;
+  /** Said after "photo.jpg (24.6 MB) is too large to place on these pages." Left out: "Choose a smaller picture." (decision 8) */
+  tooLargeAdvice?: string;
   when?: { key: string; value: string };
 };
 ```
@@ -76,7 +78,8 @@ export type PictureOutcome = { kind: 'ready'; pixels: number } | { kind: 'damage
 export function pictureOutcome(bytes: Uint8Array, rule: PictureRule, fflate: { Inflate: InflateClass }): PictureOutcome;
 
 /** For an engine: the bytes when `value` is bytes whose outcome under the tool's own rule is ready; else undefined. */
-export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table = optionPictures): Uint8Array | undefined;
+/** The engine passes `optionPictures` as `table`: picture.ts imports only types from option-values.ts, so Image to PDF, which shares picture.ts, fetches no more files than before. */
+export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table: PictureTable): Uint8Array | undefined;
 ```
 
 `pictureOutcome`, in order: `readPicture` damaged or unsupported is that; a type not in `types` is damaged (the page sniffed it first, so only a file whose header lies reaches here); a PNG whose data does not fit (`pngDataFits`) or a JPG `jpegForPdf` cannot rebuild is damaged; else ready, with its width × height as stored. Size never refuses. Reading only, with the caps `picture.ts` already has; nothing is decoded and nothing kept.
@@ -99,7 +102,9 @@ pictures: Readonly<Record<string, PictureEntry>>;
 - The bytes are held in a ref, `pictures: Map<string, File>`, beside `files`. `pickPicture(key, file)`:
   1. reads the first `sniffLength` bytes (from `accept.ts`); if they are not of the rule's types (`looksAccepted(head, rule.types)`), the held picture for that key is forgotten and `picture-chosen` records it as `refused`. **A wrong pick leaves no picture chosen**, even if one was ready before: the field has one slot, holding the last pick, and its sentence says "No picture is chosen." This was chosen over keeping the earlier picture beside a sentence about the new file, which would show a ready line and a problem at once (UX, stage 1: either, the plainer written down);
   2. else holds it, records `reading`, ends any thumbnail being drawn (as `inspect` does), and asks the worker to read it (`readChosenPicture`); when the answer comes, and the same file is still held for that key, records it. A worker failure while reading (the engine could not load) is the tool's failure, as for a file.
-- **A read cut short** (the architect, stage 1): `ToolClient.end()` rejects a pending request as `cancelled`, and the worker is ended by a thumbnail's time limit or by `stopThumbnail`. `readChosenPicture` therefore reads again when the answer is `cancelled` and the same file is still held and still `reading`, at most twice, then records it as damaged; and `backToFiles` reads again any picture still `reading`, as it does for files. So a picture never stays "Getting ready".
+  - **After the first bytes are read** (stage 2, the code reviewer): the pick goes on only while the files are still listed and it is still the latest pick for its key (a per-key count, taken before the read and compared after it), so "Start again" during the 1 KB read neither holds the picture nor starts a worker, and two quick picks finishing out of order keep only the later.
+  - **A read still in flight for the key** (stage 2, security): reading a hostile PNG can take minutes, and the new read would wait behind it. Once the new pick is recorded (held, or turned away), `endReplacedRead` ends the worker if a read for that key is in flight for a file no longer held, so the new read starts on a fresh worker. The old read is cancelled for a file no longer held, so it is never read again, and the new pick counts its own tries from 0. No file is being read then, as the field is shown only once every file has been read; another picture's read cut short this way is read again, as below.
+- **A read cut short** (the architect, stage 1): `ToolClient.end()` rejects a pending request as `cancelled`, and the worker is ended by a thumbnail's time limit or by `stopThumbnail`. `readChosenPicture` therefore reads again when the answer is `cancelled`, the files are still listed, and the same file is still held and still `reading`, at most twice, then records it as damaged (`rereadPicture(entry, stillHeld, tries, listing)`). Never during the job or on its result (stage 2, the code reviewer): the job's own end cancels a read of a hidden picture still being read, and a read again there would start a worker holding the picture; and `backToFiles` reads again any picture still `reading`, as it does for files. **Cancel does the same** (stage 2, the code reviewer): it ends the worker, so a hidden picture's read still running is cancelled, and that answer comes before the page is listing again, so `rereadPicture` gives nothing; `cancel` therefore takes `picturesToReread` before it ends the worker and reads each again after `back-to-files` (`rereadPictures`, shared with `backToFiles`). Each attempt marks its key with its own token, so an ended attempt never clears the mark of a newer read of the same file. So a picture never stays "Getting ready".
 - **No thumbnail while a picture is read:** the thumbnail pump starts nothing while any picture is `reading`, so the second cause does not arise in normal use; the retry covers the rest.
 - `clear` forgets the held pictures with the files; removing the last file forgets them too, as the state is reset.
 - `start` sends `picturesToSend(options, choices, state.pictures, held)`: for each shown picture option whose entry is `ready`, its held `File`, by key. A hidden or unready picture is not sent.
@@ -115,25 +120,27 @@ pictures: Readonly<Record<string, PictureEntry>>;
 ### 7. The component: `src/components/PictureField/`
 
 ```tsx
-<div className={`field ${styles.picture}`}>
+<div className={styles.picture}>
   <p id={labelId} className={styles.label}>{option.label}</p>
   {error ? <p id={errorId} className={styles.error}>{error}</p> : null}
   {chosen ? <p id={chosenId} className={styles.chosen}>{chosen}</p> : null}
-  <FilePicker label={entry ? option.againLabel : option.pickLabel} accepts={rule.types} multiple={false} look="secondary"
+  <FilePicker label={picturePicked(entry) ? option.againLabel : option.pickLabel} accepts={types} multiple={false} look="secondary"
               onFiles={(files) => onPick(files[0])} describedBy={[labelId, chosenId, errorId, hintId]} inputRef={focusRef} />
   <p id={hintId} className={styles.note}>{option.hint}</p>
 </div>
 ```
 
 - `FilePicker` gains an optional `describedBy` (ids joined into the input's `aria-describedby`); nothing else about it changes, and its other uses pass none.
-- **The line:** "signature.png, 120 KB" when ready, "signature.png, Getting ready" while read; no line for a picture turned away (its sentence names it and says no picture is chosen). A long name wraps (`overflow-wrap: anywhere`).
+- **Not the site's `field` class** (stage 2, UX): its rules make a field's label bold and its input full width with padding, which would make the button bold and full width and undo the hidden input's 1px size. The wrapper has only its own class, with the same gap below as a field; the button keeps the site's secondary style, regular weight, natural width on a wide screen.
+- **The button's words:** "Choose another picture" once a picture is chosen, being read, damaged or unreadable (`picturePicked`); "Choose a picture" before a pick and after a wrong pick, which leaves no picture chosen (stage 2, UX).
+- **The line:** "signature.png, 120 KB." when ready, "signature.png, Getting ready." while read, each ending with a full stop so a screen reader pauses before the hint (stage 2, UX); no line for a picture turned away (its sentence names it and says no picture is chosen). A long name wraps (`overflow-wrap: anywhere`).
 - **The sentences,** in `src/widget/options.ts` (`pictureSentence`), each naming the file as React text, so a hostile name is shown, never run:
   - refused: "notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen." (with `acceptsName`);
   - damaged: "broken.png is damaged and cannot be read. Choose another picture.";
   - unsupported: "arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.";
 - **The notice** (`pictureNotice`, beside them), for a ready picture over `noticeBytes` or `noticePixels`: a `Notice` under the field whose heading is "photo.jpg is 12.4 MB, with 24 million pixels." (`formatSize`, and pixels in millions with `number`), and whose text is "A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead." (the tool's words where it gives `largeAdvice`; Sign PDF names the signature). It is tied to the main button by `aria-describedby`, as Image to PDF's notice is, and holds nothing back. The hint names the notice sizes, so the visitor knows them before choosing.
-- **`optionsHold`'s signature** gains a last, optional argument: `optionsHold(tool, options, choices, texts?, pictures: State['pictures'] = {}, pictureTable = optionPictures)`, so its callers and tests that pass `texts` keep working; `ToolWorkspace` passes `state.pictures` and memoises on it too. `picturesToSend(options, choices, pictures, held)` is new beside it; `optionsToSend` and `jobOptions` are unchanged, as the bytes do not go in `options` on the page.
-- **The main button:** `optionsHold` gives, for a shown picture, `empty` with `emptySentence` when none is chosen, `reading` with "The picture is still being read." while read (both in the tied paragraph under the button), and the sentence above, by the field, for a problem (tied from there, as a text's is). The status region says "signature.png, 120 KB." once when ready, and each problem's sentence once when it appears.
+- **`optionsHold`'s signature** gains two last, optional arguments, after the `drawings` table `add-drawing-option` added: `optionsHold(tool, options, choices, texts?, drawings?, pictures: State['pictures'] = {}, pictureTable = optionPictures)`, so its callers and tests that pass `texts` or `drawings` keep working; `ToolWorkspace` passes `state.pictures` and memoises on it too. `picturesToSend(options, choices, pictures, held)` is new beside it; `optionsToSend` and `jobOptions` are unchanged, as the bytes do not go in `options` on the page.
+- **The main button:** `optionsHold` gives, for a shown picture, `empty` with `emptySentence` when none is chosen, `reading` with "The picture is still being read." while read (both in the tied paragraph under the button), and the sentence above, by the field, for a problem (tied from there, as a text's is). The status region says "signature.png, 120 KB." once when ready, and each problem's sentence once when it appears. Typing in a text says that text's own problem only: `ToolWorkspace`'s `typeText` announces the new hold only when its key is the text being typed in (`next.key === key`) and it is not said under the button, so a text after a picture with a problem does not announce the picture's sentence again on each key.
 - **No preview:** "Look and feel" allows no image but page thumbnails of the visitor's file, and showing it would mean decoding it on the page or a second thumbnail path. The name and size say which picture was chosen.
 - **Drops and pastes** stay the tool's own files (`useFileDrop` is unchanged): a picture dropped on a PDF tool's page is refused as not a PDF, as now. Taking drops for the field was considered and dropped: a drop has no target field, and guessing by type would surprise.
 - **Look,** in `PictureField.module.css`: a top margin of 1.5rem; the label as the field labels; `.error` bold in the text colour and `.note` muted, copied from `TextField` on purpose, as `add-text-option` copied them from `PasswordField`, so each component owns its styles.
@@ -142,7 +149,7 @@ pictures: Readonly<Record<string, PictureEntry>>;
 
 - `FailureKind` gains `picture-refused`; `worker-core` maps an error named `PictureRefused` to it and `messages.ts` accepts it; `failureSentence` gives the first picture option's `refusedSentence`, else "The picture could not be used. Choose another picture."
 - `FailureKind` also gains `picture-too-large`, from an error named `PictureTooLarge` (in `option-values.ts`, beside `PictureRefused`), for an engine that finds the picture alone would pass its new file's size budget (Sign PDF, whose drawing step counts the picture once; the architect and UX, stage 1). `failureSentence` gains an optional last argument, the state's `pictures`, so the sentence names the chosen picture and its size: "photo.jpg (24.6 MB) is too large to place on these pages." followed by the option's `tooLargeAdvice`, else "Choose a smaller picture." Without a chosen picture it says "The picture is too large to place on these pages." `PictureOption` gains optional `tooLargeAdvice` (Sign PDF: "Crop it to the signature, or save a smaller copy.").
-- **Never a blob address:** a unit test reads the source of `PictureField` and of `useToolRun`'s picking code (`pickPicture`, `readChosenPicture`) and checks neither calls `URL.createObjectURL` or writes to storage (the privacy reviewer, stage 1).
+- **Never a blob address:** a unit test reads the source of `PictureField` and of `useToolRun`'s picking code (`readChosenPicture`, `endReplacedRead`, `pickPicture`) and checks neither calls `URL.createObjectURL` or writes to storage (the privacy reviewer, stage 1).
 
 ## Page weight and late loading
 

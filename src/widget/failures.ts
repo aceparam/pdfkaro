@@ -2,10 +2,10 @@
 // runs. Plain functions over the registry's words, tested in Node.
 
 import type { Progress } from '../engines/types';
-import type { DrawingOption, TextOption, ToolWidgetWords } from '../tools/registry';
-import { fileCount, number, progressLine } from './format';
-import { shownOptions, type Choices } from './options';
-import type { FailureKind } from './state';
+import type { DrawingOption, PictureOption, TextOption, ToolWidgetWords } from '../tools/registry';
+import { fileCount, formatSize, number, progressLine } from './format';
+import { chosenPicture, shownOptions, type Choices } from './options';
+import type { FailureKind, PictureEntry } from './state';
 import { tooManyPicturesSentence, zipLimitSentence } from './zip-limits';
 
 const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
@@ -23,11 +23,21 @@ export const textRefusedSentence = 'The text could not be used. Check it and try
 /** What the page says when the engine refuses a drawing, for a tool with no words of its own for it. */
 export const drawingRefusedSentence = 'The drawing could not be used. Clear it and draw again.';
 
-/** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */
+/** What the page says when the engine refuses a picture, for a tool with no words of its own for it. */
+export const pictureRefusedSentence = 'The picture could not be used. Choose another picture.';
+
+/** The step after "… is too large to place on these pages.", for a tool with no words of its own for it. */
+export const pictureTooLargeAdvice = 'Choose a smaller picture.';
+
+/**
+ * The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them.
+ * `pictures` (the state's) names the chosen picture when the engine finds it too large; the worker's error carries nothing of it.
+ */
 export function failureSentence(
   kind: FailureKind,
   words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options'>,
   choices: Choices = {},
+  pictures: Readonly<Record<string, PictureEntry>> = {},
 ): string {
   if (kind === 'too-many-files' || kind === 'zip-too-large') {
     return zipLimitSentence(kind === 'too-many-files' ? 'files' : 'bytes', words.zipLimitAdvice ?? 'Try a smaller job.');
@@ -46,6 +56,20 @@ export function failureSentence(
   if (kind === 'drawing-refused') {
     const drawing = shownOptions(words.options, choices).find((option): option is DrawingOption => option.kind === 'drawing');
     return drawing?.refusedSentence ?? drawingRefusedSentence;
+  }
+  // The same for a picture: the first shown picture's own words, else the shared ones.
+  if (kind === 'picture-refused') {
+    const picture = shownOptions(words.options, choices).find((option): option is PictureOption => option.kind === 'picture');
+    return picture?.refusedSentence ?? pictureRefusedSentence;
+  }
+  // The picture alone would pass the new file's size budget: named with its size from the page's own state.
+  if (kind === 'picture-too-large') {
+    const shown = shownOptions(words.options, choices).filter((option): option is PictureOption => option.kind === 'picture');
+    const option = shown.find((each) => chosenPicture(each, pictures) !== undefined) ?? shown[0];
+    const entry = option ? chosenPicture(option, pictures) : undefined;
+    const advice = option?.tooLargeAdvice ?? pictureTooLargeAdvice;
+    const said = entry ? `${entry.name} (${formatSize(entry.size)})` : 'The picture';
+    return `${said} is too large to place on these pages. ${advice}`;
   }
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
   return shared[kind];

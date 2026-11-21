@@ -53,6 +53,12 @@ export type InspectOutcome =
 /** Reads one file before a job, so the page can show its page count or a problem. */
 export type Inspector = (file: Uint8Array, password: string | undefined, tools: EngineTools) => Promise<InspectOutcome>;
 
+/**
+ * What reading a picture chosen for an option tells the page (`pictureOutcome` in picture.ts): ready, with
+ * its pixels as stored (width × height), damaged, or saved in a way the tool cannot read. Nothing else.
+ */
+export type PictureOutcome = { kind: 'ready'; pixels: number } | { kind: 'damaged' } | { kind: 'unsupported' };
+
 /** What a file in src/engines/tools/ exports. Its name is the tool's id. */
 export type EngineModule = {
   run: Engine<Record<string, unknown>>;
@@ -63,4 +69,10 @@ export type EngineModule = {
    * Chosen by tool, never by a file's bytes, so a PDF tool never hands a file to the image decoder.
    */
   thumbnails?: 'picture';
+  /**
+   * Reads a picture chosen for one of the tool's picture options, by its key, before the job: one line,
+   * `pictureOutcome` with the tool's rule. Every tool with a picture option exports it (the registry test);
+   * the worker answers `damaged` for a tool without one, so nothing unread is ever called ready.
+   */
+  inspectPicture?: (key: string, bytes: Uint8Array, tools: EngineTools) => Promise<PictureOutcome>;
 };
