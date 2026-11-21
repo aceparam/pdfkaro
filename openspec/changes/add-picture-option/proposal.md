@@ -43,7 +43,7 @@ The picture is read in the visitor's browser, in the tool worker, with the same 
 
 ## Open decisions and owner questions touched
 
-- **No fixed size limit** (`SPEC.md` "Privacy, limits and security") and **Very large PNGs** (waiting for the owner, Image to PDF): kept. No picture is refused for its size; above each tool's notice size (Sign PDF: 8 MB or 16 million pixels) the page shows a notice and the job still runs, as Image to PDF does. A new question for the owner, which does not block: "Refuse very large signature pictures, or keep the notice?"
+- **No fixed size limit** (`SPEC.md` "Privacy, limits and security") and **Very large PNGs** (waiting for the owner, Image to PDF): kept. No picture is refused for its size; above each tool's notice size (Sign PDF: 8 MB or 16 million pixels) the page shows a notice and the job still runs, as Image to PDF does. The owner decided on 21 Nov 2026 to keep the notice for very large signature pictures.
 - **Picture details** (waiting for the owner): touched in kind. The picture is read with the reader that keeps no camera, date or place; a tool that draws it (Sign PDF) copies none, as Image to PDF does.
 - **Shared pieces in tool pull requests** (waiting for the owner): this change follows `SPEC.md`'s rule and gives the picture its own pull request, ahead of Sign PDF.
 - **Repair PDF link** (waiting for the owner): not touched; a damaged picture is replaced, not repaired.

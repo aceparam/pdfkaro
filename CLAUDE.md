@@ -87,6 +87,8 @@ Update this section when a phase gate is passed.
 - **Warn above 20,000 pages (13 Nov 2026).** Page tools show a notice when a file has more than 20,000 pages, because qpdf selects pages slowly from very large files. No limit; the job still runs. The owner may list it on Known problems.
 - **Attachments drawn on a page go with that page (13 Nov 2026).** The owner confirmed the agent's reading of "attached files go with the first part only".
 - **Fonts for other scripts later (21 Nov 2026).** Drawn text (Watermark, and later Sign PDF's typed signature) accepts only the standard font's Western European characters for now, and refuses others with a sentence. Shipping fonts for Hindi, Telugu, Arabic, Chinese and other scripts is to be taken up later, in issue #20.
+- **Very large signature pictures get a notice, not a refusal (21 Nov 2026).** In Sign PDF, a signature picture over 8 MB or 16 million pixels shows a notice naming its size and the job still runs, as Image to PDF does for very large PNGs.
+- **Placing a signature by dragging it on a page preview comes later (21 Nov 2026).** Sign PDF's first version puts the signature at one of six edge places on the first, last or every page, and the page says a signature line in the middle of a page cannot be reached yet. Drag placement, with a keyboard way, is a later shared component.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
