@@ -84,6 +84,7 @@ Update this section when a phase gate is passed.
 - **New files keep accessibility tags, named destinations and reading threads whole, and the page says so (13 Nov 2026).** This answers PR #8's first question for Split, Extract and Delete: a file with fewer pages can still carry descriptive text from pages left out, with the document's title and author, and each page tells the visitor.
 - **Warn above 20,000 pages (13 Nov 2026).** Page tools show a notice when a file has more than 20,000 pages, because qpdf selects pages slowly from very large files. No limit; the job still runs. The owner may list it on Known problems.
 - **Attachments drawn on a page go with that page (13 Nov 2026).** The owner confirmed the agent's reading of "attached files go with the first part only".
+- **Fonts for other scripts later (21 Nov 2026).** Drawn text (Watermark, and later Sign PDF's typed signature) accepts only the standard font's Western European characters for now, and refuses others with a sentence. Shipping fonts for Hindi, Telugu, Arabic, Chinese and other scripts is to be taken up later, in issue #20.
 - **React, not Preact (10 Nov 2026).** The owner asked for a React-based app with reusable components and, offered Preact or React, said to pick whichever helps a later phone app. The interface is written as React components. Astro renders them to static HTML; only interactive parts ship script. `SPEC.md` still says "Preact islands".
 
 ## Decisions the agent made for the owner
