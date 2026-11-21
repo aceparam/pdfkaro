@@ -187,7 +187,7 @@ When the job fails, its code cannot be fetched, the browser runs out of memory, 
 #### Scenario: The new file would be far too large
 
 - **WHEN** the file being written passes its size limit
-- **THEN** writing stops at the limit, and the page says the new file would be far larger than expected, so it was not made, with the same thing to try
+- **THEN** writing stops at the limit, and the page says the new file would be far larger than expected, so it was not made, and that the file may be damaged and to try another copy of it
 
 #### Scenario: A page too small or too large to number
 

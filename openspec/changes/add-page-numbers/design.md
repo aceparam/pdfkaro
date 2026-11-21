@@ -147,7 +147,7 @@ The plain copy is decrypted, so the result has no password and no restrictions; 
 
 ### 4. The output-limit failure
 
-- `FailureKind` gains `output-limit`; `failures.ts` says "The new file would be far larger than expected, so it was not made." followed by the tool's `memoryAdvice`.
+- `FailureKind` gains `output-limit`; `failures.ts` says "The new file would be far larger than expected, so it was not made." followed by its own advice, "The file may be damaged. Try another copy of it." The cap is a fixed formula only a broken write reaches, so it fails the same way on a computer and `memoryAdvice` would send the visitor somewhere that does not help.
 - The engine throws an error whose message `worker-core` recognises, as it recognises running out of memory; a test covers the worker's mapping and the sentence. Other tools never throw it.
 
 ### 5. Progress
