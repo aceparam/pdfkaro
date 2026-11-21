@@ -7,12 +7,11 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFOperator, StandardFonts } from '@cantoo/pdf-lib';
-import { createCanvas } from '@napi-rs/canvas';
 import { describe, expect, it } from 'vitest';
 import { descent, fullHeight, run, watermarkPlace } from '../../src/engines/tools/watermark-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { failureKind } from '../../src/workers/worker-core';
-import { fixture, jsonOf, makeQpdf, open, password, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
+import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
 
 const fifty = 'Confidential draft for review only - do not share.';
 
@@ -142,53 +141,6 @@ describe('the text sent', { timeout: 60_000 }, () => {
 
 // ---------------------------------------------------------------------------
 // Drawing pages to look at what changed.
-
-type Picture = { data: Uint8ClampedArray; width: number; height: number };
-
-/** Each page drawn by PDF.js as it is shown, on white, at most 800 pixels on its longer side. */
-async function pictures(bytes: Uint8Array, given?: string): Promise<Picture[]> {
-  const doc = await (await import('pdfjs-dist/legacy/build/pdf.mjs')).getDocument({ data: bytes.slice(), password: given, disableFontFace: true, useSystemFonts: false, verbosity: 0 }).promise;
-  const all: Picture[] = [];
-  for (let number = 1; number <= doc.numPages; number++) {
-    const page = await doc.getPage(number);
-    const shown = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: Math.min(1, 800 / Math.max(shown.width, shown.height)) });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: context as unknown as CanvasRenderingContext2D, viewport, canvas: canvas as unknown as HTMLCanvasElement }).promise;
-    all.push({ data: context.getImageData(0, 0, canvas.width, canvas.height).data, width: canvas.width, height: canvas.height });
-    page.cleanup();
-  }
-  await doc.loadingTask.destroy();
-  return all;
-}
-
-/**
- * The pixels that changed between a page before and after: the box they form, as
- * shares of the shown width and of the height from the top, and the most common
- * red value among those that were white before.
- */
-function changed(before: Picture, after: Picture) {
-  expect([after.width, after.height]).toEqual([before.width, before.height]);
-  let [left, top, right, bottom, n] = [Infinity, Infinity, -Infinity, -Infinity, 0];
-  const onWhite = new Map<number, number>();
-  for (let y = 0; y < after.height; y++) {
-    for (let x = 0; x < after.width; x++) {
-      const k = (y * after.width + x) * 4;
-      if (Math.abs(after.data[k]! - before.data[k]!) + Math.abs(after.data[k + 1]! - before.data[k + 1]!) + Math.abs(after.data[k + 2]! - before.data[k + 2]!) < 24) continue;
-      n++;
-      left = Math.min(left, x);
-      right = Math.max(right, x + 1);
-      top = Math.min(top, y);
-      bottom = Math.max(bottom, y + 1);
-      if (before.data[k] === 255 && before.data[k + 1] === 255 && before.data[k + 2] === 255) onWhite.set(after.data[k]!, (onWhite.get(after.data[k]!) ?? 0) + 1);
-    }
-  }
-  const mode = [...onWhite.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return { n, left: left / after.width, right: right / after.width, top: top / after.height, bottom: bottom / after.height, middleX: (left + right) / 2 / after.width, middleY: (top + bottom) / 2 / after.height, grey: mode };
-}
 
 /** The angle of each page's last text item as PDF.js shows the page, in degrees, counter-clockwise from the right. */
 async function shownAngles(bytes: Uint8Array): Promise<number[]> {

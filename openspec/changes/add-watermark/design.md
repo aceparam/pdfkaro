@@ -119,7 +119,7 @@ No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 S
 ## Page weight and late loading
 
 - **Before a pick:** the same island; the entry's option words add a few hundred bytes of props. `npm run weigh` must stay under 100 KB.
-- **After a pick:** what Add page numbers fetches (the worker, the workspace chunk, qpdf and its WebAssembly, `inspect`, `plain`, PDF.js and its data for the first page's thumbnail), and the engine with `stamp` and `qpdf-json`.
+- **After a pick:** what Add page numbers fetches (the worker, the workspace chunk, qpdf and its WebAssembly, `inspect`, `plain`, PDF.js and its data for the first page's thumbnail), and the engine with `stamp`. With two engines importing the drawing step, the bundler gives it a file of its own (`stamp-*.js`, which also holds `option-values`), and puts the qpdf JSON helpers in the shared `plain` file; `page-weight.mjs` names `stamp` in `loadedLater`, and Add page numbers' exact no-upload allowlist gains `stamp-*.js` (found while building; its other checks are unchanged).
 - **At the main button:** pdf-lib's file, which brings `fflate`. No other WebAssembly.
 - `check-worker.mjs` checks the engine stays out of the worker file, is loaded late and holds no pdf-lib code.
 

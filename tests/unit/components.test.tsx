@@ -420,6 +420,44 @@ describe('TextField, a text of a test entry', () => {
   });
 });
 
+describe("TextField with Watermark's entry", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { optionsHold, optionsToSend } = await import('../../src/widget/options');
+  const widget = tools.find((tool) => tool.id === 'watermark-pdf')!.widget!;
+  const option = widget.options![0]!;
+  if (option.kind !== 'text') throw new Error('Watermark lists a text first');
+  // As the workspace draws it once the file is read: empty.
+  const html = renderToStaticMarkup(<TextField option={option} id="r4-text" raw="" onType={noop} onEnter={noop} />);
+  const field = html.match(/<input [^>]*\/>/)?.[0] ?? '';
+
+  it('is the only option: "Watermark text", empty, with its hint read with it', () => {
+    expect(widget.options).toHaveLength(1);
+    expect(option.key).toBe('text');
+    expect(html).toContain('<label for="r4-text">Watermark text</label>');
+    expect(field).toContain('value=""');
+    expect(field).not.toContain('aria-invalid');
+    expect(field).toContain('aria-describedby="r4-text-hint"');
+    expect(html).toContain('>Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.</p>');
+  });
+
+  it('holds the main button back while empty or only spaces, with "Type the watermark text first.", and sends nothing then', () => {
+    for (const raw of [undefined, '', '   ']) {
+      const choices: Record<string, string> = raw === undefined ? {} : { text: raw };
+      expect(optionsHold('watermark-pdf', widget.options, choices)).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+    }
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'Draft for review' })).toBeNull();
+    expect(optionsToSend(widget.options, { text: 'Draft for review' })).toEqual({ text: 'Draft for review' });
+  });
+
+  it('refuses "मसौदा", "Łódź" and 63 characters with their sentences, and takes "Brouillon – à relire"', () => {
+    const advice = 'Use letters from English and other Western European languages, numbers and common marks.';
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'मसौदा' })).toEqual({ key: 'text', kind: 'characters', sentence: `Some characters cannot be used. ${advice}` });
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'Łódź' })).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used. ${advice}` });
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'x'.repeat(63) })).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'Brouillon – à relire' })).toBeNull();
+  });
+});
+
 describe('Enter in a typed field (TextField and PasswordField)', async () => {
   const { pressesButton } = await import('../../src/widget/keys');
 

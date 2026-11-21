@@ -21,24 +21,24 @@ Built on `add-text-option`, merged first.
 
 ## 5. Page and page text
 
-- [ ] 5.1 Check the page renders with its heading, sentence, title and description, and that once the file is read the empty "Watermark text" field shows with its hint and focus, and the main button waits with "Type the watermark text first.", as `add-text-option` draws them; verify with the built page and a component test with this entry
-- [ ] 5.2 Write `src/content/tools/watermark-pdf.md`, 250 to 500 words, marked as a draft, covering what the design's section 4 lists, with the privacy words saying only what the page controls (not uploaded; kept only while the tab is open; let go on "Start again" or closing the tab; no claim about downloads, keyboard apps or extensions; no "100%"); no question restates the title; no capitals for emphasis, even in examples; check it against "Banned patterns"; verify the built page holds the heading, sentence, steps and questions with scripts off
+- [x] 5.1 Check the page renders with its heading, sentence, title and description, and that once the file is read the empty "Watermark text" field shows with its hint and focus, and the main button waits with "Type the watermark text first.", as `add-text-option` draws them; verify with the built page and a component test with this entry
+- [x] 5.2 Write `src/content/tools/watermark-pdf.md`, 250 to 500 words, marked as a draft, covering what the design's section 4 lists, with the privacy words saying only what the page controls (not uploaded; kept only while the tab is open; let go on "Start again" or closing the tab; no claim about downloads, keyboard apps or extensions; no "100%"); no question restates the title; no capitals for emphasis, even in examples; check it against "Banned patterns"; verify the built page holds the heading, sentence, steps and questions with scripts off
 
 ## 6. End-to-end test
 
-- [ ] 6.1 `tests/e2e/watermark-pdf.spec.ts` at 360px and 1280px:
+- [x] 6.1 `tests/e2e/watermark-pdf.spec.ts` at 360px and 1280px:
   - choosing a file: one row, no summary line, "Getting ready" seen with the engine's route held until it has been checked (so a quick load cannot skip it), the status line, focus on the field once the file is read; two files dropped; not a PDF;
   - the main button waiting: `aria-disabled`, "Type the watermark text first." read with it, a press fetching no pdf-lib file and starting no job; the field's label, hint, `autocomplete="off"` and `spellcheck="false"`;
   - the text: typing "Kv4wm Qx8mrk" makes the button work (checked before pressing); Enter starts the job; "मसौदा" marks the field invalid, shows "Some characters cannot be used." and the second sentence between the label and the field ("Łódź" names Ł and ź), ties it to the button and says it once in the status region, and a press does nothing; a 63-character paste is kept whole with its sentence; Tab from the field to "Choose another file" and then the main button;
   - watermarking `mixed.pdf` with "Kv4wm Qx8mrk": the download passes `qpdf --check`, each page's text ends with the watermark's words, and the changed-pixel box is centred on each page as PDF.js shows it;
-  - progress "Reading the file" and "Page n of m"; Cancel keeping the text; "Start again" emptying it; "Choose another file" keeping it; Remove emptying it;
+  - progress "Reading the file" and "Page n of m"; Cancel keeping the text; "Start again" emptying it; "Choose another file" keeping it; no Remove on the row, as for every one-file tool (Compress PDF's test checks the same), so a file is replaced, not removed;
   - password right and wrong, with focus landing on the field once the right password opens the file; damaged; engine-load failure; memory, output-limit and refused-text failures from a fake engine (the last saying "The watermark text could not be used. Check it and try again."); "Go back to your file" keeping the text;
   - the 100 MB notice; the 20,000-page notice on the generated 120,000-page file, with typing in the field blocking nothing for more than 100 ms;
   - verify it passes, with the other tools' e2e tests unchanged
 
 ## 7. No-upload test
 
-- [ ] 7.1 The tool's no-upload test: its exact allowlist from the build (the engine, `stamp`, `qpdf-json`, pdf-lib's file and `fflate`, no other tool's engine), positive checks that the engine and pdf-lib were fetched and a download happened; `qz7report.pdf`, its stem, the password, the full text `Kv4wm Qx8mrk` and each word, `Kv4wm` and `Qx8mrk`, as secrets for requests, headers, the console, the title, storage and traces; runs on `rich.pdf`, `tagged.pdf` and `form.pdf` with their bookmark titles, attachment name, document titles, `SECRET-` markers and field values as secrets; the address with no query and no hash; verify it passes
+- [x] 7.1 The tool's no-upload test: its exact allowlist from the build (the engine, `stamp`, `plain` with the qpdf JSON helpers inside it, pdf-lib's file and `fflate`, no other tool's engine), positive checks that the engine and pdf-lib were fetched and a download happened; `qz7report.pdf`, its stem, the password, the full text `Kv4wm Qx8mrk` and each word, `Kv4wm` and `Qx8mrk`, as secrets for requests, headers, the console, the title, storage and traces; runs on `rich.pdf`, `tagged.pdf` and `form.pdf` with their bookmark titles, attachment name, document titles, `SECRET-` markers and field values as secrets; the address with no query and no hash; Add page numbers' allowlist gains `stamp-*.js`, now a file of its own, with its other checks unchanged; verify both pass
 
 ## 8. Screenshots
 

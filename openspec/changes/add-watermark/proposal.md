@@ -41,7 +41,7 @@ This change depends on `add-text-option`, which adds a typed text to the widget 
 
 ## Where files are processed, and new requests
 
-Everything happens in the visitor's browser, in the tool worker. No request carries file contents, a file name, a password or the watermark text. After a pick, the page fetches only the site's own files: the worker, the workspace chunk, qpdf and its WebAssembly, the shared `inspect` and `plain` files, PDF.js and its data (for the first page's thumbnail), and the engine with `stamp` and `qpdf-json`; at the main button, pdf-lib's file, which brings `fflate`. No dependency is added, and no request to another origin.
+Everything happens in the visitor's browser, in the tool worker. No request carries file contents, a file name, a password or the watermark text. After a pick, the page fetches only the site's own files: the worker, the workspace chunk, qpdf and its WebAssembly, the shared `inspect` and `plain` files, PDF.js and its data (for the first page's thumbnail), and the engine with the drawing step (`stamp`, now a file of its own, shared with Add page numbers) and the qpdf JSON helpers (inside the shared `plain` file); at the main button, pdf-lib's file, which brings `fflate`. No dependency is added, and no request to another origin.
 
 ## Open decisions and owner questions touched
 
@@ -82,4 +82,4 @@ None. The drawing step's requirement ("Drawing on the pages of a PDF" in `tool-e
   - `tests/fixtures/README.md`, with each fixture's outcome;
   - the `@cantoo/pdf-lib` line in `LICENSES.md`, whose reason now names this tool too;
   - `CLAUDE.md` "Questions waiting for the owner", when the pull request is opened: "Rotate's waiting main button" is widened to Watermark's. The font question was settled by the owner on 21 Nov 2026 (taken up later in issue #20).
-- **Other tools:** no change in behaviour; their tests must pass unchanged. Add page numbers' related link to Watermark starts to show.
+- **Other tools:** no change in behaviour; their tests must pass unchanged, except that Add page numbers' exact no-upload allowlist names the drawing step's own file, `stamp-*.js`, which the bundler splits out of its engine once two engines import it. Add page numbers' related link to Watermark starts to show.
