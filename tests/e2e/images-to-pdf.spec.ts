@@ -252,6 +252,9 @@ test.describe('converting', () => {
     await open(page);
     await pick(page, ['wide.jpg', 'tall.jpg', 'screenshot.png', 'small.png']);
     await page.getByRole('button', { name: 'Move small.png up' }).click();
+    // Hold the job: pdf-lib is fetched only once the job starts, so a fetch that never answers keeps it
+    // running. Four small pictures otherwise convert before Cancel can be pressed.
+    await page.context().route(/\/_astro\/pdflib-[^/]+\.js$/, () => {});
     await mainButton(page).click();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(mainButton(page)).toBeFocused();
