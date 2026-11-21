@@ -79,12 +79,12 @@ The field "Your name" SHALL take up to 50 characters on one line, of the standar
 #### Scenario: Accented Western European letters
 
 - **WHEN** the visitor types "Zoë Ångström-Núñez"
-- **THEN** it is taken, and the page shows those characters as typed
+- **THEN** it is taken, and the page shows those characters as typed, with no accent, ring or tail cut off
 
 #### Scenario: A name in another script
 
 - **WHEN** the visitor types "सीता"
-- **THEN** the field is marked invalid, the page says "Some characters cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above.", the hint saying which characters work, the main button does nothing, and no question marks are ever drawn
+- **THEN** the field is marked invalid, the page says "Some characters cannot be used. To use other letters, choose “Draw it” or “Use a picture of it” above.", the hint saying which characters work, the main button does nothing, and no question marks are ever drawn
 
 #### Scenario: The engine is sent a name it does not accept
 
@@ -105,10 +105,15 @@ With "Draw it" chosen, the drawing pad SHALL be shown with the label "Draw your 
 - **WHEN** the visitor draws a loop in the left half of the pad and signs the last page at the bottom right
 - **THEN** the loop is drawn in black at the bottom right of the last page, the empty right half of the pad left out, its width and height in the same proportion as drawn
 
+#### Scenario: A small drawing
+
+- **WHEN** the visitor draws a small scribble in one corner of the pad
+- **THEN** it is drawn as large as the size rule allows, and its lines are no thicker on the page than those of a drawing that fills the pad
+
 #### Scenario: A dot
 
 - **WHEN** the drawing holds a line of one point
-- **THEN** it is drawn as a round dot the width of a line
+- **THEN** it is drawn as a round dot the width of a full drawing's line, not grown to fill the signature's box
 
 #### Scenario: The engine is sent a drawing it does not accept
 

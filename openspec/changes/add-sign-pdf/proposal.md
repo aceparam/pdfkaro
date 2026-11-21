@@ -84,7 +84,7 @@ The agent's own choices, named in the pull request: the three ways and "Type you
 
 ### Modified Capabilities
 
-- `tool-engines`: a new requirement, "Drawing on some pages only": the drawing step can be told which pages to draw on, and leaves every other page exactly as it was.
+- `tool-engines`: a new requirement, "Drawing on some pages only": the drawing step can be told which pages to draw on, and leaves every other page exactly as it was. A second, "What every page shares, counted once": what every run shares is counted once against the size budget, and blamed only when the chosen pages alone fit.
 
 ## Impact
 
@@ -96,7 +96,8 @@ The agent's own choices, named in the pull request: the three ways and "Type you
   - the registry entry, third under "Edit and sign", and its lines in `optionValues`, `optionTexts`, `optionDrawings` and `optionPictures` in `src/widget/option-values.ts`;
   - `src/engines/stamp.ts` (`only`, with tests in `tests/unit/stamp.test.ts`);
   - `src/engines/picture.ts` and `src/engines/tools/images-to-pdf.ts` (the turn table moved, Image to PDF's tests unchanged);
-  - `check-worker.mjs`, which checks the engine loads late and holds no pdf-lib code;
+  - `src/engines/stamp.ts` also gains `sharedBytes` (what every run shares, counted once against the size budget);
+  - `check-worker.mjs` is not changed: it was run and confirmed to check that the engine loads late and holds no pdf-lib code;
   - `tests/fixtures/README.md`, with each fixture's outcome;
   - the `@cantoo/pdf-lib` line in `LICENSES.md`, whose reason names this tool too;
   - `CLAUDE.md` "Questions waiting for the owner", when the pull request opens.
