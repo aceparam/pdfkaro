@@ -42,7 +42,7 @@ Built on `add-tool-options`, merged first.
 - [x] 9.1 `LICENSES.md`: no new line, as no dependency is added; the `@cantoo/pdf-lib` line's reason also names Add page numbers
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`; verify each passes
 - [x] 9.3 Add Add page numbers' hand checks to issue #7: the four PDF readers, browsers and phones, a tagged file from a word processor numbered and read with a screen reader, and the owner's review of the page text
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one option with six places and "Bottom centre" first, numbers from 1 as digits only, the size and margin rule, black Helvetica not put inside the file, the number marked as a page number, every page numbered, the placement method, the output-size backstop, `-numbered`), the drawing step and failure kind riding along, more `Q` than `q` as a known limit, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one option with six places and "Bottom centre" first, numbers from 1 as digits only, the size and margin rule, black Helvetica not put inside the file, the number marked as a page number, every page numbered, the placement method, the output-size backstop, `-numbered`), the drawing step and failure kind riding along, more `Q` than `q` as a known limit, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
 
 ## Workflow follow-up
 
