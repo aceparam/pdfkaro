@@ -37,7 +37,7 @@
 
 - [x] 9.1 `LICENSES.md`: no change, as no dependency is added
 - [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests and `npm run spec`; verify each passes
-- [ ] 9.3 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one kind for now, one radio per line, focus to the first option after reading, choices kept until "Start again", `src/widget/option-values.ts`) and that it is merged before `add-page-numbers`
+- [x] 9.3 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one kind for now, one radio per line, focus to the first option after reading, choices kept until "Start again", `src/widget/option-values.ts`) and that it is merged before `add-page-numbers`
 
 ## Workflow follow-up
 
