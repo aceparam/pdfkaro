@@ -4,11 +4,11 @@ Built on `add-text-option`, merged first.
 
 ## 1. Registry entry
 
-- [ ] 1.1 Add the `watermark-pdf` entry to `src/tools/registry.ts` as the design gives it (after Add page numbers, second under "Edit and sign", one `text` option with its words and `refusedSentence` and no limit or rule, no preset) and its line in `optionTexts` in `src/widget/option-values.ts`; verify with `npm test` (the registry test's catalogue order and the text checks from `add-text-option`) and that the built home page lists "Watermark" second under "Edit and sign" and Add page numbers' page now links to it
+- [x] 1.1 Add the `watermark-pdf` entry to `src/tools/registry.ts` as the design gives it (after Add page numbers, second under "Edit and sign", one `text` option with its words and `refusedSentence` and no limit or rule, no preset) and its line in `optionTexts` in `src/widget/option-values.ts`; verify with `npm test` (the registry test's catalogue order and the text checks from `add-text-option`) and that the built home page lists "Watermark" second under "Edit and sign" and Add page numbers' page now links to it
 
 ## 2. Engine
 
-- [ ] 2.1 Write `src/engines/tools/watermark-pdf.ts`: the text checked with `acceptedText` before any work, throwing `TextRefused` (whose message does not hold it); `watermarkPlace` (exported, pure) and `drawWatermark` (the text between an `/Artifact << /Type /Pagination /Subtype /Watermark >>` BDC and EMC, Helvetica Bold, `rgb(0.5, 0.5, 0.5)`, opacity 0.4, 45 degrees, numbers rounded to a thousandth); `run` through `plainCopy` and `stampPages` with reading, page and writing progress as Add page numbers reports them; pdf-lib imported for types only; `inspect` is `inspectPdf`; no change to `stamp.ts`, `qpdf.ts` or the failure kinds; verify with `npm run check` and the tests in 3.1
+- [x] 2.1 Write `src/engines/tools/watermark-pdf.ts`: the text checked with `acceptedText` before any work, throwing `TextRefused` (whose message does not hold it); `watermarkPlace` (exported, pure) and `drawWatermark` (the text between an `/Artifact << /Type /Pagination /Subtype /Watermark >>` BDC and EMC, Helvetica Bold, `rgb(0.5, 0.5, 0.5)`, opacity 0.4, 45 degrees, numbers rounded to a thousandth); `run` through `plainCopy` and `stampPages` with reading, page and writing progress as Add page numbers reports them; pdf-lib imported for types only; `inspect` is `inspectPdf`; no change to `stamp.ts`, `qpdf.ts` or the failure kinds; verify with `npm run check` and the tests in 3.1
 
 ## 3. Engine unit tests
 
@@ -17,7 +17,7 @@ Built on `add-text-option`, merged first.
 
 ## 4. Worker wiring
 
-- [ ] 4.1 Confirm `tool.worker.ts` already gives `qpdf` and `pdflib` and needs no change; `check-worker.mjs` checks the engine is loaded late, stays out of the worker file and holds no pdf-lib code (by a sentence from pdf-lib's source); `page-weight.mjs` gets a `loadedLater` line only for a new chunk; verify with `npm run build`, `npm run check:worker` and `npm run weigh`
+- [x] 4.1 Confirm `tool.worker.ts` already gives `qpdf` and `pdflib` and needs no change; `check-worker.mjs` checks the engine is loaded late, stays out of the worker file and holds no pdf-lib code (by a sentence from pdf-lib's source); `page-weight.mjs` gets a `loadedLater` line only for a new chunk; verify with `npm run build`, `npm run check:worker` and `npm run weigh`
 
 ## 5. Page and page text
 

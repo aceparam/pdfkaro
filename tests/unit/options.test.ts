@@ -294,8 +294,10 @@ describe('what is wrong with a text', () => {
 });
 
 describe('a tool\'s own rule for a text, and what its engine takes', () => {
-  it('lists no tool yet', () => {
-    expect(optionTexts).toEqual({});
+  it('lists Watermark only, 50 characters of the standard fonts', () => {
+    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } } });
+    expect(textRule('watermark-pdf', 'text')).toEqual({ maxLength: 50, characters: 'standard-font' });
+    expect(acceptedText('watermark-pdf', 'text', '  Draft ')).toBe('Draft');
     expect(textRule('test-text', 'text')).toBeUndefined();
     expect(acceptedText('test-text', 'text', 'Draft')).toBeUndefined();
   });
