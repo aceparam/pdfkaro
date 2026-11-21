@@ -2,11 +2,13 @@
 // turns, the kinds of JPG that are refused, the parts of a JPG that are kept,
 // colour profiles, and hostile inputs that must give `damaged`, never a throw.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Inflate } from 'fflate';
 import { describe, expect, it } from 'vitest';
+import type { PictureRule } from '../../src/widget/option-values';
 import {
+  acceptedPicture,
   inflateLimited,
   isHuge,
   jpegForPdf,
@@ -16,6 +18,7 @@ import {
   pngDataSize,
   pngForPdf,
   pngProfile,
+  pictureOutcome,
   profileColourOnly,
   profileFits,
   readOrientation,
@@ -583,5 +586,125 @@ describe('hostile pictures', () => {
       for (let at = start.length; at < bytes.length; at++) bytes[at] = random();
       tryAll(bytes);
     }
+  });
+});
+
+describe('a picture chosen for an option (pictureOutcome)', () => {
+  const both: PictureRule = { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 };
+  const jpgOnly: PictureRule = { ...both, types: ['image/jpeg'] };
+  const ready = (pixels: number) => ({ kind: 'ready', pixels });
+  const damaged = { kind: 'damaged' };
+  // Every file in tests/fixtures/pictures/, with its outcome under a rule of JPG and PNG. The fixtures README gives the same.
+  const outcomes: Record<string, object> = {
+    'alpha.png': ready(38_400),
+    'animated.png': ready(2400),
+    'arithmetic.jpg': { kind: 'unsupported' },
+    'bad-profile.jpg': ready(20_000),
+    'bad-profile.png': ready(20_000),
+    'bomb-profile.png': ready(2400),
+    'broken.jpg': damaged,
+    'broken.png': damaged,
+    'cmyk.jpg': ready(20_000),
+    'data-bomb.png': damaged,
+    'details-progressive.jpg': ready(76_800),
+    'details.jpg': ready(120_000),
+    'details.png': ready(30_000),
+    'grey-profile.png': ready(4800),
+    'grey-scan.jpg': ready(8_699_840),
+    'grey16.png': ready(8192),
+    'huge.jpg': ready(256_000_000),
+    'huge.png': ready(256_000_000),
+    'p3.icc': damaged,
+    'p3.jpg': ready(20_000),
+    'palette.png': ready(9600),
+    'profile.png': ready(20_000),
+    'progressive.jpg': ready(76_800),
+    'scan-g4.tif': damaged,
+    'screenshot.png': ready(921_600),
+    'small.png': ready(60_000),
+    'tall.jpg': ready(3_000_000),
+    'text-bomb.png': ready(1),
+    'turn-1.jpg': ready(16_000),
+    'turn-2.jpg': ready(16_000),
+    'turn-3.jpg': ready(16_000),
+    'turn-4.jpg': ready(16_000),
+    'turn-5.jpg': ready(16_000),
+    'turn-6.jpg': ready(16_000),
+    'turn-6.png': ready(16_000),
+    'turn-7.jpg': ready(16_000),
+    'turn-8.jpg': ready(16_000),
+    'wide.jpg': ready(3_000_000),
+    'zero-size.png': damaged,
+  };
+
+  it('lists every test picture', () => {
+    expect(readdirSync(join(__dirname, '../fixtures/pictures')).sort()).toEqual(Object.keys(outcomes).sort());
+  });
+
+  it.each(Object.entries(outcomes))('%s under a rule of JPG and PNG', (name, wanted) => {
+    expect(pictureOutcome(picture(name), both, fflate)).toEqual(wanted);
+  });
+
+  it('calls every PNG damaged under a rule of JPG only, and reads every JPG as before', () => {
+    for (const [name, wanted] of Object.entries(outcomes)) {
+      const under = pictureOutcome(picture(name), jpgOnly, fflate);
+      expect(under, name).toEqual(name.endsWith('.png') ? damaged : wanted);
+    }
+  });
+
+  it('never refuses a picture for its size: huge pictures are ready, whatever the notice sizes', () => {
+    const tiny: PictureRule = { ...both, noticeBytes: 1_048_576, noticePixels: 1_000_000 };
+    expect(pictureOutcome(picture('huge.png'), tiny, fflate)).toEqual(ready(256_000_000));
+    expect(pictureOutcome(picture('tall.jpg'), tiny, fflate)).toEqual(ready(3_000_000));
+  });
+
+  it('asks the inflater for nothing when reading a JPG, and counts a PNG with it', () => {
+    let made = 0;
+    class Counting extends Inflate {
+      constructor(ondata: ConstructorParameters<typeof Inflate>[0]) {
+        super(ondata);
+        made += 1;
+      }
+    }
+    pictureOutcome(picture('tall.jpg'), both, { Inflate: Counting });
+    expect(made).toBe(0);
+    pictureOutcome(picture('small.png'), both, { Inflate: Counting });
+    expect(made).toBe(1);
+  });
+});
+
+describe('a picture an engine is sent (acceptedPicture)', () => {
+  const rule: PictureRule = { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 };
+  const table = { 'test-picture': { picture: rule, jpg: { ...rule, types: ['image/jpeg'] as const } } };
+
+  it('gives the bytes of a ready picture, large ones too', () => {
+    const small = picture('small.png');
+    expect(acceptedPicture('test-picture', 'picture', small, fflate, table)).toBe(small);
+    const huge = picture('huge.png');
+    expect(acceptedPicture('test-picture', 'picture', huge, fflate, table)).toBe(huge);
+  });
+
+  it('refuses a damaged or unreadable picture, or one of a type the rule does not take', () => {
+    for (const name of ['broken.png', 'data-bomb.png', 'arithmetic.jpg', 'scan-g4.tif']) expect(acceptedPicture('test-picture', 'picture', picture(name), fflate, table), name).toBeUndefined();
+    expect(acceptedPicture('test-picture', 'jpg', picture('small.png'), fflate, table)).toBeUndefined();
+  });
+
+  it('refuses what is not bytes: text, an array of numbers, a Blob, nothing', () => {
+    const bytes = picture('small.png');
+    for (const value of ['small.png', Array.from(bytes), new Blob([bytes]), undefined, null, { length: 3 }, bytes.buffer]) {
+      expect(acceptedPicture('test-picture', 'picture', value, fflate, table)).toBeUndefined();
+    }
+  });
+
+  it('refuses a tool or key with no line, and never takes an inherited name for one', () => {
+    const bytes = picture('small.png');
+    expect(acceptedPicture('other-tool', 'picture', bytes, fflate, table)).toBeUndefined();
+    expect(acceptedPicture('test-picture', 'other', bytes, fflate, table)).toBeUndefined();
+    for (const name of ['__proto__', 'toString', 'constructor']) {
+      expect(acceptedPicture(name, 'picture', bytes, fflate, table)).toBeUndefined();
+      expect(acceptedPicture('test-picture', name, bytes, fflate, table)).toBeUndefined();
+    }
+    // No tool has a picture yet, so the real table takes nothing.
+    expect(acceptedPicture('test-picture', 'picture', bytes, fflate)).toBeUndefined();
   });
 });

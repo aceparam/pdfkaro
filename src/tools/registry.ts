@@ -113,11 +113,46 @@ export type DrawingOption = {
 };
 
 /**
+ * One picture the visitor chooses beside the tool's file, such as a picture of a signature. It is the
+ * job's input: the main button waits until one is chosen and read. Its types and notice sizes are written
+ * once, in src/widget/option-values.ts (`optionPictures`); the registry holds only its words. The picture
+ * is not shown: a line names it with its size.
+ */
+export type PictureOption = {
+  kind: 'picture';
+  /** The key the engine receives the picture's bytes under: `picture`. No page preset of the tool uses it. */
+  key: string;
+  /** Above the button, naming the field: "Picture of your signature". */
+  label: string;
+  /** The button before a pick: "Choose a picture". */
+  pickLabel: string;
+  /** The button once a picture is chosen: "Choose another picture". */
+  againLabel: string;
+  /** Under the button, read with it: what it takes and the notice sizes. A size in MB it names is the notice size. */
+  hint: string;
+  /** What a picture of the wrong type is not: "a JPG or PNG picture", as in "notes.png is not a JPG or PNG picture, so it was not used." */
+  acceptsName: string;
+  /** Tied to the main button while none is chosen: "Choose a picture of your signature first." */
+  emptySentence: string;
+  /** When the engine refuses the picture. Left out: "The picture could not be used. Choose another picture." */
+  refusedSentence?: string;
+  /**
+   * The notice's text for a picture over the tool's notice sizes. Left out: "A picture this large makes the new
+   * file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead."
+   */
+  largeAdvice?: string;
+  /** Said after "photo.jpg (24.6 MB) is too large to place on these pages." Left out: "Choose a smaller picture." */
+  tooLargeAdvice?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
  * An option a tool's working area shows once its file has been read, below the file and above
- * the main button, in registry order: a choice, a text or a drawing. One with a condition (`when`)
+ * the main button, in registry order: a choice, a text, a drawing or a picture. One with a condition (`when`)
  * is shown, held and sent only while its condition holds.
  */
-export type ToolOption = ChoiceOption | TextOption | DrawingOption;
+export type ToolOption = ChoiceOption | TextOption | DrawingOption | PictureOption;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';

@@ -185,3 +185,50 @@ export class DrawingRefused extends Error {
     super('The drawing was refused.');
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pictures. What a picture option may be, written once: each tool's types (JPG,
+// PNG or both) and the sizes in bytes and pixels above which the page shows a
+// notice. Nothing is refused for its size (SPEC.md sets no fixed size limit). The
+// page sniffs a pick's first bytes against the types, the tool's engine reads the
+// same line to check a picture before the job (`pictureOutcome` in
+// src/engines/picture.ts) and again when it runs (`acceptedPicture`); the registry
+// holds only a picture's words.
+
+/** A picture option's types. Not `PictureType`, which src/engines/picture.ts already uses for 'jpeg' | 'png'. */
+export type PictureMime = 'image/jpeg' | 'image/png';
+
+/** What one picture may be: its types, and the sizes above which the page shows a notice. Nothing is refused for its size. */
+export type PictureRule = { types: readonly PictureMime[]; noticeBytes: number; noticePixels: number };
+
+export type PictureTable = Readonly<Record<string, Readonly<Record<string, PictureRule>>>>;
+
+/** Each tool's pictures, by tool id and key. Each tool's change adds its own line, such as `'sign-pdf': { picture: {...} }`. */
+export const optionPictures: PictureTable = {};
+
+/** A tool's own rule for one of its pictures, or `undefined`. Only own keys count, as in `acceptedValue`. */
+export function pictureRule(tool: string, key: string, table: PictureTable = optionPictures): PictureRule | undefined {
+  if (!Object.hasOwn(table, tool)) return undefined;
+  const byKey = table[tool];
+  if (byKey === undefined || !Object.hasOwn(byKey, key)) return undefined;
+  return byKey[key];
+}
+
+/** Thrown by an engine that refuses its picture, before it reads the file. Known to the worker by its name. Its message holds nothing of the picture. */
+export class PictureRefused extends Error {
+  override name = 'PictureRefused';
+  constructor() {
+    super('The picture was refused.');
+  }
+}
+
+/**
+ * Thrown by an engine that finds the picture alone would make its new file pass its size budget. Known to
+ * the worker by its name. Its message holds nothing of the picture: the page names it from its own state.
+ */
+export class PictureTooLarge extends Error {
+  override name = 'PictureTooLarge';
+  constructor() {
+    super('The picture is too large to place.');
+  }
+}

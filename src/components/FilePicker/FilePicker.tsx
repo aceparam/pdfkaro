@@ -13,6 +13,8 @@ type Props = {
   /** Lets a parent move focus to the picker. */
   inputRef?: RefObject<HTMLInputElement | null>;
   id?: string;
+  /** Ids of the paragraphs read with the button, in order, joined into its `aria-describedby`. Empty ones are left out. */
+  describedBy?: readonly (string | null | undefined)[];
 };
 
 /**
@@ -20,7 +22,7 @@ type Props = {
  * keyboard, and files chosen before the page's script has loaded are taken as
  * soon as it has. The input is emptied after each pick, so it never holds files.
  */
-export function FilePicker({ label, accepts, multiple, onFiles, look = 'main', inputRef, id }: Props) {
+export function FilePicker({ label, accepts, multiple, onFiles, look = 'main', inputRef, id, describedBy }: Props) {
   const ownRef = useRef<HTMLInputElement | null>(null);
   const ref = inputRef ?? ownRef;
 
@@ -37,6 +39,8 @@ export function FilePicker({ label, accepts, multiple, onFiles, look = 'main', i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const described = (describedBy ?? []).filter((each): each is string => typeof each === 'string' && each !== '').join(' ');
+
   return (
     <label className={`${look === 'main' ? 'button' : 'button-secondary'} ${styles.picker}`}>
       <input
@@ -46,6 +50,7 @@ export function FilePicker({ label, accepts, multiple, onFiles, look = 'main', i
         type="file"
         accept={accepts.join(',')}
         multiple={multiple}
+        aria-describedby={described || undefined}
         onChange={(event) => take(event.currentTarget)}
       />
       {label}

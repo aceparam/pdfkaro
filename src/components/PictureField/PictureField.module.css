@@ -1,0 +1,28 @@
+/* A tool's picture (its registry `options`), placed as a typed text or a drawing is. */
+.picture {
+  margin-top: 1.5rem;
+}
+/* As the field labels: bold, the body size, the same gap below. The same rule as DrawingPad's label,
+   copied on purpose: each component owns its CSS Module. */
+.label {
+  margin: 0 0 0.375rem;
+  font-weight: 700;
+}
+/* The line naming the chosen picture. A long file name wraps rather than pushing the page sideways. */
+.chosen {
+  margin: 0 0 0.375rem;
+  overflow-wrap: anywhere;
+}
+/* What is wrong, between the label and the button: bold in the text colour, as a text's sentence is.
+   The same rule as TextField's error, copied on purpose. A long file name in it wraps. */
+.error {
+  margin: 0 0 0.375rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+/* The hint under the button, muted. The same rule as TextField's note, copied on purpose. */
+.note {
+  margin: 0.375rem 0 0;
+  color: var(--muted);
+}

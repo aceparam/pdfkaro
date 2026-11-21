@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type DrawingOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
-import { characterRules, drawingRule, optionDrawings, optionTexts, optionValues, textRule, type DrawingRule, type TextRule } from '../../src/widget/option-values';
+import { groups, tools, type DrawingOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import {
+  characterRules,
+  drawingRule,
+  optionDrawings,
+  optionPictures,
+  optionTexts,
+  optionValues,
+  pictureRule,
+  textRule,
+  type DrawingRule,
+  type PictureRule,
+  type TextRule,
+} from '../../src/widget/option-values';
 import { ruleAdvice } from '../../src/widget/options';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
@@ -442,6 +454,10 @@ const itemKeys = new Set([
 type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 type Texts = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
 type Drawings = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
+type Pictures = Readonly<Record<string, Readonly<Record<string, PictureRule>>>>;
+
+/** Keys the worker itself puts beside the options it hands the engine: an option never uses one. */
+const workerKeys = new Set(['passwords']);
 
 /** A word the widget shows: not empty, and plain (no exclamation mark). */
 const plain = (words: string | undefined) => words !== undefined && words.trim() !== '' && !words.includes('!');
@@ -450,7 +466,13 @@ const plain = (words: string | undefined) => words !== undefined && words.trim()
  * What is wrong with a tool's options, as plain sentences; none for a tool whose options are sound.
  * Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
  */
-function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values, texts: Texts = optionTexts, drawings: Drawings = optionDrawings): string[] {
+function optionProblems(
+  tool: Pick<Tool, 'id' | 'pages' | 'widget'>,
+  values: Values,
+  texts: Texts = optionTexts,
+  drawings: Drawings = optionDrawings,
+  pictures: Pictures = optionPictures,
+): string[] {
   const options = tool.widget?.options ?? [];
   const problems: string[] = [];
   const keys = options.map((option) => option.key);
@@ -471,11 +493,14 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       problems.push(...textProblems(tool.id, option, texts));
     } else if (option.kind === 'drawing') {
       problems.push(...drawingProblems(tool.id, option, drawings));
+    } else if (option.kind === 'picture') {
+      problems.push(...pictureProblems(tool.id, option, pictures));
     } else {
       problems.push(`${(option as { key: string }).key}: unknown kind`);
     }
     if (!/^[a-z][a-zA-Z0-9]*$/.test(option.key)) problems.push(`${option.key}: the key is not a plain word`);
     if (itemKeys.has(option.key)) problems.push(`${option.key}: the key is one the page's items send`);
+    if (workerKeys.has(option.key)) problems.push(`${option.key}: the key is one the worker sends`);
     for (const page of tool.pages) {
       if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
     }
@@ -501,6 +526,52 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
     for (const key of Object.keys(drawings[tool.id] ?? {})) {
       if (kindOf(key) !== 'drawing') problems.push(`${key}: in optionDrawings but not a drawing of the tool`);
     }
+  }
+  if (Object.hasOwn(pictures, tool.id)) {
+    for (const key of Object.keys(pictures[tool.id] ?? {})) {
+      if (kindOf(key) !== 'picture') problems.push(`${key}: in optionPictures but not a picture of the tool`);
+    }
+  }
+  return problems;
+}
+
+const megabyte = 1_048_576;
+const pictureTypes = new Set(['image/jpeg', 'image/png']);
+
+/** What is wrong with one picture: its words, and its line in optionPictures. */
+function pictureProblems(toolId: string, option: PictureOption, pictures: Pictures): string[] {
+  const problems: string[] = [];
+  const words: [string, string | undefined, boolean][] = [
+    ['label', option.label, true],
+    ['pick label', option.pickLabel, true],
+    ['again label', option.againLabel, true],
+    ['hint', option.hint, true],
+    ['accepts name', option.acceptsName, true],
+    ['empty sentence', option.emptySentence, true],
+    ['refused sentence', option.refusedSentence, false],
+    ['large advice', option.largeAdvice, false],
+    ['too-large advice', option.tooLargeAdvice, false],
+  ];
+  for (const [name, said, needed] of words) {
+    if ((needed || said !== undefined) && !plain(said)) problems.push(`${option.key}: the ${name} is empty or not plain`);
+  }
+  const rule = pictureRule(toolId, option.key, pictures);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionPictures`);
+    return problems;
+  }
+  const types: readonly string[] = rule.types;
+  if (types.length < 1 || types.length > 2 || new Set(types).size !== types.length || !types.every((type) => pictureTypes.has(type))) {
+    problems.push(`${option.key}: the types are not JPG, PNG or both, once each`);
+  }
+  const megabytes = rule.noticeBytes / megabyte;
+  if (!Number.isInteger(megabytes) || megabytes < 1 || megabytes > 50) problems.push(`${option.key}: the notice size is not a whole number of MB from 1 to 50`);
+  const millions = rule.noticePixels / 1_000_000;
+  if (!Number.isInteger(millions) || millions < 1 || millions > 100) problems.push(`${option.key}: the notice pixels are not a whole number of millions from 1 to 100`);
+  // "One over 8 MB": a hint that names a size in MB names the notice size, so the two cannot drift apart.
+  for (const match of option.hint.matchAll(/(\d[\d,.]*)\s*MB\b/g)) {
+    const named = match[1] ?? '';
+    if (Number(named.replaceAll(',', '')) !== megabytes) problems.push(`${option.key}: the hint names ${named} MB, not the notice size`);
   }
   return problems;
 }
@@ -854,5 +925,108 @@ describe('drawings', () => {
     expect(optionProblems(entry([drawing]), {}, {}, drawings)).toContain('drawing: the first option is a drawing');
     expect(optionProblems(entry([drawing, way]), values, {}, drawings)).toContain('drawing: the first option is a drawing');
     expect(optionProblems(entry([way, drawing]), values, {}, drawings)).not.toContain('drawing: the first option is a drawing');
+  });
+});
+
+describe('pictures', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'picture', label: 'Use a picture' }], initial: 'draw' };
+  const picture: PictureOption = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['draw', 'picture'] } };
+  const rule: PictureRule = { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 };
+  const pictures: Pictures = { 'test-options': { picture: rule } };
+  const check = (options: ToolOption[], table: Pictures = pictures, preset?: Record<string, string>) =>
+    optionProblems(entry(options, preset), options.includes(way) ? values : {}, {}, {}, table);
+
+  it('are sound for every tool, and optionPictures names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings, optionPictures), tool.id).toEqual([]);
+    for (const id of Object.keys(optionPictures)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry: first, after a choice, with a condition, or with its own words', () => {
+    expect(check([picture])).toEqual([]);
+    expect(check([way, { ...picture, when: { key: 'way', value: 'picture' } }])).toEqual([]);
+    expect(
+      check([way, { ...picture, refusedSentence: 'This picture could not be used. Choose another picture.', largeAdvice: 'Save a smaller copy. You can still go ahead.', tooLargeAdvice: 'Crop it to the signature, or save a smaller copy.' }]),
+    ).toEqual([]);
+    expect(check([picture], { 'test-options': { picture: { ...rule, types: ['image/png'] } } })).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(check([{ ...picture, label: ' ' }])).toContain('picture: the label is empty or not plain');
+    expect(check([{ ...picture, pickLabel: '' }])).toContain('picture: the pick label is empty or not plain');
+    expect(check([{ ...picture, againLabel: 'Again!' }])).toContain('picture: the again label is empty or not plain');
+    expect(check([{ ...picture, hint: '' }])).toContain('picture: the hint is empty or not plain');
+    expect(check([{ ...picture, acceptsName: ' ' }])).toContain('picture: the accepts name is empty or not plain');
+    expect(check([{ ...picture, emptySentence: 'Choose one!' }])).toContain('picture: the empty sentence is empty or not plain');
+    expect(check([{ ...picture, refusedSentence: ' ' }])).toContain('picture: the refused sentence is empty or not plain');
+    expect(check([{ ...picture, largeAdvice: '' }])).toContain('picture: the large advice is empty or not plain');
+    expect(check([{ ...picture, tooLargeAdvice: 'Smaller!' }])).toContain('picture: the too-large advice is empty or not plain');
+  });
+
+  it('fail with no line in optionPictures, or a line that belongs to no picture', () => {
+    expect(check([picture], {})).toContain('picture: no line in optionPictures');
+    expect(check([picture], { 'test-options': { other: rule } })).toContain('picture: no line in optionPictures');
+    expect(check([picture], { 'test-options': { picture: rule, size: rule } })).toContain('size: in optionPictures but not a picture of the tool');
+    expect(check([way, picture], { 'test-options': { picture: rule, way: rule } })).toContain('way: in optionPictures but not a picture of the tool');
+    // An inherited name is never taken for a tool's or a picture's line.
+    expect(check([{ ...picture, key: 'toString' }])).toContain('toString: no line in optionPictures');
+  });
+
+  it('fail when the types are not JPG, PNG or both, once each', () => {
+    const wrong = 'picture: the types are not JPG, PNG or both, once each';
+    const typesOf = (types: readonly string[]): Pictures => ({ 'test-options': { picture: { ...rule, types: types as PictureRule['types'] } } });
+    for (const types of [[], ['image/jpeg', 'image/jpeg'], ['image/gif'], ['image/jpeg', 'image/png', 'image/webp'], ['application/pdf']]) {
+      expect(check([picture], typesOf(types)), types.join(' ')).toContain(wrong);
+    }
+    expect(check([picture], typesOf(['image/jpeg']))).not.toContain(wrong);
+  });
+
+  it('fail when a notice size is not within its bounds', () => {
+    const bytes = 'picture: the notice size is not a whole number of MB from 1 to 50';
+    const pixels = 'picture: the notice pixels are not a whole number of millions from 1 to 100';
+    const noSize = { ...picture, hint: 'A JPG or PNG picture.' };
+    for (const noticeBytes of [0, 51 * 1_048_576, 8_000_000, 1.5 * 1_048_576, Number.NaN]) {
+      expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes } } })).toContain(bytes);
+    }
+    for (const noticePixels of [0, 101_000_000, 16_500_000, Number.NaN]) {
+      expect(check([noSize], { 'test-options': { picture: { ...rule, noticePixels } } })).toContain(pixels);
+    }
+    expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes: 1_048_576, noticePixels: 1_000_000 } } })).toEqual([]);
+    expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes: 50 * 1_048_576, noticePixels: 100_000_000 } } })).toEqual([]);
+  });
+
+  it('fail when the hint names a size in MB other than the notice size', () => {
+    expect(check([picture], { 'test-options': { picture: { ...rule, noticeBytes: 10 * 1_048_576 } } })).toContain('picture: the hint names 8 MB, not the notice size');
+    expect(check([picture])).not.toContain('picture: the hint names 8 MB, not the notice size');
+  });
+
+  it('fail when the key is used twice, is a preset key, one the items send, or passwords', () => {
+    expect(check([picture, { ...picture, label: 'Again' }])).toContain('an option key is used twice');
+    expect(check([picture], pictures, { picture: 'yes' })).toContain(`picture: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(check([{ ...picture, key: 'order' }], { 'test-options': { order: rule } })).toContain("order: the key is one the page's items send");
+    expect(check([{ ...picture, key: 'passwords' }], { 'test-options': { passwords: rule } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('the worker keys', () => {
+  it('fail for an option of any kind keyed passwords, which the worker sends beside the options', () => {
+    const merge = tools.find((each) => each.id === 'merge-pdf');
+    if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+    const choice: ToolOption = { kind: 'choice', key: 'passwords', legend: 'Which', choices: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], initial: 'a' };
+    const tool: Tool = { ...merge, id: 'test-options', widget: { ...merge.widget, options: [choice] } };
+    expect(optionProblems(tool, { 'test-options': { passwords: ['a', 'b'] } })).toContain('passwords: the key is one the worker sends');
   });
 });

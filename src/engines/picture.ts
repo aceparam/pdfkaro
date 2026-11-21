@@ -7,6 +7,11 @@
 // add up is `damaged`; a JPG coded in a way many PDF readers cannot draw is
 // `unsupported`.
 
+import { optionPictures, pictureRule, type PictureMime, type PictureRule, type PictureTable } from '../widget/option-values';
+import type { PictureOutcome } from './types';
+
+export type { PictureOutcome } from './types';
+
 export type PictureType = 'jpeg' | 'png';
 
 /** The camera turn, as EXIF numbers it: 1 is upright, 2 to 8 turned or mirrored. */
@@ -578,4 +583,44 @@ export function readPicture(bytes: Uint8Array): PictureRead {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return readJpeg(bytes);
   if (bytes.length >= 8 && pngSignature.every((byte, index) => bytes[index] === byte)) return readPng(bytes);
   return { kind: 'damaged' };
+}
+
+// ---------------------------------------------------------------------------
+// A picture chosen for an option (src/widget/option-values.ts's `optionPictures`).
+
+const mimeFor: Record<PictureType, PictureMime> = { jpeg: 'image/jpeg', png: 'image/png' };
+
+/**
+ * Whether a picture's bytes may be used under a rule, read without decoding a pixel, every read
+ * bounds-checked: `readPicture` damaged or unsupported is that; a type the rule does not take is
+ * damaged (the page sniffed it first, so only a file whose header lies reaches here); a PNG whose
+ * data inflates past its header (`pngDataFits`) or a JPG `jpegForPdf` cannot rebuild is damaged; else
+ * ready, with its width × height as stored. Size never refuses: a large picture gets a notice on the page.
+ * It always takes fflate, JPG or PNG, so the files fetched are the same whatever the picture's type.
+ */
+export function pictureOutcome(bytes: Uint8Array, rule: PictureRule, fflate: { Inflate: InflateClass }): PictureOutcome {
+  const read = readPicture(bytes);
+  if (read.kind !== 'ok') return read;
+  const { picture } = read;
+  if (!rule.types.includes(mimeFor[picture.type])) return { kind: 'damaged' };
+  if (picture.type === 'png' ? !pngDataFits(bytes, fflate) : jpegForPdf(bytes) === undefined) return { kind: 'damaged' };
+  return { kind: 'ready', pixels: picture.width * picture.height };
+}
+
+/**
+ * For an engine: the bytes when `value` is bytes whose outcome under the tool's own rule for `key` is
+ * ready; else `undefined`, and the engine throws `PictureRefused` before it reads the PDF. Only own keys
+ * count, so `__proto__` or `toString` is never taken for a tool or a picture. A large picture is taken.
+ */
+export function acceptedPicture(
+  tool: string,
+  key: string,
+  value: unknown,
+  fflate: { Inflate: InflateClass },
+  table: PictureTable = optionPictures,
+): Uint8Array | undefined {
+  if (!(value instanceof Uint8Array)) return undefined;
+  const rule = pictureRule(tool, key, table);
+  if (rule === undefined) return undefined;
+  return pictureOutcome(value, rule, fflate).kind === 'ready' ? value : undefined;
 }
