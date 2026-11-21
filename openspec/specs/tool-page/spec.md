@@ -662,7 +662,6 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 - **WHEN** the visitor types a text, starts the job and presses Cancel, or the job fails, or the visitor picks another file with "Choose another file" while listing; and later presses "Start again" or removes the only file
 - **THEN** after Cancel, a failure or another file the text is as typed; after "Start again" or removing the only file the field is empty again
 
-
 ### Requirement: A typed text that cannot be used
 
 Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. A sentence about refused characters SHALL say only which characters cannot be used, since the hint states the rule. (SPEC.md: Tool page anatomy, 4; What we are building, rule 4)
@@ -671,6 +670,7 @@ Text that is too long, or has a character the tool's rule does not take, SHALL g
 
 - **WHEN** the typed text is too long or has a character the tool's rule does not take
 - **THEN** one sentence saying what is wrong is tied to the field and to the main button, which stays focusable, and a press does nothing
+
 ### Requirement: A text the engine refuses
 
 When a tool's engine refuses the text it was sent, the page SHALL say "The text could not be used. Check it and try again.", or the tool's own words for its text, under the tool's heading for a failed job, and offer "Go back to your file" with the text as typed. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
