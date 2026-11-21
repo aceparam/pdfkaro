@@ -130,7 +130,7 @@ function listed(characters: readonly string[]): string {
   return `${characters.slice(0, -1).join(', ')} and ${characters[characters.length - 1] ?? ''}`;
 }
 
-/** The one sentence for a text's problem, in the tool's words where it has them. */
+/** The one sentence for a text's problem, in the tool's words where it has them; a refused character's with the tool's `charactersAdvice` after it. */
 export function textSentence(option: TextOption, rule: TextRule, problem: TextProblem): string {
   switch (problem.kind) {
     case 'empty':
@@ -140,7 +140,9 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
     case 'characters': {
       // The rule itself is said by the hint under the field (the registry test checks every hint ends with it), so not again here.
       const named = problem.refused.length >= 1 && problem.refused.length <= 3 && problem.refused.every(nameable);
-      return named ? `${listed(problem.refused)} cannot be used.` : 'Some characters cannot be used.';
+      const sentence = named ? `${listed(problem.refused)} cannot be used.` : 'Some characters cannot be used.';
+      // The tool's way forward for another script (Sign PDF: drawing or a picture), after either sentence: a name with Ł needs it too.
+      return option.charactersAdvice ? `${sentence} ${option.charactersAdvice}` : sentence;
     }
   }
 }

@@ -1,5 +1,6 @@
 // Drawing on the pages of a PDF: the shared step of Add page numbers, which
-// Watermark and Sign PDF will reuse by giving their own `draw`.
+// Watermark and Sign PDF reuse by giving their own `draw`. A tool may choose
+// which pages are drawn on (`only`, Sign PDF); a page not chosen is not touched.
 //
 // pdf-lib draws one layer per page, on a page sized as the visitor's page is
 // shown (its crop box, turn and user unit read as PDF.js reads them). Each
@@ -48,8 +49,14 @@ export const smallestScale = 1e-6;
  */
 export class OutputLimit extends Error {
   override name = 'OutputLimit';
-  constructor() {
+  /**
+   * `'shared'` when what every page shares (`sharedBytes`, such as Sign PDF's picture) would alone pass the budget
+   * with the chosen pages, found before anything is drawn, so the tool can say so in its own sentence.
+   */
+  readonly reason: 'shared' | undefined;
+  constructor(reason?: 'shared') {
     super('The new file would pass its size limit.');
+    this.reason = reason;
   }
 }
 
@@ -262,6 +269,12 @@ export function newId(objects: NewObjects): string {
   return `${objects.next++} 0 R`;
 }
 
+/**
+ * Each raw stream's data as base64, by the bytes it holds, so data shared by every run (Sign PDF's picture,
+ * registered afresh in each run over the same bytes) is turned into text once per job, not once per run.
+ */
+const base64Of = new WeakMap<Uint8Array, string>();
+
 /** Bytes as base64, in chunks, with what a worker and Node both have. */
 export function base64(bytes: Uint8Array): string {
   let text = '';
@@ -334,7 +347,13 @@ function dictOf(lib: Lib, context: PdfLib.PDFContext, dict: PdfLib.PDFDict, obje
 /** The entry of a referenced object: a stream, with its data, or a value. */
 function entryOf(lib: Lib, context: PdfLib.PDFContext, target: PdfLib.PDFObject, objects: NewObjects, refs: Map<string, string>, depth: number): QpdfEntry {
   if (target instanceof lib.PDFRawStream) {
-    return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length']), data: base64(target.getContents()) } };
+    const contents = target.getContents();
+    let data = base64Of.get(contents);
+    if (data === undefined) {
+      data = base64(contents);
+      base64Of.set(contents, data);
+    }
+    return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length']), data } };
   }
   if (target instanceof lib.PDFFlateStream) {
     return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length', '/Filter', '/DecodeParms']), data: base64(target.getUnencodedContents()) } };
@@ -437,14 +456,25 @@ export function writeUpdate(qpdf: Qpdf, limit: number, onWriting?: (percent: num
 /**
  * What a tool gives the drawing step. `prepare` runs once for each pdf-lib document of up to
  * 2,000 layer pages, with pdf-lib itself, and gives what every page of the run draws with: Add page
- * numbers embeds Helvetica, Watermark may embed another font, Sign PDF the signature's picture.
+ * numbers embeds Helvetica, Watermark Helvetica Bold, Sign PDF the signature's form.
  * `draw` then draws on one layer page with it.
  */
 export type StampSteps<Run = unknown> = {
   prepare(doc: PdfLib.PDFDocument, lib: Lib): Promise<Run>;
-  /** Draws on one layer page, sized as the page is shown, upright; `index` counts from 0. */
+  /** Draws on one layer page, sized as the page is shown, upright; `index` counts from 0 over every page of the file. */
   draw(page: PdfLib.PDFPage, area: { width: number; height: number }, index: number, run: Run, lib: Lib): void;
-  /** After each layer page is drawn: how many are done, of how many. */
+  /**
+   * Which pages are drawn on, by index from 0 of `total`. Left out, every page. A page not chosen gets no layer and no
+   * entry in the update, so it stays exactly as in the plain copy. Choosing no page at all is refused before anything is written.
+   */
+  only?(index: number, total: number): boolean;
+  /**
+   * The encoded size in bytes of what every run's `prepare` makes and the new file is to hold once (Sign PDF's picture
+   * and signature form). Counted once against the size budget before the first run; when it alone, with the chosen
+   * pages, would pass the budget, the job stops with `OutputLimit` whose reason is `'shared'`, before anything is drawn.
+   */
+  sharedBytes?: number;
+  /** After each layer page is drawn: how many chosen pages are done, of how many chosen. */
   onPage?(done: number, total: number): void;
   /** qpdf's write progress, in percent. */
   onWriting?(percent: number): void;
@@ -453,22 +483,38 @@ export type StampSteps<Run = unknown> = {
 /** The plain copy, which the drawing step lets go of once qpdf holds it. */
 export type PlainSource = { plain?: Uint8Array };
 
+/** What the update holds for shared streams of `bytes` encoded bytes: their data as base64, and room for their dictionaries. */
+export function sharedText(bytes: number): number {
+  return Math.ceil(bytes / 3) * 4 + 4096;
+}
+
 /**
- * Draws on every page of the plain copy and gives the checked result. The
- * reading qpdf is let go first; then the stamping qpdf is made from the plain
- * copy, and `source.plain` is let go, so reading never holds a fourth copy.
- * Layers are drawn 2,000 pages at a time; each run is turned into update
- * entries, appended to the stamping qpdf's /update.json, and let go. Before a
- * run is built its update is estimated, and once the running total would pass
- * the budget the job stops with `OutputLimit`.
+ * Draws on the chosen pages of the plain copy (every page unless `only` says
+ * otherwise) and gives the checked result. The reading qpdf is let go first;
+ * then the stamping qpdf is made from the plain copy, and `source.plain` is let
+ * go, so reading never holds a fourth copy. Layers are drawn 2,000 chosen pages
+ * at a time; each run is turned into update entries, appended to the stamping
+ * qpdf's /update.json, and let go; a page not chosen gets nothing. Before a run
+ * is built its update is estimated, and once the running total would pass the
+ * budget the job stops with `OutputLimit`. What every run shares
+ * (`sharedBytes`) is counted once, at its encoded size, as the new file holds
+ * it; the update, which carries it as base64, is allowed that much more.
  */
 export async function stampPages<Run>(tools: EngineTools, source: PlainSource, steps: StampSteps<Run>): Promise<Uint8Array> {
   if (!source.plain) throw new Error('No file was given to draw on.');
   const plainBytes = source.plain.byteLength;
   const read = await readPages(tools, source.plain);
-  const lib = (await (tools.pdflib ?? missing)()) as Lib;
   const total = read.pages.length;
+  const chosen = steps.only ? read.pages.flatMap((page, index) => (steps.only!(index, total) ? [{ page, index }] : [])) : read.pages.map((page, index) => ({ page, index }));
+  // Refused before anything is written, so a tool's mistake can never hand back the plain copy as if it were drawn on.
+  if (chosen.length === 0) throw new Error('No page was chosen to draw on.');
   const limit = sizeLimit(plainBytes, total);
+  const shared = Math.max(0, steps.sharedBytes ?? 0);
+  // The update carries shared streams as base64, a third larger than the file will hold them, once.
+  const updateLimit = shared > 0 ? limit + sharedText(shared) - shared : limit;
+  const sizes = new WeakMap<object, number>();
+  if (shared > 0 && shared + chosen.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0) > limit) throw new OutputLimit('shared');
+  const lib = (await (tools.pdflib ?? missing)()) as Lib;
   const qpdf = await freshQpdf(tools, source.plain);
   delete source.plain;
 
@@ -477,7 +523,7 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
   const append = (text: string) => {
     const bytes = encoder.encode(text);
     appended += bytes.length;
-    if (appended > limit) throw new OutputLimit();
+    if (appended > updateLimit) throw new OutputLimit();
     qpdf.append('/update.json', bytes);
   };
   const saveId = newId(objects);
@@ -489,27 +535,29 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
       entryText(restoreId, { stream: { dict: {}, data: base64(encoder.encode('\nQ\n')) } }),
   );
   const draws = new Map<string, string>();
-  const sizes = new WeakMap<object, number>();
+  // The shared streams are still to be written until the first run is appended.
+  let sharedLeft = shared > 0 ? sharedText(shared) : 0;
 
-  for (let start = 0; start < total; start += runPages) {
-    const run = read.pages.slice(start, start + runPages);
-    const estimate = run.reduce((sum, page) => sum + pageEstimate(page, sizes), 0);
-    if (appended + estimate > limit) throw new OutputLimit();
+  // Runs of up to 2,000 chosen pages: a stretch of pages with none chosen makes no pdf-lib document and calls no `prepare`.
+  for (let start = 0; start < chosen.length; start += runPages) {
+    const run = chosen.slice(start, start + runPages);
+    const estimate = run.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0);
+    if (appended + estimate + sharedLeft > updateLimit) throw new OutputLimit();
 
     const doc = await lib.PDFDocument.create({ updateMetadata: false });
     const prepared = await steps.prepare(doc, lib);
     const layers: PdfLib.PDFPage[] = [];
-    run.forEach((page, offset) => {
+    run.forEach(({ page, index }, offset) => {
       const layer = doc.addPage([page.place.width, page.place.height]);
-      steps.draw(layer, { width: page.place.width, height: page.place.height }, start + offset, prepared, lib);
+      steps.draw(layer, { width: page.place.width, height: page.place.height }, index, prepared, lib);
       layers.push(layer);
-      steps.onPage?.(start + offset + 1, total);
+      steps.onPage?.(start + offset + 1, chosen.length);
     });
     await doc.flush();
 
     const refs = new Map<string, string>();
     const parts: string[] = [];
-    run.forEach((page, offset) => {
+    run.forEach(({ page }, offset) => {
       const { place } = page;
       const layer = layerOf(lib, layers[offset]!, objects, refs);
       const formId = newId(objects);
@@ -537,6 +585,7 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
     for (const [id, entry] of objects.entries) parts.push(entryText(id, entry));
     objects.entries.clear();
     append(`,${parts.join(',')}`);
+    sharedLeft = 0;
     layers.length = 0;
   }
   append('}]}');

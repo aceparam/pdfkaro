@@ -12,7 +12,7 @@
 // is written.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
-import { isHuge, jpegForPdf, pngDataFits, pngForPdf, pngProfile, profileColourOnly, readPicture, shownSize, type InflateClass, type Orientation } from '../picture';
+import { isHuge, jpegForPdf, orientedMatrix, pngDataFits, pngForPdf, pngProfile, profileColourOnly, readPicture, shownSize, type InflateClass, type Matrix, type Orientation } from '../picture';
 import type { Engine, EngineTools, Inspector } from '../types';
 
 /** An A4 page, upright, in points. */
@@ -27,7 +27,7 @@ export type Placement = {
   /** The box the picture fills, as shown, centred on the page. */
   box: { x: number; y: number; width: number; height: number };
   /** The `cm` matrix that maps the stored picture's unit square onto the box, turned and mirrored by the camera turn. */
-  matrix: [number, number, number, number, number, number];
+  matrix: Matrix;
 };
 
 /**
@@ -45,18 +45,8 @@ export function place(picture: { width: number; height: number; orientation: Ori
   const h = natural.height * scale;
   const x = (page.width - w) / 2;
   const y = (page.height - h) / 2;
-  // The stored picture's unit square has its top-left at (0, 1).
-  const matrices: Record<Orientation, Placement['matrix']> = {
-    1: [w, 0, 0, h, x, y],
-    2: [-w, 0, 0, h, x + w, y],
-    3: [-w, 0, 0, -h, x + w, y + h],
-    4: [w, 0, 0, -h, x, y + h],
-    5: [0, -h, -w, 0, x + w, y + h],
-    6: [0, -h, w, 0, x, y + h],
-    7: [0, h, w, 0, x, y],
-    8: [0, h, -w, 0, x + w, y],
-  };
-  return { page, box: { x, y, width: w, height: h }, matrix: matrices[picture.orientation] };
+  const box = { x, y, width: w, height: h };
+  return { page, box, matrix: orientedMatrix(picture.orientation, box) };
 }
 
 async function need<T>(tools: EngineTools, name: string): Promise<T> {

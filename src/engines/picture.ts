@@ -57,6 +57,28 @@ export function shownSize(picture: Pick<Picture, 'width' | 'height' | 'orientati
   return picture.orientation >= 5 ? { width: picture.height, height: picture.width } : { width: picture.width, height: picture.height };
 }
 
+/** A `cm` matrix: a b c d e f. */
+export type Matrix = [number, number, number, number, number, number];
+
+/**
+ * The `cm` matrix that maps the stored picture's unit square (its top-left at (0, 1)) onto a box as shown,
+ * turned and mirrored by the camera turn. Shared by Image to PDF's pages and Sign PDF's signature.
+ */
+export function orientedMatrix(orientation: Orientation, box: { x: number; y: number; width: number; height: number }): Matrix {
+  const { x, y, width: w, height: h } = box;
+  const matrices: Record<Orientation, Matrix> = {
+    1: [w, 0, 0, h, x, y],
+    2: [-w, 0, 0, h, x + w, y],
+    3: [-w, 0, 0, -h, x + w, y + h],
+    4: [w, 0, 0, -h, x, y + h],
+    5: [0, -h, -w, 0, x + w, y + h],
+    6: [0, -h, w, 0, x, y + h],
+    7: [0, h, w, 0, x, y],
+    8: [0, h, -w, 0, x + w, y],
+  };
+  return matrices[orientation];
+}
+
 /** Whether the page warns about this picture and draws no thumbnail of it. */
 export function isHuge(picture: Picture): boolean {
   return picture.type === 'png' && picture.width * picture.height > maxPngPixels;

@@ -13,6 +13,7 @@ import {
   pageBox,
   pageEstimate,
   pdfNumber,
+  sharedText,
   sizeLimit,
   stampPages,
   writeUpdate,
@@ -495,5 +496,163 @@ describe('large and hostile files', { timeout: 60_000 }, () => {
 
   it('the budget is twice the plain copy, 2 KB a page and 16 MB', () => {
     expect(sizeLimit(1000, 10)).toBe(2000 + 20480 + 16 * 1024 * 1024);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drawing on some pages only (`only`), and what every page shares (`sharedBytes`), for Sign PDF.
+
+/** The page objects of a file, by page order, each as qpdf's JSON gives it with its content streams' text. */
+async function pageObjects(bytes: Uint8Array) {
+  const { pages, objects } = await jsonOf(bytes);
+  // qpdf numbers objects afresh as it writes, so references are left out: the page tree's, and the content streams', given by their text.
+  return pages.map((page) => {
+    const dict = { ...(objects[`obj:${page.object}`]!.value as Record<string, unknown>) };
+    delete dict['/Parent'];
+    delete dict['/Contents'];
+    return { dict, contents: page.contents.map((id) => streamText(objects, id)) };
+  });
+}
+
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('drawing on some pages only', { timeout: 60_000 }, () => {
+  it('the last of three pages: only it carries the mark; the first two pages are as in the plain copy, and qpdf --check passes', async () => {
+    const input = await oddPages([{ name: 'a' }, { name: 'b', rotate: 90 }, { name: 'c' }]);
+    const plain = (await plainCopy(tools, input, undefined)).plain;
+    const drawnOn: number[] = [];
+    const counted: [number, number][] = [];
+    const output = await stamp(input, (page, area, index, run, lib) => {
+      drawnOn.push(index);
+      redMark(page, area, index, run, lib);
+    }, { only: (index, total) => index === total - 1, onPage: (done, total) => counted.push([done, total]) });
+    expect((await qpdfOn(output, ['--check'])).code).toBe(0);
+    expect(drawnOn).toEqual([2]);
+    expect(counted).toEqual([[1, 1]]);
+    const found = await marks(output);
+    expect(found[0]).toBeNull();
+    expect(found[1]).toBeNull();
+    expect(found[2]).not.toBeNull();
+    const before = await pageObjects(plain);
+    const after = await pageObjects(output);
+    expect(after.slice(0, 2)).toEqual(before.slice(0, 2));
+    expect(after[2]!.contents.slice(1, -2)).toEqual(before[2]!.contents);
+  });
+
+  it('left out, every page is drawn on, as Add page numbers and Watermark draw', async () => {
+    const input = await oddPages([{ name: 'a' }, { name: 'b' }, { name: 'c' }]);
+    const counted: [number, number][] = [];
+    const output = await stamp(input, redMark, { onPage: (done, total) => counted.push([done, total]) });
+    expect(counted).toEqual([[1, 3], [2, 3], [3, 3]]);
+    expect((await marks(output)).every((mark) => mark !== null)).toBe(true);
+  });
+
+  it('no page chosen: refused before anything is written or drawn, as the engine failure', async () => {
+    let prepared = 0;
+    let drawn = 0;
+    const failed = await stamp(fixture('text.pdf'), () => drawn++, {
+      only: () => false,
+      prepare: async (doc, lib) => {
+        prepared++;
+        return doc.embedFont(lib.StandardFonts.Helvetica);
+      },
+    }).catch((error: unknown) => error as Error);
+    expect(failed).toBeInstanceOf(Error);
+    expect((failed as Error).message).toBe('No page was chosen to draw on.');
+    expect(failureKind(failed)).toBe('engine');
+    expect([prepared, drawn]).toEqual([0, 0]);
+  });
+
+  it('the first page of 120,000: one layer, `prepare` called for one run only, progress counting one page, a few kilobytes larger than the plain copy written with object streams', async () => {
+    const pages = 120_000;
+    const input = await packed(handMade(pages));
+    const plain = (await plainCopy(tools, input, undefined)).plain;
+    const withStreams = await packed(plain);
+    let prepared = 0;
+    const drawnOn: number[] = [];
+    const counted: [number, number][] = [];
+    const output = await stamp(input, (page, area, index, run, lib) => {
+      drawnOn.push(index);
+      redMark(page, area, index, run, lib);
+    }, {
+      only: (index) => index === 0,
+      prepare: async (doc, lib) => {
+        prepared++;
+        return doc.embedFont(lib.StandardFonts.Helvetica);
+      },
+      onPage: (done, total) => counted.push([done, total]),
+    });
+    expect(prepared).toBe(1);
+    expect(drawnOn).toEqual([0]);
+    expect(counted).toEqual([[1, 1]]);
+    expect(output.length - withStreams.length).toBeLessThan(4096);
+    expect((await qpdfOn(output, ['--show-npages'])).out.trim()).toBe(String(pages));
+  }, 240_000);
+
+  it('a run of 2,000 chosen pages with none chosen around them: chosen pages are grouped into runs, and a stretch with none makes no run', async () => {
+    const pages = 4500;
+    const input = await packed(handMade(pages));
+    let prepared = 0;
+    const drawnOn: number[] = [];
+    // Pages 0 to 1,999 and 4,000 to 4,499: 2,500 pages in two runs; pages 2,000 to 3,999 make none.
+    const output = await stamp(input, (page, area, index, run, lib) => {
+      drawnOn.push(index);
+      redMark(page, area, index, run, lib);
+    }, {
+      only: (index) => index < 2000 || index >= 4000,
+      prepare: async (doc, lib) => {
+        prepared++;
+        return doc.embedFont(lib.StandardFonts.Helvetica);
+      },
+    });
+    expect(prepared).toBe(2);
+    expect(drawnOn).toHaveLength(2500);
+    expect(drawnOn[2000]).toBe(4000);
+    const { pages: list } = await jsonOf(output);
+    // A page not chosen still draws its one stream alone; a chosen page has [q, its stream, Q, draw].
+    expect(list[2500]!.contents).toHaveLength(1);
+    expect(list[0]!.contents).toHaveLength(4);
+    expect(list[4499]!.contents).toHaveLength(4);
+  }, 120_000);
+});
+
+describe('what every page shares', { timeout: 60_000 }, () => {
+  it('is counted once: shared bytes that fit with the chosen pages pass, and the update may carry them as base64 above the budget', async () => {
+    expect(sharedText(3000)).toBe(4000 + 4096);
+    // A raw stream of 12 MB, shared by every run and written once, on a small file: inside the budget at its own size.
+    const data = new Uint8Array(12 * 1024 * 1024).map((_, index) => (index * 7919) % 251);
+    let prepared = 0;
+    const output = await stamp(fixture('text.pdf'), (page, area, _index, run) => {
+      const name = page.node.newXObject('Big', run as unknown as PdfLib.PDFRef);
+      page.pushOperators(op('q'), op('cm', [10, 0, 0, 10, 0, 0].map((n) => PDFNumber.of(n))), op('Do', [PDFName.of(name.asString().slice(1))]), op('Q'));
+      void area;
+    }, {
+      sharedBytes: data.length,
+      prepare: async (doc) => {
+        prepared++;
+        const stream = doc.context.stream(data, { Type: 'XObject', Subtype: 'Image', Width: 4, Height: data.length / 12, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode' });
+        return doc.context.register(stream) as unknown as PdfLib.PDFFont;
+      },
+    });
+    expect(prepared).toBe(1);
+    expect(output.length).toBeGreaterThan(data.length);
+    expect(output.length).toBeLessThan(data.length + 64 * 1024);
+  });
+
+  it('over the budget with the chosen pages: OutputLimit with the reason "shared", before any run is prepared or drawn', async () => {
+    let prepared = 0;
+    let drawn = 0;
+    const failed = await stamp(fixture('text.pdf'), () => drawn++, {
+      sharedBytes: sizeLimit(6057, 3),
+      prepare: async (doc, lib) => {
+        prepared++;
+        return doc.embedFont(lib.StandardFonts.Helvetica);
+      },
+    }).catch((error: unknown) => error);
+    expect(failed).toBeInstanceOf(OutputLimit);
+    expect((failed as OutputLimit).reason).toBe('shared');
+    expect(failureKind(failed)).toBe('output-limit');
+    expect([prepared, drawn]).toEqual([0, 0]);
+    // Any other limit has no reason.
+    expect(new OutputLimit().reason).toBeUndefined();
   });
 });
