@@ -639,4 +639,66 @@ export const tools: Tool[] = [
       resultNotes: [],
     },
   },
+  {
+    // The first row of "Edit and sign", and the first tool that draws on the visitor's pages (src/engines/stamp.ts).
+    id: 'add-page-numbers',
+    group: 'edit',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Watermark and Sign PDF are linked once they are published.
+    related: ['merge-pdf', 'rearrange-pdf-pages', 'delete-pdf-pages', 'watermark-pdf', 'sign-pdf', 'compress-pdf'],
+    pages: [
+      {
+        slug: 'add-page-numbers-to-pdf',
+        name: 'Add page numbers',
+        summary: 'Number the pages of a PDF.',
+        title: 'Add page numbers to a PDF in your browser - PDFkaro',
+        description: 'Put a page number on every page of a PDF, at the top or bottom. The file stays on your device and is not uploaded.',
+        heading: 'Add page numbers to a PDF',
+        sentence: 'Put a number on every page of a PDF. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Add numbers and download',
+      writingLabel: 'Writing the numbered file',
+      doneHeading: 'Your numbered file is ready',
+      failedHeading: 'The numbers were not added.',
+      tooFewFiles: 'Choose a PDF file to number its pages.',
+      outputSuffix: 'numbered',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and number the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The values are also listed in src/widget/option-values.ts, which the engine reads.
+      options: [
+        {
+          kind: 'choice',
+          key: 'position',
+          legend: 'Where the numbers go',
+          initial: 'bottom-centre',
+          choices: [
+            { value: 'bottom-left', label: 'Bottom left' },
+            { value: 'bottom-centre', label: 'Bottom centre' },
+            { value: 'bottom-right', label: 'Bottom right' },
+            { value: 'top-left', label: 'Top left' },
+            { value: 'top-centre', label: 'Top centre' },
+            { value: 'top-right', label: 'Top right' },
+          ],
+        },
+      ],
+      // Page tools drop passwords and restrictions (13 Nov 2026), and the decision names Add page numbers.
+      resultNotes: [
+        'Each page has its number. Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
 ];
