@@ -18,25 +18,25 @@
 
 ## 5. Page
 
-- [ ] 5.1 `ToolWorkspace` draws each choice once the file has been read, while listing, below the file and above the main button: a `fieldset` with no border and no padding, a `legend` styled as the field labels, one native radio per line in a label at least 2.75rem tall, `accent-color: var(--text)`, the site's focus ring; focus moves to the chosen radio of the first option once the file is ready, if focus is still on the main button or the body; verify with component tests against a test entry (fieldset and legend, checked radio, `option-set` on change, focus, hidden while reading, for a password and for a damaged file) and that Compress PDF's and Rotate PDF's rendering and focus tests pass unchanged
-- [ ] 5.2 No page text: no page shows an option yet; verify the built pages are unchanged with `npm run build` and `npm run weigh`
+- [x] 5.1 `ToolWorkspace` draws each choice once the file has been read, while listing, below the file and above the main button: a `fieldset` with no border and no padding, a `legend` styled as the field labels, one native radio per line in a label at least 2.75rem tall, `accent-color: var(--text)`, the site's focus ring; focus moves to the chosen radio of the first option once the file is ready, if focus is still on the main button or the body; verify with component tests against a test entry (fieldset and legend, checked radio, `option-set` on change, focus, hidden while reading, for a password and for a damaged file) and that Compress PDF's and Rotate PDF's rendering and focus tests pass unchanged
+- [x] 5.2 No page text: no page shows an option yet; verify the built pages are unchanged with `npm run build` and `npm run weigh`
 
 ## 6. End-to-end test
 
-- [ ] 6.1 No end-to-end test in this change, as no published page has options; the other tools' end-to-end tests must pass unchanged; verify with `npm run e2e -- --trace off`
+- [x] 6.1 No end-to-end test in this change, as no published page has options; the other tools' end-to-end tests must pass unchanged; verify with `npm run e2e -- --trace off`
 
 ## 7. No-upload test
 
-- [ ] 7.1 No request, storage or address is added; the existing no-upload tests must pass unchanged; verify they do
+- [x] 7.1 No request, storage or address is added; the existing no-upload tests must pass unchanged; verify they do
 
 ## 8. Screenshots
 
-- [ ] 8.1 No page changes how it looks, so no screenshots; the pull request says so, and Add page numbers' pull request carries the group at 360px and 1280px
+- [x] 8.1 No page changes how it looks, so no screenshots; the pull request says so, and Add page numbers' pull request carries the group at 360px and 1280px
 
 ## 9. Checks and review
 
-- [ ] 9.1 `LICENSES.md`: no change, as no dependency is added
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests and `npm run spec`; verify each passes
+- [x] 9.1 `LICENSES.md`: no change, as no dependency is added
+- [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests and `npm run spec`; verify each passes
 - [ ] 9.3 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one kind for now, one radio per line, focus to the first option after reading, choices kept until "Start again", `src/widget/option-values.ts`) and that it is merged before `add-page-numbers`
 
 ## Workflow follow-up
