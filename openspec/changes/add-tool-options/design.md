@@ -56,7 +56,7 @@ export const optionValues: Readonly<Record<string, Readonly<Record<string, reado
 - Values match `optionValues` as above.
 - **No preset key is an option key** (the architect, stage 1): `{ ...preset, ...choices }` would otherwise let a choice silently replace what a page's URL promises.
 - **No option key is a key the page's items send** (the security reviewer, stage 2): `cuts`, `pages`, `turns` and `order` (`jobOption` in `useToolRun`, read in the test from `toggleRules` and `turnRules`), since options are spread after them.
-- A component test renders `ToolWorkspace` with a test entry holding one choice of three values, since no published tool has options yet.
+- `ChoiceGroup` is tested by its markup and by calling its change handler, with a test entry holding one choice of three values, since no published tool has options yet; no harness here renders `ToolWorkspace` or runs its effects (see Tests).
 
 ### 4. The state
 
