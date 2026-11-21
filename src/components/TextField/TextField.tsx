@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
 import type { TextOption } from '../../tools/registry';
+import { pressesButton } from '../../widget/keys';
 import styles from './TextField.module.css';
 
 type Props = {
@@ -50,7 +51,8 @@ export function TextField({ option, id, raw, error, onType, onEnter, focusRef }:
         aria-describedby={error ? `${errorId(id)} ${hintId}` : hintId}
         onChange={(event) => onType(event.currentTarget.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
+          // Not the Enter that confirms a word in an input method or a phone keyboard's suggestion.
+          if (pressesButton(event)) {
             event.preventDefault();
             onEnter();
           }

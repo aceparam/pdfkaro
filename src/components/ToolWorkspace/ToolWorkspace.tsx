@@ -198,7 +198,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // A tool with options: once a new set of files has been read, focus moves to the first option (a choice's
   // chosen radio button, or a text's field), if it is still where the widget put it or on the page body. The status line still
   // says the file's line. Cancel and "Go back to your file" keep the key, so focus stays on the main button.
-  const options = words.options ?? [];
+  const options = useMemo(() => words.options ?? [], [words.options]);
   const showOptions = options.length > 0 && optionsShown(state);
   const filesRead = readyKey(state);
   const filesReadBefore = useRef('');
@@ -212,7 +212,8 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   }, [filesRead, showOptions]);
 
   // A text that holds the main button back: empty, too long, or with characters its rule does not take.
-  const hold = optionsHold(toolId, options, state.choices);
+  // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
+  const hold = useMemo(() => optionsHold(toolId, options, state.choices), [toolId, options, state.choices]);
   const fieldId = (key: string) => `${optionName}-${key}`;
   // Too long or refused characters: the sentence is shown by the field, and tied to the main button from there.
   const fieldHold = showOptions && hold && hold.kind !== 'empty' ? hold : null;

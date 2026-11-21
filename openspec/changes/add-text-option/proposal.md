@@ -24,7 +24,7 @@ Watermark, the next Phase 1 tool after Add page numbers, puts the visitor's own 
 - **Out of scope:**
   - any tool's text, label or limits (each tool's change adds its own);
   - a text with a starting value, or one the main button does not wait for; text of several lines; a live count of characters;
-  - characters beyond the standard fonts' encoding, which needs a font put inside the file (an owner question raised by `add-watermark`);
+  - characters beyond the standard fonts' encoding, which needs a font put inside the file (taken up later, by the owner's decision of 21 Nov 2026, in issue #20);
   - other kinds of option (a number, a colour, a slider), and options before a pick.
 
 ### `SPEC.md` sections

@@ -58,7 +58,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **The multilingual test file** is still missing; Watermark leaves existing text alone, so it changes nothing there.
 - **The agent's own choices,** named in the pull request: no option but the text; 50 characters on one line; 45 degrees rising left to right across the centre; the size rule (fits inside the shown part with a margin of a twelfth of the shorter side, at most a fifth of it); bold Helvetica, mid-grey, 40% opacity; drawn above the page content; marked as a watermark artifact; every page; `-watermarked`.
 
-No open decision needs more than its assumed default; the new owner question above is asked, not assumed beyond the default.
+No open decision needs more than its assumed default.
 
 ## Capabilities
 

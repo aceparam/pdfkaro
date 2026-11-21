@@ -14,7 +14,7 @@ A tool's options SHALL be declared in its registry entry: for a choice, a key, a
 #### Scenario: The registry test checks a text
 
 - **WHEN** the registry test checks a tool with a text
-- **THEN** it fails unless the label, hint and sentences are plain and not empty, the accepted-values module has a line for that tool and key with a most characters from 1 to 200 and a known character rule, every text line in that module belongs to a text the registry shows, and a hint that names a number of characters names that most characters
+- **THEN** it fails unless the label, hint and sentences are plain and not empty, the accepted-values module has a line for that tool and key with a most characters from 1 to 200 and a known character rule, every text line in that module belongs to a text the registry shows, a hint that names a number of characters names that most characters, and the hint ends with what its character rule takes, in the rule's own words
 
 #### Scenario: A preset uses an option's key
 

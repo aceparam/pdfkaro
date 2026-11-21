@@ -98,6 +98,7 @@ For every tool, beside the choice checks of `add-tool-options`:
 - its label, hint, `emptySentence` and `refusedSentence` (if given) are not empty and hold no exclamation mark;
 - `textRule(tool.id, key)` exists, with `maxLength` a whole number from 1 to 200 and `characters` a key of `characterRules`; and every line in `optionTexts` belongs to a text the registry shows;
 - a hint that names a number of characters ("Up to 50 characters") names that `maxLength`, so the hint and the limit cannot drift apart;
+- the hint ends with the rule's own words, `ruleAdvice[rule.characters]` in `src/widget/options.ts` (the architect, stage 2), so the hint and the rule cannot drift apart either;
 - a failing case for each check, built in the test with a test entry and a test table, as `optionTexts` is empty in this change.
 
 ### 4. The state and the failure
@@ -113,8 +114,8 @@ Plain functions, tested in Node, each given the tool's id where it needs a rule:
 - `chosenValue(option, choices)` for a choice, as now; `typedText(option, choices)` for a text: the raw string stored, else `''`;
 - `optionsToSend(options, choices)`: a choice's value, and a text's cleaned text (`cleanText`), by key. It takes no tool id, as cleaning needs no rule, so its signature and `jobOptions`' stay as `add-tool-options` built them. The main button cannot start a job while a text has a problem, and the engine checks again;
 - `textSentence(option, rule, problem)`:
-  - `characters` with one to three refused characters, all visible letters or marks of the Latin script or common signs (not a control, format, combining or white-space character, and not of another script): "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." ("Ł cannot be used.", "Ł, ź and ő cannot be used.");
-  - `characters` otherwise (another script, more than three, or anything invisible): "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks.", with no list, since a list of Devanagari or Arabic letters, or of invisible marks, says nothing useful; the first sentence says what happened, as the named list does (the UX reviewer, stage 1);
+  - `characters` with one to three refused characters, each a Latin letter of one code point in capital, small or title case and not a fullwidth form (U+FF00 to U+FFEF) (the UX reviewer, stage 2: a refused number, punctuation mark or symbol often looks like one the rule takes, such as U+2010 hyphen, U+2212 minus or fullwidth marks, so naming it bare would confuse; modifier letters, marks, spaces, controls, other scripts and emoji are never named either): "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." ("Ł cannot be used.", "Ł, ź and ő cannot be used.");
+  - `characters` otherwise (another script, more than three, anything invisible, or any refused number, punctuation mark or symbol): "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks.", with no list, since a list of Devanagari or Arabic letters, or of invisible marks, says nothing useful; the first sentence says what happened, as the named list does (the UX reviewer, stage 1);
   - `too-long`: "This text has 63 characters. Use 50 or fewer." with both numbers from the text and the rule (written with `number`, so 1,204);
   - `empty`: the option's `emptySentence`;
 - `optionsHold(tool, options, choices)`: the first text with a problem, as `{ key, kind, sentence }`, or null. `empty` goes under the main button; `characters` and `too-long` go by the field and are tied to the main button from there (decision 6);
@@ -134,7 +135,7 @@ Plain functions, tested in Node, each given the tool's id where it needs a rule:
          aria-invalid={error ? true : undefined}
          aria-describedby={error ? `${id}-error ${id}-hint` : `${id}-hint`}
          onChange={(event) => onType(event.currentTarget.value)}
-         onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); onEnter(); } }} />
+         onKeyDown={(event) => { if (pressesButton(event)) { event.preventDefault(); onEnter(); } }} />
   <p id={`${id}-hint`} className={styles.note}>{option.hint}</p>
 </div>
 ```
@@ -149,7 +150,8 @@ Plain functions, tested in Node, each given the tool's id where it needs a rule:
   - while a text is empty, the existing tied paragraph shows the option's `emptySentence` (after "too few files", which comes first) and the button is `aria-disabled`;
   - while a text is too long or has characters it cannot take, the sentence is by the field, the button is `aria-disabled`, and its `aria-describedby` points at the sentence's own id (`${id}-error`), so the button reads the sentence alone, without the hint. It is not repeated under the button, so it is on screen once;
   - in both cases the button stays focusable and a press does nothing, as now. `ready` adds `optionsHold(...) === null` to what it checks.
-- **Enter** in the field calls the same handler as the main button, which starts the job only when the button works, as Enter in the password field presses its button.
+- **Enter** in the field calls the same handler as the main button, which starts the job only when the button works, as Enter in the password field presses its button. Not the Enter that confirms a word in an input method or a phone keyboard's suggestion (`nativeEvent.isComposing`, or key code 229): `pressesButton` in `src/widget/keys.ts` says which, and `PasswordField` uses it too, a small shared fix (the UX and code reviewers, stage 2).
+- **`optionsHold` is memoised** on the tool id, the options and `state.choices`, so a long paste is not cleaned and checked again each time a thumbnail arrives (the code reviewer, stage 2).
 - **Said once:** the field's typing handler works out the problem the new text will have and, when its key and kind (not its sentence, which changes with every character past the limit) differ from the problem shown, says the sentence through the status region, so a `characters` or `too-long` problem is said when it appears or changes kind. It is done in the handler, not in an effect, because the repo's lint forbids setting state in an effect body, and only typing can make such a problem appear. It says nothing when the problem goes or for `empty`, which is tied to the button from the start. Focus never moves for it, so it is announced once.
 - **Focus:** `optionRef` goes on the first option's focus target: the chosen radio button of a choice, or the field of a text. `focusMovesToOptions` is unchanged, so focus moves once per set of files read, only while still free, never after Cancel or "Go back to your file".
 - **Tab** from the field reaches the next option, then "Choose another file" in a one-file tool's actions row, then the main button, as for a choice.
@@ -164,7 +166,7 @@ The script before a pick is unchanged: the island's props are the same for every
 
 ## Threats
 
-- **What is typed.** It is the visitor's own text, but it is checked like anything from the page: only own keys, only strings, the character list, the limit, before the engine reads the file. Direction overrides, control characters and invisible marks are outside the list and refused, so a text cannot reorder or hide what is drawn. A refused character is shown back to the visitor only when it is a visible Latin letter or common sign, so the page never prints an invisible or direction-changing mark into its own sentence.
+- **What is typed.** It is the visitor's own text, but it is checked like anything from the page: only own keys, only strings, the character list, the limit, before the engine reads the file. Direction overrides, control characters and invisible marks are outside the list and refused, so a text cannot reorder or hide what is drawn. A refused character is shown back to the visitor only when it is a Latin letter (not fullwidth), so the page never prints an invisible or direction-changing mark, or a lookalike of an allowed character, into its own sentence. The status line may say that sentence, so it can name up to three such letters, never the text.
 - **A huge paste.** Cleaning and counting a megabyte takes milliseconds; it is shown as too long and never sent.
 - **Leaks.**
   - No `name` and no form, so it can never be submitted to an address.
@@ -184,7 +186,7 @@ The script before a pick is unchanged: the island's props are the same for every
 - **Component,** `tests/unit/components.test.tsx`:
   - `ChoiceGroup`'s existing tests, imported from its new folder, unchanged;
   - `TextField` by its markup: the label's `for` matches the field's `id`; `type="text"`, `autocomplete="off"`, `spellcheck="false"`, `enterkeyhint="go"`; no `name`, no `maxlength`, no form; without an error, no `aria-invalid`, no sentence and `aria-describedby` naming the hint; with an error, the sentence in its own paragraph between the label and the field, `aria-invalid="true"`, and `aria-describedby` naming the sentence and then the hint;
-  - `TextField` by its handlers: `onType` gets the value; Enter calls `onEnter` and prevents the default, another key does not; the focus ref is on the field.
+  - `TextField` by its handlers: `onType` gets the value; Enter calls `onEnter` and prevents the default, another key does not, and neither does an Enter that confirms a composed word (`isComposing`, key code 229); the focus ref is on the field; `pressesButton` tested as a plain function.
   - `ToolWorkspace` is not rendered and its effects are not run in a test, as in `add-tool-options`: the repo has no harness that renders components or runs effects in Node, and adding one is a dependency this change does not add.
 - **End-to-end:** none in this change, as no published page has a text. Watermark's end-to-end test is the first browser test of these lines: focus on the field after reading and after a password, the main button waiting and its sentence, typing, refused characters named or not, a long paste, Enter, Tab order, the status message once, Cancel and "Start again", and phone width; its screenshots show the field at 360px and 1280px, light and dark, and at 200% text.
 - **Other tools:** every existing unit and end-to-end test passes unchanged, including Add page numbers' choice, its look and its focus.

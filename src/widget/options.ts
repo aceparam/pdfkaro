@@ -55,17 +55,17 @@ export const ruleAdvice: Readonly<Record<CharacterRule, string>> = {
 };
 
 /**
- * Whether a refused character is shown back to the visitor by name: a visible letter, number, mark
- * or sign of the Latin script or of no script, one code point. Never a control, format, combining
- * or white-space character, a letter of another script, or an emoji, so the page never prints an
- * invisible or direction-changing mark, or a list that says nothing useful.
+ * Whether a refused character is shown back to the visitor by name: only a Latin letter of one code
+ * point, capital, small or title case (Ł, ő, ğ), and not a fullwidth one (U+FF00 to U+FFEF), which
+ * looks like a letter the rule takes. Never a number, punctuation or symbol, since a refused one
+ * often looks like one the rule takes (U+2010 hyphen beside "-", U+2212 minus, fullwidth marks);
+ * never a modifier letter, mark, space, control or format character, a letter of another script or
+ * an emoji. So the page never prints an invisible or direction-changing mark, or a name that looks
+ * like an allowed character; the rest get "Some characters cannot be used."
  */
 function nameable(character: string): boolean {
-  return (
-    /^[\p{Script=Latin}\p{Script=Common}]$/u.test(character) &&
-    /^[\p{L}\p{N}\p{P}\p{S}]$/u.test(character) &&
-    !/^[\p{Extended_Pictographic}\p{Emoji_Modifier}]$/u.test(character)
-  );
+  const point = character.codePointAt(0) ?? 0;
+  return /^[\p{Lu}\p{Ll}\p{Lt}]$/u.test(character) && /^\p{Script=Latin}$/u.test(character) && !(point >= 0xff00 && point <= 0xffef);
 }
 
 /** "Ł", "Ł and ź", "Ł, ź and ő". */

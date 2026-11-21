@@ -90,7 +90,7 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: A keyboard user uses the field
 
 - **WHEN** a keyboard user is in the field and presses Tab, or presses Enter
-- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works
+- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works; the Enter that confirms a word in an input method or a phone keyboard's suggestion does not press it
 
 #### Scenario: A screen reader user reaches the field
 

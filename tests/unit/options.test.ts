@@ -344,13 +344,24 @@ describe('a text in the widget', () => {
     expect(jobOptions({ format: 'jpg' }, {}, [watermark], { text: ' Draft ' })).toEqual({ format: 'jpg', text: 'Draft' });
   });
 
-  it('says what is wrong in one sentence: refused characters named when one to three visible Latin letters or signs', () => {
+  it('says what is wrong in one sentence: refused characters named when one to three Latin letters', () => {
     const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
     expect(ruleAdvice['standard-font']).toBe(advice);
     expect(characters(['Ł'])).toBe(`Ł cannot be used. ${advice}`);
     expect(characters(['Ł', 'ź'])).toBe(`Ł and ź cannot be used. ${advice}`);
     expect(characters(['Ł', 'ź', 'ő'])).toBe(`Ł, ź and ő cannot be used. ${advice}`);
-    expect(characters(['≠'])).toBe(`≠ cannot be used. ${advice}`);
+    expect(characters(['ğ', 'Ǆ'])).toBe(`ğ and Ǆ cannot be used. ${advice}`);
+  });
+
+  it('never names a refused character that looks like one the rule takes, or any number, mark or symbol', () => {
+    const some = `Some characters cannot be used. ${advice}`;
+    const characters = (refused: string[]) => textSentence(watermark, rule, { kind: 'characters', refused });
+    // U+2010 hyphen, U+2011 no-break hyphen, U+2212 minus, U+2215 division slash, fullwidth "!" and "A", a modifier apostrophe.
+    for (const character of ['\u2010', '\u2011', '\u2212', '\u2215', '\uff01', '\uff21', '\u02bc', '≠', '½', '٣']) {
+      expect(characters([character]), `U+${(character.codePointAt(0) ?? 0).toString(16)}`).toBe(some);
+    }
+    // One lookalike among Latin letters sends the whole list to the plain sentence.
+    expect(characters(['Ł', '\u2212'])).toBe(some);
   });
 
   it('says "Some characters cannot be used." with no list for four or more, another script, an emoji, or anything invisible', () => {

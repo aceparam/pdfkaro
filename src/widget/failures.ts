@@ -2,7 +2,7 @@
 // runs. Plain functions over the registry's words, tested in Node.
 
 import type { Progress } from '../engines/types';
-import type { ToolWidgetWords } from '../tools/registry';
+import type { TextOption, ToolWidgetWords } from '../tools/registry';
 import { fileCount, number, progressLine } from './format';
 import type { FailureKind } from './state';
 import { tooManyPicturesSentence, zipLimitSentence } from './zip-limits';
@@ -30,8 +30,8 @@ export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 
   if (kind === 'output-limit') return outputLimitSentence;
   // The page should never send a text the engine refuses; if the two disagree, the first text's own words, else the shared ones.
   if (kind === 'text-refused') {
-    const text = words.options?.find((option) => option.kind === 'text');
-    return (text?.kind === 'text' ? text.refusedSentence : undefined) ?? textRefusedSentence;
+    const text = words.options?.find((option): option is TextOption => option.kind === 'text');
+    return text?.refusedSentence ?? textRefusedSentence;
   }
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
   return shared[kind];

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { groups, tools, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
 import { characterRules, optionTexts, optionValues, textRule, type TextRule } from '../../src/widget/option-values';
+import { ruleAdvice } from '../../src/widget/options';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
@@ -505,6 +506,8 @@ function textProblems(toolId: string, option: TextOption, texts: Texts): string[
   }
   if (!Number.isInteger(rule.maxLength) || rule.maxLength < 1 || rule.maxLength > 200) problems.push(`${option.key}: the most characters is not a whole number from 1 to 200`);
   if (!Object.hasOwn(characterRules, rule.characters)) problems.push(`${option.key}: the character rule is not known`);
+  // The hint ends with what the rule takes, in the rule's own words, so the hint and the rule cannot drift apart.
+  else if (!option.hint.endsWith(ruleAdvice[rule.characters])) problems.push(`${option.key}: the hint does not end with what its rule takes`);
   // "Up to 50 characters": a hint that names a number of characters names the limit, so the two cannot drift apart.
   for (const match of option.hint.matchAll(/(\d[\d,]*)\s+characters?\b/g)) {
     if (Number(match[1]!.replaceAll(',', '')) !== rule.maxLength) problems.push(`${option.key}: the hint names ${match[1]} characters, not the most characters`);
@@ -647,21 +650,29 @@ describe('texts', () => {
 
   it('fail when the most characters is not a whole number from 1 to 200, or the rule is not known', () => {
     const limit = 'text: the most characters is not a whole number from 1 to 200';
+    const noNumber = { ...words, hint: 'On one line. Use letters from English and other Western European languages, numbers and common marks.' };
     for (const maxLength of [0, 201, 2.5, Number.NaN]) {
-      expect(optionProblems(entry([{ ...words, hint: 'On one line.' }]), {}, { 'test-options': { text: { maxLength, characters: 'standard-font' } } })).toContain(limit);
+      expect(optionProblems(entry([noNumber]), {}, { 'test-options': { text: { maxLength, characters: 'standard-font' } } })).toContain(limit);
     }
-    expect(optionProblems(entry([{ ...words, hint: 'On one line.' }]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toEqual([]);
+    expect(optionProblems(entry([noNumber]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toEqual([]);
     const unknown = { maxLength: 50, characters: 'any' as TextRule['characters'] };
     expect(optionProblems(entry([words]), {}, { 'test-options': { text: unknown } })).toContain('text: the character rule is not known');
     const inherited = { maxLength: 50, characters: 'toString' as TextRule['characters'] };
     expect(optionProblems(entry([words]), {}, { 'test-options': { text: inherited } })).toContain('text: the character rule is not known');
   });
 
+  it('fail when the hint does not end with what its rule takes', () => {
+    const wrong = 'text: the hint does not end with what its rule takes';
+    expect(optionProblems(entry([{ ...words, hint: 'Up to 50 characters, on one line.' }]), {}, texts)).toContain(wrong);
+    expect(optionProblems(entry([{ ...words, hint: `${words.hint} Or anything.` }]), {}, texts)).toContain(wrong);
+    expect(optionProblems(entry([words]), {}, texts)).not.toContain(wrong);
+  });
+
   it('fail when the hint names a number of characters other than the most characters', () => {
     expect(optionProblems(entry([words]), {}, { 'test-options': { text: { maxLength: 40, characters: 'standard-font' } } })).toContain(
       'text: the hint names 50 characters, not the most characters',
     );
-    const long = { ...words, hint: 'Up to 1,200 characters.' };
+    const long = { ...words, hint: 'Up to 1,200 characters. Use letters from English and other Western European languages, numbers and common marks.' };
     expect(optionProblems(entry([long]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toContain(
       'text: the hint names 1,200 characters, not the most characters',
     );

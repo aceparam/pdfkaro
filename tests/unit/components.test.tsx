@@ -402,15 +402,32 @@ describe('TextField, a text of a test entry', () => {
     expect(inputs).toHaveLength(1);
     const props = inputs[0]?.props as {
       onChange(event: { currentTarget: { value: string } }): void;
-      onKeyDown(event: { key: string; preventDefault(): void }): void;
+      onKeyDown(event: { key: string; keyCode?: number; nativeEvent: { isComposing: boolean }; preventDefault(): void }): void;
     };
     expect((inputs[0] as unknown as { props: { ref?: unknown } }).props.ref).toBe(ref);
     props.onChange({ currentTarget: { value: ' Draft copy ' } });
     expect(typed).toEqual([' Draft copy ']);
     let prevented = 0;
-    props.onKeyDown({ key: 'a', preventDefault: () => (prevented += 1) });
+    const prevent = () => (prevented += 1);
+    props.onKeyDown({ key: 'a', nativeEvent: { isComposing: false }, preventDefault: prevent });
     expect([entered, prevented]).toEqual([0, 0]);
-    props.onKeyDown({ key: 'Enter', preventDefault: () => (prevented += 1) });
+    // The Enter that confirms an input method's or a phone keyboard's word does nothing here.
+    props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true }, preventDefault: prevent });
+    props.onKeyDown({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    expect([entered, prevented]).toEqual([0, 0]);
+    props.onKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: prevent });
     expect([entered, prevented]).toEqual([1, 1]);
+  });
+});
+
+describe('Enter in a typed field (TextField and PasswordField)', async () => {
+  const { pressesButton } = await import('../../src/widget/keys');
+
+  it('presses the button on Enter, but not on the Enter that confirms a composed word, or another key', () => {
+    expect(pressesButton({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false } })).toBe(true);
+    expect(pressesButton({ key: 'Enter', nativeEvent: { isComposing: true } })).toBe(false);
+    expect(pressesButton({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false } })).toBe(false);
+    expect(pressesButton({ key: 'Process', keyCode: 229 })).toBe(false);
+    expect(pressesButton({ key: 'a', keyCode: 65, nativeEvent: { isComposing: false } })).toBe(false);
   });
 });
