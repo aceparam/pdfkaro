@@ -163,7 +163,9 @@ describe('when the options are shown, and where focus goes', () => {
   it('does not move focus again after Cancel or going back, but does for a replaced file', () => {
     const read = play(add('a'), ready('a'));
     const before = readyKey(read);
-    const cancelled = [{ type: 'started' } as Action, { type: 'back-to-files' } as Action].reduce(reducer, read);
+    const working = reducer(read, { type: 'started' });
+    expect(readyKey(working)).toBe(before);
+    const cancelled = reducer(working, { type: 'back-to-files' });
     expect(readyKey(cancelled)).toBe(before);
     expect(focusMovesToOptions(true, readyKey(cancelled), before, true)).toBe(false);
     const replaced = [add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, read);

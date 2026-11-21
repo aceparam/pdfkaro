@@ -45,12 +45,12 @@ export function optionsShown(state: Pick<State, 'step' | 'files'>): boolean {
 }
 
 /**
- * A key that changes each time a new set of files has been read: the listed files' ids once the
- * options are shown, else ''. Cancel and "Go back to your file" keep it, so focus is not moved
- * again after them.
+ * A key that changes each time a new set of files has been read: the listed files' ids once every
+ * one has been read and opened, else ''. It does not follow the step, so the job, Cancel and "Go
+ * back to your file" keep it and focus is not moved again after them.
  */
-export function readyKey(state: Pick<State, 'step' | 'files'>): string {
-  return optionsShown(state) ? state.files.map((file) => file.id).join(' ') : '';
+export function readyKey(state: Pick<State, 'files'>): string {
+  return state.files.length > 0 && state.files.every((file) => file.status === 'ready' && !file.checking) ? state.files.map((file) => file.id).join(' ') : '';
 }
 
 /**
