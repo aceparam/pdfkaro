@@ -14,7 +14,7 @@ This change depends on `add-text-option`, which adds a typed text to the widget 
 - **How the watermark looks and where it sits:** drawn once on every page, across the centre of the page as a reader shows it, rising from lower left to upper right at 45 degrees, whatever the page's turn, size or boxes. Bold Helvetica (a standard font, not put inside the file), mid-grey at 40% opacity, so text under it stays readable. Sized so the whole text fits inside the part of the page shown with a margin, and never taller than a fifth of the page's shorter side. Drawn above the page's own content, so it shows over pictures and scans, and marked as a watermark, not text of the page, so a screen reader skips it.
 - **The main button gives `report-watermarked.pdf`.** What the new file keeps is what Add page numbers keeps: every page and everything on it, with text, links, form fields with their values, notes, bookmarks, attached files, the document's details and accessibility tags. Each page's own content stays where it was; the watermark is added after it. The file is written afresh, so earlier saved versions stored inside it are not kept, a digital signature stops being valid, and a file that met PDF/A no longer does; the page says so. The new file has no password and no restrictions, by the owner's decision of 13 Nov 2026, which names Watermark; the page says so.
 - **Progress** in real units: "Reading the file", "Page 14 of 120" while the watermark is drawn, then "Writing the watermarked file", with Cancel.
-- **Page text, tests and screenshots,** as for the earlier tools. No shared code changes: the drawing step, the output-limit failure and the text field are reused as they are.
+- **Page text, tests and screenshots,** as for the earlier tools. The drawing step and the output-limit failure are reused as they are. Two small shared fixes to the text field ride along, from the stage 2 review (see "Shared pieces" below).
 
 ### Scope
 
@@ -50,7 +50,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **Signed files** (waiting for the owner): the page says a digital signature stops being valid, as Rotate's, Compress's and Add page numbers' do.
 - **Rotate's waiting main button** (waiting for the owner): touched. Watermark's main button waits until text is typed, as Extract's waits for a page. When the pull request opens, the question in `CLAUDE.md` is widened to: "Rotate's and Watermark's main buttons wait until something is done (a page turned, text typed), while Reorder's works untouched. Keep them as they are, or make them match?"
 - **"Defaults are set so the main button works without touching any option"** (`SPEC.md` "Tool page anatomy", 4): the owner decided Extract pages starts with no page chosen; reading such input as not an option is the agent's, and reading the watermark text that way is the agent's too (`add-text-option`); named in the pull request.
-- **Shared pieces in tool pull requests** (waiting for the owner): none ride along. The text field is `add-text-option`, and the drawing step is reused unchanged.
+- **Shared pieces in tool pull requests** (waiting for the owner): two small fixes to `add-text-option`'s field ride along, found at this change's stage 2 review: a sentence about refused characters says only which cannot be used ("Ł and ź cannot be used.", "Some characters cannot be used."), since the hint under the field already states the rule; and Enter in a field while the main button waits has the status region say why, on every press, instead of doing nothing silently. Both are named in the pull request. The drawing step is reused unchanged; it becomes a file of its own in the build only because two engines import it.
 - **New files keep accessibility tags whole** (13 Nov 2026): kept; a test checks every tagged piece of content is still in its page's content.
 - **20,000 pages:** the notice is shown, by the owner's decision of 13 Nov 2026.
 - **Repair PDF link:** as for the other tools, no link until Repair PDF is published.
@@ -68,7 +68,10 @@ No open decision needs more than its assumed default.
 
 ### Modified Capabilities
 
-None. The drawing step's requirement ("Drawing on the pages of a PDF" in `tool-engines`) already names Watermark, and the text field's requirements come with `add-text-option`.
+- `tool-page`: "A text a tool needs": a refused-characters sentence leaves the rule to the hint, and Enter while the main button waits says why (the shared fixes above).
+- `add-page-numbers`: "The file is read, then listed with its option": the row has no Remove, as built for every one-file tool (found while building this change; carried as a delta so archiving applies it).
+
+The drawing step's requirement ("Drawing on the pages of a PDF" in `tool-engines`) already names Watermark.
 
 ## Impact
 

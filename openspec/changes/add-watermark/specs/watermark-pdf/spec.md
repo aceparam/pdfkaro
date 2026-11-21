@@ -55,7 +55,7 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: Nothing is typed
 
 - **WHEN** the visitor presses "Add watermark and download" with the field empty or holding only spaces
-- **THEN** nothing happens, no code for the job is fetched, and the button reads "Type the watermark text first." to a screen reader
+- **THEN** no job starts, no code for the job is fetched, the button reads "Type the watermark text first." to a screen reader, and Enter in the field has the status region say it, on every press
 
 #### Scenario: Text is typed
 
@@ -65,12 +65,12 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: Hindi is typed
 
 - **WHEN** the visitor types "मसौदा"
-- **THEN** the field is marked invalid, the page says "Use letters from English and other Western European languages, numbers and common marks." with no list of characters, the main button does nothing, and no question marks are ever drawn
+- **THEN** the field is marked invalid, the page says "Some characters cannot be used." with no list of characters, the hint under the field saying which characters work, the main button does nothing, and no question marks are ever drawn
 
 #### Scenario: A few characters from other Latin alphabets
 
 - **WHEN** the visitor types "Łódź"
-- **THEN** the page says "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks."
+- **THEN** the page says "Ł and ź cannot be used.", the hint under the field saying which characters work
 
 #### Scenario: Accented Western European letters
 

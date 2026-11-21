@@ -472,7 +472,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
     // The engine, the drawing step (in one file, shared with Watermark) and pdf-lib were fetched, and nothing of another tool's.
-    for (const name of [/\/add-page-numbers-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
+    for (const name of [/\/add-page-numbers-/, /\/stamp-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     expect(holding(fetched, 'A drawing used an object that cannot be written.').length).toBe(1);
     for (const other of [/\/compress-pdf-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);

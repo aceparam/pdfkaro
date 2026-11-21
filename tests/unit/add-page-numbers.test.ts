@@ -6,7 +6,8 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { digitHeight, numberPlace, run, type Position } from '../../src/engines/tools/add-page-numbers';
+import { digitHeight, inspect, numberPlace, run, type Position } from '../../src/engines/tools/add-page-numbers';
+import { failureKind } from '../../src/workers/worker-core';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { optionValues } from '../../src/widget/option-values';
 import { fixture, jsonOf, lastTextPlaces, password, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
@@ -240,8 +241,14 @@ describe('numbering the shared test set', { timeout: 60_000 }, () => {
     });
   });
 
-  it('damaged files and a file that is not a PDF fail and give nothing', async () => {
-    for (const name of ['damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']) await expect(number(fixture(name)), name).rejects.toThrow();
+  it('damaged files and a file that is not a PDF: read as damaged before any job, and a run on one fails as the engine\'s failure, giving nothing', async () => {
+    for (const name of ['damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']) {
+      // The page reads every file first, so a damaged one is caught here and never reaches the job.
+      expect(await inspect(fixture(name), undefined, tools), name).toMatchObject({ kind: 'damaged' });
+      const error = await number(fixture(name)).then(() => null, (caught: unknown) => caught);
+      expect(error, name).toBeInstanceOf(Error);
+      expect(failureKind(error), name).toBe('engine');
+    }
   });
 
   it('every other file in the set: numbered and checked, or a failure', async () => {

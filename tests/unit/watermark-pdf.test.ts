@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFOperator, StandardFonts } from '@cantoo/pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { descent, fullHeight, run, watermarkPlace } from '../../src/engines/tools/watermark-pdf';
+import { descent, fullHeight, inspect, run, watermarkPlace } from '../../src/engines/tools/watermark-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { failureKind } from '../../src/workers/worker-core';
 import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
@@ -415,8 +415,41 @@ describe('watermarking the shared test set', { timeout: 60_000 }, () => {
     });
   }
 
-  it('damaged files and a file that is not a PDF fail and give nothing', async () => {
-    for (const name of ['damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']) await expect(watermark(fixture(name)), name).rejects.toThrow();
+  it("keeps the document's details: title, author, subject, keywords, creator, producer and dates", async () => {
+    const doc = await PDFDocument.create({ updateMetadata: false });
+    doc.addPage([300, 300]);
+    doc.setTitle('SECRET-DOC-TITLE');
+    doc.setAuthor('SECRET-DOC-AUTHOR');
+    doc.setSubject('SECRET-DOC-SUBJECT');
+    doc.setKeywords(['SECRET-KEYWORD']);
+    doc.setCreator('A word processor');
+    doc.setProducer('A PDF writer');
+    doc.setCreationDate(new Date('2026-01-02T03:04:05Z'));
+    doc.setModificationDate(new Date('2026-01-02T03:04:05Z'));
+    const made = await doc.save({ useObjectStreams: false });
+    const details = async (bytes: Uint8Array) => {
+      const opened = await open(bytes);
+      const { info } = await opened.getMetadata();
+      await opened.loadingTask.destroy();
+      const { Title, Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate } = info as Record<string, unknown>;
+      return { Title, Author, Subject, Keywords, Creator, Producer, CreationDate, ModDate };
+    };
+    for (const input of [made, fixture('tagged.pdf'), fixture('rich.pdf'), fixture('form.pdf')]) {
+      const before = await details(input);
+      expect(before.Title).toBeTruthy();
+      expect(await details((await watermark(input)).output)).toEqual(before);
+    }
+    expect((await details((await watermark(made)).output)).Author).toBe('SECRET-DOC-AUTHOR');
+  });
+
+  it('damaged files and a file that is not a PDF: read as damaged before any job, and a run on one fails as the engine\'s failure, giving nothing', async () => {
+    for (const name of ['damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']) {
+      // The page reads every file first, so a damaged one is caught here and never reaches the job.
+      expect(await inspect(fixture(name), undefined, tools), name).toMatchObject({ kind: 'damaged' });
+      const error = await watermark(fixture(name)).then(() => null, (caught: unknown) => caught);
+      expect(error, name).toBeInstanceOf(Error);
+      expect(failureKind(error), name).toBe('engine');
+    }
   });
 
   it('every other file in the set: watermarked and checked, or a failure', async () => {

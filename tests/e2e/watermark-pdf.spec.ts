@@ -20,7 +20,6 @@ const require = createRequire(import.meta.url);
 const fixture = (name: string) => join(here, '../fixtures', name);
 const password = 'open-sesame';
 const typed = 'Kv4wm Qx8mrk';
-const advice = 'Use letters from English and other Western European languages, numbers and common marks.';
 const hint = 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.';
 const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
 
@@ -227,6 +226,12 @@ test.describe('the text', () => {
     await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
     await expect(page.locator('[role=progressbar]')).toHaveCount(0);
     expect(fetched.filter((url) => pdflibFile.test(url))).toEqual([]);
+    // Enter in the waiting field is not silent: the reason the button waits is said, on each press.
+    await field(page).press('Enter');
+    await expect(status(page)).toHaveText('Type the watermark text first.');
+    await field(page).press('Enter');
+    await expect(status(page)).toHaveText('Type the watermark text first.\u00a0');
+    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
 
     await field(page).fill(typed);
     // Checked before pressing: the button works once text is typed.
@@ -242,7 +247,8 @@ test.describe('the text', () => {
     await pickReady(page, 'text.pdf');
     await recordStatus(page);
     await field(page).pressSequentially('मसौदा');
-    const sentence = `Some characters cannot be used. ${advice}`;
+    // The rule is in the hint under the field, so the sentence does not repeat it.
+    const sentence = 'Some characters cannot be used.';
     await expect(field(page)).toHaveAttribute('aria-invalid', 'true');
     const error = page.locator('p[id$="-text-error"]');
     await expect(error).toHaveText(sentence);
@@ -271,7 +277,7 @@ test.describe('the text', () => {
     await open(page);
     await pickReady(page, 'text.pdf');
     await field(page).fill('Łódź');
-    await expect(page.locator('p[id$="-text-error"]')).toHaveText(`Ł and ź cannot be used. ${advice}`);
+    await expect(page.locator('p[id$="-text-error"]')).toHaveText('Ł and ź cannot be used.');
     const long = 'Draft copy for the review meeting, not to be sent on to others.';
     expect([...long]).toHaveLength(63);
     await field(page).fill(long);

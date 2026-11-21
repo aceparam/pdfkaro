@@ -29,7 +29,7 @@ Built on `add-text-option`, merged first.
 - [x] 6.1 `tests/e2e/watermark-pdf.spec.ts` at 360px and 1280px:
   - choosing a file: one row, no summary line, "Getting ready" seen with the engine's route held until it has been checked (so a quick load cannot skip it), the status line, focus on the field once the file is read; two files dropped; not a PDF;
   - the main button waiting: `aria-disabled`, "Type the watermark text first." read with it, a press fetching no pdf-lib file and starting no job; the field's label, hint, `autocomplete="off"` and `spellcheck="false"`;
-  - the text: typing "Kv4wm Qx8mrk" makes the button work (checked before pressing); Enter starts the job; "मसौदा" marks the field invalid, shows "Some characters cannot be used." and the second sentence between the label and the field ("Łódź" names Ł and ź), ties it to the button and says it once in the status region, and a press does nothing; a 63-character paste is kept whole with its sentence; Tab from the field to "Choose another file" and then the main button;
+  - the text: typing "Kv4wm Qx8mrk" makes the button work (checked before pressing); Enter starts the job; "मसौदा" marks the field invalid, shows "Some characters cannot be used." between the label and the field (the hint below states the rule) ("Łódź" names Ł and ź), ties it to the button and says it once in the status region, and a press does nothing; a 63-character paste is kept whole with its sentence; Tab from the field to "Choose another file" and then the main button;
   - watermarking `mixed.pdf` with "Kv4wm Qx8mrk": the download passes `qpdf --check`, each page's text ends with the watermark's words, and the changed-pixel box is centred on each page as PDF.js shows it;
   - progress "Reading the file" and "Page n of m"; Cancel keeping the text; "Start again" emptying it; "Choose another file" keeping it; no Remove on the row, as for every one-file tool (Compress PDF's test checks the same), so a file is replaced, not removed;
   - password right and wrong, with focus landing on the field once the right password opens the file; damaged; engine-load failure; memory, output-limit and refused-text failures from a fake engine (the last saying "The watermark text could not be used. Check it and try again."); "Go back to your file" keeping the text;
@@ -51,6 +51,15 @@ Built on `add-text-option`, merged first.
 - [x] 9.3 Add Watermark's hand checks to issue #7: the four PDF readers and printing to PDF from one of them, browsers and phones (including whether the on-screen keyboard opens when focus moves to the field, and that the row stays in view), a tagged file read with a screen reader, and the owner's review of the page text
 - [ ] 9.4 When the pull request opens, update "Questions waiting for the owner" in `CLAUDE.md`: the font question is settled for now (owner, 21 Nov 2026: taken up later in issue #20; recorded under owner decisions), so only link issue #20 from the pull request; and widen "Rotate's waiting main button" to "Rotate's and Watermark's main buttons wait until something is done (a page turned, text typed), while Reorder's works untouched. Keep them as they are, or make them match?"
 - [ ] 9.5 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (no option but the text; 50 characters on one line; 45 degrees across the centre; the size rule; Helvetica Bold, mid-grey, 40% opacity; above the content; marked as a watermark artifact; every page; `-watermarked`), the text read as the job's input, the font question deferred to issue #20, the drawing step's known limits, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
+
+## 10. Stage 2 fixes
+
+- [x] 10.1 The page text's characters answer says the page tells you if any cannot be used and names letters such as Ł; still 250 to 500 words
+- [x] 10.2 Shared: a refused-characters sentence keeps only its first sentence, the hint stating the rule; the `tool-page` delta, unit, component and e2e tests updated
+- [x] 10.3 Shared: Enter in a text field while the main button waits has the status region say why, on every press (`enterAction`, unit tests; the e2e test presses Enter twice in the empty field)
+- [x] 10.4 Add page numbers' "no Remove" wording carried as a MODIFIED delta in this change, and the direct edit to its archived spec reverted
+- [x] 10.5 Damaged files: `inspect` reads them as damaged and a run fails as the engine's failure, in Watermark's and Add page numbers' unit tests; the document's details (title, author, subject, keywords, creator, producer, dates) kept, in a unit test
+- [x] 10.6 `page-weight.mjs` says the stamp file also holds the shared option values and text rules; the fixtures README says why bytes per page differ between tables; Add page numbers' no-upload test checks the stamp file was fetched
 
 ## Workflow follow-up
 

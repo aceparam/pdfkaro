@@ -18,7 +18,7 @@
 **Goals:**
 - The visitor's text across the centre of every page as a reader shows it, readable, seen through, over pictures, whatever the page's turn, size or boxes.
 - Everything Add page numbers keeps is kept, by the same step: each page's own content untouched, tags and shared streams as they were, no stored turn, box or user unit changed.
-- No new dependency, no font in the file, no change to shared code.
+- No new dependency, no font in the file, and no change to shared code beyond the two small text-field fixes in section 3.
 
 **Non-Goals:**
 - Size, colour, opacity, angle, place or font options; pictures; several lines; a watermark under the content; characters outside the standard fonts; some pages only; a preview.
@@ -97,7 +97,11 @@ On the layer page: `/Artifact << /Type /Pagination /Subtype /Watermark >> BDC`, 
 
 ### 3. Shared code
 
-None changes. Considered and dropped: writing one shared form for all pages of the same size, since Watermark's layers repeat. pdf-lib gives each layer page's graphics state a new random name, so the layers are not identical as written, and a form per page costs a few hundred bytes (measured in task 3.2); a later change can share them if a large file shows the need.
+Two small fixes to the text field (`add-text-option`), from the stage 2 review, ride along:
+- `textSentence` in `src/widget/options.ts`: refused characters get only "Ł and ź cannot be used." or "Some characters cannot be used.". The rule (`ruleAdvice`) was repeated straight under the field by the hint, which the registry test requires to end with it.
+- `enterAction` in `src/widget/options.ts`, used by `ToolWorkspace`: Enter in a text field starts the job when the main button works; while it waits, the status region says the sentence tied to the button, or else the field's own, on every press (the page already makes a repeated sentence differ).
+
+The drawing step does not change. Considered and dropped: writing one shared form for all pages of the same size, since Watermark's layers repeat. pdf-lib gives each layer page's graphics state a new random name, so the layers are not identical as written, and a form per page costs a few hundred bytes (measured in task 3.2); a later change can share them if a large file shows the need.
 
 ### 4. The page text
 

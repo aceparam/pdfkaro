@@ -354,7 +354,7 @@ describe('TextField, a text of a test entry', () => {
     emptySentence: 'Type the watermark text first.',
   };
   const html = renderToStaticMarkup(<TextField option={option} id="r3-text" raw="Draft" onType={noop} onEnter={noop} />);
-  const sentence = 'Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks.';
+  const sentence = 'Ł and ź cannot be used.';
   const wrong = renderToStaticMarkup(<TextField option={option} id="r3-text" raw="Łódź" error={sentence} onType={noop} onEnter={noop} />);
   const input = (markup: string) => markup.match(/<input [^>]*\/>/)?.[0] ?? '';
 
@@ -385,7 +385,7 @@ describe('TextField, a text of a test entry', () => {
 
   it('with something wrong: the sentence between the label and the field, invalid, and read before the hint', () => {
     expect(errorId('r3-text')).toBe('r3-text-error');
-    expect(wrong).toMatch(/<\/label><p id="r3-text-error" class="[^"]+">Ł and ź cannot be used\. [^<]+<\/p><input /);
+    expect(wrong).toMatch(/<\/label><p id="r3-text-error" class="[^"]+">Ł and ź cannot be used\.<\/p><input /);
     expect(input(wrong)).toContain('aria-invalid="true"');
     expect(input(wrong)).toContain('aria-describedby="r3-text-error r3-text-hint"');
     expect(wrong.indexOf('r3-text-error')).toBeLessThan(wrong.indexOf('<input'));
@@ -450,9 +450,8 @@ describe("TextField with Watermark's entry", async () => {
   });
 
   it('refuses "मसौदा", "Łódź" and 63 characters with their sentences, and takes "Brouillon – à relire"', () => {
-    const advice = 'Use letters from English and other Western European languages, numbers and common marks.';
-    expect(optionsHold('watermark-pdf', widget.options, { text: 'मसौदा' })).toEqual({ key: 'text', kind: 'characters', sentence: `Some characters cannot be used. ${advice}` });
-    expect(optionsHold('watermark-pdf', widget.options, { text: 'Łódź' })).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used. ${advice}` });
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'मसौदा' })).toEqual({ key: 'text', kind: 'characters', sentence: 'Some characters cannot be used.' });
+    expect(optionsHold('watermark-pdf', widget.options, { text: 'Łódź' })).toEqual({ key: 'text', kind: 'characters', sentence: 'Ł and ź cannot be used.' });
     expect(optionsHold('watermark-pdf', widget.options, { text: 'x'.repeat(63) })).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
     expect(optionsHold('watermark-pdf', widget.options, { text: 'Brouillon – à relire' })).toBeNull();
   });

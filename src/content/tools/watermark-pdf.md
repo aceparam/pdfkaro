@@ -21,11 +21,11 @@ Your text, once, across the middle of each page, rising from the lower left to t
 
 ### Which characters can I use?
 
-Letters from English and other Western European languages, such as é, ü, ñ and ø, numbers and common marks, up to 50 characters on one line. Text in Hindi, Telugu, Arabic, Chinese and other scripts cannot be used for now, and neither can some letters from other alphabets, such as Ł. The page names any it cannot use.
+Letters from English and other Western European languages, such as é, ü, ñ and ø, numbers and common marks, up to 50 characters on one line. Text in Hindi, Telugu, Arabic, Chinese and other scripts cannot be used for now, and neither can some letters from other alphabets, such as Ł. The page tells you if any cannot be used, and names letters such as Ł.
 
 ### Can someone remove the watermark?
 
-Yes. A watermark marks a file but does not protect it. Anyone with a PDF editor can remove it or cover it. Some PDF readers also include its words when the text of a page is copied or searched.
+Yes. A watermark marks a file but does not protect it. Anyone with a PDF editor can remove it or cover it. Some readers also include its words when a page's text is copied or searched.
 
 ### What stays the same?
 
