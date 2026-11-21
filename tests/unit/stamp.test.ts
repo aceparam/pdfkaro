@@ -639,10 +639,12 @@ describe('what every page shares', { timeout: 60_000 }, () => {
   });
 
   it('over the budget with the chosen pages: OutputLimit with the reason "shared", before any run is prepared or drawn', async () => {
+    // The budget itself, from the plain copy's size: with the chosen pages' estimate added it is surely over.
+    const plain = (await plainCopy(tools, fixture('text.pdf'), undefined)).plain!;
     let prepared = 0;
     let drawn = 0;
     const failed = await stamp(fixture('text.pdf'), () => drawn++, {
-      sharedBytes: sizeLimit(6057, 3),
+      sharedBytes: sizeLimit(plain.byteLength, 3),
       prepare: async (doc, lib) => {
         prepared++;
         return doc.embedFont(lib.StandardFonts.Helvetica);
@@ -655,4 +657,26 @@ describe('what every page shares', { timeout: 60_000 }, () => {
     // Any other limit has no reason.
     expect(new OutputLimit().reason).toBeUndefined();
   });
+
+  it('the chosen pages alone over the budget: a plain OutputLimit, not "shared", however small the shared bytes', async () => {
+    // Thousands of pages inheriting one large /Resources: the pages' estimate alone passes the budget.
+    const fonts = Array.from({ length: 400 }, (_, n) => `/F${'f'.repeat(60)}${n} 4 0 R`).join(' ');
+    const input = await packed(
+      handMade(2000, { treeResources: `<< /Font << ${fonts} >> >>`, extra: ['<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'] }),
+    );
+    let prepared = 0;
+    for (const sharedBytes of [1, 8 * 1024 * 1024]) {
+      const failed = await stamp(input, redMark, {
+        sharedBytes,
+        prepare: async (doc, lib) => {
+          prepared++;
+          return doc.embedFont(lib.StandardFonts.Helvetica);
+        },
+      }).catch((error: unknown) => error);
+      expect(failed, String(sharedBytes)).toBeInstanceOf(OutputLimit);
+      expect((failed as OutputLimit).reason, String(sharedBytes)).toBeUndefined();
+      expect(failureKind(failed)).toBe('output-limit');
+    }
+    expect(prepared).toBe(0);
+  }, 60_000);
 });

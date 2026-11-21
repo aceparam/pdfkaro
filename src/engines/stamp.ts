@@ -50,8 +50,8 @@ export const smallestScale = 1e-6;
 export class OutputLimit extends Error {
   override name = 'OutputLimit';
   /**
-   * `'shared'` when what every page shares (`sharedBytes`, such as Sign PDF's picture) would alone pass the budget
-   * with the chosen pages, found before anything is drawn, so the tool can say so in its own sentence.
+   * `'shared'` when the chosen pages alone fit the budget and what they share (`sharedBytes`, such as Sign PDF's
+   * picture) is what would pass it, found before anything is drawn, so the tool can say so in its own sentence.
    */
   readonly reason: 'shared' | undefined;
   constructor(reason?: 'shared') {
@@ -269,11 +269,20 @@ export function newId(objects: NewObjects): string {
   return `${objects.next++} 0 R`;
 }
 
-/**
- * Each raw stream's data as base64, by the bytes it holds, so data shared by every run (Sign PDF's picture,
- * registered afresh in each run over the same bytes) is turned into text once per job, not once per run.
- */
-const base64Of = new WeakMap<Uint8Array, string>();
+/** Each large raw stream's bytes, to a number of their own, so its key in `byText` is short. */
+const bytesNumber = new WeakMap<Uint8Array, number>();
+let nextBytesNumber = 0;
+/** Above this many bytes, a raw stream is known by its bytes' identity and its dictionary, not by its whole text. */
+const keyByIdentity = 64 * 1024;
+
+function numberOf(bytes: Uint8Array): number {
+  let number = bytesNumber.get(bytes);
+  if (number === undefined) {
+    number = nextBytesNumber++;
+    bytesNumber.set(bytes, number);
+  }
+  return number;
+}
 
 /** Bytes as base64, in chunks, with what a worker and Node both have. */
 export function base64(bytes: Uint8Array): string {
@@ -304,13 +313,26 @@ export function fromPdfLib(lib: Lib, context: PdfLib.PDFContext, object: PdfLib.
     refs.set(tag, 'pending');
     const target = context.lookup(object);
     if (target === undefined) throw new Error('A drawing referred to nothing.');
-    const entry = entryOf(lib, context, target, objects, refs, depth + 1);
-    const text = JSON.stringify(entry);
+    // A raw stream over 64 KB (Sign PDF's picture, registered afresh in each run over the same bytes) is known by its
+    // bytes' identity and its dictionary, so its data is turned into base64 once per job, when first written, and never
+    // kept as a key. Anything smaller is known by its JSON text, so an identical object made in another run is written once.
+    let text: string;
+    let make: () => QpdfEntry;
+    if (target instanceof lib.PDFRawStream && target.getContents().length > keyByIdentity) {
+      const bytes = target.getContents();
+      const dict = dictOf(lib, context, target.dict, objects, refs, depth + 1, ['/Length']);
+      text = `bytes:${numberOf(bytes)}:${JSON.stringify(dict)}`;
+      make = () => ({ stream: { dict, data: base64(bytes) } });
+    } else {
+      const entry = entryOf(lib, context, target, objects, refs, depth + 1);
+      text = JSON.stringify(entry);
+      make = () => entry;
+    }
     let id = objects.byText.get(text);
     if (id === undefined) {
       id = newId(objects);
       objects.byText.set(text, id);
-      objects.entries.set(id, entry);
+      objects.entries.set(id, make());
     }
     refs.set(tag, id);
     return id;
@@ -347,13 +369,7 @@ function dictOf(lib: Lib, context: PdfLib.PDFContext, dict: PdfLib.PDFDict, obje
 /** The entry of a referenced object: a stream, with its data, or a value. */
 function entryOf(lib: Lib, context: PdfLib.PDFContext, target: PdfLib.PDFObject, objects: NewObjects, refs: Map<string, string>, depth: number): QpdfEntry {
   if (target instanceof lib.PDFRawStream) {
-    const contents = target.getContents();
-    let data = base64Of.get(contents);
-    if (data === undefined) {
-      data = base64(contents);
-      base64Of.set(contents, data);
-    }
-    return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length']), data } };
+    return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length']), data: base64(target.getContents()) } };
   }
   if (target instanceof lib.PDFFlateStream) {
     return { stream: { dict: dictOf(lib, context, target.dict, objects, refs, depth, ['/Length', '/Filter', '/DecodeParms']), data: base64(target.getUnencodedContents()) } };
@@ -470,8 +486,9 @@ export type StampSteps<Run = unknown> = {
   only?(index: number, total: number): boolean;
   /**
    * The encoded size in bytes of what every run's `prepare` makes and the new file is to hold once (Sign PDF's picture
-   * and signature form). Counted once against the size budget before the first run; when it alone, with the chosen
-   * pages, would pass the budget, the job stops with `OutputLimit` whose reason is `'shared'`, before anything is drawn.
+   * and signature form). Counted once against the size budget before the first run. When the chosen pages' estimate
+   * alone fits and adding it would pass the budget, the job stops with `OutputLimit` whose reason is `'shared'`; when
+   * the pages alone pass it, with a plain `OutputLimit`. Either way before anything is drawn.
    */
   sharedBytes?: number;
   /** After each layer page is drawn: how many chosen pages are done, of how many chosen. */
@@ -513,7 +530,12 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
   // The update carries shared streams as base64, a third larger than the file will hold them, once.
   const updateLimit = shared > 0 ? limit + sharedText(shared) - shared : limit;
   const sizes = new WeakMap<object, number>();
-  if (shared > 0 && shared + chosen.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0) > limit) throw new OutputLimit('shared');
+  if (shared > 0) {
+    const pagesAlone = chosen.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0);
+    // 'shared' only when the chosen pages alone fit, so what they share is what passes the budget; otherwise the pages do.
+    if (pagesAlone > limit) throw new OutputLimit();
+    if (shared + pagesAlone > limit) throw new OutputLimit('shared');
+  }
   const lib = (await (tools.pdflib ?? missing)()) as Lib;
   const qpdf = await freshQpdf(tools, source.plain);
   delete source.plain;
