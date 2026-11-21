@@ -125,10 +125,19 @@ describe('numbering the shared test set', () => {
       expect(place.fromBottom).toBeLessThan(0.06);
     }
     expect(progress[0]).toEqual({ stage: 'reading', unit: 'file', done: 0, total: 1 });
-    expect(progress.filter((step) => step.stage === 'working')).toEqual([1, 2, 3].map((done) => ({ stage: 'working', unit: 'page', done, total: 3 })));
+    expect(progress.filter((step) => step.stage === 'working')).toEqual([1, 2, 3].map((done) => ({ stage: 'working', unit: 'page', done, total: 3, writesAfter: true })));
     const writing = progress.filter((step) => step.stage === 'writing').map((step) => (step as { percent: number }).percent);
     expect(writing.at(-1)).toBe(100);
-    expect(writing.slice(0, -1).every((percent) => percent <= 95)).toBe(true);
+    expect(writing.slice(0, -1).every((percent) => percent >= 75 && percent <= 95)).toBe(true);
+    // The bar never goes back and is full only once the file is written.
+    const { progressFraction } = await import('../../src/widget/format');
+    const fractions = progress.map(progressFraction);
+    expect(fractions.slice(0, -1).every((fraction) => fraction < 1)).toBe(true);
+    let highest = 0;
+    for (const fraction of fractions) {
+      expect(fraction).toBeGreaterThanOrEqual(highest - 1e-9);
+      highest = Math.max(highest, fraction);
+    }
     expect(writing).toEqual([...writing].sort((a, b) => a - b));
   });
 

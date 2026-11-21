@@ -42,12 +42,13 @@ export function progressLine(progress: Progress, writingLabel: string): string {
  * How full the bar is, from 0 to 1. Reading fills the first fifth; the rest is the work.
  * Pictures fill 0.2 to 0.8, leaving the last fifth for writing, which an engine that
  * works on pictures reports from 75% (Compress PDF), so the bar is never full while it writes.
+ * Pages counted by an engine that writes after them (`writesAfter`, Add page numbers) fill as pictures do.
  */
 export function progressFraction(progress: Progress): number {
   const share = (part: number, whole: number) => (whole > 0 ? Math.min(1, Math.max(0, part / whole)) : 0);
   if (progress.stage === 'reading') return 0.2 * share(progress.done, progress.total);
   if (progress.stage === 'writing') return 0.2 + 0.8 * share(progress.percent, 100);
-  if (progress.unit === 'picture') return 0.2 + 0.6 * share(progress.done, progress.total);
+  if (progress.unit === 'picture' || progress.writesAfter) return 0.2 + 0.6 * share(progress.done, progress.total);
   return 0.2 + 0.8 * share(progress.done, progress.total);
 }
 

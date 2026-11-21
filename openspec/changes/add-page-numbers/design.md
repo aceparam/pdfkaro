@@ -155,6 +155,8 @@ The plain copy is decrypted, so the result has no password and no restrictions; 
 
 "Reading the file" before the plain copy; "Page n of m" as each layer page is drawn; "Writing the numbered file" from qpdf's progress lines, held at 95 until the check is done.
 
+Found while building: the widget fills the bar to the end with pages (`progressFraction`), so the bar was full at the last page and stayed full while the file was written, against "the bar not full until the file is written". The page progress carries `writesAfter: true` (new, optional, in `Progress`), which fills pages to 0.8 as Compress PDF's pictures do, and qpdf's write is reported from 75% (75 + percent / 5, held at 95), as Compress PDF reports it. Other tools send no `writesAfter` and are unchanged.
+
 ### 6. Memory
 
 Copies of the file at each stage, for a file of size F:

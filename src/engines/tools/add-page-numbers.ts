@@ -81,8 +81,9 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   const copy: { plain?: Uint8Array; pages: number } = await plainCopy(tools, file, passwordFrom(options));
   const output = await stampPages(tools, copy, {
     draw: (page, area, index, font) => drawNumber(lib, page, area, String(index + 1), position, font),
-    onPage: (done, total) => onProgress({ stage: 'working', unit: 'page', done, total }),
-    onWriting: (percent) => onProgress({ stage: 'writing', percent: Math.min(percent, 95) }),
+    // The pages fill the bar to 0.8; qpdf's write is reported from 75% and held at 95% until the check is done.
+    onPage: (done, total) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true }),
+    onWriting: (percent) => onProgress({ stage: 'writing', percent: Math.min(75 + percent / 5, 95) }),
   });
   onProgress({ stage: 'writing', percent: 100 });
   return [output];

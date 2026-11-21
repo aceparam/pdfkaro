@@ -78,6 +78,7 @@ No open decision needs more than its assumed default.
   - the registry entry, and its line in `src/widget/option-values.ts`;
   - `src/engines/qpdf.ts`, which gains `append`, so the update can be written in pieces, and `refused`, which says whether a capped file refused a write (qpdf can finish with exit 0 after one);
   - the failure kind `output-limit`, in `src/widget/state.ts`, `failures.ts` and `worker-core.ts`;
+  - `Progress` in `src/engines/types.ts` gains an optional `writesAfter`, and `progressFraction` in `src/widget/format.ts` fills such pages to 0.8, so the bar is not full while the numbered file is written (found while building);
   - `check-worker.mjs`, which checks the engine and `stamp` load late and hold no pdf-lib code;
   - the `@cantoo/pdf-lib` line in `LICENSES.md`, whose reason now names this tool too.
 - **Other tools:** no change in behaviour; their tests must pass unchanged.

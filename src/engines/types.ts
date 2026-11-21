@@ -7,7 +7,17 @@
  * file is being read, before the work starts (Compress PDF's "Reading the file").
  */
 export type Progress =
-  | { stage: 'reading' | 'working'; unit: 'file' | 'page' | 'picture'; done: number; total: number }
+  | {
+      stage: 'reading' | 'working';
+      unit: 'file' | 'page' | 'picture';
+      done: number;
+      total: number;
+      /**
+       * Set by an engine that writes a file after counting pages (Add page numbers), so the count
+       * fills the bar to 0.8 only, as pictures do, and the last fifth is left for writing.
+       */
+      writesAfter?: true;
+    }
   | { stage: 'writing'; percent: number };
 
 /**
