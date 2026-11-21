@@ -479,3 +479,43 @@ Measured with the memory order of the design's section 6: the reading qpdf let g
 | `make-large.mjs`'s file | 110.1 MB | 110.1 MB | 1.7 s (1.1, 0.0, 0.6) | 1.19 GB (0.97 GB without loading first) | 1.4 s, 0.92 GB | 2.3 s | 1.36 GB |
 
 In Node the draw time includes qpdf reading the 68 MB update before it writes. The 120,000-page file reads more slowly than in the experiment (14.1 s against 8.3 s), as the pages and the dictionaries are read by two capped qpdf runs and the plain copy counts its pages, where the experiment read both in one run; it needs a third less memory. The 110 MB file's peak is above the experiment's (Node 1.19 GB, or 0.97 GB without loading qpdf and pdf-lib first, against 0.92 GB; Chromium 1.36 GB over its baseline): `plainCopy`, shared with the page tools, makes a second qpdf only to count the pages, so one job makes four qpdf instances (opening, counting, reading, stamping), each holding a copy of the file until it is let go. Both differences are accepted for now (task 3.2); the later fix is to take the page count from `readPages` and skip the counting instance. The multilingual file is still missing.
+
+### Watermark (`src/engines/tools/watermark-pdf.ts`, with `src/engines/stamp.ts`)
+
+Each file was watermarked in Node with the same qpdf and pdf-lib the browser gets (`tests/unit/watermark-pdf.test.ts`), and each result read back by qpdf and by PDF.js's legacy build. Every result passes `qpdf --check`, has the same pages, is not encrypted, and each page's text through PDF.js is its text as before followed by the watermark's words. The watermark is drawn by the same step as Add page numbers, so each page's own content streams are kept unchanged between a shared `q` and `Q`, and its stored turn, boxes and user unit are as they were. Sizes in bytes, from a run on 21 Nov 2026, with the text "Draft".
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 5,179 | "Draft" across each of the 3 pages; progress "Reading the file", "Page 1 of 3" to "Page 3 of 3", then writing from 75% to 95%, and 100 once checked. qpdf's warning does not stop the job. "Brouillon – à relire" and `a) Tj (b \ % <x> [/y]` are read back by PDF.js exactly as typed; the second sits in the layer only inside one hex string |
+| `pages-500.pdf` | 198,025 | 324,023 | All 500 pages show the text after their own; with a 50-character text, 350,561 bytes, about 300 bytes a page |
+| `scanned.pdf` | 6,191 | 7,182 | The text shows over the whole-page picture on every page, centred within 3% |
+| `password.pdf` | 7,178 | 5,216 | With `open-sesame`: watermarked, with no password and no restrictions. Without it, or with a wrong one, the job fails |
+| `restricted.pdf` | 7,181 | 5,216 | Watermarked, with no restrictions |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Not watermarked: the job fails and hands back nothing |
+| `form.pdf` | 3,189 | 3,386 | Both fields kept, with the value `Sample text` |
+| `mixed.pdf` | 2,257 | 3,907 | On each page as PDF.js shows it (A4, Letter on its side, A5 turned a quarter, A4 upside down), for "Draft" and for 50 characters: the pixels that changed form a box whose middle is within 3% of the centre and which stays inside the margin of a twelfth of the shorter side; the text rises at 45 degrees as shown (within half a degree); the grey drawn on white is 204 of 255 (within 3), mid-grey at 40%. Each layer is `/Artifact << /Type /Pagination /Subtype /Watermark >> BDC … EMC`, with `/ca 0.4` in its own resources and one shared, unembedded Helvetica Bold |
+| `rich.pdf` | 2,064 | 2,868 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
+| `images.pdf` | 1,642 | 2,292 | Watermarked; the JPEG 2000 picture kept |
+| `tagged.pdf` | 5,118 | 3,699 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the watermark is the page's last marked content, an `/Artifact` with no marked-content id, in no tag. Its tags point to objects and name no `/MCID`, so a page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1` is checked beside it: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags, with no watermark words in them |
+| `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Watermarked; pictures are not read. `compress-text.pdf` (21,019 to 4,056) and `compress-small-jpg.pdf` (12,852 to 9,529) come out smaller, as qpdf compresses their uncompressed streams |
+| `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,606 | Watermarked in about 0.2 seconds; the 1 GB attachment is copied as stored and never inflated |
+| `compress-password.pdf` | 36,730 | 36,695 | With `open-sesame`: watermarked, with no password |
+| `compress-json-bomb.pdf` | 140,759 | | Not watermarked: its JSON of dictionaries is refused at 64 MB, so the pages cannot be read, and the job fails with the engine's sentence after about 14 seconds in Node |
+
+Files made in the test (`tests/unit/watermark-pdf.test.ts`):
+
+| File | Outcome |
+| --- | --- |
+| An A4 page whose content sets `/ca 0.1`, a scaling `cm` (3 times, moved 40 points) and a red fill, and restores none of them | The pixels the watermark changes, and the grey it draws (204), are exactly those of the same page with no such content |
+| 6,000 pages that share one tiny content stream (packed by qpdf), with a 50-character text | Done in about 3 seconds; every page still draws the one shared stream, unchanged; about 500 bytes a page more, as each page gets its own layer, a form holding the text, its graphics state and the font's name |
+| The text sent as missing, empty, only spaces, 51 characters, "मसौदा", "Łódź", with a tab, a tab alone, a number, `null`, an array, an object, a direction override, and under `__proto__` | Refused with `TextRefused` (`text-refused`) before qpdf is asked for; no error message holds the text |
+
+Measured as for Add page numbers, with a 50-character text: in Node, each file in a process of its own under the test runner, with qpdf and pdf-lib loaded first on `text.pdf`; peak is the process's highest resident memory, including the runner's own (about 0.14 GB). In Chromium, the built page through Playwright, from pressing the main button to the result, with the resident memory of every browser process added up and sampled every 0.2 seconds. Add page numbers' figures, from the table above, are in brackets.
+
+| File | In | Out | Node: time (read, draw, write and check) | Node: peak | Chromium: time | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | 0.20 MB | 0.35 MB (0.27) | 0.44 s (0.40): 0.18, 0.05, 0.22 | 0.17 GB (0.17) | 0.9 s (0.83) | 0.04 GB (0.04) |
+| 120,000 pages sharing one content stream (`make-many-pages.mjs`) | 16.6 MB | 61.1 MB (40.7) | 64.6 s (54.2): 13.8, 15.4, 35.4 | 1.05 GB (0.95) | 45.2 s (38.6) | 0.81 GB (0.77) |
+| `make-large.mjs`'s file | 110.1 MB | 110.1 MB (110.1) | 1.8 s (1.7): 1.2, 0.0, 0.5 | 1.16 GB (1.19) | 2.4 s (2.3) | 1.32 GB (1.36) |
+
+Every time and peak is within 20% of Add page numbers' (the largest gap is the 120,000-page file: 19% in Node, 17% in Chromium, 11% and 5% in memory). The output of the 120,000-page file is 50% larger: each page's layer holds the text, so the file grows by about 370 bytes a page (61,050,227 bytes against 16,578,179), against about 200 for a page number, and the extra time is mostly qpdf writing those bytes. It stays far inside the size budget, which is over 262 MB for this file (2 KB a page and 16 MB, before twice the plain copy is added). Sharing one form among pages of the same size could cut it (design, section 3); left for a later change if a real file shows the need. The multilingual file is still missing; Watermark leaves existing text alone, so it would change nothing there.
