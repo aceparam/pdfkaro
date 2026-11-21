@@ -131,10 +131,15 @@ test.describe('choosing a file', () => {
     await open(page);
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
     await expect(group(page)).toHaveCount(0);
+    // Hold the engine back until "Getting ready" has been seen, so a quick load cannot skip past it.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route(engineFile, async (route) => { await held; await route.continue(); });
     await pick(page, 'text.pdf');
     // While the engine loads, the row says so and the option is not shown yet.
     await expect(rows(page)).toContainText('Getting ready');
     await expect(group(page)).toHaveCount(0);
+    release();
     await expect(rows(page).filter({ hasText: 'Getting ready' })).toHaveCount(0, { timeout: 30000 });
     const size = formatSize(readFileSync(fixture('text.pdf')).length);
     await expect(rows(page)).toContainText('text.pdf');
