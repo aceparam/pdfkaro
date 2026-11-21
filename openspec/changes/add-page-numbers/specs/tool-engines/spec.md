@@ -4,7 +4,7 @@
 
 ### Requirement: Drawing on the pages of a PDF
 
-A tool that draws on the pages of a PDF (Add page numbers, then Watermark and Sign PDF) SHALL draw one layer page per page with `@cantoo/pdf-lib`, sized to that page as it is shown, and have qpdf place each layer page on its page. The drawing SHALL be upright as the page is shown, inside the part a reader shows, above the page's own content, which nothing drawn can move. All else in the file SHALL stay. (SPEC.md: Architecture and tech stack; Definition of done)
+A tool that draws on the pages of a PDF (Add page numbers, then Watermark and Sign PDF) SHALL draw with `@cantoo/pdf-lib`. Each drawing SHALL be upright as the page is shown, inside the part of the page a reader shows, and above the page's own content, which SHALL stay in the page's content and SHALL be unable to move the drawing. Nothing else in the file SHALL change. (SPEC.md: Architecture and tech stack; Definition of done)
 
 #### Scenario: A turned page
 
@@ -13,18 +13,18 @@ A tool that draws on the pages of a PDF (Add page numbers, then Watermark and Si
 
 #### Scenario: Odd turns and boxes
 
-- **WHEN** a page's turn is -90, 450, 45 or inherited from the page tree, its user unit is 0 or negative, its trim box or crop box has no area or lies off the part shown, or its paper box is reversed or missing
-- **THEN** the drawing lands where a reader that follows PDF.js's rules shows that edge, and only the page's turn, trim box and user unit are written the way such a reader already reads them, so the page looks as it did
-
-#### Scenario: A page with a user unit
-
-- **WHEN** a page has a `/UserUnit` of 2
-- **THEN** the drawing has the same size on screen as on a page of the same shown size without one
+- **WHEN** a page's turn is -90, 450, 45 or inherited from the page tree, its user unit is 2, 0 or negative, its crop box is smaller than its paper, has no area or lies off the paper, its trim box is smaller, or its paper box is offset, reversed or missing
+- **THEN** the drawing lands where PDF.js shows that edge of the page, at the same size on screen, and the page's stored turn, boxes and user unit are not changed
 
 #### Scenario: Content that leaves its drawing state unbalanced
 
-- **WHEN** a page's content stream changes the drawing state and never restores it
+- **WHEN** a page's content stream changes the drawing state with more `q` than `Q`, a scaling `cm` and a fill colour
 - **THEN** the drawing is still at its place, at its size and in its colour
+
+#### Scenario: Tagged and shared content
+
+- **WHEN** pages whose content is tied to accessibility tags, or that share one content stream, are drawn on
+- **THEN** each page's own content streams are still its content, unchanged and still shared, and every piece of marked content the tag tree names for a page is still in that page's content
 
 #### Scenario: Everything else stays
 

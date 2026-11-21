@@ -34,103 +34,51 @@ The page SHALL take one PDF from the picker, a drop anywhere on the page, or pas
 - **WHEN** a visitor chooses a text file renamed `notes.pdf`
 - **THEN** it is not listed, and the page says "notes.pdf is not a PDF, so it was not added."
 
-### Requirement: The file is read, then listed with the options
+### Requirement: The file is read, then listed with its option
 
-While the engine loads, the file's row SHALL show "Getting ready". Once read, the row SHALL show a thumbnail of the first page, the name, the page count and the size, with Remove, and no summary line above it; the two options SHALL follow it, then the main button. (SPEC.md: Tool page anatomy, 4; States every tool handles, Engine loading)
+While the engine loads, the file's row SHALL show "Getting ready". Once read, the row SHALL show a thumbnail of the first page, the name, the page count and the size, with Remove and no summary line above it; "Where the numbers go" SHALL follow it, then the main button. (SPEC.md: Tool page anatomy, 4; States every tool handles, Engine loading)
 
 #### Scenario: A file is being read
 
 - **WHEN** `report.pdf` has been chosen and the engine has not finished loading
-- **THEN** its row shows "Getting ready", and no option is shown yet
+- **THEN** its row shows "Getting ready", and the option is not shown yet
 
 #### Scenario: A file has been read
 
 - **WHEN** `report.pdf`, 12 pages and 1.4 MB, has been read
-- **THEN** its row shows its first page, "12 pages, 1.4 MB" and "Remove", then "Where the numbers go" with "Bottom centre" chosen, then "First number" holding 1, then "Add numbers and download", and the status region says "report.pdf, 12 pages, 1.4 MB."
+- **THEN** its row shows its first page, "12 pages, 1.4 MB" and "Remove", then "Where the numbers go" with "Bottom centre" chosen and focused, then "Add numbers and download", and the status region says "report.pdf, 12 pages, 1.4 MB."
 
 ### Requirement: Where the numbers go
 
-The option "Where the numbers go" SHALL offer six places, one at a time: "Bottom left", "Bottom centre", "Bottom right", "Top left", "Top centre" and "Top right", in that order, with "Bottom centre" chosen at first. (SPEC.md: Tool page anatomy, 4)
-
-#### Scenario: A place is chosen
-
-- **WHEN** the visitor chooses "Top right" and runs the job
-- **THEN** every page's number is near the top right corner of the page as it is shown
+The option "Where the numbers go" SHALL offer six places: "Bottom left", "Bottom centre", "Bottom right", "Top left", "Top centre" and "Top right", in that order, with "Bottom centre" chosen at first. It SHALL be used by keyboard and screen reader as every option is. The engine SHALL refuse any other place before reading the file. (SPEC.md: Tool page anatomy, 4; Definition of done)
 
 #### Scenario: Nothing is touched
 
-- **WHEN** the visitor chooses a file and presses "Add numbers and download" without touching an option
+- **WHEN** the visitor chooses a file and presses "Add numbers and download" without touching the option
 - **THEN** every page is numbered from 1, at the bottom centre
 
-### Requirement: The first number
+#### Scenario: A place is chosen by keyboard
 
-The option "First number" SHALL be a text field labelled "First number", with the hint "The number on page 1. Change it if this file carries on from another one.", holding 1 at first. It SHALL take a whole number from 1 to 999,999, written with the digits 0 to 9 only; spaces before and after are ignored and leading zeros are allowed. (SPEC.md: Tool page anatomy, 4)
+- **WHEN** a keyboard user, with focus on "Bottom centre", presses the up arrow twice and then Tab
+- **THEN** "Top right" is chosen, a screen reader reads it as 6 of 6 in "Where the numbers go", and focus moves to "Add numbers and download"
 
-#### Scenario: A file that carries on from another
+#### Scenario: The engine is sent a place it does not accept
 
-- **WHEN** the visitor types 37 as the first number for a 12-page file
-- **THEN** the pages are numbered 37 to 48
-
-#### Scenario: Leading zeros and spaces
-
-- **WHEN** the visitor types " 007 "
-- **THEN** the first page is numbered 7
-
-### Requirement: A first number that is not valid
-
-While "First number" holds anything other than a whole number from 1 to 999,999 (nothing, 0, -5, 2.5, 1e309, 1000000, 10^15 written out, letters or other digits), the field SHALL be marked as not valid with "Type a whole number from 1 to 999,999." under it, and the main button SHALL be unavailable but focusable with that sentence tied to it. (SPEC.md: Tool page anatomy, 4 and 5; How the words should read)
-
-#### Scenario: The field is emptied
-
-- **WHEN** the visitor deletes the 1 in "First number"
-- **THEN** the field is marked as not valid with "Type a whole number from 1 to 999,999." under it, and "Add numbers and download" is unavailable with the same sentence tied to it
-
-#### Scenario: The number is put right
-
-- **WHEN** the visitor then types 5
-- **THEN** the sentence goes and the main button can be used
-
-#### Scenario: A number too large or not whole
-
-- **WHEN** the visitor types 1000000, 1e309, -5 or 2.5
-- **THEN** the field is marked as not valid and the main button is unavailable
-
-#### Scenario: The engine is sent a bad option
-
-- **WHEN** the engine is sent a first number that is not a whole number from 1 to 999,999, or a place not among the six
+- **WHEN** the engine is sent a place not among the six, or none
 - **THEN** it refuses before reading the file, and writes nothing
-
-### Requirement: The options by keyboard and screen reader
-
-"Where the numbers go" SHALL be a group named by that legend, reached with one Tab and changed with the arrow keys. "First number" SHALL be read with its label, its hint and, when shown, the sentence on what is wrong. The options SHALL keep what was chosen through Cancel and a failure, and go back to how they started on "Start again". (SPEC.md: Definition of done, keyboard and screen reader use)
-
-#### Scenario: A keyboard user chooses a place
-
-- **WHEN** a keyboard user tabs past Remove into "Where the numbers go" and presses the down arrow
-- **THEN** focus lands on "Bottom centre", the down arrow chooses "Bottom right", and one more Tab reaches "First number"
-
-#### Scenario: A screen reader user reaches the options
-
-- **WHEN** a screen reader user moves into the group and then to the field
-- **THEN** it reads "Where the numbers go", the place with its state and position in the group, then "First number" with its hint
-
-#### Scenario: Cancel keeps the options
-
-- **WHEN** the visitor has chosen "Top left" and 37, starts the job and presses Cancel
-- **THEN** the file is listed again with "Top left" and 37 still chosen
 
 ### Requirement: Numbering the file
 
-Pressing "Add numbers and download" SHALL write one PDF in which every page carries its number, counting up from the first number, as digits only. Each number SHALL be upright at the chosen edge of the page as it is shown, inside the part of the page a reader shows, whatever the page's turn, size or boxes. The result MUST pass `qpdf --check`. (SPEC.md: Tool page anatomy, 5; Definition of done)
+Pressing "Add numbers and download" SHALL write one PDF in which every page carries its number, from 1 on the first page, as digits only. Each number SHALL be upright at the chosen edge of the page as a reader shows it, inside the part shown, whatever the page's turn, size or boxes. The result MUST pass `qpdf --check`. (SPEC.md: Tool page anatomy, 5; Definition of done)
 
 #### Scenario: An ordinary file
 
-- **WHEN** `text.pdf`, 3 pages, is numbered with the options as they start
+- **WHEN** `text.pdf`, 3 pages, is numbered with the option as it starts
 - **THEN** the pages show 1, 2 and 3, each centred across the bottom of its page, and their text as before
 
 #### Scenario: Pages turned and of mixed sizes
 
-- **WHEN** `mixed.pdf` (A4, Letter on its side, A5 turned a quarter, A4 upside down) is numbered at the bottom right
+- **WHEN** `mixed.pdf` (A4, Letter on its side, A5 turned a quarter, A4 upside down) is numbered at "Bottom right"
 - **THEN** each page, as a reader shows it, has its number upright near its own bottom right corner
 
 #### Scenario: A page whose shown part is smaller than its paper
@@ -140,17 +88,17 @@ Pressing "Add numbers and download" SHALL write one PDF in which every page carr
 
 #### Scenario: How large the number is
 
-- **WHEN** an A4 page is numbered at the bottom centre
-- **THEN** the number is about 10 points tall and its foot is about 10 mm above the bottom edge; on an A0 page it is larger, and on a page too small for that size and margin it is smaller, but always whole on the page
+- **WHEN** an A4 page is numbered at "Bottom centre"
+- **THEN** the number is set at about 10 points, its digits about 7 points tall, with its foot about 10 mm above the bottom edge; on an A0 page it is larger, and on a page too small for that size and margin it is smaller, but always whole on the page
 
 #### Scenario: A long file
 
-- **WHEN** `pages-500.pdf` is numbered from 1
+- **WHEN** `pages-500.pdf` is numbered
 - **THEN** page 500 shows 500, and copying the text of a page gives its own text with its number
 
 ### Requirement: Nothing else changes
 
-The new file SHALL keep every page and everything on it: text, links, form fields with their values, notes, bookmarks, attached files, the document's details and accessibility tags. The number SHALL be marked as a page number, not as text of the page. It SHALL have no password and no restrictions. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change"; the owner's decisions of 13 Nov 2026)
+The new file SHALL keep every page and everything on it: text, links, form fields with their values, notes, bookmarks, attached files, the document's details and accessibility tags. Each page's own content SHALL stay in that page's content, and the number SHALL be marked as a page number, not text of the page. The file SHALL have no password and no restrictions. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change"; the owner's decisions of 13 Nov 2026)
 
 #### Scenario: A file with everything
 
@@ -160,7 +108,7 @@ The new file SHALL keep every page and everything on it: text, links, form field
 #### Scenario: A file with tagged content
 
 - **WHEN** a page whose text is tied to an accessibility tag is numbered
-- **THEN** a reader still finds that text from its tag, and the number is not inside any tag
+- **THEN** every piece of marked content the tag tree names for that page is still in that page's own content, a reader still finds the text from its tag, and the number is in no tag
 
 #### Scenario: A protected file
 
@@ -169,7 +117,7 @@ The new file SHALL keep every page and everything on it: text, links, form field
 
 ### Requirement: What the page says about the new file
 
-The result SHALL say that text, links, form fields, bookmarks and attached files are kept; that earlier saved versions stored inside the file are not and a digital signature will no longer be valid; and that the new file has no password and no restrictions. The page text SHALL also say that a file that claimed to meet PDF/A no longer does. (SPEC.md: What we are building, rule 4, "Honest about limits"; CLAUDE.md: Signed files)
+The result SHALL say that text, links, form fields, bookmarks and attached files are kept; that earlier saved versions stored inside the file are not and a digital signature will no longer be valid; and that the new file has no password and no restrictions. The page text SHALL also say that a file that met PDF/A no longer does. (SPEC.md: What we are building, rule 4, "Honest about limits"; CLAUDE.md: Signed files)
 
 #### Scenario: The result notes
 
@@ -178,7 +126,7 @@ The result SHALL say that text, links, form fields, bookmarks and attached files
 
 ### Requirement: Progress and cancel
 
-While the job runs the page SHALL show progress in real units with a Cancel button: "Reading the file", then "Page 14 of 120" while numbers are drawn, then "Writing the numbered file", with the bar not full until the file is written. Cancel SHALL stop the work and return to the file and its options. The page MUST stay responsive. (SPEC.md: States every tool handles, Working; Definition of done)
+While the job runs the page SHALL show progress in real units with a Cancel button: "Reading the file", then "Page 14 of 120" while numbers are drawn, then "Writing the numbered file", with the bar not full until the file is written. Cancel SHALL stop the work and return to the file with the same place chosen. The page MUST stay responsive. (SPEC.md: States every tool handles, Working; Definition of done)
 
 #### Scenario: A job is running
 
@@ -187,8 +135,8 @@ While the job runs the page SHALL show progress in real units with a Cancel butt
 
 #### Scenario: Cancel is pressed
 
-- **WHEN** the visitor presses Cancel during a job
-- **THEN** the work stops, no result is shown, and the file is listed with the same options
+- **WHEN** the visitor has chosen "Top left", starts the job and presses Cancel
+- **THEN** the work stops, no result is shown, and the file is listed with "Top left" still chosen
 
 ### Requirement: The result
 
@@ -201,7 +149,7 @@ When the job is done the page SHALL show the result's name, size and page count,
 
 ### Requirement: A file that needs a password
 
-When the file needs a password the page SHALL ask for it in a labelled field that names the file, with a note that the password stays in the browser, and show no options until it is opened. A wrong password SHALL be reported and the field kept; "Choose another file" SHALL replace the file. (SPEC.md: States every tool handles, Password needed)
+When the file needs a password the page SHALL ask for it in a labelled field that names the file, with a note that the password stays in the browser, and show no option until it is opened. A wrong password SHALL be reported and the field kept; "Choose another file" SHALL replace the file. (SPEC.md: States every tool handles, Password needed)
 
 #### Scenario: A protected file is chosen
 
@@ -224,7 +172,7 @@ When the file cannot be read the page SHALL say it is damaged and cannot be read
 
 ### Requirement: A job that fails
 
-When the job fails, its code cannot be fetched or the browser runs out of memory, the page SHALL say "The numbers were not added." with what happened in one sentence and one thing to try, and offer "Go back to your file" with the file and options kept. (SPEC.md: States every tool handles, Failed)
+When the job fails, its code cannot be fetched, the browser runs out of memory, or the new file would grow far past what numbers add, the page SHALL say "The numbers were not added." with what happened in one sentence and one thing to try, and offer "Go back to your file" with the file and its place kept. (SPEC.md: States every tool handles, Failed)
 
 #### Scenario: The engine cannot be fetched
 
@@ -236,6 +184,16 @@ When the job fails, its code cannot be fetched or the browser runs out of memory
 - **WHEN** the browser runs out of memory during the job
 - **THEN** the page says the browser ran out of memory and to try on a computer, or to split the file first and number the parts
 
+#### Scenario: The new file would be far too large
+
+- **WHEN** the file being written passes its size limit
+- **THEN** writing stops at the limit, and the page says the new file would be far larger than expected, so it was not made, with the same thing to try
+
+#### Scenario: A page too small or too large to number
+
+- **WHEN** a page is shown less than 1 point or more than 100,000,000 points on a side
+- **THEN** the job stops with the engine failure, and nothing is written
+
 ### Requirement: Large files
 
 There SHALL be no fixed size limit. A file over 100 MB SHALL show "This file is more than 100 MB", and a file of more than 20,000 pages SHALL show "This file has more than 20,000 pages", and the job SHALL still run. (SPEC.md: States every tool handles, Too large; Privacy, limits and security; the owner's decision of 13 Nov 2026)
@@ -243,16 +201,21 @@ There SHALL be no fixed size limit. A file over 100 MB SHALL show "This file is 
 #### Scenario: A file of 120,000 pages
 
 - **WHEN** a file of 120,000 pages has been read
-- **THEN** the 20,000-page notice is shown, the options can be changed without blocking the page for more than 100 ms, and the main button can be used
+- **THEN** the 20,000-page notice is shown, changing the place blocks the page for no more than 100 ms, and the main button can be used
+
+#### Scenario: Pages that share one small content stream
+
+- **WHEN** a file of thousands of pages that all draw the same tiny content stream is numbered
+- **THEN** the job finishes, and the new file is larger than the old by no more than a few hundred bytes a page
 
 ### Requirement: Nothing is uploaded
 
-From the moment a file is picked until the result is downloaded, no request SHALL carry file contents, the file name, a password or a chosen option, and none SHALL go to another origin. None of them SHALL be written to browser storage or the page address. (SPEC.md: Privacy, limits and security, Browser tools)
+From the moment a file is picked until the result is downloaded, no request SHALL carry file contents, the file name, a password or the chosen place, and none SHALL go to another origin. None of them SHALL be written to browser storage or the page address. (SPEC.md: Privacy, limits and security, Browser tools)
 
 #### Scenario: The no-upload test
 
-- **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, chooses "Top left" and 4321 as the first number, numbers the file and downloads it, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, `top-left` or `4321`; and storage, the title, the address and the console hold none of them
+- **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, chooses "Top left", numbers the file and downloads it, while watching every request from the page and its workers
+- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, `top-left` or `Top left`; and storage, the title, the address and the console hold none of them
 
 #### Scenario: No hidden text reaches a request
 
@@ -261,7 +224,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them, with nothing from "Banned patterns". The questions SHALL cover uploading, choosing where the numbers go and the first number, what is kept and what is not, signatures and PDF/A, passwords, and that the page forgets the file. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft until the owner reviews them, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover uploading, where the numbers can go, leaving out a cover, what is kept and what is not, signatures and PDF/A, passwords, and that the page forgets the file. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
 
 #### Scenario: The text is in the served page
 
