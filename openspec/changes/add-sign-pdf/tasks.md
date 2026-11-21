@@ -1,0 +1,60 @@
+# Tasks
+
+Built on `add-watermark`, `add-option-conditions`, `add-drawing-option` and `add-picture-option`, each merged first.
+
+## 1. Registry entry
+
+- [ ] 1.1 Add the `sign-pdf` entry to `src/tools/registry.ts` as the design gives it (after Watermark, third under "Edit and sign"; the six options with their conditions and words; no preset) and its lines in `optionValues`, `optionTexts`, `optionDrawings` and `optionPictures` in `src/widget/option-values.ts`; verify with `npm test` (catalogue order, the four kinds' registry checks, the conditions' checks, `inspectPicture` exported) and that the built home page lists "Sign PDF" third under "Edit and sign" and Add page numbers' and Watermark's pages now link to it
+
+## 2. Engine
+
+- [ ] 2.1 `src/engines/stamp.ts`: the optional `only(index, total)` in `StampSteps`, as the design's 2c gives it (pages not chosen get no entry, only chosen pages are estimated and counted, `onPage` counts chosen pages); `src/engines/picture.ts`: `orientedMatrix` moved from Image to PDF's `place`, which now calls it; verify with new cases in `tests/unit/stamp.test.ts` (the last of three, the first of 120,000, left out) and with `tests/unit/stamp.test.ts`, `add-page-numbers.test.ts`, `watermark-pdf.test.ts` and `images-to-pdf.test.ts` otherwise passing unchanged
+- [ ] 2.2 Write `src/engines/tools/sign-pdf.ts`: every option checked before the PDF is read (`acceptedValue` for the three choices; `acceptedText`, `acceptedDrawing` or `acceptedPicture` for the way chosen only, throwing `TextRefused`, `DrawingRefused` or `PictureRefused`, whose messages hold nothing of the input); `signaturePlace` (exported, pure); `signatureForm` for a typed name (Times Italic, hex string), a drawing (bounds, y turned, round caps and joins, dots as circles) and a picture (one `JpegEmbedder` or `PngEmbedder` per job, `embedIntoContext` per run, `orientedMatrix`, `/Decode` dropped for a CMYK JPG with no Adobe segment, no colour profile); `run` through `plainCopy` and `stampPages` with `only`, page progress for every page only, and writing progress as Watermark reports it; `inspect` is `inspectPdf`; `inspectPicture` asks for `fflate` for every picture and gives `pictureOutcome` under the tool's rule; pdf-lib imported for types only; verify with `npm run check` and the tests in 3.1
+
+## 3. Engine unit tests
+
+- [ ] 3.1 `tests/unit/sign-pdf.test.ts` as the design's Tests list it: `signaturePlace` on every page size, box and place listed; every refusal before qpdf is asked for; the typed name (syntax characters in one hex string, accents read back, Times Italic not embedded); the drawing (place by changed pixels, empty part left out, a dot); the picture (`alpha.png` see-through, `turn-6.jpg` upright, `cmyk.jpg`, no `SECRET-` marker from `details.jpg` or `details.png`, one picture and one form for 500 pages); `run` on every file in `tests/fixtures/` with a typed name on the last page (`qpdf --check`, page count, the name last in the last page's text, other pages' objects unchanged, `mixed.pdf` on every page placed as shown, `scanned.pdf`, `rich.pdf`, `form.pdf`, `tagged.pdf` with every tagged MCID in its page's own content, `password.pdf` and `restricted.pdf` with no password and no restrictions, `warning.pdf`, the damaged files failing); a page that leaves `/ca 0.1`, a scaling `cm` and a red fill set; thousands of pages sharing one tiny content stream; `inspectPicture` for every picture in `tests/fixtures/pictures/`; verify the tests pass, then record each fixture's outcome, for each of the three ways where it differs, in `tests/fixtures/README.md`, with the multilingual file still missing (Sign PDF leaves existing text alone)
+- [ ] 3.2 Measure the time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s file, in Node and in Chromium, signing the last page with a typed name and every page with an 8 MB picture; verify the numbers are recorded in the fixtures README beside Watermark's, that the last-page runs stay within a few kilobytes of the plain copy written with object streams, and that the every-page runs stay inside the size budget; any figure more than 20% worse than Watermark's for every page is explained there or raised in the pull request
+
+## 4. Worker wiring
+
+- [ ] 4.1 Confirm `tool.worker.ts` already gives `qpdf`, `pdflib` and `fflate` and needs no change; `check-worker.mjs` checks the engine is loaded late, stays out of the worker file and holds no pdf-lib code (by a sentence from pdf-lib's source); `page-weight.mjs` gets a `loadedLater` line only for a new chunk; verify with `npm run build`, `npm run check:worker` and `npm run weigh`
+
+## 5. Page and page text
+
+- [ ] 5.1 Check the page renders with its heading, sentence, title and description, and that once the file is read the six options show as the spec says, with "Type your name" focused and the main button waiting with "Type your name first."; verify with the built page and a component test with this entry (`ChoiceGroup`, `TextField`, `DrawingPad` and `PictureField` drawn from its words)
+- [ ] 5.2 Write `src/content/tools/sign-pdf.md`, 250 to 500 words, marked as a draft, covering what the design's section 4 lists, with the privacy words saying only what the page controls; no question restates the title; no capitals for emphasis; check it against "Banned patterns"; verify the built page holds the heading, sentence, steps and questions with scripts off
+
+## 6. End-to-end test
+
+- [ ] 6.1 `tests/e2e/sign-pdf.spec.ts` at 360px and 1280px:
+  - choosing a file: one row, no summary line, "Getting ready" seen with the engine's route held until checked, the status line, focus on "Type your name" once read; two files dropped; not a PDF; a picture dropped on the page refused as not a PDF;
+  - the three ways: the arrow keys change the way, the matching input appears after the choice, focus stays on the radio button, Tab reaches the input, each way's main-button sentence, a typed name kept when switching away and back; Tab order from "Type your name" to the field, the two choices, "Choose another file" and the main button;
+  - typing: "Jq5name Vx2sig" makes the button work; Enter starts the job; "सीता" refused with "Some characters cannot be used."; a 63-character paste kept with its sentence;
+  - drawing: two lines with the mouse; with touch on a phone-sized page, the page's scroll position unchanged and no text selected; a second touch drawing nothing; Clear and its status message; a full drawing's message; the window resized with the drawing shown whole; no long task over 100 ms while drawing with the processor slowed four times;
+  - a picture: `alpha.png` named with its size and said once; the button's words before and after; `broken.png`, `arithmetic.jpg`, a file over 8 MB (made in the test) and `notes.png` (text) each with its sentence; no `<img>` and no `blob:` address for it;
+  - signing `mixed.pdf` on every page at the bottom right, once each way: the download passes `qpdf --check` and the changed-pixel box is at each page's bottom right as PDF.js shows it; a typed name on the last page only: other pages unchanged, the last page's text ending with the name;
+  - progress "Reading the file" and "Page n of m" for every page; Cancel keeping the way, the drawing and the choices; "Start again" resetting all; "Choose another file" keeping them; no Remove on the row;
+  - password right and wrong, focus landing on "Type your name" once opened; damaged; engine-load failure; memory, output-limit and the three refused failures from a fake engine with their sentences; "Go back to your file" keeping everything;
+  - the 100 MB notice; the 20,000-page notice on the generated 120,000-page file, with typing and drawing blocking nothing for more than 100 ms;
+  - verify it passes, with the other tools' e2e tests unchanged
+
+## 7. No-upload test
+
+- [ ] 7.1 The tool's no-upload test: its exact allowlist from the build (the engine, `stamp`, `plain` with the qpdf JSON helpers, `picture` if it is its own file, pdf-lib's file with `fflate`, no other tool's engine), the same for the three ways; positive checks that the engine and pdf-lib were fetched and a download happened; `qz7contract.pdf`, its stem, the password, `Jq5name Vx2sig` and each word, and `qz7sig.png` and its stem as secrets for requests, headers, the console, the title, storage and traces; no request body after a drawing; no `blob:` address for the picture; runs on `rich.pdf`, `tagged.pdf` and `form.pdf` with their bookmark titles, attachment name, document titles, `SECRET-` markers and field values as secrets; the address with no query and no hash; verify it passes, with Add page numbers' and Watermark's no-upload tests unchanged
+
+## 8. Screenshots
+
+- [ ] 8.1 Screenshots of `/sign-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with "Type your name" and the waiting button, a name typed, a refused character, the pad empty and drawn, the picture field before a pick, ready and with a problem, working, result, password, damaged, failed, the 20,000-page notice; the listed states with the pad drawn and with a picture problem, and the result, at 200% text size, with nothing overflowing sideways; verify by looking at each and adding them to the change folder
+
+## 9. Checks and review
+
+- [ ] 9.1 `LICENSES.md`: no new line, as no dependency or font is added; the `@cantoo/pdf-lib` line's reason also names Sign PDF
+- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`; verify each passes
+- [ ] 9.3 Add Sign PDF's hand checks to issue #7: the four PDF readers and printing to PDF from one of them; browsers and phones, including drawing with a finger on Android Chrome and iOS Safari, a pen on an iPad and an Android tablet, and choosing a photo from the camera; a tagged file read with a screen reader; the whole job by keyboard alone and with a screen reader, by typing and by a picture; and the owner's review of the page text
+- [ ] 9.4 When the pull request opens, update "Questions waiting for the owner" in `CLAUDE.md`: widen the waiting-main-button question to name Sign PDF; add the three new questions (placing by drag on a page preview later; Times Italic or a handwriting font with issue #20; tagging the signature in tagged files) and, if `add-picture-option` has not already, the per-tool picture limit
+- [ ] 9.5 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (the three ways and "Type your name" first; Times Italic; black; last page and bottom right first; the size rule; above the content, not an artifact and not tagged; one shared signature form; `-signed`; the "not a digital signature" note), the two shared engine pieces that ride along (`only`, the turn table), the signature read as the job's input, the font question deferred to issue #20, the drawing step's known limits, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
+
+## Workflow follow-up
+
+- After merge, archive the change with `/opsx:archive` and add Sign PDF to "Where the project stands" in `CLAUDE.md`.
