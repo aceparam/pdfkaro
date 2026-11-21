@@ -102,6 +102,9 @@ test.describe('home page', () => {
 
   test('keeps what is typed on the page: no request, cookie or storage', async ({ page, context }) => {
     await page.goto('/');
+    // The tool list loads its script when the browser is idle (client:idle), which can come after the network
+    // is quiet on a busy machine; wait until it has hydrated, so only what typing does is recorded.
+    await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
     await page.waitForLoadState('networkidle');
     const requests: string[] = [];
     page.on('request', (request) => requests.push(request.url()));
