@@ -25,6 +25,9 @@ export default defineConfig({
   },
   devToolbar: { enabled: false },
   vite: {
+    // A preview on a port already taken fails instead of moving to the next one, so an end-to-end
+    // run never waits on a port another run's server answers on (see playwright.config.ts).
+    preview: { strictPort: true },
     // Workers are ES modules, so each tool's engine stays its own file and is
     // fetched only when that tool runs.
     worker: {
