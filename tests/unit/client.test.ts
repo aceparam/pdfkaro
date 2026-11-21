@@ -194,3 +194,22 @@ describe('a picture picked again while the last one is still being read', () => 
     await expect(fresh).resolves.toEqual({ kind: 'ready', pixels: 1 });
   });
 });
+
+describe('Cancel while a picture is being read', () => {
+  it('cancels the read with the job, and a read started again goes to a fresh worker and answers', async () => {
+    const { client, workers } = setup();
+    const picture = new File(['\x89PNG'], 'signature.png');
+    const read = client.inspectPicture(picture, 'picture');
+    read.catch(() => {});
+    const job = client.run([file], [undefined], {}, () => {});
+    job.catch(() => {});
+    client.end();
+    await expect(read).rejects.toEqual(new ToolError('cancelled'));
+    await expect(job).rejects.toEqual(new ToolError('cancelled'));
+    const again = client.inspectPicture(picture, 'picture');
+    expect(workers).toHaveLength(2);
+    const sent = workers[1]?.sent[0];
+    workers[1]?.reply({ type: 'picture-inspected', requestId: sent?.requestId, outcome: { kind: 'ready', pixels: 4 } });
+    await expect(again).resolves.toEqual({ kind: 'ready', pixels: 4 });
+  });
+});

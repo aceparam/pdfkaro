@@ -960,3 +960,39 @@ describe('the picture field and the picking code, by their source', () => {
     }
   });
 });
+
+describe('Cancel with a hidden picture still being read', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const play = (...actions: Action[]) => actions.reduce(reducer, initialState);
+  const working = play(
+    { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+    { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+    { type: 'option-set', key: 'way', value: 'picture' },
+    { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5, status: 'reading' },
+    // The picture is hidden by the choice while it is read, so the main button works, and the job starts.
+    { type: 'option-set', key: 'way', value: 'type' },
+    { type: 'started' },
+  );
+
+  it("is listed for reading again when Cancel is pressed, since its own cancelled read comes while the job's step still holds", () => {
+    expect(way.key).toBe('way');
+    expect(working.step).toBe('working');
+    // Its read is cancelled by Cancel ending the worker before the page lists the file again, so it is not read again there.
+    expect(rereadPicture(working.pictures.picture, true, 0, working.step === 'listing')).toBe('nothing');
+    // So Cancel takes the pictures still being read before it ends the worker, and reads each again.
+    expect(picturesToReread(working)).toEqual(['picture']);
+    const cancelled = reducer(working, { type: 'back-to-files' });
+    expect(cancelled.step).toBe('listing');
+    expect(cancelled.pictures.picture?.status).toBe('reading');
+    // Read again, its answer is taken.
+    expect(reducer(cancelled, { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 9 } }).pictures.picture?.status).toBe('ready');
+  });
+
+  it('is read again by cancel, as by "Go back to your file", in the hook source', () => {
+    const hook = readFileSync(join(__dirname, '../../src/hooks/useToolRun.ts'), 'utf8');
+    const cancel = hook.slice(hook.indexOf('const cancel = useCallback('), hook.indexOf('[rereadPictures]);'));
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeGreaterThan(-1);
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeLessThan(cancel.indexOf('client.current?.end()'));
+    expect(cancel).toContain('void rereadPictures(unreadPictures);');
+  });
+});

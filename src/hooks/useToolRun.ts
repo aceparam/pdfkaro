@@ -83,7 +83,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const pictures = useRef(new Map<string, File>());
   // The file each key's read in the worker is for, while one is in flight; and a count of picks per key, so a pick
   // whose first bytes come back after a later pick's is dropped.
-  const picturesInFlight = useRef(new Map<string, File>());
+  // Each attempt has its own token, so an attempt that ends never clears the mark of a newer read of the same file.
+  const picturesInFlight = useRef(new Map<string, { file: File }>());
   const pictureTickets = useRef(new Map<string, number>());
   const nextId = useRef(1);
   const client = useRef<ToolClient | null>(null);
@@ -280,7 +281,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     async (key: string, file: File): Promise<void> => {
       for (let tries = 0; ; tries += 1) {
         stopThumbnail();
-        picturesInFlight.current.set(key, file);
+        const attempt = { file };
+        picturesInFlight.current.set(key, attempt);
         try {
           const outcome = await getClient().inspectPicture(file, key);
           if (pictures.current.get(key) === file) dispatch({ type: 'picture-read', key, outcome });
@@ -299,7 +301,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
           if (held) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
           return;
         } finally {
-          if (picturesInFlight.current.get(key) === file) picturesInFlight.current.delete(key);
+          if (picturesInFlight.current.get(key) === attempt) picturesInFlight.current.delete(key);
         }
       }
     },
@@ -313,7 +315,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const endReplacedRead = useCallback(
     (key: string) => {
       const inFlight = picturesInFlight.current.get(key);
-      if (inFlight === undefined || pictures.current.get(key) === inFlight) return;
+      if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
       picturesInFlight.current.delete(key);
       stopThumbnail();
       client.current?.end();
@@ -430,10 +432,26 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const setOption = useCallback((key: string, value: string) => dispatch({ type: 'option-set', key, value }), []);
   const setDrawing = useCallback((key: string, drawing: Drawing) => dispatch({ type: 'drawing-set', key, drawing }), []);
 
+  // Reads again, in turn, each picture still held among `keys`: those a failure or Cancel left being read.
+  const rereadPictures = useCallback(
+    async (keys: readonly string[]) => {
+      for (const key of keys) {
+        const file = pictures.current.get(key);
+        if (file) await readChosenPicture(key, file);
+      }
+    },
+    [readChosenPicture],
+  );
+
+  // Cancel ends the worker, which cancels a hidden picture's read still running; that read's own answer comes
+  // before the page is listing again, so it is not read again there (`rereadPicture`). Cancel reads it again
+  // here, as "Go back to your file" does, so it never stays "Getting ready" and thumbnails are not held back.
   const cancel = useCallback(() => {
+    const unreadPictures = picturesToReread(stateRef.current);
     client.current?.end();
     dispatch({ type: 'back-to-files' });
-  }, []);
+    void rereadPictures(unreadPictures);
+  }, [rereadPictures]);
 
   // Going back after a failure reads again any file or picture the failure left unread,
   // such as when the engine could not be fetched while they were being read.
@@ -443,12 +461,9 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     dispatch({ type: 'back-to-files' });
     void (async () => {
       for (const id of unread) await inspect(id);
-      for (const key of unreadPictures) {
-        const file = pictures.current.get(key);
-        if (file) await readChosenPicture(key, file);
-      }
+      await rereadPictures(unreadPictures);
     })();
-  }, [inspect, readChosenPicture]);
+  }, [inspect, rereadPictures]);
 
   const clear = useCallback(() => {
     if (drawing.current) drawing.current.stopped = true;

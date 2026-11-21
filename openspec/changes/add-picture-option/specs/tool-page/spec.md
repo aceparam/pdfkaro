@@ -46,6 +46,11 @@ A picture SHALL be a field with a label, a button to choose one picture of the t
 - **WHEN** a picture hidden by a choice is still being read when the job starts, and the job's end cancels the read
 - **THEN** it is not read again during the job or on its result, and no worker is started for it
 
+#### Scenario: Cancel while a hidden picture is being read
+
+- **WHEN** a picture hidden by a choice is still being read when the visitor starts the job and presses Cancel
+- **THEN** the file is listed again and the picture is read again, so it never stays "Getting ready" and thumbnails are not held back
+
 #### Scenario: A picture is picked again while the last is still being read
 
 - **WHEN** the visitor picks another picture while the last one is still being read
