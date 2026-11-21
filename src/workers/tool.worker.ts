@@ -49,7 +49,7 @@ const tools: EngineTools = {
   }),
   // PDF.js's fonts and decoders: one fixed set, loaded late, never statically.
   pdfjsData: async () => (await import('./pdfjs-data')).pdfjsData,
-  // pdf-lib, for an engine that writes a PDF from nothing; its own chunk, fetched at the main button.
+  // pdf-lib, for an engine that writes a PDF from nothing or draws on pages; its own chunk, fetched at the main button.
   pdflib: () => import('./pdflib'),
   // fflate, from the same chunk pdf-lib and the zip use: its streaming Inflate and Deflate, never inflateSync.
   fflate: async () => {

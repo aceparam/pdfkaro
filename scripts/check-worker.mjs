@@ -47,6 +47,7 @@ const lateSources = [
   { what: "the shared qpdf JSON steps (qpdf-json.ts)", path: join('src', 'engines', 'qpdf-json.ts') },
   { what: 'the picture resampling (resample.ts)', path: join('src', 'engines', 'resample.ts') },
   { what: 'the page drawing and its canvas budget (thumbnail.ts)', path: join('src', 'engines', 'thumbnail.ts') },
+  { what: 'the drawing step that draws on pages (stamp.ts)', path: join('src', 'engines', 'stamp.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');
@@ -120,6 +121,15 @@ else {
 for (const name of [workers[0], ...files.filter((each) => engineIds.some((id) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each)))]) {
   if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name} holds pdf-lib's code.`);
 }
+// The drawing step (stamp.ts, for Add page numbers, then Watermark and Sign PDF) takes pdf-lib from its tools too:
+// whichever file holds its code, found by a sentence of its own, holds none of pdf-lib's, and is not the worker.
+const stampSentence = 'A drawing used an object that cannot be written.';
+const stampFiles = files.filter((name) => /\.js$/.test(name) && readFileSync(join(assets, name), 'utf8').includes(stampSentence));
+if (stampFiles.length !== 1) problems.push(`Expected the drawing step (stamp.ts) in one file, found ${stampFiles.length}.`);
+for (const name of stampFiles) {
+  if (name === workers[0]) problems.push('The worker file holds the drawing step (stamp.ts).');
+  if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name}, which holds the drawing step, holds pdf-lib's code.`);
+}
 
 // The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
 // picture.ts throws no sentences, so its marker names stand in for them.
@@ -143,5 +153,5 @@ for (const [what, pattern, markers] of [
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling and page drawing out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
 );

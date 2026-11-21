@@ -76,7 +76,7 @@ export function updateJson(maxObjectId: number, update: Map<string, Dict>): stri
  * would overflow it. Every argument is a made-up path, an option or a page
  * list built from checked page numbers, in any order, so none holds a line break.
  */
-export function callWithArgumentFile(qpdf: Qpdf, args: readonly string[]): { code: number } {
+export function callWithArgumentFile(qpdf: Qpdf, args: readonly string[]): ReturnType<Qpdf['call']> {
   if (args.some((arg) => /[\r\n]/.test(arg))) throw new Error('An argument held a line break.');
   qpdf.write('/args', new TextEncoder().encode(`${args.join('\n')}\n`));
   return qpdf.call(['@/args']);

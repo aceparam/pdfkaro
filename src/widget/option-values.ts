@@ -6,7 +6,9 @@
 // `'add-page-numbers': { position: [...] }`.
 
 /** Each tool's accepted values for each option, by tool id and option key. */
-export const optionValues: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {};
+export const optionValues: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] },
+};
 
 /**
  * The value an engine was sent for one of its options, when it is a string

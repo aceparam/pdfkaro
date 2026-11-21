@@ -13,6 +13,9 @@ const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
   engine: 'Something went wrong. Try again.',
 };
 
+/** What the page says when a new file would grow far past what drawing on it adds (stamp.ts's `OutputLimit`). */
+export const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
+
 /** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */
 export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice'>): string {
   if (kind === 'too-many-files' || kind === 'zip-too-large') {
@@ -20,6 +23,8 @@ export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 
   }
   // PDF to JPG and PDF to PNG stop at maxOutputBytes (zip-limits.ts), so the tab is not ended.
   if (kind === 'too-many-pictures') return tooManyPicturesSentence();
+  // Only a broken or crafted file reaches the drawing step's budget, so it fails the same on a computer: its own advice.
+  if (kind === 'output-limit') return outputLimitSentence;
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
   return shared[kind];
 }

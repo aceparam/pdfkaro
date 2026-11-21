@@ -433,3 +433,49 @@ Files made in the test:
 The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was converted by hand in Node on 16 Nov 2026: one picture, 26,341 bytes as PNG and 23,552 as JPG, in under half a second each. It is not run in CI.
 
 The multilingual file is still missing, so Chinese, Japanese and Korean text cannot be checked against the test set. PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data holds no character maps; the page text says such text may be missing.
+
+### Add page numbers (`src/engines/tools/add-page-numbers.ts`, with `src/engines/stamp.ts`)
+
+Each file was numbered in Node with the same qpdf and pdf-lib the browser gets (`tests/unit/add-page-numbers.test.ts`), and each result read back by qpdf and by PDF.js's legacy build. Every result passes `qpdf --check`, has the same pages, is not encrypted, and each page's text through PDF.js is its text as before followed by its number. Each page's own content streams are kept unchanged between a shared `q` and `Q`, and its stored turn, boxes and user unit are as they were. Sizes in bytes, from a run on 21 Nov 2026, at "Bottom centre".
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 4,821 | Numbered 1 to 3, each centred across the bottom; progress "Reading the file", "Page 1 of 3" to "Page 3 of 3", then writing from 75% to 95%, and 100 once checked. qpdf's warning does not stop the job |
+| `pages-500.pdf` | 198,025 | 267,447 | Page 500 shows 500; about 140 bytes a page |
+| `scanned.pdf` | 6,191 | 6,944 | Numbered: the number is the only text on each page |
+| `password.pdf` | 7,178 | 4,858 | With `open-sesame`: numbered, with no password and no restrictions. Without it, or with a wrong one, the job fails |
+| `restricted.pdf` | 7,181 | 4,858 | Numbered, with no restrictions |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Not numbered: the job fails and hands back nothing |
+| `form.pdf` | 3,189 | 3,262 | Both fields kept, with the value `Sample text` |
+| `mixed.pdf` | 2,257 | 3,431 | At each of the six places, every page's number sits within 2% of where `numberPlace` puts it on the page as PDF.js shows it, upright: A4, Letter on its side, A5 turned a quarter and A4 upside down |
+| `rich.pdf` | 2,064 | 2,628 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
+| `images.pdf` | 1,642 | 2,168 | Numbered; the JPEG 2000 picture kept |
+| `tagged.pdf` | 5,118 | 3,456 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the number is in an `/Artifact`, in no tag |
+| `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Numbered; pictures are not read. `compress-text.pdf` (21,019 to 3,694) and `compress-small-jpg.pdf` (12,852 to 9,404) come out smaller, as qpdf compresses their uncompressed streams |
+| `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,480 | Numbered in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
+| `compress-password.pdf` | 36,730 | 36,569 | With `open-sesame`: numbered, with no password |
+| `compress-json-bomb.pdf` | 140,759 | | Not numbered: its JSON of dictionaries is refused at 64 MB while qpdf writes it, so the pages cannot be read, and the job fails with the engine's sentence after about 15 seconds in Node |
+
+Files made in the test (`tests/unit/stamp.test.ts`):
+
+| File | Outcome |
+| --- | --- |
+| 20 pages with odd turns and boxes: turns of 0, 90, 180, 270, -90, 450 and 45; a paper box offset, reversed and missing; a crop box smaller, of no area and off the paper; a trim box smaller than the crop box; user units of 2, 0 and -2; a quarter and a three-quarter turn with an offset crop box and a user unit of 2; content that leaves a `q` open after a scaling `cm` and a green fill | A red mark drawn at the bottom centre of each layer is found by PDF.js within 2% of the bottom centre of the page as shown; no stored turn, box or user unit changed |
+| A turn inherited from the page tree | The mark at the bottom centre of the page turned a quarter |
+| A page whose `/XObject` already names `/PDFkaro` and `/PDFkaro1` | The layer goes in as `/PDFkaro2`; the other resources are kept |
+| A page with text tied to tags by `/MCID 0` and an `/MCR` for `/MCID 1` | Both ids still in the page's own unchanged streams, `/StructParents` kept, PDF.js finds "Hello tagged" and "Second part" from their tags |
+| 6,000 pages that share one tiny content stream (packed by qpdf) | Numbered in about 3.5 seconds, in three pdf-lib documents of at most 2,000 pages, under 300 bytes a page more; every page still draws the one shared stream |
+| 2,000 pages that inherit one /Resources of about 56 KB, with its /XObject behind a reference (packed by qpdf, 20,882 bytes) | Stopped with `OutputLimit` (`output-limit`, "The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.") before any layer is drawn, in about half a second |
+| 2,000 pages that inherit small resources whose `/XObject` dictionary (800 long names, about 54 KB) sits behind a reference (packed by qpdf) | Stopped with `OutputLimit` before any layer is drawn: the estimate counts the dictionary reached through the reference in full |
+| `pageBox` given a box of 10^-5 points and a user unit of 10^7 (a unit test, no file) | The engine failure: its sides fit, but the matrix would scale by less than a millionth |
+| `pages-500.pdf` written with a cap of 20,000 bytes on the new file | Stopped with `OutputLimit`. qpdf finishes with exit 0 and a cut-off file when a write is refused while it writes object streams, so the capped file's own record (`Qpdf.refused`) is asked |
+
+Measured with the memory order of the design's section 6: the reading qpdf let go before the stamping qpdf is made, and the JavaScript plain copy let go once the stamping qpdf holds it. In Node, each file in a process of its own, with qpdf and pdf-lib loaded first on `text.pdf`; peak is the process's highest resident memory, which includes the test runner's own (about 0.14 GB here). The design's experiment was run again in the same conditions for comparison (its own process, without a test runner, about 0.05 GB). In Chromium, the built page through Playwright, from pressing the main button to the result, with the resident memory of every browser process added up and sampled every 0.2 seconds; its baseline was about 0.5 GB.
+
+| File | In | Out | Node: time (read, draw, write and check) | Node: peak | Experiment again: time, peak | Chromium: time | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | 0.20 MB | 0.27 MB | 0.40 s (0.16, 0.11, 0.13) | 0.17 GB | 0.40 s, 0.11 GB | 0.83 s | 0.04 GB |
+| 120,000 pages sharing one content stream (`make-many-pages.mjs`) | 16.6 MB | 40.7 MB | 54.2 s (14.1, 16.9, 23.2) | 0.95 GB | 50.3 s, 1.46 GB | 38.6 s | 0.77 GB |
+| `make-large.mjs`'s file | 110.1 MB | 110.1 MB | 1.7 s (1.1, 0.0, 0.6) | 1.19 GB (0.97 GB without loading first) | 1.4 s, 0.92 GB | 2.3 s | 1.36 GB |
+
+In Node the draw time includes qpdf reading the 68 MB update before it writes. The 120,000-page file reads more slowly than in the experiment (14.1 s against 8.3 s), as the pages and the dictionaries are read by two capped qpdf runs and the plain copy counts its pages, where the experiment read both in one run; it needs a third less memory. The 110 MB file's peak is above the experiment's (Node 1.19 GB, or 0.97 GB without loading qpdf and pdf-lib first, against 0.92 GB; Chromium 1.36 GB over its baseline): `plainCopy`, shared with the page tools, makes a second qpdf only to count the pages, so one job makes four qpdf instances (opening, counting, reading, stamping), each holding a copy of the file until it is let go. Both differences are accepted for now (task 3.2); the later fix is to take the page count from `readPages` and skip the counting instance. The multilingual file is still missing.

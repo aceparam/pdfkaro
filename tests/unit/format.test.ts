@@ -50,6 +50,9 @@ describe('progress', () => {
     expect(progressFraction({ stage: 'working', unit: 'picture', done: 40, total: 40 })).toBeCloseTo(0.8);
     expect(progressFraction({ stage: 'writing', percent: 75 })).toBeCloseTo(0.8);
     expect(progressFraction({ stage: 'writing', percent: 99 })).toBeLessThan(1);
+    // Pages counted before a write fill as pictures do (Add page numbers).
+    expect(progressFraction({ stage: 'working', unit: 'page', done: 40, total: 40, writesAfter: true })).toBeCloseTo(0.8);
+    expect(progressLine({ stage: 'working', unit: 'page', done: 4, total: 40, writesAfter: true }, 'x')).toBe('Page 4 of 40');
     // Pages and files still fill to the end.
     expect(progressFraction({ stage: 'working', unit: 'page', done: 40, total: 40 })).toBeCloseTo(1);
     expect(progressFraction({ stage: 'working', unit: 'file', done: 2, total: 4 })).toBeCloseTo(0.6);

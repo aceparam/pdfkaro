@@ -76,8 +76,10 @@ No open decision needs more than its assumed default.
   - unit tests, `tests/e2e/add-page-numbers.spec.ts` and the tool's no-upload test.
 - **Changed code:**
   - the registry entry, and its line in `src/widget/option-values.ts`;
-  - `src/engines/qpdf.ts`, which gains `append`, so the update can be written in pieces;
-  - the failure kind `output-limit`, in `src/widget/state.ts`, `failures.ts` and `worker-core.ts`;
+  - `src/engines/qpdf.ts`, which gains `append`, so the update can be written in pieces, and `refused`, which says whether a capped file refused a write (qpdf can finish with exit 0 after one);
+  - the failure kind `output-limit`, in `src/widget/state.ts`, `failures.ts`, `worker-core.ts` and the list of failure kinds `src/workers/messages.ts` accepts;
+  - `callWithArgumentFile` in `src/engines/qpdf-json.ts`, which now returns everything qpdf printed (its exit code, answer and messages) and not only its exit code, so the drawing step can tell a write refused at the cap;
+  - `Progress` in `src/engines/types.ts` gains an optional `writesAfter`, and `progressFraction` in `src/widget/format.ts` fills such pages to 0.8, so the bar is not full while the numbered file is written (found while building);
   - `check-worker.mjs`, which checks the engine and `stamp` load late and hold no pdf-lib code;
   - the `@cantoo/pdf-lib` line in `LICENSES.md`, whose reason now names this tool too.
 - **Other tools:** no change in behaviour; their tests must pass unchanged.

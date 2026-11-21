@@ -16,6 +16,7 @@ type QpdfModule = {
     unlink(path: string): void;
     stat(path: string): { size: number };
     open(path: string, flags: string): { node?: Record<string, unknown> };
+    write(stream: unknown, buffer: Uint8Array, offset: number, length: number): number;
     close(stream: unknown): void;
   };
 };
@@ -29,6 +30,11 @@ export type Qpdf = {
   /** Writes a file into qpdf's memory. Paths are made up by the engine, never taken from a file name. */
   write(path: string, data: Uint8Array): void;
   read(path: string): Uint8Array;
+  /**
+   * Adds bytes to the end of a file in qpdf's memory, making it if it is not there, so a large
+   * file can be written in pieces and each piece let go once it is in (the drawing step's update).
+   */
+  append(path: string, data: Uint8Array): void;
   /** Removes a file from qpdf's memory, so a step that has read it does not keep it twice. */
   remove(path: string): void;
   /** A file's length in bytes, read without reading the file. */
@@ -40,6 +46,11 @@ export type Qpdf = {
    * be capped; the caller then still checks the size afterwards.
    */
   capFile(path: string, limit: number): boolean;
+  /**
+   * Whether a file made by `capFile` has refused a write. qpdf does not always say so: writing
+   * object streams, it can finish with exit 0 and leave the file cut off at the cap.
+   */
+  refused(path: string): boolean;
   /**
    * Runs qpdf with these arguments. Gives its exit code, what it wrote as its
    * answer (`out`, standard output) and everything it printed (`printed`,
@@ -69,14 +80,31 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
   const utf8 = new TextDecoder();
   let out = '';
   let printed = '';
+  // The capped files that have refused a write.
+  const refusals = new Set<string>();
   const qpdf: Qpdf = {
     onLine: null,
     mkdir: (path) => module.FS.mkdir(path),
     write: (path, data) => module.FS.writeFile(path, data),
     read: (path) => module.FS.readFile(path),
+    append(path, data) {
+      const stream = module.FS.open(path, 'a');
+      try {
+        let written = 0;
+        while (written < data.length) {
+          const step = module.FS.write(stream, data, written, data.length - written);
+          if (!(step > 0)) throw new Error('A file in qpdf’s memory could not be written.');
+          written += step;
+        }
+      } finally {
+        module.FS.close(stream);
+      }
+    },
     remove: (path) => module.FS.unlink(path),
     size: (path) => module.FS.stat(path).size,
+    refused: (path) => refusals.has(path),
     capFile(path, limit) {
+      refusals.delete(path);
       module.FS.writeFile(path, new Uint8Array(0));
       // The file system's names are shortened in this build, so its parts are found by what they do:
       // the error a missing file throws, and the file's own table of read and write steps.
@@ -102,7 +130,10 @@ export async function createQpdf(load: () => Promise<unknown>, wasm: string): Pr
       node[key] = {
         ...ops,
         write(stream: unknown, buffer: unknown, offset: number, length: number, position: number, canOwn?: boolean) {
-          if (position + length > limit) throw new Refusal(51);
+          if (position + length > limit) {
+            refusals.add(path);
+            throw new Refusal(51);
+          }
           return ops.write(stream, buffer, offset, length, position, canOwn);
         },
       };

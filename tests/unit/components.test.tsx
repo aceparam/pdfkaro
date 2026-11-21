@@ -323,3 +323,21 @@ describe('ChoiceGroup, a choice of a test entry', () => {
     expect(inputs.map((input) => (input as unknown as { props: { ref?: unknown } }).props.ref)).toEqual([ref, undefined, undefined]);
   });
 });
+
+describe("ChoiceGroup with Add page numbers' entry", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { chosenValue } = await import('../../src/widget/options');
+  const option = tools.find((tool) => tool.id === 'add-page-numbers')!.widget!.options![0]!;
+  // As the workspace draws it before anything is chosen: the option's starting value.
+  const html = renderToStaticMarkup(<ChoiceGroup option={option} value={chosenValue(option, {})} name="r2-position" onChoose={noop} />);
+
+  it('is named "Where the numbers go", with its six places in order, and "Bottom centre" chosen', () => {
+    expect(html).toContain('<legend class="');
+    expect(html).toContain('>Where the numbers go</legend>');
+    const labels = [...html.matchAll(/<span>([^<]+)<\/span>/g)].map((match) => match[1]);
+    expect(labels).toEqual(['Bottom left', 'Bottom centre', 'Bottom right', 'Top left', 'Top centre', 'Top right']);
+    expect(html.match(/type="radio" name="r2-position"/g)).toHaveLength(6);
+    expect(html.match(/checked=""/g)).toHaveLength(1);
+    expect(html).toMatch(/checked="" value="bottom-centre"/);
+  });
+});

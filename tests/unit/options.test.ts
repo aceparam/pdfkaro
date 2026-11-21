@@ -90,8 +90,10 @@ describe('a test entry with a choice', () => {
 describe('the accepted values of an option', () => {
   const values = { 'test-options': { position: ['bottom-centre', 'bottom-right', 'top-right'] } };
 
-  it('lists no tool yet', () => {
-    expect(optionValues).toEqual({});
+  it("lists Add page numbers' six places, and no other tool", () => {
+    expect(optionValues).toEqual({ 'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] } });
+    expect(acceptedValue('add-page-numbers', 'position', 'top-left')).toBe('top-left');
+    expect(acceptedValue('add-page-numbers', 'position', 'Top left')).toBeUndefined();
     expect(acceptedValue('test-options', 'position', 'top-right')).toBeUndefined();
   });
 
