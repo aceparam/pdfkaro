@@ -2,20 +2,39 @@
 // plain functions. A choice always holds a value with which the main button
 // works, so it never holds the button back. A text is the job's input: it starts
 // empty, and it holds the button back while it is empty, too long, or has a
-// character its rule does not take (src/widget/option-values.ts).
+// character its rule does not take (src/widget/option-values.ts). A drawing is
+// the job's input too: it starts empty, and it holds the button back while
+// nothing is drawn.
 
-import type { ChoiceOption, TextOption, ToolOption } from '../tools/registry';
+import type { ChoiceOption, DrawingOption, TextOption, ToolOption } from '../tools/registry';
 import { number } from './format';
-import { cleanText, textProblem, textRule, type CharacterRule, type TextProblem, type TextRule, type TextTable } from './option-values';
+import {
+  cleanText,
+  drawingRule,
+  textProblem,
+  textRule,
+  type CharacterRule,
+  type Drawing,
+  type DrawingTable,
+  type TextProblem,
+  type TextRule,
+  type TextTable,
+} from './option-values';
 import type { State } from './state';
 
-/** What each option holds, by option key: a choice's value, or a text as typed. `{}` is every option at its start. */
-export type Choices = Readonly<Record<string, string>>;
+/** What each option holds, by option key: a choice's value, a text as typed, or a drawing's lines. `{}` is every option at its start. */
+export type Choices = Readonly<Record<string, string | Drawing>>;
 
 /** The value a choice shows: the one chosen when it is among the option's values, else its starting value. */
 export function chosenValue(option: ChoiceOption, choices: Choices): string {
   const chosen = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
-  return chosen !== undefined && option.choices.some((choice) => choice.value === chosen) ? chosen : option.initial;
+  return typeof chosen === 'string' && option.choices.some((choice) => choice.value === chosen) ? chosen : option.initial;
+}
+
+/** What a drawing's box shows: its lines, else none. A string under its key is never taken for a drawing. */
+export function drawnLines(option: DrawingOption, choices: Choices): Drawing {
+  const drawn = Object.hasOwn(choices, option.key) ? choices[option.key] : undefined;
+  return Array.isArray(drawn) ? drawn : [];
 }
 
 /** What a text's field shows: the text exactly as typed, else ''. */
@@ -48,14 +67,18 @@ export function shownOptions(options: readonly ToolOption[] | undefined, choices
 }
 
 /**
- * What the engine is sent for the tool's options: a choice's value and a text cleaned (composed and
- * trimmed), by key, or `{}` for a tool with none. Only shown options are sent: a hidden one sends no
- * key at all. The main button cannot start a job while a text has a problem, and the engine checks
- * the text again.
+ * What the engine is sent for the tool's options: a choice's value, a text cleaned (composed and
+ * trimmed) and a drawing's lines as they are, by key, or `{}` for a tool with none. Only shown
+ * options are sent: a hidden one sends no key at all. The main button cannot start a job while a
+ * text has a problem or a drawing is empty, and the engine checks both again.
  */
-export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices): Record<string, string> {
-  const sent: Record<string, string> = {};
-  for (const option of shownOptions(options, choices)) sent[option.key] = option.kind === 'choice' ? chosenValue(option, choices) : cleanText(typedText(option, choices));
+export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices): Record<string, string | Drawing> {
+  const sent: Record<string, string | Drawing> = {};
+  for (const option of shownOptions(options, choices)) {
+    if (option.kind === 'choice') sent[option.key] = chosenValue(option, choices);
+    else if (option.kind === 'text') sent[option.key] = cleanText(typedText(option, choices));
+    else sent[option.key] = drawnLines(option, choices);
+  }
   return sent;
 }
 
@@ -113,17 +136,29 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
   }
 }
 
-/** A text holding the main button back: its key, what is wrong, and the sentence. */
+/** A text or a drawing holding the main button back: its key, what is wrong, and the sentence. A drawing is only ever `empty`. */
 export type OptionHold = { key: string; kind: TextProblem['kind']; sentence: string };
 
 /**
- * The first shown text, in registry order, that holds the main button back, or null. A hidden text
- * and a choice never hold it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
- * and tied to the main button from there. A text with no line in optionTexts (which the registry test
- * forbids) always holds, with its empty sentence, so a text is never sent unchecked.
+ * The first shown text or drawing, in registry order, that holds the main button back, or null. A
+ * hidden one and a choice never hold it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
+ * and tied to the main button from there. A drawing holds while it has no lines. A text with no line in optionTexts, or a drawing with
+ * none in optionDrawings (which the registry test forbids), always holds, with its empty sentence, so neither is sent unchecked.
  */
-export function optionsHold(tool: string, options: readonly ToolOption[] | undefined, choices: Choices, texts?: TextTable): OptionHold | null {
+export function optionsHold(
+  tool: string,
+  options: readonly ToolOption[] | undefined,
+  choices: Choices,
+  texts?: TextTable,
+  drawings?: DrawingTable,
+): OptionHold | null {
   for (const option of shownOptions(options, choices)) {
+    if (option.kind === 'drawing') {
+      if (drawingRule(tool, option.key, drawings) === undefined || drawnLines(option, choices).length === 0) {
+        return { key: option.key, kind: 'empty', sentence: option.emptySentence };
+      }
+      continue;
+    }
     if (option.kind !== 'text') continue;
     const rule = textRule(tool, option.key, texts);
     if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };

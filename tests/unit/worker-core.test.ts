@@ -104,6 +104,13 @@ describe('failureKind', () => {
     expect(failureKind(new Error(new TextRefused().message))).toBe('engine');
   });
 
+  it('knows a refused drawing by its name, and its message is not taken for anything else', async () => {
+    const { DrawingRefused } = await import('../../src/widget/option-values');
+    expect(failureKind(new DrawingRefused())).toBe('drawing-refused');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'DrawingRefused' }))).toBe('drawing-refused');
+    expect(failureKind(new Error(new DrawingRefused().message))).toBe('engine');
+  });
+
   it('tells running out of memory from other failures', () => {
     expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
     expect(failureKind(new Error('Aborted(OOM)'))).toBe('memory');

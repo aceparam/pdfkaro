@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { failureSentence, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -177,5 +177,34 @@ describe('the sentence for a text the engine refused', () => {
 
   it('leaves the other failures as they were for a tool with a text', () => {
     expect(failureSentence('engine', { options: [text] })).toBe('Something went wrong. Try again.');
+  });
+});
+
+describe('the sentence for a drawing the engine refused', () => {
+  const drawing = {
+    kind: 'drawing' as const,
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const way = { kind: 'choice' as const, key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw' }, { value: 'type', label: 'Type' }], initial: 'draw' };
+
+  it("says what happened and what to try, in the shared words or the first shown drawing's own", () => {
+    expect(drawingRefusedSentence).toBe('The drawing could not be used. Clear it and draw again.');
+    expect(failureSentence('drawing-refused', {})).toBe(drawingRefusedSentence);
+    expect(failureSentence('drawing-refused', { options: [way, drawing] })).toBe(drawingRefusedSentence);
+    const own = 'This signature could not be used. Clear it and draw again.';
+    expect(failureSentence('drawing-refused', { options: [way, { ...drawing, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...drawing, refusedSentence: own, when: { key: 'way', value: 'draw' } };
+    expect(failureSentence('drawing-refused', { options: [way, hidden] }, { way: 'type' })).toBe(drawingRefusedSentence);
+    expect(failureSentence('drawing-refused', { options: [way, hidden] }, { way: 'draw', drawing: [[1, 1]] })).toBe(own);
+  });
+
+  it("is not a text's sentence, and a text's is not a drawing's", () => {
+    const text = { kind: 'text' as const, key: 'text', label: 'Name', hint: 'Your name.', emptySentence: 'Type it first.', refusedSentence: 'The name could not be used.' };
+    expect(failureSentence('drawing-refused', { options: [way, text, drawing] })).toBe(drawingRefusedSentence);
+    expect(failureSentence('text-refused', { options: [way, { ...drawing, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
   });
 });

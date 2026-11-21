@@ -9,6 +9,8 @@ import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
 import { ChoiceGroup } from '../../src/components/ChoiceGroup/ChoiceGroup';
 import { errorId, TextField } from '../../src/components/TextField/TextField';
+import { DrawingPad } from '../../src/components/DrawingPad/DrawingPad';
+import { readFileSync } from 'node:fs';
 
 const noop = () => {};
 
@@ -466,5 +468,87 @@ describe('Enter in a typed field (TextField and PasswordField)', async () => {
     expect(pressesButton({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false } })).toBe(false);
     expect(pressesButton({ key: 'Process', keyCode: 229 })).toBe(false);
     expect(pressesButton({ key: 'a', keyCode: 65, nativeEvent: { isComposing: false } })).toBe(false);
+  });
+});
+
+// No render harness (no jsdom): the pad's pointer handlers and effects are not run here. Its rules are
+// plain functions (tests/unit/drawing.test.ts); Sign PDF's end-to-end test is the first browser test of the pad.
+describe('DrawingPad, a drawing of a test entry', () => {
+  const option = {
+    kind: 'drawing' as const,
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const rule = { maxLines: 50, maxPoints: 5000 };
+  const html = renderToStaticMarkup(<DrawingPad option={option} id="r5-drawing" drawing={[]} rule={rule} onDraw={noop} onClear={noop} />);
+  const canvas = html.match(/<canvas [^>]*>/)?.[0] ?? '';
+  const button = html.match(/<button [^>]*>[^<]*<\/button>/)?.[0] ?? '';
+
+  it('is the label, the box, the hint and the Clear button, in that order', () => {
+    expect(html).toMatch(
+      /^<div class="[^"]+"><p id="r5-drawing-label" class="[^"]+">Draw your signature<\/p><canvas [^>]*><\/canvas><p id="r5-drawing-hint" class="[^"]+">Draw with a finger, a mouse or a pen\. To use a keyboard, type your name instead\.<\/p><div class="actions"><button /,
+    );
+    expect(html).not.toContain('<label');
+    expect(html).not.toContain('<form');
+  });
+
+  it('names the box by its label and describes it by its hint, as a picture, with no Tab stop', () => {
+    expect(canvas).toContain('role="img"');
+    expect(canvas).toContain('aria-labelledby="r5-drawing-label"');
+    expect(canvas).toContain('aria-describedby="r5-drawing-hint"');
+    expect(canvas).not.toMatch(/tabindex/i);
+  });
+
+  it('has a Clear button in the tool\'s words, a plain button described by the hint', () => {
+    expect(button).toContain('type="button"');
+    expect(button).toContain('class="button-secondary"');
+    expect(button).toContain('aria-describedby="r5-drawing-hint"');
+    expect(button).toMatch(/>Clear the drawing<\/button>$/);
+  });
+
+  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2', () => {
+    const css = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.module.css', import.meta.url), 'utf8');
+    const box = css.match(/\.box \{([^}]*)\}/)?.[1] ?? '';
+    for (const rule of [
+      'touch-action: none;',
+      'user-select: none;',
+      '-webkit-user-select: none;',
+      '-webkit-touch-callout: none;',
+      'width: 100%;',
+      'aspect-ratio: 5 / 2;',
+      'border: 1px solid var(--control);',
+      'border-radius: 4px;',
+      'background: transparent;',
+      'color: var(--text);',
+    ]) {
+      expect(box, rule).toContain(rule);
+    }
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/shadow|gradient|animation|transition/);
+  });
+
+  it('never makes a picture or a data address of the canvas, and never writes to storage', () => {
+    const source = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.tsx', import.meta.url), 'utf8');
+    const rules = readFileSync(new URL('../../src/widget/drawing.ts', import.meta.url), 'utf8');
+    for (const code of [source, rules]) {
+      for (const word of ['toDataURL', 'toBlob', 'getImageData', 'convertToBlob', 'transferToImageBitmap', 'localStorage', 'sessionStorage', 'indexedDB', 'console.', 'data:']) {
+        expect(code, word).not.toContain(word);
+      }
+    }
+  });
+
+  it('prevents the context menu on the box, and starts, moves and ends lines on pointer events, ended by cancel or lost capture too', () => {
+    const source = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.tsx', import.meta.url), 'utf8');
+    for (const wiring of ['onPointerDown={start}', 'onPointerMove={move}', 'onPointerUp={end}', 'onPointerCancel={end}', 'onLostPointerCapture={end}', 'onContextMenu={(event) => event.preventDefault()}']) {
+      expect(source, wiring).toContain(wiring);
+    }
+    expect(source).toContain('setPointerCapture');
+    expect(source).toContain('event.isPrimary');
+    expect(source).toContain('getCoalescedEvents');
+    expect(source).toContain('devicePixelRatio');
+    expect(source).toContain('ResizeObserver');
+    expect(source).toContain('prefers-color-scheme');
   });
 });
