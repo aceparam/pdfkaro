@@ -42,7 +42,7 @@ Built on `add-text-option`, merged first.
 
 ## 8. Screenshots
 
-- [ ] 8.1 Screenshots of `/watermark-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with the empty field and the waiting button, listed with text typed, a refused character, too long, working, result, password, damaged, failed, the 20,000-page notice; the listed states with a refused character and the result at 200% text size, with nothing overflowing sideways; verify by looking at each and adding them to the change folder
+- [x] 8.1 Screenshots of `/watermark-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with the empty field and the waiting button, listed with text typed, a refused character, too long, working, result, password, damaged, failed, the 20,000-page notice; the listed states with a refused character and the result at 200% text size, with nothing overflowing sideways; verify by looking at each and adding them to the change folder
 
 ## 9. Checks and review
 
