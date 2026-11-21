@@ -183,7 +183,7 @@ All but `developer` are read-only.
 
 - **Tagged reading order after Reorder pages.** Raised at its review (14 Nov 2026): in a file with accessibility tags, the tags keep the original reading order, so a screen reader may read reordered pages in their old order. The page says so. Should the reading order follow the new page order?
 
-- **Rotate's waiting main button.** Rotate's main button waits until a page is turned, as Extract's does, while Reorder's works with nothing moved (PR #13). Keep them different, or make them match?
+- **Waiting main buttons.** Rotate's and Watermark's main buttons wait until something is done (a page turned, text typed), as Extract's does, while Reorder's works untouched (PR #13, `add-watermark`). Keep them as they are, or make them match?
 
 - **Signed files.** Every page tool writes the file afresh, so a digital signature stops being valid. Rotate's page says so. Is saying so enough, or should page tools keep signed files intact later?
 
