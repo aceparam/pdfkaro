@@ -22,11 +22,20 @@
 /* The thumbnail slot is always 52 by 68, so the list never moves when a picture arrives. */
 .slot {
   flex: none;
+  width: 52px;
+  height: 68px;
+}
+/* The picture inside the slot, centred. Its size never depends on the picture, so a picture that
+   arrives, loads or turns lays out this box only, never the whole list or grid: the browser cannot
+   lay out a flex or grid item on its own, so this is a plain block inside the slot. Size and layout
+   containment only: paint or style containment would clip it or shift the picture by part of a pixel. */
+.picture {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 52px;
   height: 68px;
+  contain: size layout;
 }
 /* A page is drawn on white paper in light and dark mode alike, at its own shape. */
 .thumb,

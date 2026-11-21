@@ -94,7 +94,7 @@ test.describe('what thumbnails show', () => {
     const wide = items(page).filter({ hasText: 'wide.pdf' }).locator('img');
     const size = await wide.evaluate((image) => {
       const box = image.getBoundingClientRect();
-      const slot = image.parentElement!.getBoundingClientRect();
+      const slot = image.closest('[aria-hidden]')!.getBoundingClientRect();
       return { width: box.width, height: box.height, slotWidth: slot.width, slotHeight: slot.height };
     });
     expect(size.width).toBeGreaterThan(size.height);

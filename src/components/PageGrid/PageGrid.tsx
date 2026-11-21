@@ -116,11 +116,13 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
     >
       {/* A picture of the page, decorative: the name beside it says what it is. Until it is drawn, blank paper. */}
       <div className={styles.slot} aria-hidden="true">
-        {item.thumbnail ? (
-          <img className={`${styles.thumb}${turn ? ` ${styles[`turn${turn}`]}` : ''}`} src={item.thumbnail} alt="" draggable={false} />
-        ) : (
-          <div className={`${styles.blank}${turn ? ` ${styles[`turn${turn}`]}` : ''}`} />
-        )}
+        <div className={styles.picture}>
+          {item.thumbnail ? (
+            <img className={`${styles.thumb}${turn ? ` ${styles[`turn${turn}`]}` : ''}`} src={item.thumbnail} alt="" draggable={false} />
+          ) : (
+            <div className={`${styles.blank}${turn ? ` ${styles[`turn${turn}`]}` : ''}`} />
+          )}
+        </div>
       </div>
       <div className={grid ? `${styles.caption}${turn !== undefined ? ` ${styles.turnCaption}` : ''}` : styles.about}>
         {/* A page that turns says how far in words: the picture is hidden from screen readers, and half a turn of blank paper looks like none. */}
@@ -234,8 +236,24 @@ type ChunkProps = {
   itemProps(item: GridItem, index: number): ItemProps & { key: string };
 };
 
+/** Whether two items show the same: every field equal, so a field added to `GridItem` is compared with no edit here. */
+export function sameItem(item: GridItem, other: GridItem): boolean {
+  if (item === other) return true;
+  const keys = Object.keys(item) as (keyof GridItem)[];
+  return keys.length === Object.keys(other).length && keys.every((key) => Object.hasOwn(other, key) && item[key] === other[key]);
+}
+
+/** Whether two runs of items show the same: the same items, field by field, in the same order. */
+function sameItems(before: GridItem[], after: GridItem[]): boolean {
+  if (before === after) return true;
+  if (before.length !== after.length) return false;
+  return before.every((item, index) => sameItem(item, after[index]!));
+}
+
 /**
  * A run of pages drawn together; drawn again only when its items, the list's length or its stamp change.
+ * Items are compared field by field, as the list is made afresh whenever a thumbnail arrives: only the
+ * chunk that holds the new picture is drawn again, not every chunk of a long file.
  * The stamp must change with everything else a cell shows. Chunks are used only for pages that turn,
  * which have no moves and no toggle, so only the turns change; a tool that adds another per-page
  * state must fold it into the stamp.
@@ -251,7 +269,7 @@ const Chunk = memo(
       </>
     );
   },
-  (before, after) => before.items === after.items && before.start === after.start && before.count === after.count && before.stamp === after.stamp,
+  (before, after) => before.start === after.start && before.count === after.count && before.stamp === after.stamp && sameItems(before.items, after.items),
 );
 
 /**

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FilePicker } from '../../src/components/FilePicker/FilePicker';
 import { Notice } from '../../src/components/Notice/Notice';
-import { PageGrid } from '../../src/components/PageGrid/PageGrid';
+import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid/PageGrid';
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
@@ -50,7 +50,7 @@ describe('PageGrid', () => {
   });
 
   it('shows blank paper in a hidden slot until a thumbnail is drawn', () => {
-    expect(html.match(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*blank[^"]*"><\/div><\/div>/g)).toHaveLength(2);
+    expect(html.match(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*picture[^"]*"><div class="[^"]*blank[^"]*"><\/div><\/div><\/div>/g)).toHaveLength(2);
     expect(html).not.toContain('<img');
   });
 
@@ -58,7 +58,7 @@ describe('PageGrid', () => {
     const drawn = renderToStaticMarkup(
       <PageGrid items={[{ ...items[0]!, thumbnail: 'blob:http://localhost/1' }, items[1]!]} onMove={noop} onRemove={noop} />,
     );
-    expect(drawn).toMatch(/<div class="[^"]*slot[^"]*" aria-hidden="true"><img class="[^"]*thumb[^"]*" src="blob:http:\/\/localhost\/1" alt="" draggable="false"\/><\/div>/);
+    expect(drawn).toMatch(/<div class="[^"]*slot[^"]*" aria-hidden="true"><div class="[^"]*picture[^"]*"><img class="[^"]*thumb[^"]*" src="blob:http:\/\/localhost\/1" alt="" draggable="false"\/><\/div><\/div>/);
     expect(drawn).not.toMatch(/<img[^>]*tabindex/);
     expect(drawn.match(/blank/g)).toHaveLength(1);
   });
@@ -142,6 +142,27 @@ describe('PageGrid with pages that turn', () => {
     expect(html).toMatch(/class="[^"]*turn1[^"]*" src="blob:http:\/\/localhost\/3"/);
     expect(html).toMatch(/class="[^"]*turn2[^"]*" src="blob:http:\/\/localhost\/2"/);
     expect(html).not.toMatch(/style="[^"]*rotate/);
+  });
+});
+
+describe('PageGrid chunks redraw when an item changes', () => {
+  const item: GridItem = { id: 'p1', title: 'Page 1', detail: '', thumbnail: 'blob:http://localhost/1' };
+
+  it('sees two items with the same fields as the same', () => {
+    expect(sameItem(item, { ...item })).toBe(true);
+  });
+
+  it('sees a new thumbnail, title or detail as a change', () => {
+    expect(sameItem(item, { ...item, thumbnail: 'blob:http://localhost/2' })).toBe(false);
+    expect(sameItem(item, { ...item, title: 'Page 2' })).toBe(false);
+    expect(sameItem(item, { ...item, detail: 'Getting ready' })).toBe(false);
+    expect(sameItem({ id: 'p1', title: 'Page 1', detail: '' }, item)).toBe(false);
+  });
+
+  it('compares every field, so a field added to GridItem later is never missed', () => {
+    const later = { ...item, caption: 'turned right' } as GridItem;
+    expect(sameItem(later, { ...later, caption: 'turned left' } as GridItem)).toBe(false);
+    expect(sameItem(item, later)).toBe(false);
   });
 });
 
