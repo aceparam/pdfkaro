@@ -25,13 +25,37 @@ export function typedText(option: TextOption, choices: Choices): string {
 }
 
 /**
+ * Whether an option is shown: it names no condition, or the earlier choice it names holds the value
+ * it names. The choice's value is read as everywhere else (`chosenValue`), so a stored value that is
+ * not one of its values counts as its start. A condition that names no choice (which the registry
+ * test forbids) hides its option, so nothing unchecked is ever held or sent.
+ */
+export function optionShown(option: ToolOption, options: readonly ToolOption[], choices: Choices): boolean {
+  const when = option.when;
+  if (when === undefined) return true;
+  const named = options.find((each) => each.key === when.key);
+  if (named === undefined || named.kind !== 'choice') return false;
+  return chosenValue(named, choices) === when.value;
+}
+
+/**
+ * The options on screen, held and sent, in registry order: every option of a tool whose options
+ * name no condition. A hidden option keeps what it holds in `choices`, for when it is shown again.
+ */
+export function shownOptions(options: readonly ToolOption[] | undefined, choices: Choices): ToolOption[] {
+  const all = options ?? [];
+  return all.filter((option) => optionShown(option, all, choices));
+}
+
+/**
  * What the engine is sent for the tool's options: a choice's value and a text cleaned (composed and
- * trimmed), by key, or `{}` for a tool with none. The main button cannot start a job while a text has
- * a problem, and the engine checks the text again.
+ * trimmed), by key, or `{}` for a tool with none. Only shown options are sent: a hidden one sends no
+ * key at all. The main button cannot start a job while a text has a problem, and the engine checks
+ * the text again.
  */
 export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices): Record<string, string> {
   const sent: Record<string, string> = {};
-  for (const option of options ?? []) sent[option.key] = option.kind === 'choice' ? chosenValue(option, choices) : cleanText(typedText(option, choices));
+  for (const option of shownOptions(options, choices)) sent[option.key] = option.kind === 'choice' ? chosenValue(option, choices) : cleanText(typedText(option, choices));
   return sent;
 }
 
@@ -93,13 +117,13 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
 export type OptionHold = { key: string; kind: TextProblem['kind']; sentence: string };
 
 /**
- * The first text, in registry order, that holds the main button back, or null. A choice never holds
- * it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
+ * The first shown text, in registry order, that holds the main button back, or null. A hidden text
+ * and a choice never hold it. `empty` is tied to the main button under it; `characters` and `too-long` are shown by the field
  * and tied to the main button from there. A text with no line in optionTexts (which the registry test
  * forbids) always holds, with its empty sentence, so a text is never sent unchecked.
  */
 export function optionsHold(tool: string, options: readonly ToolOption[] | undefined, choices: Choices, texts?: TextTable): OptionHold | null {
-  for (const option of options ?? []) {
+  for (const option of shownOptions(options, choices)) {
     if (option.kind !== 'text') continue;
     const rule = textRule(tool, option.key, texts);
     if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };

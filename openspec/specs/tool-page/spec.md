@@ -600,7 +600,7 @@ A tool with options SHALL show them once its file has been read, below the file 
 
 ### Requirement: A text a tool needs
 
-A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. (SPEC.md: Tool page anatomy, 4 and 5; What we are building, rule 4; Definition of done)
+A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Enter in the field while the main button waits SHALL have the status region say why, on every press. (SPEC.md: Tool page anatomy, 4 and 5; Definition of done)
 
 #### Scenario: A file is read in a tool with a text
 
@@ -625,12 +625,12 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: A few Western characters the rule does not take
 
 - **WHEN** the visitor types "Łódź" into a field whose rule is the standard fonts' characters
-- **THEN** the field is marked invalid, and "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, read with the field and tied to the main button, which does nothing when pressed
+- **THEN** the field is marked invalid, and "Ł and ź cannot be used." is shown, with the rule left to the hint under the field, read with the field and tied to the main button, which does nothing when pressed
 
 #### Scenario: Text in another script
 
 - **WHEN** the visitor types "नमस्ते" or "مرحبا" into such a field
-- **THEN** the field is marked invalid, and "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, with no list of characters, tied to the main button; nothing is ever drawn as question marks
+- **THEN** the field is marked invalid, and "Some characters cannot be used." is shown, with the rule left to the hint under the field, with no list of characters, tied to the main button; nothing is ever drawn as question marks
 
 #### Scenario: Accented letters in composed or separate form
 
@@ -645,7 +645,7 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: A keyboard user uses the field
 
 - **WHEN** a keyboard user is in the field and presses Tab, or presses Enter
-- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works; the Enter that confirms a word in an input method or a phone keyboard's suggestion does not press it
+- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works, and while the button waits the status region says why on every press ("Type the watermark text first.", or the field's sentence); the Enter that confirms a word in an input method or a phone keyboard's suggestion does not press it
 
 #### Scenario: A screen reader user reaches the field
 
@@ -661,6 +661,15 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 
 - **WHEN** the visitor types a text, starts the job and presses Cancel, or the job fails, or the visitor picks another file with "Choose another file" while listing; and later presses "Start again" or removes the only file
 - **THEN** after Cancel, a failure or another file the text is as typed; after "Start again" or removing the only file the field is empty again
+
+### Requirement: A typed text that cannot be used
+
+Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. A sentence about refused characters SHALL say only which characters cannot be used, since the hint states the rule. (SPEC.md: Tool page anatomy, 4; What we are building, rule 4)
+
+#### Scenario: A text with a problem
+
+- **WHEN** the typed text is too long or has a character the tool's rule does not take
+- **THEN** one sentence saying what is wrong is tied to the field and to the main button, which stays focusable, and a press does nothing
 
 ### Requirement: A text the engine refuses
 

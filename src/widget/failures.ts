@@ -4,6 +4,7 @@
 import type { Progress } from '../engines/types';
 import type { TextOption, ToolWidgetWords } from '../tools/registry';
 import { fileCount, number, progressLine } from './format';
+import { shownOptions } from './options';
 import type { FailureKind } from './state';
 import { tooManyPicturesSentence, zipLimitSentence } from './zip-limits';
 
@@ -20,7 +21,11 @@ export const outputLimitSentence = 'The new file would be far larger than expect
 export const textRefusedSentence = 'The text could not be used. Check it and try again.';
 
 /** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */
-export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options'>): string {
+export function failureSentence(
+  kind: FailureKind,
+  words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options'>,
+  choices: Readonly<Record<string, string>> = {},
+): string {
   if (kind === 'too-many-files' || kind === 'zip-too-large') {
     return zipLimitSentence(kind === 'too-many-files' ? 'files' : 'bytes', words.zipLimitAdvice ?? 'Try a smaller job.');
   }
@@ -28,9 +33,10 @@ export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 
   if (kind === 'too-many-pictures') return tooManyPicturesSentence();
   // Only a broken or crafted file reaches the drawing step's budget, so it fails the same on a computer: its own advice.
   if (kind === 'output-limit') return outputLimitSentence;
-  // The page should never send a text the engine refuses; if the two disagree, the first text's own words, else the shared ones.
+  // The page should never send a text the engine refuses; if the two disagree, the first shown text's own words, else the shared ones.
+  // A hidden text is never sent, so its words never apply (shownOptions decides what is shown, in one place).
   if (kind === 'text-refused') {
-    const text = words.options?.find((option): option is TextOption => option.kind === 'text');
+    const text = shownOptions(words.options, choices).find((option): option is TextOption => option.kind === 'text');
     return text?.refusedSentence ?? textRefusedSentence;
   }
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;

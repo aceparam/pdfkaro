@@ -252,6 +252,23 @@ describe('what the options show', () => {
     expect(again.choices).toEqual({});
   });
 
+  it('keeps a hidden text as typed: typed for "a", "b" chosen, then "a" again', () => {
+    const typed = play(add('a'), ready(), set('Signed', 'textA'));
+    const other = reducer(typed, set('b', 'way'));
+    expect(other.choices).toEqual({ textA: 'Signed', way: 'b' });
+    const back = reducer(other, set('a', 'way'));
+    expect(back.choices).toEqual({ textA: 'Signed', way: 'a' });
+  });
+
+  it('forgets the choice and both texts on Start again and when the last file is removed', () => {
+    const both = play(add('a'), ready(), set('Signed', 'textA'), set('b', 'way'), set('Initials', 'textB'));
+    expect(both.choices).toEqual({ textA: 'Signed', way: 'b', textB: 'Initials' });
+    const again = [{ type: 'started' } as Action, { type: 'finished', result: { name: 'a.pdf', size: 1 } } as Action, { type: 'reset' } as Action].reduce(reducer, both);
+    expect(again.choices).toEqual({});
+    expect(reducer(both, { type: 'removed', id: 'a' })).toBe(initialState);
+    expect([add('b'), ready('b')].reduce(reducer, reducer(both, { type: 'removed', id: 'a' })).choices).toEqual({});
+  });
+
   it('goes back to every option at its start on Start again', () => {
     const state = play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'finished', result: { name: 'a.pdf', size: 1 } }, { type: 'reset' });
     expect(state).toEqual(initialState);
