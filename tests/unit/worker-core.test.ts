@@ -90,6 +90,13 @@ describe('failureKind', () => {
     expect(failureKind(new TooBigForZip('files'))).toBe('too-many-files');
   });
 
+  it("knows the drawing step's size budget by its name, and its message is not taken for running out of memory", async () => {
+    const { OutputLimit } = await import('../../src/engines/stamp');
+    expect(failureKind(new OutputLimit())).toBe('output-limit');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'OutputLimit' }))).toBe('output-limit');
+    expect(failureKind(new Error(new OutputLimit().message))).toBe('engine');
+  });
+
   it('tells running out of memory from other failures', () => {
     expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
     expect(failureKind(new Error('Aborted(OOM)'))).toBe('memory');

@@ -356,7 +356,10 @@ function layerOf(lib: Lib, page: PdfLib.PDFPage, objects: NewObjects, refs: Map<
     at += part.length + 1;
   }
   const resources = page.node.Resources();
-  return { data, resources: resources ? dictOf(lib, context, resources, objects, refs, 0) : {} };
+  const converted = resources ? dictOf(lib, context, resources, objects, refs, 0) : {};
+  // pdf-lib starts every page with empty /ExtGState and /XObject dictionaries; an empty one says nothing.
+  for (const [key, value] of Object.entries(converted)) if (isDict(value) && Object.keys(value).length === 0) delete converted[key];
+  return { data, resources: converted };
 }
 
 // ---------------------------------------------------------------------------

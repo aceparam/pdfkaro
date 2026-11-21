@@ -58,7 +58,9 @@ export function numberPlace(
 
 /** Draws one number on a layer page, between an /Artifact pagination BDC and EMC, in black Helvetica. */
 export function drawNumber(lib: typeof PdfLib, page: PdfLib.PDFPage, area: { width: number; height: number }, text: string, position: Position, font: PdfLib.PDFFont) {
-  const { x, y, size } = numberPlace(area, text, position, (each, at) => font.widthOfTextAtSize(each, at));
+  // Rounded to a thousandth of a point, far finer than can be seen, so the file holds short numbers.
+  const exact = numberPlace(area, text, position, (each, at) => font.widthOfTextAtSize(each, at));
+  const [x, y, size] = [exact.x, exact.y, exact.size].map((value) => Math.round(value * 1000) / 1000) as [number, number, number];
   const kind = position.startsWith('top') ? 'Header' : 'Footer';
   // pdf-lib writes a dictionary operand as it is, though its types do not list one.
   const properties = page.doc.context.obj({ Type: 'Pagination', Subtype: kind }) as unknown as PdfLib.PDFArray;
