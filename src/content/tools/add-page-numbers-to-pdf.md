@@ -37,7 +37,7 @@ Form fields and notes are drawn above the page. If one sits where the number goe
 
 ### Can I use a PDF that has a password?
 
-Yes, if you know the password. The page asks for it, and the password stays in your browser. The new file has no password and no restrictions. You can add a password afterwards.
+Yes, if you know the password. The page asks for it, and the password stays in your browser. The new file has no password and no restrictions.
 
 ### Is my original file changed?
 

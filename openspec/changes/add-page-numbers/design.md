@@ -65,7 +65,8 @@ run([file], options, onProgress, tools):
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 })
   { plain, pages } = plainCopy(tools, file, passwordFrom(options))
   out = await stampPages(tools, plain, pages, {
-    draw: (page, area, index, font) => drawNumber(page, area, String(index + 1), position, font),
+    prepare: (doc, lib) => doc.embedFont(lib.StandardFonts.Helvetica),          // once for each run of up to 2,000 layer pages
+    draw: (page, area, index, font, lib) => drawNumber(lib, page, area, String(index + 1), position, font),
     onPage: (done) => onProgress({ stage: 'working', unit: 'page', done, total: pages }),
     onWriting: (percent) => onProgress({ stage: 'writing', percent: Math.min(percent, 95) }),
   })
@@ -80,11 +81,11 @@ inspect = inspectPdf
   - x: left `m`, centre `(W − w) / 2`, right `W − m − w`; baseline y: bottom `m`, top `H − m − 0.718s`;
   - a page too small for the number and its margin: the margin shrinks first, down to 0, then the size, until the number fits whole in the area.
 - **`drawNumber`** draws, on the layer page, `/Artifact << /Type /Pagination /Subtype /Footer >> BDC` (`/Header` at the top), the number with pdf-lib's `drawText` in black `StandardFonts.Helvetica`, then `EMC`. Digits only, at most 7 for any file under 9 million pages.
-- pdf-lib is imported for types only; its values come from `tools.pdflib()`, so the engine and `stamp` stay small and `check-worker.mjs` can check pdf-lib's code is in neither.
+- pdf-lib is imported for types only; `stampPages` fetches it once through `tools.pdflib()` and hands it to `prepare` and `draw` (the stage 2 review), so the engine never fetches it itself, both files stay small, and `check-worker.mjs` can check pdf-lib's code is in neither.
 
 ### 3. The shared step: `src/engines/stamp.ts`
 
-`stampPages(tools, plain, pages, { draw, onPage, onWriting })` is the step Watermark and Sign PDF reuse: they give their own `draw`. It returns the checked result's bytes. Its parts, each exported for its test:
+`stampPages(tools, source, { prepare, draw, onPage, onWriting })` is the step Watermark and Sign PDF reuse: they give their own `prepare` and `draw`. `prepare(doc, lib)` runs once for each pdf-lib document of up to 2,000 layer pages and gives what that run draws with (Add page numbers embeds Helvetica; Watermark may embed another font, Sign PDF the signature's picture); `draw(page, area, index, prepared, lib)` draws one layer page with it (the stage 2 review replaced the fixed Helvetica embed with this hook). It returns the checked result's bytes. Its parts, each exported for its test:
 
 #### 3a. Reading each page: `readPages`
 
@@ -102,7 +103,7 @@ As PDF.js reads a page, so the result matches the thumbnail and Firefox:
 - **shown box** `[x0 y0 x1 y1]`: the inherited `/CropBox`, by the same test, intersected with the paper box when that leaves an area, else the paper box;
 - **user unit** `u`: the page's own `/UserUnit` when it is a number above 0, else 1;
 - **layer size:** `W = (x1 − x0)u`, `H = (y1 − y0)u` in points, swapped for a turn of 90 or 270;
-- **limits:** a side of the layer under 1 point or over 10^8 points (35 km) stops the job with the engine failure (the security reviewer, stage 1), so pdf-lib and qpdf are never handed a page of no size or numbers that large.
+- **limits:** a side of the layer under 1 point or over 10^8 points (35 km) stops the job with the engine failure (the security reviewer, stage 1), so pdf-lib and qpdf are never handed a page of no size or numbers that large. So does a user unit over 10^6, where the matrix would scale by less than a millionth (`1/u < 10^-6`, the code reviewer, stage 2), which only a crafted file has; a unit test covers it.
 
 The trim box is not used: a reader shows the crop box, and numbers sit near its edge. Nothing stored is changed for any page.
 
@@ -121,7 +122,7 @@ Each number is written with at most 6 decimals. This is the table the experiment
 
 #### 3d. Drawing the layers
 
-- Layer pages are drawn in pdf-lib documents of at most 2,000 pages (pdf-lib slows as a document grows: 351 s for 120,000 pages in one, 8.5 s in runs of 2,000). For each page: `addPage([W, H])`, `draw(page, { width: W, height: H }, index, font)`, `onPage`. A document is made with `updateMetadata: false`; nothing of the visitor's file goes into it but sizes and numbers.
+- Layer pages are drawn in pdf-lib documents of at most 2,000 pages (pdf-lib slows as a document grows: 351 s for 120,000 pages in one, 8.5 s in runs of 2,000). For each run: `prepare(doc, lib)`; for each page: `addPage([W, H])`, `draw(page, { width: W, height: H }, index, prepared, lib)`, `onPage`. A document is made with `updateMetadata: false`; nothing of the visitor's file goes into it but sizes and numbers.
 - After each run, its pages are turned into update entries (3e), written into the stamping qpdf (section 6), and the pdf-lib document and the entries are let go.
 
 #### 3e. The update for each page
@@ -217,6 +218,8 @@ No new dependency. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 Sep 2026, abou
 - **[Dark pages]** A black number does not show on a black page. → No colour option; plain, and a later change if asked.
 - **[PDF/A]** The new file no longer meets PDF/A, and any claim it makes to is left as it was. → The page says so.
 - **[Very long files on phones]** Memory as measured. → The notice above 20,000 pages, the memory failure's advice.
+- **[A genuine file refused by the update budget]** (the code reviewer, stage 2) Each page carries a direct copy of its resources, so a genuine file whose many pages inherit one very large `/Resources` (for example a long scan whose pages share one `/XObject` dictionary naming every page's picture) can pass the budget and be refused with the output-limit sentence, whose advice, "The file may be damaged. Try another copy of it.", is then wrong for that file. → A known limit, named in the pull request; the fixtures hold no such genuine file. A later change could add the layer to a shared resources dictionary when the pages that share it are few, or say something else for this case.
+- **[Peak memory on the 110 MB file]** (the architect, stage 2) Measured for task 3.2: in Node the peak was 1.19 GB with qpdf and pdf-lib loaded first (0.97 GB without), against the experiment's 0.92 GB rerun in the same conditions; in Chromium the browser's processes rose by 1.36 GB over their baseline. The reason is that `plainCopy` (shared with the page tools) makes a second qpdf only to count the pages, so one job makes four qpdf instances in all (opening, counting, reading, stamping), each holding a copy of the file until it is let go. → Accepted with task 3.2's exception. The later fix: take the page count from `readPages` and skip `plainCopy`'s counting instance for this tool.
 - **[Caps on reading]** A file whose pages and dictionaries JSON passes 64 MB (well past 120,000 pages) cannot be numbered. → The engine failure; a later change could read pages in batches.
 - **[The drawing step rides along]** `stamp.ts` and the output-limit failure come with this tool. → Named in the pull request; the owner question on shared pieces stays open.
 

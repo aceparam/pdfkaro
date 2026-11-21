@@ -11,7 +11,7 @@
 // digital signature stops being valid, as the page says. The new file has no
 // password and no restrictions, by the owner's decision of 13 Nov 2026.
 //
-// pdf-lib is imported for its types only: its values come from `tools.pdflib()`.
+// pdf-lib is imported for its types only: the drawing step fetches it through `tools.pdflib()` and hands it to `draw`.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
 import { acceptedValue } from '../../widget/option-values';
@@ -76,11 +76,12 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   const position = acceptedValue('add-page-numbers', 'position', options.position) as Position | undefined;
   if (position === undefined) throw new Error('The place for the numbers is not valid.');
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 });
-  const lib = (await (tools.pdflib ?? (() => Promise.reject(new Error('pdf-lib was not given to this engine.'))))()) as typeof PdfLib;
   // The plain copy is handed over in an object, so the drawing step can let go of it once qpdf holds it.
   const copy: { plain?: Uint8Array; pages: number } = await plainCopy(tools, file, passwordFrom(options));
   const output = await stampPages(tools, copy, {
-    draw: (page, area, index, font) => drawNumber(lib, page, area, String(index + 1), position, font),
+    // Each run of up to 2,000 layer pages embeds the standard Helvetica once; no font goes into the file.
+    prepare: (doc, lib) => doc.embedFont(lib.StandardFonts.Helvetica),
+    draw: (page, area, index, font, lib) => drawNumber(lib, page, area, String(index + 1), position, font),
     // The pages fill the bar to 0.8; qpdf's write is reported from 75% and held at 95% until the check is done.
     onPage: (done, total) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true }),
     onWriting: (percent) => onProgress({ stage: 'writing', percent: Math.min(75 + percent / 5, 95) }),

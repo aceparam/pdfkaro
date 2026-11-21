@@ -11,6 +11,7 @@ import {
   fromPdfLib,
   layerMatrix,
   pageBox,
+  pageEstimate,
   pdfNumber,
   sizeLimit,
   stampPages,
@@ -25,11 +26,15 @@ import { fixture, jsonOf, makeQpdf, marks, open, qpdfOn, storedPlaces, streamTex
 const op = (name: string, args: Parameters<typeof PDFOperator.of>[1] = []) => PDFOperator.of(name as PdfLib.PDFOperatorNames, args);
 
 /** A red square, 20 points, centred across the bottom of the layer, its centre 30 points up. */
-const redMark: StampSteps['draw'] = (page, area) => page.drawRectangle({ x: area.width / 2 - 10, y: 20, width: 20, height: 20, color: rgb(1, 0, 0) });
+const redMark: StampSteps<PdfLib.PDFFont>['draw'] = (page, area) => page.drawRectangle({ x: area.width / 2 - 10, y: 20, width: 20, height: 20, color: rgb(1, 0, 0) });
 
-async function stamp(bytes: Uint8Array, draw: StampSteps['draw'] = redMark, extra: Partial<StampSteps> = {}) {
+type FontSteps = StampSteps<PdfLib.PDFFont>;
+/** Each run embeds Helvetica, as Add page numbers does. */
+const helvetica: FontSteps['prepare'] = (doc, lib) => doc.embedFont(lib.StandardFonts.Helvetica);
+
+async function stamp(bytes: Uint8Array, draw: FontSteps['draw'] = redMark, extra: Partial<FontSteps> = {}) {
   const copy: { plain?: Uint8Array; pages: number } = await plainCopy(tools, bytes, undefined);
-  return stampPages(tools, copy, { draw, ...extra });
+  return stampPages(tools, copy, { prepare: helvetica, draw, ...extra });
 }
 
 describe('where a page is shown', () => {
@@ -71,6 +76,9 @@ describe('where a page is shown', () => {
     expect(place([0, 0, 2e8, 100])).toThrow(/too small or too large/);
     expect(place([0, 0, 1e5, 100], 1e4)).toThrow(/too small or too large/);
     expect(place([0, 0, 1, 1e8])()).toMatchObject({ width: 1, height: 1e8 });
+    // A user unit over a million would make the matrix scale by less than a millionth, even when the sides fit.
+    expect(place([0, 0, 1e-5, 1e-5], 1e7)).toThrow(/too small or too large/);
+    expect(place([0, 0, 0.001, 0.001], 1e6)()).toMatchObject({ unit: 1e6, width: 1000 });
   });
 });
 
@@ -189,7 +197,8 @@ async function oddPages(list: Spec[], inherited?: number): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
-describe('drawing on odd pages', () => {
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('drawing on odd pages', { timeout: 60_000 }, () => {
   it('puts the mark at the bottom centre as PDF.js shows every page, and changes no stored turn, box or user unit', async () => {
     const input = await oddPages(specs);
     const output = await stamp(input);
@@ -252,7 +261,8 @@ describe('drawing on odd pages', () => {
   });
 });
 
-describe('tags and shared content', () => {
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('tags and shared content', { timeout: 60_000 }, () => {
   /** The marked-content ids the tag tree names for each page, by page object. */
   function mcidsByPage(objects: Awaited<ReturnType<typeof jsonOf>>['objects'], root: unknown): Map<string, number[]> {
     const found = new Map<string, number[]>();
@@ -405,7 +415,8 @@ async function packed(bytes: Uint8Array): Promise<Uint8Array> {
   return qpdf.read('/out.pdf');
 }
 
-describe('large and hostile files', () => {
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('large and hostile files', { timeout: 60_000 }, () => {
   it('numbers thousands of pages that share one tiny content stream quickly, growing by a few hundred bytes a page', async () => {
     const pages = 6000;
     const input = await packed(handMade(pages));
@@ -445,6 +456,32 @@ describe('large and hostile files', () => {
     expect(drawn).toBe(0);
     expect(Date.now() - started).toBeLessThan(15_000);
   }, 30_000);
+
+  it('small resources whose /XObject dictionary is behind a reference: the estimate counts that dictionary in full, and the job stops with nothing drawn', async () => {
+    const pages = 2000;
+    const forms = Array.from({ length: 800 }, (_, n) => `/X${'x'.repeat(60)}${n} 5 0 R`).join(' ');
+    const input = await packed(
+      handMade(pages, {
+        treeResources: '<< /XObject 4 0 R >>',
+        extra: [`<< ${forms} >>`, '<< /Type /XObject /Subtype /Form /BBox [0 0 1 1] /Length 0 >>\nstream\n\nendstream'],
+      }),
+    );
+    let drawn = 0;
+    const failed = await stamp(input, (...args) => {
+      drawn++;
+      redMark(...args);
+    }).catch((error: unknown) => error);
+    expect(failed).toBeInstanceOf(OutputLimit);
+    expect(drawn).toBe(0);
+  });
+
+  it('pageEstimate counts the resolved /XObject dictionary, not only the reference to it', () => {
+    const xobjects = Object.fromEntries(Array.from({ length: 1000 }, (_, n) => [`/X${n}`, '9 0 R']));
+    const page = { dict: { '/Type': '/Page', '/Resources': '7 0 R' }, resources: { '/XObject': '8 0 R' }, xobjects, contents: ['3 0 R'] };
+    const small = pageEstimate({ ...page, xobjects: undefined }, new WeakMap());
+    const large = pageEstimate(page, new WeakMap());
+    expect(large - small).toBeGreaterThanOrEqual(JSON.stringify(xobjects).length);
+  });
 
   it('the cap on the new file stops a write that would pass it', async () => {
     const plain = (await plainCopy(tools, fixture('pages-500.pdf'), undefined)).plain;

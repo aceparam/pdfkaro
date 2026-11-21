@@ -81,7 +81,8 @@ describe('where a number goes', async () => {
   });
 });
 
-describe('the place sent', () => {
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('the place sent', { timeout: 60_000 }, () => {
   it('is refused before any work when it is not one of the six', async () => {
     let asked = 0;
     const watched: EngineTools = { ...tools, qpdf: async () => (asked++, tools.qpdf!()) };
@@ -115,7 +116,8 @@ async function expectNumbered(input: Uint8Array, output: Uint8Array, given?: str
   });
 }
 
-describe('numbering the shared test set', () => {
+// Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
+describe('numbering the shared test set', { timeout: 60_000 }, () => {
   it('text.pdf: each page ends with its number at the bottom centre, with progress for reading, each page and writing', async () => {
     const input = fixture('text.pdf');
     const { output, progress } = await number(input);

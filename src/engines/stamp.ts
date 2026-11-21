@@ -39,6 +39,8 @@ export const treeDepthLimit = 64;
 /** The smallest and largest side of a page as shown, in points. Outside them, the job stops. */
 export const smallestSide = 1;
 export const largestSide = 1e8;
+/** The smallest scale the layer's matrix may have (1 / the user unit). Below it, the job stops. */
+export const smallestScale = 1e-6;
 
 /**
  * The new file, and the update that makes it, would pass their size budget.
@@ -86,7 +88,8 @@ function boxOf(value: unknown): [number, number, number, number] | null {
  * and Firefox: a turn that is a multiple of 90, taken modulo 360, else 0; the
  * paper box, else Letter; the crop box intersected with the paper box when that
  * leaves an area, else the paper box; the page's own user unit when above 0,
- * else 1. A side of the layer under 1 point or over 10^8 points stops the job.
+ * else 1. A side of the layer under 1 point or over 10^8 points, or a user unit over 10^6
+ * (a matrix that would scale by less than a millionth), stops the job.
  */
 export function pageBox(raw: RawPlace): PagePlace {
   const rotate = raw.rotate;
@@ -106,6 +109,8 @@ export function pageBox(raw: RawPlace): PagePlace {
   for (const side of [width, height]) {
     if (!(side >= smallestSide && side <= largestSide)) throw new Error('A page is too small or too large to draw on.');
   }
+  // A user unit so large that the matrix would scale by less than a millionth: only a crafted file has one.
+  if (1 / unit < smallestScale) throw new Error('A page is too small or too large to draw on.');
   return { turn, box, unit, width, height };
 }
 
@@ -429,10 +434,16 @@ export function writeUpdate(qpdf: Qpdf, limit: number, onWriting?: (percent: num
   return qpdf.read('/out.pdf');
 }
 
-/** What a tool gives the drawing step. */
-export type StampSteps = {
+/**
+ * What a tool gives the drawing step. `prepare` runs once for each pdf-lib document of up to
+ * 2,000 layer pages, with pdf-lib itself, and gives what every page of the run draws with: Add page
+ * numbers embeds Helvetica, Watermark may embed another font, Sign PDF the signature's picture.
+ * `draw` then draws on one layer page with it.
+ */
+export type StampSteps<Run = unknown> = {
+  prepare(doc: PdfLib.PDFDocument, lib: Lib): Promise<Run>;
   /** Draws on one layer page, sized as the page is shown, upright; `index` counts from 0. */
-  draw(page: PdfLib.PDFPage, area: { width: number; height: number }, index: number, font: PdfLib.PDFFont): void;
+  draw(page: PdfLib.PDFPage, area: { width: number; height: number }, index: number, run: Run, lib: Lib): void;
   /** After each layer page is drawn: how many are done, of how many. */
   onPage?(done: number, total: number): void;
   /** qpdf's write progress, in percent. */
@@ -451,7 +462,7 @@ export type PlainSource = { plain?: Uint8Array };
  * run is built its update is estimated, and once the running total would pass
  * the budget the job stops with `OutputLimit`.
  */
-export async function stampPages(tools: EngineTools, source: PlainSource, steps: StampSteps): Promise<Uint8Array> {
+export async function stampPages<Run>(tools: EngineTools, source: PlainSource, steps: StampSteps<Run>): Promise<Uint8Array> {
   if (!source.plain) throw new Error('No file was given to draw on.');
   const plainBytes = source.plain.byteLength;
   const read = await readPages(tools, source.plain);
@@ -486,11 +497,11 @@ export async function stampPages(tools: EngineTools, source: PlainSource, steps:
     if (appended + estimate > limit) throw new OutputLimit();
 
     const doc = await lib.PDFDocument.create({ updateMetadata: false });
-    const font = await doc.embedFont(lib.StandardFonts.Helvetica);
+    const prepared = await steps.prepare(doc, lib);
     const layers: PdfLib.PDFPage[] = [];
     run.forEach((page, offset) => {
       const layer = doc.addPage([page.place.width, page.place.height]);
-      steps.draw(layer, { width: page.place.width, height: page.place.height }, start + offset, font);
+      steps.draw(layer, { width: page.place.width, height: page.place.height }, start + offset, prepared, lib);
       layers.push(layer);
       steps.onPage?.(start + offset + 1, total);
     });

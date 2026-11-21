@@ -45,11 +45,25 @@ type Given = string | { name: string; mimeType: string; buffer: Buffer };
 async function pick(page: Page, file: Given) {
   await picker(page).setInputFiles(typeof file === 'string' ? fixture(file) : file);
 }
+const nameOf = (file: Given) => (typeof file === 'string' ? file : file.name);
+
+/**
+ * Waits until this file is listed and read: its row is there, and the option group, which shows only once
+ * every listed file has been read, is on screen. Checking only that no row says "Getting ready" would pass
+ * at once, before the row of a new file is even listed (the page first reads the file's opening bytes),
+ * and leave the read itself to a short wait.
+ */
+async function waitUntilRead(page: Page, file: Given) {
+  await expect(rows(page).filter({ hasText: nameOf(file) })).toHaveCount(1, { timeout: 30000 });
+  await expect(rows(page).filter({ hasText: /Getting ready|Trying the password/ })).toHaveCount(0, { timeout: 30000 });
+  await expect(group(page)).toBeVisible({ timeout: 30000 });
+}
+
 /** Picks a file and waits until it has been read. */
 async function pickReady(page: Page, file: Given) {
   await pick(page, file);
   await expect(rows(page)).toHaveCount(1);
-  await expect(rows(page).filter({ hasText: 'Getting ready' })).toHaveCount(0, { timeout: 30000 });
+  await waitUntilRead(page, file);
 }
 
 async function drop(page: Page, names: string[]) {
@@ -206,7 +220,6 @@ test.describe('numbering', () => {
     await open(page);
     await pickReady(page, 'mixed.pdf');
     await place(page, 'Top left').check();
-    await recordProgress(page);
     const { download, bytes } = await numberAndDownload(page);
     expect(download.suggestedFilename()).toBe('mixed-numbered.pdf');
     await expect(page.locator('astro-island section')).toContainText(`${formatSize(bytes.length)}, 4 pages`);
@@ -225,24 +238,31 @@ test.describe('numbering', () => {
       expect(found.fromBottom).toBeGreaterThan(0.93);
     }
 
-    // "Reading the file", then each page, then writing, with a bar that never goes back and is not full while writing.
-    const progress = await recorded(page);
-    const lines = [...new Set(progress.map((step) => step.line))].filter((line) => line !== 'Starting on 1 file');
-    // Pages may be drawn faster than the page shows each one, so some page lines can be skipped.
-    expect(lines).toEqual(['Reading the file', 'Page 1 of 4', 'Page 2 of 4', 'Page 3 of 4', 'Page 4 of 4', 'Writing the numbered file'].filter((line) => lines.includes(line)));
-    expect(lines[0]).toBe('Reading the file');
-    expect(lines).toContain('Page 4 of 4');
-    expect(lines.at(-1)).toBe('Writing the numbered file');
-    const values = progress.map((step) => step.value);
-    expect(values).toEqual([...values].sort((a, b) => a - b));
-    // Pages fill the bar to 80; the write is reported from there and held below full until the file is written.
-    expect(progress.find((step) => step.line === 'Page 4 of 4')?.value).toBe(80);
-    // The engine says 100 once the file is written and checked, just before the result; nothing before that is full.
-    for (const step of progress.slice(0, -1)) expect(step.value).toBeLessThan(100);
     await noSidewaysScroll(page);
   });
 
-  test('the same file at "Bottom centre", untouched, puts each number centred across the bottom', async ({ page }) => {
+  test('progress on pages-500.pdf: "Reading the file", then "Page n of 500", then writing, with a bar that never goes back and is not full while writing', async ({ page }) => {
+    test.setTimeout(120_000);
+    await open(page);
+    await pickReady(page, 'pages-500.pdf');
+    await recordProgress(page);
+    await numberAndDownload(page);
+    const progress = await recorded(page);
+    const lines = [...new Set(progress.map((step) => step.line))].filter((line) => line !== 'Starting on 1 file');
+    // The page shows the latest word from the worker when it next draws, so some page lines are skipped; never all of 500.
+    expect(lines[0]).toBe('Reading the file');
+    expect(lines.at(-1)).toBe('Writing the numbered file');
+    const pageLines = lines.slice(1, -1);
+    expect(pageLines.length).toBeGreaterThan(0);
+    for (const line of pageLines) expect(line).toMatch(/^Page \d{1,3} of 500$/);
+    const values = progress.map((step) => step.value);
+    expect(values).toEqual([...values].sort((a, b) => a - b));
+    // Pages fill the bar to 80 at most; the write is reported from there, and nothing is full until the file is written.
+    for (const step of progress.filter((each) => each.line.startsWith('Page '))) expect(step.value).toBeLessThanOrEqual(80);
+    for (const step of progress.slice(0, -1)) expect(step.value).toBeLessThan(100);
+  });
+
+  test('the same file at "Bottom centre, untouched, puts each number centred across the bottom', async ({ page }) => {
     await open(page);
     await pickReady(page, 'mixed.pdf');
     const { bytes } = await numberAndDownload(page);
@@ -313,6 +333,10 @@ test.describe('problems with the file', () => {
   test('"Choose another file" in place of the password replaces the file', async ({ page }) => {
     await open(page);
     await pick(page, 'password.pdf');
+    // While the file is read, the actions row's file input (named "Choose another file" too, with a button's role)
+    // is on screen; it gives way to the password field's button once the file asks for a password.
+    await expect(page.getByLabel('Password for password.pdf')).toBeFocused({ timeout: 30000 });
+    await expect(page.getByRole('button', { name: 'Choose another file' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
     await pickReady(page, 'text.pdf');
@@ -411,8 +435,7 @@ async function watchedRun(page: Page, given: Given, typed?: string) {
     await page.getByLabel(/^Password for /).fill(typed);
     await page.keyboard.press('Enter');
   }
-  await expect(rows(page).filter({ hasText: /Getting ready|Trying the password/ })).toHaveCount(0, { timeout: 30000 });
-  await expect(group(page)).toBeVisible();
+  await waitUntilRead(page, given);
   return consoleText;
 }
 
