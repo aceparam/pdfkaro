@@ -940,7 +940,7 @@ describe('pictures', () => {
     label: 'Picture of your signature',
     pickLabel: 'Choose a picture',
     againLabel: 'Choose another picture',
-    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
     acceptsName: 'a JPG or PNG picture',
     emptySentence: 'Choose a picture of your signature first.',
   };

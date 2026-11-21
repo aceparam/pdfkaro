@@ -424,7 +424,7 @@ describe('a text in the widget', () => {
 
   it("says the tool's charactersAdvice after every refused-characters sentence, named or not, and never after another problem", () => {
     const name = tools.find((tool) => tool.id === 'sign-pdf')!.widget!.options!.find((option): option is TextOption => option.kind === 'text')!;
-    const advice = 'To sign in another script, choose “Draw it” or “Use a picture of it” above.';
+    const advice = 'To use other letters, choose “Draw it” or “Use a picture of it” above.';
     expect(name.charactersAdvice).toBe(advice);
     expect(textSentence(name, rule, { kind: 'characters', refused: ['स', 'ी', 'त', 'ा'] })).toBe(`Some characters cannot be used. ${advice}`);
     expect(textSentence(name, rule, { kind: 'characters', refused: ['Ł'] })).toBe(`Ł cannot be used. ${advice}`);
@@ -785,7 +785,7 @@ describe('a picture in the widget', () => {
     label: 'Picture of your signature',
     pickLabel: 'Choose a picture',
     againLabel: 'Choose another picture',
-    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
     acceptsName: 'a JPG or PNG picture',
     emptySentence: 'Choose a picture of your signature first.',
   };

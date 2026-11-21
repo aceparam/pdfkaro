@@ -86,7 +86,7 @@ export type TextOption = {
   refusedSentence?: string;
   /**
    * Said after every refused-characters sentence, whether letters are named or not: the tool's way forward for a
-   * text in another script. Sign PDF: "To sign in another script, choose “Draw it” or “Use a picture of it” above."
+   * text in another script. Sign PDF: "To use other letters, choose “Draw it” or “Use a picture of it” above."
    * Left out, the sentence stands alone (Watermark).
    */
   charactersAdvice?: string;
@@ -915,7 +915,7 @@ export const tools: Tool[] = [
           when: { key: 'source', value: 'type' },
           label: 'Your name',
           hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
-          charactersAdvice: 'To sign in another script, choose “Draw it” or “Use a picture of it” above.',
+          charactersAdvice: 'To use other letters, choose “Draw it” or “Use a picture of it” above.',
           emptySentence: 'Type your name first.',
           refusedSentence: 'Your name could not be used. Check it and try again.',
         },
@@ -936,7 +936,7 @@ export const tools: Tool[] = [
           pickLabel: 'Choose a picture',
           againLabel: 'Choose another picture',
           acceptsName: 'a JPG or PNG picture',
-          hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large. A picture with a see-through background works best.',
+          hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.',
           largeAdvice:
             'A picture this large makes the signed file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.',
           tooLargeAdvice: 'Crop it to the signature, or save a smaller copy.',

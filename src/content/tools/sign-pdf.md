@@ -29,7 +29,7 @@ Letters from English and other Western European languages, such as é, ü and ñ
 
 ### What picture works best?
 
-A JPG or PNG of your signature alone. A PNG with a see-through background lets the page show around it. A photo of a signature on paper brings the paper with it, as a pale box, so crop it first. A very large picture makes the new file large too.
+A JPG or PNG of your signature alone. A PNG with a see-through background lets the page show around it. A photo of a signature on paper brings the paper with it, as a pale box, so crop it first. A very large picture makes the new file large too. The camera, date and place details in a picture are not copied into the PDF.
 
 ### What stays the same?
 

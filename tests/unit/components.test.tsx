@@ -525,8 +525,7 @@ describe('DrawingPad, a drawing of a test entry', () => {
       'user-select: none;',
       '-webkit-user-select: none;',
       '-webkit-touch-callout: none;',
-      // The column's width, or 150% of the screen's height, so at 5 to 2 it is never more than 60% of it (a phone turned sideways).
-      'width: min(100%, 150vh);',
+      // The column's width, or 150% of the screen's small height, so at 5 to 2 it is never more than 60% of it (a phone turned sideways).
       'width: min(100%, 150svh);',
       'aspect-ratio: 5 / 2;',
       'border: 1px solid var(--control);',
@@ -570,7 +569,7 @@ describe('PictureField, a picture of a test entry', () => {
     label: 'Picture of your signature',
     pickLabel: 'Choose a picture',
     againLabel: 'Choose another picture',
-    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large.',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
     acceptsName: 'a JPG or PNG picture',
     emptySentence: 'Choose a picture of your signature first.',
   };
@@ -713,7 +712,7 @@ describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and Pict
     expect(picturesToSend(options, { source: 'picture' }, ready, held)).toEqual({ picture: file });
     expect(picturesToSend(options, { source: 'type' }, ready, held)).toEqual({});
     // A refused letter names it, followed by the tool's way forward.
-    expect(optionsHold('sign-pdf', options, { name: 'Łukasz' })?.sentence).toBe('Ł cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above.');
+    expect(optionsHold('sign-pdf', options, { name: 'Łukasz' })?.sentence).toBe('Ł cannot be used. To use other letters, choose “Draw it” or “Use a picture of it” above.');
   });
 
   it('the pad: "Draw your signature", its hint naming typing as the keyboard way, and "Clear the drawing"; the picture field: its label, button and hint', () => {
@@ -725,7 +724,7 @@ describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and Pict
     expect(field).toContain('>Picture of your signature</p>');
     expect(field).toContain('Choose a picture');
     expect(field).toContain('accept="image/jpeg,image/png"');
-    expect(field).toContain('>A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large. A picture with a see-through background works best.</p>');
+    expect(field).toContain('>A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.</p>');
     expect(field).not.toContain('<img');
   });
 });

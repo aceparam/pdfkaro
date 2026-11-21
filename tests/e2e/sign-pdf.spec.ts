@@ -25,9 +25,9 @@ const pictureFile = (name: string) => join(here, '../fixtures/pictures', name);
 const password = 'open-sesame';
 const typed = 'Jq5name Vx2sig';
 const hint = 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.';
-const advice = 'To sign in another script, choose “Draw it” or “Use a picture of it” above.';
+const advice = 'To use other letters, choose “Draw it” or “Use a picture of it” above.';
 const padHint = 'Use a finger, a mouse or a pen in the box. To use a keyboard, choose “Type your name” above.';
-const pictureHint = 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large. A picture with a see-through background works best.';
+const pictureHint = 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.';
 const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
 
 const picker = (page: Page) => page.locator('input[type=file]').first();
