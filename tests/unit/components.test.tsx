@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FilePicker } from '../../src/components/FilePicker/FilePicker';
@@ -6,6 +7,7 @@ import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
+import { ChoiceGroup } from '../../src/components/ToolWorkspace/ToolWorkspace';
 
 const noop = () => {};
 
@@ -275,5 +277,49 @@ describe('ProgressBar and Notice', () => {
     const html = renderToStaticMarkup(<Notice heading="appendix.pdf is damaged and cannot be read." />);
     expect(html).toContain('<h2 tabindex="-1"');
     expect(html).not.toMatch(/role="(alert|status)"/);
+  });
+});
+
+describe('ChoiceGroup, a choice of a test entry', () => {
+  const option = {
+    kind: 'choice' as const,
+    key: 'position',
+    legend: 'Where the numbers go',
+    choices: [
+      { value: 'bottom-centre', label: 'Bottom, in the middle' },
+      { value: 'bottom-right', label: 'Bottom right' },
+      { value: 'top-right', label: 'Top right' },
+    ],
+    initial: 'bottom-centre',
+  };
+  const html = renderToStaticMarkup(<ChoiceGroup option={option} value="bottom-right" name="r1-position" onChoose={noop} />);
+
+  it('is a fieldset named by its legend, with no ARIA role added', () => {
+    expect(html).toMatch(/^<fieldset class="[^"]*choiceGroup[^"]*"><legend class="[^"]*legend[^"]*">Where the numbers go<\/legend>/);
+    expect(html).not.toContain('role=');
+    expect(html).not.toContain('aria-');
+  });
+
+  it('gives each value one native radio button in its own label, sharing one name, in order', () => {
+    expect(html.match(/<label class="[^"]*choice[^"]*"><input type="radio" name="r1-position"( checked="")? value="[a-z-]+"\/><span>[^<]+<\/span><\/label>/g)).toHaveLength(3);
+    expect(html.indexOf('Bottom, in the middle')).toBeLessThan(html.indexOf('Bottom right'));
+    expect(html.indexOf('Bottom right')).toBeLessThan(html.indexOf('Top right'));
+  });
+
+  it('shows the chosen value checked, and only that one', () => {
+    expect(html.match(/checked=""/g)).toHaveLength(1);
+    expect(html).toMatch(/checked="" value="bottom-right"/);
+  });
+
+  it('says the value chosen when a radio button changes, and puts the focus ref on the chosen one only', () => {
+    const chosen: string[] = [];
+    const ref = { current: null };
+    const group = ChoiceGroup({ option, value: 'bottom-centre', name: 'r1-position', onChoose: (value) => chosen.push(value), chosenRef: ref });
+    const labels = (group.props as { children: ReactElement[] }).children[1] as unknown as ReactElement<{ children: ReactElement[] }>[];
+    const inputs = labels.map((label) => label.props.children[0] as ReactElement<{ onChange(): void; value: string }>);
+    inputs[2]!.props.onChange();
+    inputs[0]!.props.onChange();
+    expect(chosen).toEqual(['top-right', 'bottom-centre']);
+    expect(inputs.map((input) => (input as unknown as { props: { ref?: unknown } }).props.ref)).toEqual([ref, undefined, undefined]);
   });
 });

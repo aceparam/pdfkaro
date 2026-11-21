@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type Ref } from 'react';
 import type { Progress } from '../../engines/types';
-import type { ToolWidgetWords } from '../../tools/registry';
+import type { ToolOption, ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
+import { chosenValue, focusMovesToOptions, optionsShown, readyKey } from '../../widget/options';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
@@ -58,6 +59,43 @@ function detailFor(file: FileEntry, listPages = true): string {
   }
 }
 
+type ChoiceGroupProps = {
+  option: ToolOption;
+  /** The value shown as chosen. */
+  value: string;
+  /** The radio buttons' shared name, unique on the page. */
+  name: string;
+  onChoose(value: string): void;
+  /** Put on the chosen radio button, so focus can move to it. */
+  chosenRef?: Ref<HTMLInputElement>;
+};
+
+/**
+ * One choice: native radio buttons, one per line, in a fieldset named by its legend. The browser's
+ * own radio group gives one Tab stop, the arrow keys and the "1 of 6" a screen reader says, so no
+ * ARIA role is added. No hooks, so it can be drawn and tested on its own.
+ */
+export function ChoiceGroup({ option, value, name, onChoose, chosenRef }: ChoiceGroupProps) {
+  return (
+    <fieldset className={styles.choiceGroup}>
+      <legend className={styles.legend}>{option.legend}</legend>
+      {option.choices.map((choice) => (
+        <label key={choice.value} className={styles.choice}>
+          <input
+            ref={choice.value === value ? chosenRef : undefined}
+            type="radio"
+            name={name}
+            value={choice.value}
+            checked={choice.value === value}
+            onChange={() => onChoose(choice.value)}
+          />
+          <span>{choice.label}</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 /** Everything after the first pick: the list, problems, progress, the result. */
 export default function ToolWorkspace({ toolId, accepts, words, preset, firstFiles, onEmpty }: Props) {
   const [announcement, setAnnouncementText] = useState('Getting ready');
@@ -90,6 +128,9 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const damagedRef = useRef<HTMLHeadingElement | null>(null);
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const addRef = useRef<HTMLInputElement | null>(null);
+  // The chosen radio button of the first option, where focus goes once the file has been read.
+  const optionRef = useRef<HTMLInputElement | null>(null);
+  const optionName = useId();
 
   // The first files: add them once, then move focus to the summary.
   const refusedText = useCallback(
@@ -188,6 +229,22 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     // The heading and the advice are said together.
     if (unreadableSaid) setAnnouncement(unreadableSaid);
   }, [problem, problemKey, state.files, setAnnouncement, unreadableSaid]);
+
+  // A tool with options: once a new set of files has been read, focus moves to the chosen radio button of
+  // the first option, if it is still where the widget put it or on the page body. The status line still
+  // says the file's line. Cancel and "Go back to your file" keep the key, so focus stays on the main button.
+  const options = words.options ?? [];
+  const showOptions = options.length > 0 && optionsShown(state);
+  const filesRead = readyKey(state);
+  const filesReadBefore = useRef('');
+  useEffect(() => {
+    if (!filesRead) return;
+    const before = filesReadBefore.current;
+    filesReadBefore.current = filesRead;
+    const active = document.activeElement;
+    const free = active === null || active === document.body || active === mainRef.current || active === summaryRef.current;
+    if (focusMovesToOptions(showOptions, filesRead, before, free)) optionRef.current?.focus();
+  }, [filesRead, showOptions]);
 
   const count = totals(state);
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
@@ -489,6 +546,19 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               </button>
             </div>
           ) : null}
+
+          {showOptions
+            ? options.map((option, index) => (
+                <ChoiceGroup
+                  key={option.key}
+                  option={option}
+                  value={chosenValue(option, state.choices)}
+                  name={`${optionName}-${option.key}`}
+                  onChoose={(value) => run.setOption(option.key, value)}
+                  chosenRef={index === 0 ? optionRef : undefined}
+                />
+              ))
+            : null}
 
           {askingPassword && problem ? (
             <PasswordField
