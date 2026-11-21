@@ -236,14 +236,18 @@ type ChunkProps = {
   itemProps(item: GridItem, index: number): ItemProps & { key: string };
 };
 
+/** Whether two items show the same: every field equal, so a field added to `GridItem` is compared with no edit here. */
+export function sameItem(item: GridItem, other: GridItem): boolean {
+  if (item === other) return true;
+  const keys = Object.keys(item) as (keyof GridItem)[];
+  return keys.length === Object.keys(other).length && keys.every((key) => item[key] === other[key]);
+}
+
 /** Whether two runs of items show the same: the same items, field by field, in the same order. */
 function sameItems(before: GridItem[], after: GridItem[]): boolean {
   if (before === after) return true;
   if (before.length !== after.length) return false;
-  return before.every((item, index) => {
-    const other = after[index]!;
-    return item === other || (item.id === other.id && item.title === other.title && item.detail === other.detail && item.thumbnail === other.thumbnail);
-  });
+  return before.every((item, index) => sameItem(item, after[index]!));
 }
 
 /**
