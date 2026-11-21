@@ -4,7 +4,7 @@
 
 ### Requirement: Options are declared in the registry
 
-A tool's options SHALL be declared in its registry entry: for a choice, a key, a legend, the values with their labels and the value chosen at first; for a text, a key, a label, a hint, the sentence while empty, the most characters and the character rule. What each tool accepts SHALL be written once, in a plain module its engine reads to check what it is sent. No page preset SHALL use an option's key. (SPEC.md: Rules for the code, 1 and 2; Tool page anatomy, 4)
+A tool's options SHALL be declared in its registry entry: for a choice, a key, a legend, the values with their labels and the value chosen at first; for a text, a key, a label, a hint and its sentences. What each tool accepts, a choice's values or a text's limit and character rule, SHALL be written once, in a plain module its engine reads to check what it is sent. No page preset SHALL use an option's key. (SPEC.md: Rules for the code, 1 and 2; Tool page anatomy, 4)
 
 #### Scenario: The registry test runs
 
@@ -14,7 +14,7 @@ A tool's options SHALL be declared in its registry entry: for a choice, a key, a
 #### Scenario: The registry test checks a text
 
 - **WHEN** the registry test checks a tool with a text
-- **THEN** it fails unless the label, hint and sentence while empty are plain and not empty, the most characters is a whole number from 1 to 200, the character rule is a known one, both are exactly those the accepted-values module gives for that tool and key, and every text line in that module belongs to a text the registry shows
+- **THEN** it fails unless the label, hint and sentences are plain and not empty, the accepted-values module has a line for that tool and key with a most characters from 1 to 200 and a known character rule, every text line in that module belongs to a text the registry shows, and a hint that names a number of characters names that most characters
 
 #### Scenario: A preset uses an option's key
 
@@ -29,7 +29,7 @@ A tool's options SHALL be declared in its registry entry: for a choice, a key, a
 #### Scenario: The engine is sent a text it does not accept
 
 - **WHEN** an engine is sent, for a text, something that is not a string, is empty or only spaces once trimmed, is longer than its limit, or has a character its rule does not take
-- **THEN** it refuses before it reads the file, writes nothing, and its error does not hold the text
+- **THEN** it refuses before it reads the file with the refused-text error, writes nothing, and its error does not hold the text
 
 #### Scenario: The character rule matches the fonts
 

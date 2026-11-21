@@ -44,14 +44,15 @@
             minFiles: 1, multiple: false, resultPages: 'input', items: 'files', itemControls: false, outputs: 'one',
             memoryAdvice: 'Try on a computer, or split the file first and add the watermark to each part.',
             options: [{ kind: 'text', key: 'text', label: 'Watermark text',
-                        hint: 'Up to 50 characters, on one line. Use English letters, numbers and common marks.',
-                        emptySentence: 'Type the watermark text first.', maxLength: 50, characters: 'standard-font' }],
+                        hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+                        emptySentence: 'Type the watermark text first.',
+                        refusedSentence: 'The watermark text could not be used. Check it and try again.' }],
             resultNotes: ['The watermark is on every page. Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
                           'The new file has no password and no restrictions, even if the file you chose had them.'] } }
 ```
 
 - Placed after Add page numbers in the registry, so the catalogue-order test and the home page put it second under "Edit and sign".
-- `src/widget/option-values.ts` gains `optionTexts['watermark-pdf'] = { text: { maxLength: 50, characters: 'standard-font' } }`; the registry test from `add-text-option` checks the entry against it.
+- `src/widget/option-values.ts` gains `optionTexts['watermark-pdf'] = { text: { maxLength: 50, characters: 'standard-font' } }`; it is the one place the limit and the rule are written (`add-text-option`); the widget reads them from there, and the registry test from `add-text-option` checks the entry has this line and its hint's "50 characters" matches it.
 - Four related links show now (Add page numbers, Merge, Compress, Rotate); Sign PDF and Protect follow once published. Add page numbers already names `watermark-pdf`, so its link to this page starts to show.
 - **50 characters** keeps the text readable on small pages: on A6 a 50-character line is still about 11 points; a full sentence would shrink below what reads. **One line,** as `add-text-option` allows only one.
 
@@ -59,7 +60,7 @@
 
 ```
 run([file], options, onProgress, tools):
-  text = acceptedText('watermark-pdf', 'text', options.text)   // refused before any work if undefined: "The watermark text is not valid."
+  text = acceptedText('watermark-pdf', 'text', options.text)   // undefined: throw new TextRefused() before any work; its message holds no text
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 })
   copy = plainCopy(tools, file, passwordFrom(options))
   out = await stampPages(tools, copy, {
@@ -73,7 +74,7 @@ run([file], options, onProgress, tools):
 inspect = inspectPdf
 ```
 
-- The same shape, progress and memory order as Add page numbers' engine; the text never goes into an error or a progress message.
+- The same shape, progress and memory order as Add page numbers' engine; the text never goes into an error or a progress message. A refused text gives `add-text-option`'s `text-refused` failure, with this tool's `refusedSentence`.
 - pdf-lib is imported for types only; `stampPages` fetches it once and hands it to `prepare` and `draw`, so `check-worker.mjs` can check pdf-lib's code is not in the engine.
 
 #### 2a. Where the text goes: `watermarkPlace` (exported, pure)
@@ -100,7 +101,16 @@ None changes. Considered and dropped: writing one shared form for all pages of t
 
 ### 4. The page text
 
-`src/content/tools/watermark-pdf.md`, 250 to 500 words, marked as a draft, covering: the steps (choose the file, type the text, press "Add watermark and download", then Download); what it looks like (grey, seen through, across the middle at a slant, sized to each page, upright as each page is shown); which characters work and that other scripts cannot be used for now, said plainly without promising when; that anyone with a PDF editor can remove or cover a watermark, so it marks a file but does not protect it; that the words may be picked up when the page's text is copied or searched in some readers; what is kept; that earlier saved versions are not kept, a digital signature stops being valid and a PDF/A file no longer meets PDF/A; that the password and restrictions are removed; that a form field or note at the centre can cover it; that nothing is uploaded and the page forgets the file and the text. No question restates the title, and the page's own words use no capitals for emphasis, even in examples. Checked against "Banned patterns".
+`src/content/tools/watermark-pdf.md`, 250 to 500 words, marked as a draft, covering:
+- the steps (choose the file, type the text, press "Add watermark and download", then Download);
+- what it looks like (grey, seen through, across the middle at a slant, sized to each page, upright as each page is shown);
+- which characters work (letters from English and other Western European languages, numbers and common marks) and that other scripts cannot be used for now, said plainly without promising when;
+- that anyone with a PDF editor can remove or cover a watermark, so it marks a file but does not protect it;
+- that the words may be picked up when the page's text is copied or searched in some readers;
+- what is kept; that earlier saved versions are not kept, a digital signature stops being valid and a PDF/A file no longer meets PDF/A; that the password and restrictions are removed; that a form field or note at the centre can cover it;
+- privacy, saying only what the page controls (the privacy reviewer, stage 1): the file and the text are not uploaded or sent anywhere; the page keeps them only while the tab is open, and lets go of them when "Start again" is pressed or the tab is closed or left. It does not say the page forgets them on download (it does not), claims nothing about keyboard apps, browser extensions or spell checkers outside the page, and makes no "100%" claim.
+
+No question restates the title, and the page's own words use no capitals for emphasis, even in examples. Checked against "Banned patterns".
 
 ## Dependencies
 
@@ -119,6 +129,7 @@ No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 S
 - **Huge page counts.** Layers drawn 2,000 pages at a time and let go; progress for every page; Cancel ends the worker; the notice over 20,000 pages; the memory failure with its advice on a phone.
 - **A result that balloons.** The page's own content is referenced, not copied; the update and the output are held to the same budget; a test watermarks thousands of pages sharing one tiny content stream and checks the growth.
 - **Content that tries to change the watermark.** Wrapped in `q … Q`; tested with a low opacity, a scaling `cm` and a fill colour left set. More `Q` than `q` remains the known limit of the drawing step.
+- **Characters that mean something in PDF syntax.** Parentheses, backslashes, `%`, `<`, `>`, `[`, `]` and `/` are all in `'standard-font'`. pdf-lib writes a standard font's text as a hex string (`<…> Tj`), so none of them can close a string or start an operator; a unit test draws `a) Tj (b \ % <x> [/y]` and checks the layer stream holds it only inside one hex string, `qpdf --check` passes and PDF.js reads it back exactly.
 - **The text.** Checked with `acceptedText` before the file is read: only a string, only the tool's own line, cleaned, at most 50 characters, only `'standard-font'` characters, so no control character, direction override or invisible mark reaches pdf-lib, and pdf-lib never draws `?` in place of a refused character. pdf-lib writes it as a hex string inside the layer's content stream; it never reaches qpdf's arguments or a JSON string built by hand.
 - **Option abuse.** `'__proto__'`, a number, `null`, a missing key, an empty or long text, a tab, Devanagari: each refused before the file is read, with an error that does not hold the text.
 - **Hostile file names.** Unchanged: `stem` cleans the output name; names never reach the engine.
@@ -128,7 +139,8 @@ No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 S
 
 - **`tests/unit/watermark-pdf.test.ts`:**
   - `watermarkPlace` on A4, A4 on its side, Letter, A6, A0, a 20 by 20 point page and a 10 by 2,000 point strip, for "D", "Draft" and 50 characters: the turned box inside the margin on all four sides, its middle on the centre, the size at most a fifth of the shorter side, 119 points for "Draft" on A4;
-  - the text refused when missing, empty, only spaces, 51 characters, "मसौदा", "Łódź", a tab, a number, `null` or under `'__proto__'`, before qpdf is asked for (a spy on `tools.qpdf`), with an error that does not hold the text;
+  - `a) Tj (b \ % <x> [/y]` drawn: `qpdf --check` passes, PDF.js reads it back exactly, and the layer's content stream holds the text only inside one `<…>` hex string, with no `(` string and no stray operator;
+  - the text refused when missing, empty, only spaces, 51 characters, "मसौदा", "Łódź", a tab, a number, `null` or under `'__proto__'`, with `TextRefused` before qpdf is asked for (a spy on `tools.qpdf`), with an error that does not hold the text;
   - `run` on every file in `tests/fixtures/`: `qpdf --check`; the page count; each page's text through PDF.js holding its own text, with the watermark's words last; on `mixed.pdf`, the changed pixels against the page before forming a box whose middle is within 3% of the centre of each page as shown and inside its margin, and the text's angle as shown 45 degrees; the drawn grey 204 (±3) on white; the form holding `/Artifact << /Type /Pagination /Subtype /Watermark >> BDC` and a graphics state with `/ca 0.4`; "Brouillon – à relire" drawn with its accents (PDF.js reads it back as typed); `scanned.pdf` showing the text over its pictures; `rich.pdf`'s bookmarks, link and `note.txt`; `form.pdf`'s fields and values; `tagged.pdf`'s tags, destination and thread, with every tagged MCID still in its page's own content and its streams unchanged; `password.pdf` (with its password) and `restricted.pdf` back with no password and no restrictions; `warning.pdf` watermarked; the damaged files failing with the damaged outcome;
   - a page made in the test whose content sets `/ca 0.1`, a scaling `cm` and a red fill without restoring them: the watermark's place, size, grey and opacity unchanged;
   - thousands of pages sharing one tiny content stream: finished fast, the stream still one and unchanged, growth no more than a few hundred bytes a page.

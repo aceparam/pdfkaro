@@ -65,17 +65,27 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: The text is too long
 
 - **WHEN** the visitor types or pastes 63 characters into a field that takes 50
-- **THEN** nothing typed is cut off, the field is marked invalid, and "This text has 63 characters. Use 50 or fewer." is shown under it, read with the field and tied to the main button, which does nothing when pressed
+- **THEN** nothing typed is cut off, the field is marked invalid, and "This text has 63 characters. Use 50 or fewer." is shown between the label and the field, read with the field and tied to the main button, which does nothing when pressed
 
-#### Scenario: A character the rule does not take
+#### Scenario: A few Western characters the rule does not take
 
-- **WHEN** the visitor types "नमस्ते" or "Łódź" into a field whose rule is the standard fonts' characters
-- **THEN** the field is marked invalid, a sentence under it says some characters cannot be drawn and which characters can be used, it is tied to the main button, and nothing is ever drawn as question marks
+- **WHEN** the visitor types "Łódź" into a field whose rule is the standard fonts' characters
+- **THEN** the field is marked invalid, and "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, read with the field and tied to the main button, which does nothing when pressed
+
+#### Scenario: Text in another script
+
+- **WHEN** the visitor types "नमस्ते" or "مرحبا" into such a field
+- **THEN** the field is marked invalid, and only "Use letters from English and other Western European languages, numbers and common marks." is shown, with no list of characters, tied to the main button; nothing is ever drawn as question marks
 
 #### Scenario: Accented letters in composed or separate form
 
 - **WHEN** the visitor types "Café", with the accent typed as its own mark after the "e"
 - **THEN** it is taken as "Café", counted as four characters, and the main button works
+
+#### Scenario: A phone keyboard is open
+
+- **WHEN** the visitor types on a phone at 360px and the on-screen keyboard covers the lower half of the screen
+- **THEN** a sentence about the text is shown above the field, where the keyboard does not cover it, and the keyboard's Enter key is labelled as "Go"
 
 #### Scenario: A keyboard user uses the field
 
@@ -90,9 +100,18 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: How the field looks
 
 - **WHEN** the field is shown at 360px, at 1280px, in dark mode or with text at 200%
-- **THEN** it has the site's field style, a label that looks like the other field labels, a height of at least 2.75rem, the sentence in the same place and style as a wrong password's, and nothing overflows sideways
+- **THEN** it has the site's field style, a label that looks like the other field labels, a height of at least 2.75rem, the sentence between the label and the field, bold in the text colour as a wrong password's is, the hint under the field, and nothing overflows sideways
 
 #### Scenario: Cancel, Start again and another file
 
 - **WHEN** the visitor types a text, starts the job and presses Cancel, or the job fails, or the visitor picks another file with "Choose another file" while listing; and later presses "Start again" or removes the only file
 - **THEN** after Cancel, a failure or another file the text is as typed; after "Start again" or removing the only file the field is empty again
+
+### Requirement: A text the engine refuses
+
+When a tool's engine refuses the text it was sent, the page SHALL say "The text could not be used. Check it and try again.", or the tool's own words for its text, under the tool's heading for a failed job, and offer "Go back to your file" with the text as typed. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
+
+#### Scenario: The engine refuses a text
+
+- **WHEN** a test entry's engine is sent a text it refuses
+- **THEN** the page shows the failed heading and "The text could not be used. Check it and try again.", and "Go back to your file" lists the file with the text still in the field

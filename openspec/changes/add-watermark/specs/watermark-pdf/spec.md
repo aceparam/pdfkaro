@@ -50,7 +50,7 @@ While the engine loads, the file's row SHALL show "Getting ready". Once read, th
 
 ### Requirement: The watermark text
 
-The field SHALL take up to 50 characters on one line, of the standard fonts' characters: English and accented Western European letters, numbers and common marks. The main button SHALL wait until text is typed. Other characters, or more than 50, SHALL be refused with a sentence, as every text field does. The engine SHALL refuse any text the field would refuse, before reading the file. (SPEC.md: Tool page anatomy, 4 and 5; What we are building, rule 4)
+The field SHALL take up to 50 characters on one line, of the standard fonts' characters: letters from English and other Western European languages, numbers and common marks. The main button SHALL wait until text is typed. Other characters, or more than 50, SHALL be refused with a sentence, as every text field does. The engine SHALL refuse any text the field would refuse, before reading the file. (SPEC.md: Tool page anatomy, 4 and 5; What we are building, rule 4)
 
 #### Scenario: Nothing is typed
 
@@ -65,7 +65,12 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: Hindi is typed
 
 - **WHEN** the visitor types "मसौदा"
-- **THEN** the field is marked invalid, the page says some of these characters cannot be drawn and to use English letters, numbers and common marks, the main button does nothing, and no question marks are ever drawn
+- **THEN** the field is marked invalid, the page says "Use letters from English and other Western European languages, numbers and common marks." with no list of characters, the main button does nothing, and no question marks are ever drawn
+
+#### Scenario: A few characters from other Latin alphabets
+
+- **WHEN** the visitor types "Łódź"
+- **THEN** the page says "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks."
 
 #### Scenario: Accented Western European letters
 
@@ -80,7 +85,7 @@ The field SHALL take up to 50 characters on one line, of the standard fonts' cha
 #### Scenario: The engine is sent a text it does not accept
 
 - **WHEN** the engine is sent no text, an empty text, 51 characters, "मसौदा", a tab or something that is not a string
-- **THEN** it refuses before reading the file, writes nothing, and its error does not hold the text
+- **THEN** it refuses before reading the file, writes nothing, its error does not hold the text, and the page says "The watermark was not added." and "The watermark text could not be used. Check it and try again."
 
 ### Requirement: Drawing the watermark
 
@@ -90,6 +95,11 @@ Pressing the main button SHALL write one PDF in which every page shows the text 
 
 - **WHEN** `text.pdf`, 3 pages, is watermarked with "Draft"
 - **THEN** each page shows "Draft" across its centre at 45 degrees, grey and seen through, with the page's text readable under it and as before
+
+#### Scenario: Characters that mean something inside a PDF
+
+- **WHEN** the text is `a) Tj (b \ % <x> [/y]`
+- **THEN** the result passes `qpdf --check`, PDF.js reads the text back exactly, and the layer's content stream holds it only inside one hex string
 
 #### Scenario: Pages turned and of mixed sizes
 
@@ -249,8 +259,8 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 #### Scenario: The no-upload test
 
-- **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, types "Kv4wm Marker", watermarks the file and downloads it, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, `Kv4wm Marker` or `Kv4wm`; and storage, the title, the address and the console hold none of them
+- **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, types "Kv4wm Qx8mrk", watermarks the file and downloads it, while watching every request from the page and its workers
+- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and pdf-lib's file and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, `Kv4wm Qx8mrk`, `Kv4wm` or `Qx8mrk`; and storage, the title, the address and the console hold none of them
 
 #### Scenario: No hidden text reaches a request
 
