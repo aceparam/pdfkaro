@@ -600,7 +600,7 @@ A tool with options SHALL show them once its file has been read, below the file 
 
 ### Requirement: A text a tool needs
 
-A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. A sentence about refused characters SHALL say only which characters cannot be used, since the hint states the rule. Enter in the field while the main button waits SHALL have the status region say why, on every press. (SPEC.md: Tool page anatomy, 4 and 5; What we are building, rule 4; Definition of done)
+A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Enter in the field while the main button waits SHALL have the status region say why, on every press. (SPEC.md: Tool page anatomy, 4 and 5; Definition of done)
 
 #### Scenario: A file is read in a tool with a text
 
@@ -662,6 +662,15 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 - **WHEN** the visitor types a text, starts the job and presses Cancel, or the job fails, or the visitor picks another file with "Choose another file" while listing; and later presses "Start again" or removes the only file
 - **THEN** after Cancel, a failure or another file the text is as typed; after "Start again" or removing the only file the field is empty again
 
+
+### Requirement: A typed text that cannot be used
+
+Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. A sentence about refused characters SHALL say only which characters cannot be used, since the hint states the rule. (SPEC.md: Tool page anatomy, 4; What we are building, rule 4)
+
+#### Scenario: A text with a problem
+
+- **WHEN** the typed text is too long or has a character the tool's rule does not take
+- **THEN** one sentence saying what is wrong is tied to the field and to the main button, which stays focusable, and a press does nothing
 ### Requirement: A text the engine refuses
 
 When a tool's engine refuses the text it was sent, the page SHALL say "The text could not be used. Check it and try again.", or the tool's own words for its text, under the tool's heading for a failed job, and offer "Go back to your file" with the text as typed. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
