@@ -139,7 +139,7 @@ Left out, every page is chosen, so Add page numbers and Watermark are unchanged.
 ### 3. Shared code
 
 - `stampPages`' `only` and `sharedBytes` (2c) and the moved turn table (2d) ride along, named in the pull request with the owner question on shared pieces. Neither changes another tool's output; their tests cover both.
-- **A text's advice for refused characters** (UX, stage 1): `TextOption` gains an optional `charactersAdvice`, which `textSentence` says after "Some characters cannot be used." (not after a list of named Latin letters, where switching script is not the point). Sign PDF's: "Some characters cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above." The registry test checks it is plain and not empty when given. Watermark gives none and is unchanged.
+- **A text's advice for refused characters** (UX, stage 1): `TextOption` gains an optional `charactersAdvice`, which `textSentence` says after every refused-characters sentence, whether letters are named or not (UX, stage 1 round 2: a Polish or Turkish name with Ł or ğ needs the same way forward). Sign PDF's: "Some characters cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above." and "Ł cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above." The registry test checks it is plain and not empty when given. Watermark gives none and is unchanged.
 - Nothing else shared changes. The three options and the picture reader are used as their changes built them.
 
 ### 4. The page text
