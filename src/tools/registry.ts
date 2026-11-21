@@ -42,6 +42,13 @@ export type ToolPage = {
 export type PageWords = Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>;
 
 /**
+ * When an option is shown: only while the earlier choice `key` of the same tool holds `value`.
+ * The registry test checks that `key` is a choice listed earlier with no condition of its own,
+ * that `value` is one of its values, and that a tool's first option has none.
+ */
+export type OptionCondition = { key: string; value: string };
+
+/**
  * A choice of one value from several, drawn as radio buttons. The values each tool accepts are
  * also written in src/widget/option-values.ts, which its engine reads; the registry test checks
  * the two lists are the same.
@@ -56,6 +63,8 @@ export type ChoiceOption = {
   choices: { value: string; label: string }[];
   /** The value chosen at first, with which the main button works. */
   initial: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
 };
 
 /**
@@ -75,11 +84,14 @@ export type TextOption = {
   emptySentence: string;
   /** When the engine refuses the text. Left out: "The text could not be used. Check it and try again." */
   refusedSentence?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
 };
 
 /**
  * An option a tool's working area shows once its file has been read, below the file and above
- * the main button, in registry order: a choice or a text.
+ * the main button, in registry order: a choice or a text. One with a condition (`when`) is shown,
+ * held and sent only while its condition holds.
  */
 export type ToolOption = ChoiceOption | TextOption;
 

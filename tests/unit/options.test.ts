@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import type { TextOption, ToolOption } from '../../src/tools/registry';
+import { tools, type TextOption, type ToolOption } from '../../src/tools/registry';
 import {
   acceptedText,
   acceptedValue,
@@ -20,8 +20,10 @@ import {
   jobOptions,
   optionsHold,
   optionsShown,
+  optionShown,
   optionsToSend,
   readyKey,
+  shownOptions,
   ruleAdvice,
   textSentence,
   typedText,
@@ -450,5 +452,102 @@ describe('Enter in a text field', () => {
 
   it('does nothing when the button waits with no sentence', () => {
     expect(enterAction(false, [null, undefined, ''])).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe('options shown for one choice', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'a', label: 'Way a' }, { value: 'b', label: 'Way b' }], initial: 'a' };
+  const forA: TextOption = { ...watermark, key: 'textA', label: 'Text for a', emptySentence: 'Type the text for a first.', when: { key: 'way', value: 'a' } };
+  const forB: TextOption = { ...watermark, key: 'textB', label: 'Text for b', emptySentence: 'Type the text for b first.', when: { key: 'way', value: 'b' } };
+  const size: ToolOption = { kind: 'choice', key: 'size', legend: 'Size', choices: [{ value: 'small', label: 'Small' }, { value: 'large', label: 'Large' }], initial: 'small' };
+  const options: ToolOption[] = [way, forA, forB, size];
+  const texts = { 'test-when': { textA: rule, textB: rule } };
+  const keys = (shown: readonly ToolOption[]) => shown.map((option) => option.key);
+
+  it('shows the choice, the text for its start and the option with no condition, at the start', () => {
+    expect(keys(shownOptions(options, {}))).toEqual(['way', 'textA', 'size']);
+    expect(optionShown(forB, options, {})).toBe(false);
+    expect(optionShown(way, options, {})).toBe(true);
+  });
+
+  it('shows the text for "b" in place of the text for "a" once "b" is chosen, in registry order', () => {
+    expect(keys(shownOptions(options, { way: 'b' }))).toEqual(['way', 'textB', 'size']);
+    expect(keys(shownOptions(options, { way: 'b', textA: 'Kept' }))).toEqual(['way', 'textB', 'size']);
+  });
+
+  it('reads an unknown stored value as the choice\'s start', () => {
+    expect(keys(shownOptions(options, { way: 'c' }))).toEqual(['way', 'textA', 'size']);
+  });
+
+  it('hides an option whose condition names no choice, or names a text', () => {
+    const lost: TextOption = { ...forA, when: { key: 'nothing', value: 'a' } };
+    expect(optionShown(lost, [way, lost], {})).toBe(false);
+    const onText: TextOption = { ...forB, when: { key: 'textA', value: 'a' } };
+    expect(optionShown(onText, [way, forA, onText], { textA: 'a' })).toBe(false);
+    expect(shownOptions(undefined, {})).toEqual([]);
+  });
+
+  it('sends the choice, the text shown and the option with no condition, and no key for the hidden text', () => {
+    expect(optionsToSend(options, { textA: ' Signed ', textB: 'Initials' })).toEqual({ way: 'a', textA: 'Signed', size: 'small' });
+    const sent = optionsToSend(options, { way: 'b', textA: 'Signed', textB: ' Initials ' });
+    expect(sent).toEqual({ way: 'b', textB: 'Initials', size: 'small' });
+    expect(Object.hasOwn(sent, 'textA')).toBe(false);
+  });
+
+  it('is held only by the text shown: never by a hidden empty text', () => {
+    expect(optionsHold('test-when', options, {}, texts)).toEqual({ key: 'textA', kind: 'empty', sentence: 'Type the text for a first.' });
+    expect(optionsHold('test-when', options, { textA: 'Signed' }, texts)).toBeNull();
+    expect(optionsHold('test-when', options, { way: 'b', textA: 'Signed' }, texts)).toEqual({ key: 'textB', kind: 'empty', sentence: 'Type the text for b first.' });
+    expect(optionsHold('test-when', options, { way: 'b', textB: 'Initials' }, texts)).toBeNull();
+    expect(optionsHold('test-when', options, { way: 'b', textA: 'Łódź', textB: 'Initials' }, texts)).toBeNull();
+  });
+
+  it('changes nothing for a tool with no conditions: Add page numbers and Watermark', () => {
+    for (const id of ['add-page-numbers', 'watermark-pdf']) {
+      const tool = tools.find((each) => each.id === id);
+      const own = tool?.widget?.options;
+      expect(own, id).toBeDefined();
+      if (own === undefined) continue;
+      expect(own.some((option) => option.when !== undefined), id).toBe(false);
+      expect(shownOptions(own, {}), id).toEqual(own);
+      expect(shownOptions(own, { position: 'top-right', text: 'Draft' }), id).toEqual(own);
+    }
+    expect(optionsToSend([position, watermark], { text: ' Draft ', position: 'top-right' })).toEqual({ position: 'top-right', text: 'Draft' });
+    expect(optionsHold('test-text', [position, watermark], {}, table)).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+  });
+
+  it("reaches the real ToolClient's run message with the hidden text's key absent, set through the reducer, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-when', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'option-set', key: 'textA', value: 'Signed' },
+      { type: 'option-set', key: 'way', value: 'b' },
+      { type: 'option-set', key: 'textB', value: ' Initials ' },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    expect(state.choices).toEqual({ textA: 'Signed', way: 'b', textB: ' Initials ' });
+    expect(optionsHold('test-when', options, state.choices, texts)).toBeNull();
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions({ format: 'pdf' }, {}, options, state.choices), () => {});
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type).toBe('run');
+    const sentOptions = sent?.type === 'run' ? sent.options : undefined;
+    expect(sentOptions).toEqual({ format: 'pdf', way: 'b', textB: 'Initials', size: 'small' });
+    expect(sentOptions !== undefined && Object.hasOwn(sentOptions, 'textA')).toBe(false);
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
   });
 });

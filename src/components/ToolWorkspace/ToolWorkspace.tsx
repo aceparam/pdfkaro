@@ -6,7 +6,7 @@ import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, typedText } from '../../widget/options';
+import { chosenValue, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, shownOptions, typedText } from '../../widget/options';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
@@ -200,6 +200,10 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // says the file's line. Cancel and "Go back to your file" keep the key, so focus stays on the main button.
   const options = useMemo(() => words.options ?? [], [words.options]);
   const showOptions = options.length > 0 && optionsShown(state);
+  // The options drawn: those whose condition holds, in registry order, so one shown by a choice comes after the
+  // options before it. Changing the choice neither moves focus nor says anything; the next Tab reaches the option
+  // now shown. The first option has no condition (the registry test), so optionRef always has a target.
+  const drawnOptions = useMemo(() => shownOptions(options, state.choices), [options, state.choices]);
   const filesRead = readyKey(state);
   const filesReadBefore = useRef('');
   useEffect(() => {
@@ -211,7 +215,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     if (focusMovesToOptions(showOptions, filesRead, before, free)) optionRef.current?.focus();
   }, [filesRead, showOptions]);
 
-  // A text that holds the main button back: empty, too long, or with characters its rule does not take.
+  // A shown text that holds the main button back: empty, too long, or with characters its rule does not take.
   // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
   const hold = useMemo(() => optionsHold(toolId, options, state.choices), [toolId, options, state.choices]);
   const fieldId = (key: string) => `${optionName}-${key}`;
@@ -540,7 +544,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
           ) : null}
 
           {showOptions
-            ? options.map((option, index) =>
+            ? drawnOptions.map((option, index) =>
                 option.kind === 'choice' ? (
                   <ChoiceGroup
                     key={option.key}

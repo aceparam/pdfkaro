@@ -477,6 +477,7 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
     }
   }
+  problems.push(...conditionProblems(options));
   // Every accepted-values line belongs to a choice the registry shows, and every text line to a text.
   const kindOf = (key: string) => options.find((option) => option.key === key)?.kind;
   if (Object.hasOwn(values, tool.id)) {
@@ -489,6 +490,28 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       if (kindOf(key) !== 'text') problems.push(`${key}: in optionTexts but not a text of the tool`);
     }
   }
+  return problems;
+}
+
+/**
+ * What is wrong with the tool's conditions: each names a choice listed earlier, with no condition of
+ * its own, and one of its values; and the first option has none, so focus after reading has a place.
+ */
+function conditionProblems(options: readonly ToolOption[]): string[] {
+  const problems: string[] = [];
+  const first = options[0];
+  if (first !== undefined && first.when !== undefined) problems.push(`${first.key}: the first option has a condition`);
+  options.forEach((option, index) => {
+    const when = option.when;
+    if (when === undefined) return;
+    const named = options.slice(0, index).find((earlier) => earlier.key === when.key);
+    if (named === undefined || named.kind !== 'choice') {
+      problems.push(`${option.key}: the condition names no earlier choice`);
+      return;
+    }
+    if (named.when !== undefined) problems.push(`${option.key}: the condition names a choice that has a condition`);
+    if (!named.choices.some((choice) => choice.value === when.value)) problems.push(`${option.key}: the condition names a value the choice does not have`);
+  });
   return problems;
 }
 
@@ -676,5 +699,54 @@ describe('texts', () => {
     expect(optionProblems(entry([long]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toContain(
       'text: the hint names 1,200 characters, not the most characters',
     );
+  });
+});
+
+describe('conditions', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'a', label: 'Way a' }, { value: 'b', label: 'Way b' }], initial: 'a' };
+  const hint = 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.';
+  const forA: ToolOption = { kind: 'text', key: 'textA', label: 'Text for a', hint, emptySentence: 'Type the text for a first.', when: { key: 'way', value: 'a' } };
+  const forB: ToolOption = { kind: 'text', key: 'textB', label: 'Text for b', hint, emptySentence: 'Type the text for b first.', when: { key: 'way', value: 'b' } };
+  const size: ToolOption = { kind: 'choice', key: 'size', legend: 'Size', choices: [{ value: 'small', label: 'Small' }, { value: 'large', label: 'Large' }], initial: 'small' };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[]): Tool => ({ ...merge, id: 'test-options', widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['a', 'b'], size: ['small', 'large'] } };
+  const rule: TextRule = { maxLength: 50, characters: 'standard-font' };
+  const texts: Texts = { 'test-options': { textA: rule, textB: rule } };
+
+  it('pass for every tool, and for an entry whose texts are shown by an earlier choice', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts), tool.id).toEqual([]);
+    expect(optionProblems(entry([way, forA, forB, size]), values, texts)).toEqual([]);
+    expect(optionProblems(entry([way, size, forB, { ...forA, when: { key: 'way', value: 'a' } }]), values, texts)).toEqual([]);
+    const sizeForB: ToolOption = { ...size, when: { key: 'way', value: 'b' } };
+    expect(optionProblems(entry([way, forA, sizeForB]), values, { 'test-options': { textA: rule } })).toEqual([]);
+  });
+
+  it('fail when a condition names no earlier choice: a later one, a text, a missing key or the option itself', () => {
+    const wrong = (key: string) => `${key}: the condition names no earlier choice`;
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'size', value: 'small' } }, size]), values, { 'test-options': { textA: rule } })).toContain(wrong('textA'));
+    expect(optionProblems(entry([way, forA, { ...forB, when: { key: 'textA', value: 'a' } }]), values, texts)).toContain(wrong('textB'));
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'nothing', value: 'a' } }]), values, { 'test-options': { textA: rule } })).toContain(wrong('textA'));
+    expect(optionProblems(entry([way, { ...size, when: { key: 'size', value: 'small' } }]), values)).toContain(wrong('size'));
+  });
+
+  it('fail when a condition names a value the choice does not have', () => {
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'way', value: 'c' } }]), values, { 'test-options': { textA: rule } })).toContain(
+      'textA: the condition names a value the choice does not have',
+    );
+  });
+
+  it('fail when a condition names a choice that has a condition of its own', () => {
+    const sizeForB: ToolOption = { ...size, when: { key: 'way', value: 'b' } };
+    expect(optionProblems(entry([way, sizeForB, { ...forA, when: { key: 'size', value: 'small' } }]), values, { 'test-options': { textA: rule } })).toContain(
+      'textA: the condition names a choice that has a condition',
+    );
+  });
+
+  it('fail when the first option has a condition', () => {
+    const problems = optionProblems(entry([{ ...forA, when: { key: 'way', value: 'a' } }, way]), values, { 'test-options': { textA: rule } });
+    expect(problems).toContain('textA: the first option has a condition');
   });
 });
