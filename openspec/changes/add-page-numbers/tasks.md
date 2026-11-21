@@ -13,7 +13,7 @@ Built on `add-tool-options`, merged first.
 
 ## 3. Engine unit tests
 
-- [ ] 3.1 `tests/unit/add-page-numbers.test.ts`: `numberPlace` (A4, Letter, A6, A0, a 20 by 20 point page, 1 to 7 digits, every place); the place refused when unlisted, a label, a number, `'__proto__'` or missing; `run` on every file in `tests/fixtures/`: `qpdf --check`, the page count, each page's text through PDF.js ending with its number, the number's place for each of the six places on `mixed.pdf`'s four pages as PDF.js shows them, `rich.pdf`'s bookmarks, link and `note.txt`, `form.pdf`'s fields and values, `tagged.pdf`'s tags, destination and thread with every tagged MCID still in its page's content, `password.pdf` (with its password) and `restricted.pdf` coming back with no password and no restrictions, `warning.pdf` numbered, damaged files failing; verify the tests pass, then record each fixture's outcome in `tests/fixtures/README.md`, with the multilingual file still missing
+- [x] 3.1 `tests/unit/add-page-numbers.test.ts`: `numberPlace` (A4, Letter, A6, A0, a 20 by 20 point page, 1 to 7 digits, every place); the place refused when unlisted, a label, a number, `'__proto__'` or missing; `run` on every file in `tests/fixtures/`: `qpdf --check`, the page count, each page's text through PDF.js ending with its number, the number's place for each of the six places on `mixed.pdf`'s four pages as PDF.js shows them, `rich.pdf`'s bookmarks, link and `note.txt`, `form.pdf`'s fields and values, `tagged.pdf`'s tags, destination and thread with every tagged MCID still in its page's content, `password.pdf` (with its password) and `restricted.pdf` coming back with no password and no restrictions, `warning.pdf` numbered, damaged files failing; verify the tests pass, then record each fixture's outcome in `tests/fixtures/README.md`, with the multilingual file still missing
 - [ ] 3.2 Measure, with the memory order of the design's section 6, the time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s 100 MB file, in Node and in Chromium; verify the numbers are recorded in the fixtures README and are no worse than the design's table
 
 ## 4. Worker wiring
@@ -39,7 +39,7 @@ Built on `add-tool-options`, merged first.
 
 ## 9. Checks and review
 
-- [ ] 9.1 `LICENSES.md`: no new line, as no dependency is added; the `@cantoo/pdf-lib` line's reason also names Add page numbers
+- [x] 9.1 `LICENSES.md`: no new line, as no dependency is added; the `@cantoo/pdf-lib` line's reason also names Add page numbers
 - [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`; verify each passes
 - [ ] 9.3 Add Add page numbers' hand checks to issue #7: the four PDF readers, browsers and phones, a tagged file from a word processor numbered and read with a screen reader, and the owner's review of the page text
 - [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one option with six places and "Bottom centre" first, numbers from 1 as digits only, the size and margin rule, black Helvetica not put inside the file, the number marked as a page number, every page numbered, the placement method, the output-size backstop, `-numbered`), the drawing step and failure kind riding along, more `Q` than `q` as a known limit, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
