@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Inflate } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import type { PictureRule } from '../../src/widget/option-values';
+import { optionPictures, type PictureRule } from '../../src/widget/option-values';
 import {
   acceptedPicture,
   inflateLimited,
@@ -705,6 +705,6 @@ describe('a picture an engine is sent (acceptedPicture)', () => {
       expect(acceptedPicture('test-picture', name, bytes, fflate, table)).toBeUndefined();
     }
     // No tool has a picture yet, so the real table takes nothing.
-    expect(acceptedPicture('test-picture', 'picture', bytes, fflate)).toBeUndefined();
+    expect(acceptedPicture('test-picture', 'picture', bytes, fflate, optionPictures)).toBeUndefined();
   });
 });

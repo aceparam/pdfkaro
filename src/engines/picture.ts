@@ -7,7 +7,9 @@
 // add up is `damaged`; a JPG coded in a way many PDF readers cannot draw is
 // `unsupported`.
 
-import { optionPictures, pictureRule, type PictureMime, type PictureRule, type PictureTable } from '../widget/option-values';
+// Types only from option-values.ts: a value imported from it would put that module in this file's chunk graph,
+// so Image to PDF's engine and thumbnails, which share this file, would fetch one more file than before.
+import type { PictureMime, PictureRule, PictureTable } from '../widget/option-values';
 import type { PictureOutcome } from './types';
 
 export type { PictureOutcome } from './types';
@@ -611,16 +613,12 @@ export function pictureOutcome(bytes: Uint8Array, rule: PictureRule, fflate: { I
  * For an engine: the bytes when `value` is bytes whose outcome under the tool's own rule for `key` is
  * ready; else `undefined`, and the engine throws `PictureRefused` before it reads the PDF. Only own keys
  * count, so `__proto__` or `toString` is never taken for a tool or a picture. A large picture is taken.
+ * The engine passes `optionPictures` as `table` itself (see the note on the imports above).
  */
-export function acceptedPicture(
-  tool: string,
-  key: string,
-  value: unknown,
-  fflate: { Inflate: InflateClass },
-  table: PictureTable = optionPictures,
-): Uint8Array | undefined {
-  if (!(value instanceof Uint8Array)) return undefined;
-  const rule = pictureRule(tool, key, table);
+export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table: PictureTable): Uint8Array | undefined {
+  if (!(value instanceof Uint8Array) || !Object.hasOwn(table, tool)) return undefined;
+  const byKey = table[tool];
+  const rule = byKey !== undefined && Object.hasOwn(byKey, key) ? byKey[key] : undefined;
   if (rule === undefined) return undefined;
   return pictureOutcome(value, rule, fflate).kind === 'ready' ? value : undefined;
 }

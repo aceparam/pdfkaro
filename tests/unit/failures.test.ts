@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { drawingRefusedSentence, failureSentence, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
+import type { ToolOption } from '../../src/tools/registry';
 
 describe('the failure sentence', () => {
   it('gives the shared sentences, or the tool own advice after running out of memory', () => {
@@ -206,5 +207,45 @@ describe('the sentence for a drawing the engine refused', () => {
     const text = { kind: 'text' as const, key: 'text', label: 'Name', hint: 'Your name.', emptySentence: 'Type it first.', refusedSentence: 'The name could not be used.' };
     expect(failureSentence('drawing-refused', { options: [way, text, drawing] })).toBe(drawingRefusedSentence);
     expect(failureSentence('text-refused', { options: [way, { ...drawing, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
+  });
+});
+
+describe('a picture the engine refuses or finds too large', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const picture = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  } as const;
+  const photo = { picture: { name: 'photo.jpg', size: Math.round(24.6 * 1_048_576), pixels: 40_000_000, status: 'ready' as const } };
+
+  it('says the shared sentence, or the first shown picture own words, when refused', () => {
+    expect(pictureRefusedSentence).toBe('The picture could not be used. Choose another picture.');
+    expect(failureSentence('picture-refused', {})).toBe(pictureRefusedSentence);
+    expect(failureSentence('picture-refused', { options: [picture] })).toBe(pictureRefusedSentence);
+    const own = 'This signature picture could not be used. Choose another picture.';
+    expect(failureSentence('picture-refused', { options: [{ ...picture, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...picture, refusedSentence: own, when: { key: 'way', value: 'picture' } };
+    expect(failureSentence('picture-refused', { options: [way, hidden] })).toBe(pictureRefusedSentence);
+    expect(failureSentence('picture-refused', { options: [way, hidden] }, { way: 'picture' })).toBe(own);
+  });
+
+  it('names the chosen picture and its size from the page own state, with the tool step', () => {
+    expect(failureSentence('picture-too-large', { options: [picture] }, {}, photo)).toBe('photo.jpg (24.6 MB) is too large to place on these pages. Choose a smaller picture.');
+    expect(pictureTooLargeAdvice).toBe('Choose a smaller picture.');
+    const tooLargeAdvice = 'Crop it to the signature, or save a smaller copy.';
+    expect(failureSentence('picture-too-large', { options: [{ ...picture, tooLargeAdvice }] }, {}, photo)).toBe(
+      'photo.jpg (24.6 MB) is too large to place on these pages. Crop it to the signature, or save a smaller copy.',
+    );
+  });
+
+  it('says the picture is too large without a name when none is chosen', () => {
+    expect(failureSentence('picture-too-large', { options: [picture] })).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
+    expect(failureSentence('picture-too-large', {})).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
   });
 });

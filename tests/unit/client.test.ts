@@ -120,3 +120,59 @@ describe('the tool client', () => {
     expect(workers[0]!.ended).toBe(false);
   });
 });
+
+describe('a picture chosen for an option', () => {
+  const picture = new File(['\x89PNG'], 'signature.png');
+
+  it('is read with its key, as the file itself, and answers with its outcome', async () => {
+    const { client, workers } = setup();
+    const asked = client.inspectPicture(picture, 'picture');
+    const sent = workers[0]?.sent[0];
+    expect(sent).toMatchObject({ type: 'inspect-picture', toolId: 'merge-pdf', key: 'picture' });
+    expect(sent?.type === 'inspect-picture' && sent.file).toBe(picture);
+    workers[0]?.reply({ type: 'picture-inspected', requestId: sent?.requestId, outcome: { kind: 'ready', pixels: 300 } });
+    await expect(asked).resolves.toEqual({ kind: 'ready', pixels: 300 });
+  });
+
+  it('goes with a run beside the files, and a run with none carries no pictures', async () => {
+    const { client, workers } = setup();
+    const job = client.run([file], [undefined], {}, () => {}, undefined, { picture });
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type === 'run' && sent.pictures).toEqual({ picture });
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+    for (const none of [undefined, {}]) {
+      const again = setup();
+      const plain = again.client.run([file], [undefined], {}, () => {}, undefined, none);
+      const message = again.workers[0]?.sent[0];
+      expect(message && 'pictures' in message).toBe(false);
+      again.client.end();
+      await expect(plain).rejects.toMatchObject({ kind: 'cancelled' });
+    }
+  });
+
+  it('is cancelled when the worker is ended during the read, as a thumbnail time limit does', async () => {
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient(
+      'merge-pdf',
+      () => {
+        const worker = new FakeWorker();
+        workers.push(worker);
+        return worker;
+      },
+      5,
+    );
+    const asked = client.inspectPicture(picture, 'picture');
+    asked.catch(() => {});
+    // A thumbnail asked for meanwhile runs out of time and ends the worker, read and all.
+    const drawn = client.thumbnail(file, undefined, 1, { width: 100, height: 100 }, 'f1');
+    await expect(drawn).resolves.toBeNull();
+    await expect(asked).rejects.toEqual(new ToolError('cancelled'));
+    expect(workers[0]?.ended).toBe(true);
+    // Read again, it starts a fresh worker and answers.
+    const again = client.inspectPicture(picture, 'picture');
+    const sent = workers[1]?.sent[0];
+    workers[1]?.reply({ type: 'picture-inspected', requestId: sent?.requestId, outcome: { kind: 'damaged' } });
+    await expect(again).resolves.toEqual({ kind: 'damaged' });
+  });
+});

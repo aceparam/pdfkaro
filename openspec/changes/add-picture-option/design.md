@@ -45,8 +45,10 @@ export type PictureOption = {
   emptySentence: string;
   /** When the engine refuses the picture. Left out: "The picture could not be used. Choose another picture." */
   refusedSentence?: string;
-  /** The notice's text for a very large picture. Left out: "A picture this large makes the new file larger, and a phone may run out of memory. Save a smaller copy. You can still go ahead." */
+  /** The notice's text for a very large picture. Left out: "A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead." (decision 7) */
   largeAdvice?: string;
+  /** Said after "photo.jpg (24.6 MB) is too large to place on these pages." Left out: "Choose a smaller picture." (decision 8) */
+  tooLargeAdvice?: string;
   when?: { key: string; value: string };
 };
 ```
@@ -76,7 +78,8 @@ export type PictureOutcome = { kind: 'ready'; pixels: number } | { kind: 'damage
 export function pictureOutcome(bytes: Uint8Array, rule: PictureRule, fflate: { Inflate: InflateClass }): PictureOutcome;
 
 /** For an engine: the bytes when `value` is bytes whose outcome under the tool's own rule is ready; else undefined. */
-export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table = optionPictures): Uint8Array | undefined;
+/** The engine passes `optionPictures` as `table`: picture.ts imports only types from option-values.ts, so Image to PDF, which shares picture.ts, fetches no more files than before. */
+export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table: PictureTable): Uint8Array | undefined;
 ```
 
 `pictureOutcome`, in order: `readPicture` damaged or unsupported is that; a type not in `types` is damaged (the page sniffed it first, so only a file whose header lies reaches here); a PNG whose data does not fit (`pngDataFits`) or a JPG `jpegForPdf` cannot rebuild is damaged; else ready, with its width × height as stored. Size never refuses. Reading only, with the caps `picture.ts` already has; nothing is decoded and nothing kept.
@@ -119,7 +122,7 @@ pictures: Readonly<Record<string, PictureEntry>>;
   <p id={labelId} className={styles.label}>{option.label}</p>
   {error ? <p id={errorId} className={styles.error}>{error}</p> : null}
   {chosen ? <p id={chosenId} className={styles.chosen}>{chosen}</p> : null}
-  <FilePicker label={entry ? option.againLabel : option.pickLabel} accepts={rule.types} multiple={false} look="secondary"
+  <FilePicker label={entry ? option.againLabel : option.pickLabel} accepts={types} multiple={false} look="secondary"
               onFiles={(files) => onPick(files[0])} describedBy={[labelId, chosenId, errorId, hintId]} inputRef={focusRef} />
   <p id={hintId} className={styles.note}>{option.hint}</p>
 </div>
@@ -132,7 +135,7 @@ pictures: Readonly<Record<string, PictureEntry>>;
   - damaged: "broken.png is damaged and cannot be read. Choose another picture.";
   - unsupported: "arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.";
 - **The notice** (`pictureNotice`, beside them), for a ready picture over `noticeBytes` or `noticePixels`: a `Notice` under the field whose heading is "photo.jpg is 12.4 MB, with 24 million pixels." (`formatSize`, and pixels in millions with `number`), and whose text is "A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead." (the tool's words where it gives `largeAdvice`; Sign PDF names the signature). It is tied to the main button by `aria-describedby`, as Image to PDF's notice is, and holds nothing back. The hint names the notice sizes, so the visitor knows them before choosing.
-- **`optionsHold`'s signature** gains a last, optional argument: `optionsHold(tool, options, choices, texts?, pictures: State['pictures'] = {}, pictureTable = optionPictures)`, so its callers and tests that pass `texts` keep working; `ToolWorkspace` passes `state.pictures` and memoises on it too. `picturesToSend(options, choices, pictures, held)` is new beside it; `optionsToSend` and `jobOptions` are unchanged, as the bytes do not go in `options` on the page.
+- **`optionsHold`'s signature** gains two last, optional arguments, after the `drawings` table `add-drawing-option` added: `optionsHold(tool, options, choices, texts?, drawings?, pictures: State['pictures'] = {}, pictureTable = optionPictures)`, so its callers and tests that pass `texts` or `drawings` keep working; `ToolWorkspace` passes `state.pictures` and memoises on it too. `picturesToSend(options, choices, pictures, held)` is new beside it; `optionsToSend` and `jobOptions` are unchanged, as the bytes do not go in `options` on the page.
 - **The main button:** `optionsHold` gives, for a shown picture, `empty` with `emptySentence` when none is chosen, `reading` with "The picture is still being read." while read (both in the tied paragraph under the button), and the sentence above, by the field, for a problem (tied from there, as a text's is). The status region says "signature.png, 120 KB." once when ready, and each problem's sentence once when it appears.
 - **No preview:** "Look and feel" allows no image but page thumbnails of the visitor's file, and showing it would mean decoding it on the page or a second thumbnail path. The name and size say which picture was chosen.
 - **Drops and pastes** stay the tool's own files (`useFileDrop` is unchanged): a picture dropped on a PDF tool's page is refused as not a PDF, as now. Taking drops for the field was considered and dropped: a drop has no target field, and guessing by type would surprise.
