@@ -110,3 +110,42 @@ test('PDF to PNG: listing and converting the 500-page file blocks the page for n
   const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
   expect(long.filter((duration) => duration > 100)).toEqual([]);
 });
+
+test('Sign PDF: drawing a signature with the mouse blocks a CPU slowed four times for no more than 100 ms', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'CPU slowing is a Chromium feature');
+  await page.goto('/sign-pdf');
+  await page.waitForLoadState('networkidle');
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+  await page.locator('input[type=file]').first().setInputFiles(join(here, '../fixtures/text.pdf'));
+  await expect(page.getByRole('radio', { name: 'Draw it', exact: true })).toBeVisible({ timeout: 30000 });
+  await page.getByRole('radio', { name: 'Draw it', exact: true }).check();
+  const pad = page.getByRole('img', { name: 'Draw your signature' });
+  await pad.scrollIntoViewIfNeeded();
+  await expect(page.locator('astro-island ol > li img')).toHaveCount(1, { timeout: 30000 });
+  await page.waitForTimeout(1000);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await page.evaluate(() => {
+    const long: number[] = [];
+    (window as unknown as { longTasks: number[] }).longTasks = long;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) long.push(entry.duration);
+    }).observe({ type: 'longtask', buffered: false });
+  });
+  const box = (await pad.boundingBox())!;
+  // Ten strokes, each a loop of many small moves, as a signature is written.
+  for (let stroke = 0; stroke < 10; stroke++) {
+    await page.mouse.move(box.x + box.width * (0.05 + stroke * 0.09), box.y + box.height * 0.5);
+    await page.mouse.down();
+    for (let n = 1; n <= 40; n++) {
+      const angle = (n / 40) * Math.PI * 2;
+      await page.mouse.move(box.x + box.width * (0.05 + stroke * 0.09 + 0.04 * Math.sin(angle)), box.y + box.height * (0.5 - 0.35 * Math.sin(angle * 0.5) * Math.cos(angle)));
+    }
+    await page.mouse.up();
+  }
+  await page.getByRole('button', { name: 'Clear the drawing' }).click();
+  await page.waitForTimeout(1000);
+  const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  expect(long.filter((duration) => duration > 100)).toEqual([]);
+});

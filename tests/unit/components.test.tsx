@@ -517,7 +517,7 @@ describe('DrawingPad, a drawing of a test entry', () => {
     expect(button).toMatch(/>Clear the drawing<\/button>$/);
   });
 
-  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2', () => {
+  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2, at most 60% of a short screen tall', () => {
     const css = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.module.css', import.meta.url), 'utf8');
     const box = css.match(/\.box \{([^}]*)\}/)?.[1] ?? '';
     for (const rule of [
@@ -525,7 +525,9 @@ describe('DrawingPad, a drawing of a test entry', () => {
       'user-select: none;',
       '-webkit-user-select: none;',
       '-webkit-touch-callout: none;',
-      'width: 100%;',
+      // The column's width, or 150% of the screen's height, so at 5 to 2 it is never more than 60% of it (a phone turned sideways).
+      'width: min(100%, 150vh);',
+      'width: min(100%, 150svh);',
       'aspect-ratio: 5 / 2;',
       'border: 1px solid var(--control);',
       'border-radius: 4px;',
@@ -658,5 +660,72 @@ describe('PictureField, a picture of a test entry', () => {
     expect(css).toMatch(/\.chosen\s*{[^}]*overflow-wrap: anywhere;/);
     expect(css).toMatch(/\.note\s*{[^}]*color: var\(--muted\);/);
     expect(css).not.toMatch(/shadow|gradient|border-radius: (?:[5-9]|\d{2})/);
+  });
+});
+
+describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and PictureField", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { chosenValue, optionsHold, optionsToSend, picturesToSend, shownOptions } = await import('../../src/widget/options');
+  const { drawingRule, pictureRule } = await import('../../src/widget/option-values');
+  const widget = tools.find((tool) => tool.id === 'sign-pdf')!.widget!;
+  const options = widget.options!;
+  const [source, name, drawing, picture, page, position] = options;
+  if (source?.kind !== 'choice' || name?.kind !== 'text' || drawing?.kind !== 'drawing' || picture?.kind !== 'picture' || page?.kind !== 'choice' || position?.kind !== 'choice') {
+    throw new Error('Sign PDF lists its six options in the order of the design');
+  }
+
+  it('once the file is read: "How to add your signature" with "Type your name" chosen, the field "Your name", "Last page" and "Bottom right"; the pad and the picture field hidden', () => {
+    expect(shownOptions(options, {}).map((option) => option.key)).toEqual(['source', 'name', 'page', 'position']);
+    const how = renderToStaticMarkup(<ChoiceGroup option={source} value={chosenValue(source, {})} name="r9-source" onChoose={noop} />);
+    expect(how).toContain('<legend');
+    expect(how).toContain('How to add your signature</legend>');
+    expect([...how.matchAll(/<span>([^<]*)<\/span>/g)].map((match) => match[1])).toEqual(['Type your name', 'Draw it', 'Use a picture of it']);
+    expect(how).toMatch(/<input type="radio" name="r9-source" checked="" value="type"\/>/);
+    const field = renderToStaticMarkup(<TextField option={name} id="r9-name" raw="" onType={noop} onEnter={noop} />);
+    expect(field).toContain('<label for="r9-name">Your name</label>');
+    expect(field).toContain('>Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.</p>');
+    for (const [option, chosen, labels] of [
+      [page, 'last', ['Last page', 'First page', 'Every page']],
+      [position, 'bottom-right', ['Bottom left', 'Bottom centre', 'Bottom right', 'Top left', 'Top centre', 'Top right']],
+    ] as const) {
+      const html = renderToStaticMarkup(<ChoiceGroup option={option} value={chosenValue(option, {})} name={`r9-${option.key}`} onChoose={noop} />);
+      expect(chosenValue(option, {})).toBe(chosen);
+      expect([...html.matchAll(/<span>([^<]*)<\/span>/g)].map((match) => match[1])).toEqual(labels);
+    }
+    expect(renderToStaticMarkup(<ChoiceGroup option={page} value="last" name="r9-page" onChoose={noop} />)).toContain('Which pages to sign</legend>');
+    expect(renderToStaticMarkup(<ChoiceGroup option={position} value="bottom-right" name="r9-position" onChoose={noop} />)).toContain('Where on the page</legend>');
+  });
+
+  it('the main button waits with each way\'s sentence until the way chosen has a signature, and only that way\'s input is sent', () => {
+    const file = new File(['x'], 'qz7sig.png', { type: 'image/png' });
+    const ready = { picture: { name: 'qz7sig.png', size: 1, pixels: 1, status: 'ready' as const } };
+    expect(optionsHold('sign-pdf', options, {})).toEqual({ key: 'name', kind: 'empty', sentence: 'Type your name first.' });
+    expect(optionsHold('sign-pdf', options, { source: 'draw' })).toEqual({ key: 'drawing', kind: 'empty', sentence: 'Draw your signature first.' });
+    expect(optionsHold('sign-pdf', options, { source: 'picture' })).toEqual({ key: 'picture', kind: 'empty', sentence: 'Choose a picture of your signature first.' });
+    const all = { name: 'Jane Doe', drawing: [[1, 2, 3, 4]] };
+    expect(optionsHold('sign-pdf', options, all)).toBeNull();
+    expect(optionsHold('sign-pdf', options, { ...all, source: 'draw' })).toBeNull();
+    expect(optionsHold('sign-pdf', options, { ...all, source: 'picture' }, undefined, undefined, ready)).toBeNull();
+    expect(optionsToSend(options, all)).toEqual({ source: 'type', name: 'Jane Doe', page: 'last', position: 'bottom-right' });
+    expect(optionsToSend(options, { ...all, source: 'draw' })).toEqual({ source: 'draw', drawing: [[1, 2, 3, 4]], page: 'last', position: 'bottom-right' });
+    expect(optionsToSend(options, { ...all, source: 'picture' })).toEqual({ source: 'picture', page: 'last', position: 'bottom-right' });
+    const held = new Map([['picture', file]]);
+    expect(picturesToSend(options, { source: 'picture' }, ready, held)).toEqual({ picture: file });
+    expect(picturesToSend(options, { source: 'type' }, ready, held)).toEqual({});
+    // A refused letter names it, followed by the tool's way forward.
+    expect(optionsHold('sign-pdf', options, { name: 'Łukasz' })?.sentence).toBe('Ł cannot be used. To sign in another script, choose “Draw it” or “Use a picture of it” above.');
+  });
+
+  it('the pad: "Draw your signature", its hint naming typing as the keyboard way, and "Clear the drawing"; the picture field: its label, button and hint', () => {
+    const pad = renderToStaticMarkup(<DrawingPad option={drawing} id="r9-drawing" drawing={[]} rule={drawingRule('sign-pdf', 'drawing')!} onDraw={noop} onClear={noop} />);
+    expect(pad).toContain('>Draw your signature</p>');
+    expect(pad).toContain('>Use a finger, a mouse or a pen in the box. To use a keyboard, choose “Type your name” above.</p>');
+    expect(pad).toContain('>Clear the drawing</button>');
+    const field = renderToStaticMarkup(<PictureField option={picture} id="r9-picture" types={pictureRule('sign-pdf', 'picture')!.types} picked={false} onPick={noop} />);
+    expect(field).toContain('>Picture of your signature</p>');
+    expect(field).toContain('Choose a picture');
+    expect(field).toContain('accept="image/jpeg,image/png"');
+    expect(field).toContain('>A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the file large. A picture with a see-through background works best.</p>');
+    expect(field).not.toContain('<img');
   });
 });

@@ -10,11 +10,15 @@
 /* The box: the column's width at 5 to 2, the site's control edge and 4px corners, no fill, no
    shadow and no guide line. Lines are painted in its text colour, read at each paint, so dark mode
    needs no colour of its own. It takes touch for itself: a finger drawing in it never scrolls or
-   zooms the page, selects text or opens the long-press menu. */
+   zooms the page, selects text or opens the long-press menu. On a screen wider than tall and short,
+   such as a phone turned sideways, it is at most 60% of the screen's height, still 5 to 2, so there
+   is room above or below it to scroll; the second width is for browsers that know the small
+   viewport unit, which leaves out the browser's own bars. */
 .box {
   display: block;
   box-sizing: border-box;
-  width: 100%;
+  width: min(100%, 150vh);
+  width: min(100%, 150svh);
   aspect-ratio: 5 / 2;
   border: 1px solid var(--control);
   border-radius: 4px;

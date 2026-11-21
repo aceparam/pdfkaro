@@ -155,6 +155,14 @@ Left out, every page is chosen, so Add page numbers and Watermark are unchanged.
 
 No question restates the title, nothing is in capitals for emphasis, and it is checked against "Banned patterns".
 
+### 5. Changed while building
+
+- **The update may carry the shared streams as base64** (2c): the new file holds a picture at its encoded size, but qpdf's JSON update holds it as base64, a third larger. Counting the base64 against the budget would refuse a 12.4 MB JPG on a small PDF, which the spec's "very large picture" scenario says works, and counting the raw size alone would let the update pass the budget and fail with the damaged-file sentence. So `sharedBytes` is counted once at its encoded size against `sizeLimit`, as the file will hold it (the check before the first run, giving `reason: 'shared'`), and the update alone is allowed that base64 overhead above the budget (`sharedText(bytes)`: the base64 length and 4 KB for the dictionaries). The new file's cap is unchanged.
+- **A raw stream's base64 is made once per job** (2b): each run registers the picture over the same bytes, and `fromPdfLib` turns a raw stream's bytes into base64 for its JSON entry; a `WeakMap` by the bytes keeps that text, so a 120,000-page file signed on every page with an 8 MB picture does not base64 it in each of its 60 runs. The identical entry is still written once, as before.
+- **`fflate` is its own file** in the built site, not inside pdf-lib's (page weight, below): reading a picture fetches `fflate`'s file, and the main button fetches pdf-lib's, whichever way the signature was made, so the files fetched by the end of a job are the same for the three ways.
+- **The drawing pad's height on a short, wide screen** (UX, left for this change by `add-drawing-option`): on a phone turned sideways the pad at the column's width filled most of the screen's height, leaving little room to scroll past it. Its width is now `min(100%, 150vh)` (and `150svh` where the browser knows it), so at 5 to 2 it is never more than 60% of the screen's height; nothing changes at 360px or 1280px upright. A shared CSS change, named in the pull request. Repainting sharp after a change of pixel density goes to the hand checks in issue #7.
+- **The 16-million-pixel gradient** made in the unit test packs to about 0.4 MB, not the experiment's 3.2 MB, as its rows are filtered; so task 3.2 also measures a noisy, photo-like PNG of the same size, which is the figure that matters.
+
 ## Dependencies
 
 No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 Sep 2026, about 243 KB by gzip in its own chunk, with `fflate`) and qpdf 12.2.0 (`@neslinesli93/qpdf-wasm` 0.3.1, ISC wrapper, Apache-2.0 qpdf) are already shipped. Times Italic is one of the 14 standard PDF fonts, which readers supply; nothing is put inside the file. The `@cantoo/pdf-lib` line in `LICENSES.md` gains "and Sign PDF's signature" in its reason.
@@ -163,7 +171,7 @@ No new dependency, and no font. `@cantoo/pdf-lib` 2.11.1 (MIT, last release 15 S
 
 - **Before a pick:** the same island; the entry's option words add about 1.5 KB of props before compression. `npm run weigh` must stay under 100 KB.
 - **After a pick:** what Watermark fetches (the worker, the workspace chunk, qpdf and its WebAssembly, `inspect`, `plain`, PDF.js and its data for the first page's thumbnail), and the engine with `stamp` and `picture`.
-- **When a picture is chosen,** `inspectPicture` asks for `fflate` whatever the picture's type, which fetches pdf-lib's chunk early; **at the main button** pdf-lib's chunk in any case. So the files fetched by the end of a job are the same whichever way the signature was made. No other WebAssembly.
+- **When a picture is chosen,** `inspectPicture` asks for `fflate` whatever the picture's type, which fetches `fflate`'s own file (changed while building: it is not in pdf-lib's chunk); **at the main button** pdf-lib's chunk in any case, which imports `fflate`. So the files fetched by the end of a job are the same whichever way the signature was made. No other WebAssembly.
 - `check-worker.mjs` checks the engine stays out of the worker file, is loaded late and holds no pdf-lib code.
 
 ## Threats
