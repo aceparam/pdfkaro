@@ -435,7 +435,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>
-          <p>{failureSentence(state.failure, words)}</p>
+          <p>{failureSentence(state.failure, words, state.choices)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
               {words.multiple ? 'Go back to your files' : 'Go back to your file'}

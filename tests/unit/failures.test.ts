@@ -166,6 +166,15 @@ describe('the sentence for a text the engine refused', () => {
     expect(failureSentence('text-refused', { options: [{ ...text, refusedSentence: own }, { ...text, key: 'other', refusedSentence: 'Not this.' }] })).toBe(own);
   });
 
+  it('uses the words of the text that is shown, never a hidden one', () => {
+    const forA = { ...text, key: 'textA', refusedSentence: 'A could not be used.', when: { key: 'position', value: 'a' } };
+    const forB = { ...text, key: 'textB', refusedSentence: 'B could not be used.', when: { key: 'position', value: 'b' } };
+    const options = [position, forA, forB];
+    expect(failureSentence('text-refused', { options })).toBe('A could not be used.');
+    expect(failureSentence('text-refused', { options }, { position: 'a' })).toBe('A could not be used.');
+    expect(failureSentence('text-refused', { options }, { position: 'b' })).toBe('B could not be used.');
+  });
+
   it('leaves the other failures as they were for a tool with a text', () => {
     expect(failureSentence('engine', { options: [text] })).toBe('Something went wrong. Try again.');
   });

@@ -41,8 +41,9 @@ Built on `add-tool-options` and `add-text-option` (archived), after `add-waterma
 - [x] 9.1 Run the tool checks against every file in `tests/fixtures/`: not applicable, as no engine changes; record that in the pull request, with the fixtures README unchanged
 - [x] 9.2 `LICENSES.md`: no change, as no dependency is added
 - [x] 9.3 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests and `npm run spec`; verify each passes
-- [ ] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one condition per option, on one earlier choice's value; the option shown after the group, not inside it; nothing announced and focus not moved; a hidden option kept but not held or sent; the first option has no condition) and that it is merged before `add-drawing-option`, `add-picture-option` and `add-sign-pdf`
+- [x] 9.4 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (one condition per option, on one earlier choice's value; the option shown after the group, not inside it; nothing announced and focus not moved; a hidden option kept but not held or sent; the first option has no condition) and that it is merged before `add-drawing-option`, `add-picture-option` and `add-sign-pdf`
 
 ## Workflow follow-up
 
 - After merge, archive the change with `/opsx:archive` and note it in "Where the project stands" in `CLAUDE.md`; then build `add-drawing-option` on top of it.
+- [x] 9.5 Stage 2 review fix (code reviewer): a `text-refused` failure takes its sentence from the first *shown* text (`failureSentence` gains `choices` and reads `shownOptions`), so a hidden text's words never apply; a unit test in `tests/unit/failures.test.ts` covers two conditional texts
