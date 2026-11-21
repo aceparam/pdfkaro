@@ -117,7 +117,7 @@ function isOutcome(value: unknown): boolean {
   }
 }
 
-const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large', 'too-many-pictures', 'output-limit'];
+const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large', 'too-many-pictures', 'output-limit', 'text-refused'];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
 export function isFromWorker(value: unknown): value is FromWorker {

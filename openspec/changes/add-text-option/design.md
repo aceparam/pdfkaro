@@ -23,8 +23,6 @@
 ### 1. The registry type
 
 ```ts
-import type { CharacterRule } from '../widget/option-values';
-
 /** A choice of one value from several. Its values are also listed in src/widget/option-values.ts. */
 export type ChoiceOption = { kind: 'choice'; key: string; legend: string; choices: { value: string; label: string }[]; initial: string };
 
@@ -50,7 +48,7 @@ export type ToolOption = ChoiceOption | TextOption;
 ```
 
 - **The limit and the rule are not in the registry** (the architect, stage 1). They are written once, in `optionTexts`, because the engine must read them and engines do not import the registry. The widget looks them up by the tool's id and the option's key (decision 5); the registry keeps only words. A choice's values stay in both places, checked equal by the test, as `add-tool-options` built them.
-- `CharacterRule` is declared in `option-values.ts`, beside what each rule means, and the registry imports it as a type only, so the registry stays data and types.
+- `CharacterRule` is declared in `option-values.ts`, beside what each rule means. The registry does not import it, since a text there holds no rule; the registry test reads it to check each text's line.
 - **A text starts empty and is the job's input,** so the main button waits (decision 6). A starting text was considered: it would let the main button work untouched, as `SPEC.md` "Tool page anatomy" 4 asks of options, but for Watermark it means words the visitor did not choose ("Draft") going onto their file if they press at once, and for a typed signature there is no sensible default. The owner decided that Extract pages starts with no page chosen (13 Nov 2026); that the pages chosen are the job's input and not an option is the agent's reading, recorded in `CLAUDE.md`. This change reads a typed text the same way; that is the agent's reading too, and the pull request names it for the owner. A later tool that needs an optional text with a default adds `initial` in its own change.
 - `ChoiceOption` is `add-tool-options`' type, unchanged, now named.
 
@@ -113,7 +111,7 @@ For every tool, beside the choice checks of `add-tool-options`:
 
 Plain functions, tested in Node, each given the tool's id where it needs a rule:
 - `chosenValue(option, choices)` for a choice, as now; `typedText(option, choices)` for a text: the raw string stored, else `''`;
-- `optionsToSend(tool, options, choices)`: a choice's value, and a text's cleaned text (`cleanText`), by key. The main button cannot start a job while a text has a problem, and the engine checks again;
+- `optionsToSend(options, choices)`: a choice's value, and a text's cleaned text (`cleanText`), by key. It takes no tool id, as cleaning needs no rule, so its signature and `jobOptions`' stay as `add-tool-options` built them. The main button cannot start a job while a text has a problem, and the engine checks again;
 - `textSentence(option, rule, problem)`:
   - `characters` with one to three refused characters, all visible letters or marks of the Latin script or common signs (not a control, format, combining or white-space character, and not of another script): "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." ("Ł cannot be used.", "Ł, ź and ő cannot be used.");
   - `characters` otherwise (another script, more than three, or anything invisible): "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks.", with no list, since a list of Devanagari or Arabic letters, or of invisible marks, says nothing useful; the first sentence says what happened, as the named list does (the UX reviewer, stage 1);
@@ -152,13 +150,13 @@ Plain functions, tested in Node, each given the tool's id where it needs a rule:
   - while a text is too long or has characters it cannot take, the sentence is by the field, the button is `aria-disabled`, and its `aria-describedby` points at the sentence's own id (`${id}-error`), so the button reads the sentence alone, without the hint. It is not repeated under the button, so it is on screen once;
   - in both cases the button stays focusable and a press does nothing, as now. `ready` adds `optionsHold(...) === null` to what it checks.
 - **Enter** in the field calls the same handler as the main button, which starts the job only when the button works, as Enter in the password field presses its button.
-- **Said once:** an effect keyed on the first problem's key and kind (not its sentence, which changes with every character past the limit) says the sentence through the status region when a `characters` or `too-long` problem appears or changes kind. It says nothing when the problem goes or for `empty`, which is tied to the button from the start. Focus never moves for it, so it is announced once.
+- **Said once:** the field's typing handler works out the problem the new text will have and, when its key and kind (not its sentence, which changes with every character past the limit) differ from the problem shown, says the sentence through the status region, so a `characters` or `too-long` problem is said when it appears or changes kind. It is done in the handler, not in an effect, because the repo's lint forbids setting state in an effect body, and only typing can make such a problem appear. It says nothing when the problem goes or for `empty`, which is tied to the button from the start. Focus never moves for it, so it is announced once.
 - **Focus:** `optionRef` goes on the first option's focus target: the chosen radio button of a choice, or the field of a text. `focusMovesToOptions` is unchanged, so focus moves once per set of files read, only while still free, never after Cancel or "Go back to your file".
 - **Tab** from the field reaches the next option, then "Choose another file" in a one-file tool's actions row, then the main button, as for a choice.
 
 ### 7. Sending: `useToolRun`
 
-`jobOptions(preset, jobOption(), toolId, words.options, state.choices)` now sends a text's cleaned value through `optionsToSend`. A later tool's engine checks it with `acceptedText` before it reads the file, and throws `TextRefused` if it does not take it.
+`jobOptions(preset, jobOption(), words.options, state.choices)`, unchanged, now sends a text's cleaned value through `optionsToSend`. A later tool's engine checks it with `acceptedText` before it reads the file, and throws `TextRefused` if it does not take it.
 
 ## Page weight and late loading
 

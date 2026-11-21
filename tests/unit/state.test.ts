@@ -230,6 +230,28 @@ describe('what the options show', () => {
     expect(reducer(chosen, { type: 'removed', id: 'a' })).toBe(initialState);
   });
 
+  it('records a text exactly as typed, only while listing, and keeps it through Cancel, a failure and a replaced file', () => {
+    const typed = play(add('a'), ready(), set(' Draft  copy ', 'text'));
+    expect(typed.choices).toEqual({ text: ' Draft  copy ' });
+    expect(play(set('Draft', 'text')).choices).toEqual({});
+    const working = reducer(typed, { type: 'started' });
+    expect(reducer(working, set('Other', 'text'))).toBe(working);
+    const kept = { text: ' Draft  copy ' };
+    expect(reducer(working, { type: 'back-to-files' }).choices).toEqual(kept);
+    expect([{ type: 'failed', failure: 'text-refused' } as Action, { type: 'back-to-files' } as Action].reduce(reducer, working).choices).toEqual(kept);
+    expect([add('b'), { type: 'removed', id: 'a' } as Action, ready('b')].reduce(reducer, typed).choices).toEqual(kept);
+    // A long paste is held as it is; it is refused, never sent.
+    const long = 'x'.repeat(100_000);
+    expect(reducer(typed, set(long, 'text')).choices.text).toHaveLength(100_000);
+  });
+
+  it('forgets a text when the last file is removed and on Start again', () => {
+    const typed = play(add('a'), ready(), set('Draft', 'text'));
+    expect(reducer(typed, { type: 'removed', id: 'a' })).toBe(initialState);
+    const again = [{ type: 'started' } as Action, { type: 'finished', result: { name: 'a.pdf', size: 1 } } as Action, { type: 'reset' } as Action].reduce(reducer, typed);
+    expect(again.choices).toEqual({});
+  });
+
   it('goes back to every option at its start on Start again', () => {
     const state = play(add('a'), ready(), set('top-right'), { type: 'started' }, { type: 'finished', result: { name: 'a.pdf', size: 1 } }, { type: 'reset' });
     expect(state).toEqual(initialState);

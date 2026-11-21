@@ -16,8 +16,11 @@ const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
 /** What the page says when a new file would grow far past what drawing on it adds (stamp.ts's `OutputLimit`). */
 export const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
 
+/** What the page says when the engine refuses a text, for a tool with no words of its own for it. */
+export const textRefusedSentence = 'The text could not be used. Check it and try again.';
+
 /** The one sentence for a failure: what happened, and the one thing to try, in the tool's own words where it has them. */
-export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice'>): string {
+export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options'>): string {
   if (kind === 'too-many-files' || kind === 'zip-too-large') {
     return zipLimitSentence(kind === 'too-many-files' ? 'files' : 'bytes', words.zipLimitAdvice ?? 'Try a smaller job.');
   }
@@ -25,6 +28,11 @@ export function failureSentence(kind: FailureKind, words: Pick<ToolWidgetWords, 
   if (kind === 'too-many-pictures') return tooManyPicturesSentence();
   // Only a broken or crafted file reaches the drawing step's budget, so it fails the same on a computer: its own advice.
   if (kind === 'output-limit') return outputLimitSentence;
+  // The page should never send a text the engine refuses; if the two disagree, the first text's own words, else the shared ones.
+  if (kind === 'text-refused') {
+    const text = words.options?.find((option) => option.kind === 'text');
+    return (text?.kind === 'text' ? text.refusedSentence : undefined) ?? textRefusedSentence;
+  }
   if (kind === 'memory' && words.memoryAdvice) return `Your browser ran out of memory. ${words.memoryAdvice}`;
   return shared[kind];
 }

@@ -7,7 +7,8 @@ import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
-import { ChoiceGroup } from '../../src/components/ToolWorkspace/ToolWorkspace';
+import { ChoiceGroup } from '../../src/components/ChoiceGroup/ChoiceGroup';
+import { errorId, TextField } from '../../src/components/TextField/TextField';
 
 const noop = () => {};
 
@@ -328,6 +329,8 @@ describe("ChoiceGroup with Add page numbers' entry", async () => {
   const { tools } = await import('../../src/tools/registry');
   const { chosenValue } = await import('../../src/widget/options');
   const option = tools.find((tool) => tool.id === 'add-page-numbers')!.widget!.options![0]!;
+  // An option is now a choice or a text; Add page numbers' first option is a choice.
+  if (option.kind !== 'choice') throw new Error('Add page numbers lists a choice first');
   // As the workspace draws it before anything is chosen: the option's starting value.
   const html = renderToStaticMarkup(<ChoiceGroup option={option} value={chosenValue(option, {})} name="r2-position" onChoose={noop} />);
 
@@ -339,5 +342,75 @@ describe("ChoiceGroup with Add page numbers' entry", async () => {
     expect(html.match(/type="radio" name="r2-position"/g)).toHaveLength(6);
     expect(html.match(/checked=""/g)).toHaveLength(1);
     expect(html).toMatch(/checked="" value="bottom-centre"/);
+  });
+});
+
+describe('TextField, a text of a test entry', () => {
+  const option = {
+    kind: 'text' as const,
+    key: 'text',
+    label: 'Watermark text',
+    hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+    emptySentence: 'Type the watermark text first.',
+  };
+  const html = renderToStaticMarkup(<TextField option={option} id="r3-text" raw="Draft" onType={noop} onEnter={noop} />);
+  const sentence = 'Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks.';
+  const wrong = renderToStaticMarkup(<TextField option={option} id="r3-text" raw="Łódź" error={sentence} onType={noop} onEnter={noop} />);
+  const input = (markup: string) => markup.match(/<input [^>]*\/>/)?.[0] ?? '';
+
+  it("uses the site's field style, with a visible label tied to the field", () => {
+    expect(html).toMatch(/^<div class="field field-short [^"]+"><label for="r3-text">Watermark text<\/label><input /);
+    expect(input(html)).toContain('id="r3-text"');
+  });
+
+  it('is one line of text with no name, no form, no length cap, no form memory and no spell checking, and labels Enter "Go"', () => {
+    const field = input(html);
+    expect(field).toContain('type="text"');
+    // HTML attribute names are read without regard to case; React writes these in camel case.
+    expect(field).toMatch(/\sautocomplete="off"/i);
+    expect(field).toMatch(/\sspellcheck="false"/i);
+    expect(field).toMatch(/\senterkeyhint="go"/i);
+    expect(field).toContain('value="Draft"');
+    expect(field).not.toMatch(/\sname=/);
+    expect(field).not.toMatch(/maxlength/i);
+    expect(html).not.toContain('<form');
+  });
+
+  it('with nothing wrong: no sentence, not invalid, and the hint read with the field', () => {
+    expect(input(html)).not.toContain('aria-invalid');
+    expect(input(html)).toContain('aria-describedby="r3-text-hint"');
+    expect(html).not.toContain(errorId('r3-text'));
+    expect(html).toMatch(/<\/label><input [^>]*\/><p id="r3-text-hint" class="[^"]+">Up to 50 characters/);
+  });
+
+  it('with something wrong: the sentence between the label and the field, invalid, and read before the hint', () => {
+    expect(errorId('r3-text')).toBe('r3-text-error');
+    expect(wrong).toMatch(/<\/label><p id="r3-text-error" class="[^"]+">Ł and ź cannot be used\. [^<]+<\/p><input /);
+    expect(input(wrong)).toContain('aria-invalid="true"');
+    expect(input(wrong)).toContain('aria-describedby="r3-text-error r3-text-hint"');
+    expect(wrong.indexOf('r3-text-error')).toBeLessThan(wrong.indexOf('<input'));
+    expect(wrong.indexOf('id="r3-text-hint"')).toBeGreaterThan(wrong.indexOf('<input'));
+  });
+
+  it('passes on what is typed, does what the main button does on Enter only, and puts the focus ref on the field', () => {
+    const typed: string[] = [];
+    let entered = 0;
+    const ref = { current: null };
+    const field = TextField({ option, id: 'r3-text', raw: '', onType: (value) => typed.push(value), onEnter: () => (entered += 1), focusRef: ref });
+    const children = (field.props as { children: (ReactElement | null)[] }).children;
+    const inputs = children.filter((child): child is ReactElement => child !== null && child.type === 'input');
+    expect(inputs).toHaveLength(1);
+    const props = inputs[0]?.props as {
+      onChange(event: { currentTarget: { value: string } }): void;
+      onKeyDown(event: { key: string; preventDefault(): void }): void;
+    };
+    expect((inputs[0] as unknown as { props: { ref?: unknown } }).props.ref).toBe(ref);
+    props.onChange({ currentTarget: { value: ' Draft copy ' } });
+    expect(typed).toEqual([' Draft copy ']);
+    let prevented = 0;
+    props.onKeyDown({ key: 'a', preventDefault: () => (prevented += 1) });
+    expect([entered, prevented]).toEqual([0, 0]);
+    props.onKeyDown({ key: 'Enter', preventDefault: () => (prevented += 1) });
+    expect([entered, prevented]).toEqual([1, 1]);
   });
 });

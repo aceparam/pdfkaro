@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type Tool, type ToolOption } from '../../src/tools/registry';
-import { optionValues } from '../../src/widget/option-values';
+import { groups, tools, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import { characterRules, optionTexts, optionValues, textRule, type TextRule } from '../../src/widget/option-values';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
@@ -439,39 +439,75 @@ const itemKeys = new Set([
 ]);
 
 type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
+type Texts = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
+
+/** A word the widget shows: not empty, and plain (no exclamation mark). */
+const plain = (words: string | undefined) => words !== undefined && words.trim() !== '' && !words.includes('!');
 
 /**
  * What is wrong with a tool's options, as plain sentences; none for a tool whose options are sound.
  * Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
  */
-function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values): string[] {
+function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values, texts: Texts = optionTexts): string[] {
   const options = tool.widget?.options ?? [];
   const problems: string[] = [];
   const keys = options.map((option) => option.key);
   if (new Set(keys).size !== keys.length) problems.push('an option key is used twice');
   for (const option of options) {
-    const listed = option.choices.map((choice) => choice.value);
-    if (option.kind !== 'choice') problems.push(`${option.key}: unknown kind`);
-    if (!/^[a-z][a-zA-Z0-9]*$/.test(option.key)) problems.push(`${option.key}: the key is not a plain word`);
-    if (option.legend.trim() === '' || option.legend.includes('!')) problems.push(`${option.key}: the legend is empty or not plain`);
-    if (listed.length < 2) problems.push(`${option.key}: fewer than two values`);
-    if (new Set(listed).size !== listed.length) problems.push(`${option.key}: a value is listed twice`);
-    if (option.choices.some((choice) => choice.label.trim() === '' || choice.label.includes('!'))) problems.push(`${option.key}: a value has no plain label`);
-    if (!listed.includes(option.initial)) problems.push(`${option.key}: the starting value is not among the values`);
-    const accepted = Object.hasOwn(values, tool.id) && Object.hasOwn(values[tool.id]!, option.key) ? values[tool.id]![option.key]! : undefined;
-    if (!accepted || accepted.length !== listed.length || [...accepted].sort().join('\n') !== [...listed].sort().join('\n')) {
-      problems.push(`${option.key}: the values are not those of option-values.ts`);
+    if (option.kind === 'choice') {
+      const listed = option.choices.map((choice) => choice.value);
+      if (option.legend.trim() === '' || option.legend.includes('!')) problems.push(`${option.key}: the legend is empty or not plain`);
+      if (listed.length < 2) problems.push(`${option.key}: fewer than two values`);
+      if (new Set(listed).size !== listed.length) problems.push(`${option.key}: a value is listed twice`);
+      if (option.choices.some((choice) => choice.label.trim() === '' || choice.label.includes('!'))) problems.push(`${option.key}: a value has no plain label`);
+      if (!listed.includes(option.initial)) problems.push(`${option.key}: the starting value is not among the values`);
+      const accepted = Object.hasOwn(values, tool.id) && Object.hasOwn(values[tool.id]!, option.key) ? values[tool.id]![option.key]! : undefined;
+      if (!accepted || accepted.length !== listed.length || [...accepted].sort().join('\n') !== [...listed].sort().join('\n')) {
+        problems.push(`${option.key}: the values are not those of option-values.ts`);
+      }
+    } else if (option.kind === 'text') {
+      problems.push(...textProblems(tool.id, option, texts));
+    } else {
+      problems.push(`${(option as { key: string }).key}: unknown kind`);
     }
+    if (!/^[a-z][a-zA-Z0-9]*$/.test(option.key)) problems.push(`${option.key}: the key is not a plain word`);
     if (itemKeys.has(option.key)) problems.push(`${option.key}: the key is one the page's items send`);
     for (const page of tool.pages) {
       if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
     }
   }
-  // Every accepted-values line belongs to an option the registry shows.
+  // Every accepted-values line belongs to a choice the registry shows, and every text line to a text.
+  const kindOf = (key: string) => options.find((option) => option.key === key)?.kind;
   if (Object.hasOwn(values, tool.id)) {
     for (const key of Object.keys(values[tool.id]!)) {
-      if (!keys.includes(key)) problems.push(`${key}: in option-values.ts but not an option of the tool`);
+      if (kindOf(key) !== 'choice') problems.push(`${key}: in option-values.ts but not an option of the tool`);
     }
+  }
+  if (Object.hasOwn(texts, tool.id)) {
+    for (const key of Object.keys(texts[tool.id]!)) {
+      if (kindOf(key) !== 'text') problems.push(`${key}: in optionTexts but not a text of the tool`);
+    }
+  }
+  return problems;
+}
+
+/** What is wrong with one text: its words, and its line in optionTexts. */
+function textProblems(toolId: string, option: TextOption, texts: Texts): string[] {
+  const problems: string[] = [];
+  if (!plain(option.label)) problems.push(`${option.key}: the label is empty or not plain`);
+  if (!plain(option.hint)) problems.push(`${option.key}: the hint is empty or not plain`);
+  if (!plain(option.emptySentence)) problems.push(`${option.key}: the empty sentence is empty or not plain`);
+  if (option.refusedSentence !== undefined && !plain(option.refusedSentence)) problems.push(`${option.key}: the refused sentence is empty or not plain`);
+  const rule = textRule(toolId, option.key, texts);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionTexts`);
+    return problems;
+  }
+  if (!Number.isInteger(rule.maxLength) || rule.maxLength < 1 || rule.maxLength > 200) problems.push(`${option.key}: the most characters is not a whole number from 1 to 200`);
+  if (!Object.hasOwn(characterRules, rule.characters)) problems.push(`${option.key}: the character rule is not known`);
+  // "Up to 50 characters": a hint that names a number of characters names the limit, so the two cannot drift apart.
+  for (const match of option.hint.matchAll(/(\d[\d,]*)\s+characters?\b/g)) {
+    if (Number(match[1]!.replaceAll(',', '')) !== rule.maxLength) problems.push(`${option.key}: the hint names ${match[1]} characters, not the most characters`);
   }
   return problems;
 }
@@ -545,5 +581,89 @@ describe('options', () => {
 
   it('fail when a page preset uses an option key, so a choice never replaces what the page promises', () => {
     expect(optionProblems(entry([position], { position: 'top-right' }), values)).toContain('position: the preset of merge-pdf uses the key');
+  });
+});
+
+describe('texts', () => {
+  const words: TextOption = {
+    kind: 'text',
+    key: 'text',
+    label: 'Watermark text',
+    hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+    emptySentence: 'Type the watermark text first.',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf')!;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({
+    ...merge,
+    id: 'test-options',
+    pages: [{ ...merge.pages[0]!, preset }],
+    widget: { ...merge.widget!, options },
+  });
+  const texts: Texts = { 'test-options': { text: { maxLength: 50, characters: 'standard-font' } } };
+
+  it('are sound for every tool, and optionTexts names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts), tool.id).toEqual([]);
+    for (const id of Object.keys(optionTexts)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry, alone, with its own refused sentence, or beside a choice', () => {
+    expect(optionProblems(entry([words]), {}, texts)).toEqual([]);
+    expect(optionProblems(entry([{ ...words, refusedSentence: 'This watermark text could not be used. Check it and try again.' }]), {}, texts)).toEqual([]);
+    const position: ToolOption = { kind: 'choice', key: 'position', legend: 'Where it goes', choices: [{ value: 'top', label: 'Top' }, { value: 'bottom', label: 'Bottom' }], initial: 'top' };
+    expect(optionProblems(entry([position, words]), { 'test-options': { position: ['top', 'bottom'] } }, texts)).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(optionProblems(entry([{ ...words, label: ' ' }]), {}, texts)).toContain('text: the label is empty or not plain');
+    expect(optionProblems(entry([{ ...words, hint: '' }]), {}, texts)).toContain('text: the hint is empty or not plain');
+    expect(optionProblems(entry([{ ...words, emptySentence: 'Type it first!' }]), {}, texts)).toContain('text: the empty sentence is empty or not plain');
+    expect(optionProblems(entry([{ ...words, refusedSentence: ' ' }]), {}, texts)).toContain('text: the refused sentence is empty or not plain');
+  });
+
+  it('fail when the key is not a plain word, is used twice, is a preset key or one the items send', () => {
+    expect(optionProblems(entry([{ ...words, key: 'the text' }]), {}, { 'test-options': { 'the text': texts['test-options']!.text! } })).toContain(
+      'the text: the key is not a plain word',
+    );
+    expect(optionProblems(entry([words, { ...words, label: 'Again' }]), {}, texts)).toContain('an option key is used twice');
+    expect(optionProblems(entry([words], { text: 'Draft' }), {}, texts)).toContain('text: the preset of merge-pdf uses the key');
+    expect(optionProblems(entry([{ ...words, key: 'order' }]), {}, { 'test-options': { order: texts['test-options']!.text! } })).toContain(
+      "order: the key is one the page's items send",
+    );
+  });
+
+  it('fail with no line in optionTexts, or a line that belongs to no text', () => {
+    expect(optionProblems(entry([words]), {}, {})).toContain('text: no line in optionTexts');
+    expect(optionProblems(entry([words]), {}, { 'test-options': { other: texts['test-options']!.text! } })).toContain('text: no line in optionTexts');
+    expect(optionProblems(entry([words]), {}, { 'test-options': { ...texts['test-options']!, size: texts['test-options']!.text! } })).toContain(
+      'size: in optionTexts but not a text of the tool',
+    );
+    // A text's key is not a choice's line, and the reverse.
+    expect(optionProblems(entry([words]), { 'test-options': { text: ['a', 'b'] } }, texts)).toContain('text: in option-values.ts but not an option of the tool');
+    const position: ToolOption = { kind: 'choice', key: 'position', legend: 'Where it goes', choices: [{ value: 'top', label: 'Top' }, { value: 'bottom', label: 'Bottom' }], initial: 'top' };
+    expect(
+      optionProblems(entry([position]), { 'test-options': { position: ['top', 'bottom'] } }, { 'test-options': { position: texts['test-options']!.text! } }),
+    ).toContain('position: in optionTexts but not a text of the tool');
+  });
+
+  it('fail when the most characters is not a whole number from 1 to 200, or the rule is not known', () => {
+    const limit = 'text: the most characters is not a whole number from 1 to 200';
+    for (const maxLength of [0, 201, 2.5, Number.NaN]) {
+      expect(optionProblems(entry([{ ...words, hint: 'On one line.' }]), {}, { 'test-options': { text: { maxLength, characters: 'standard-font' } } })).toContain(limit);
+    }
+    expect(optionProblems(entry([{ ...words, hint: 'On one line.' }]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toEqual([]);
+    const unknown = { maxLength: 50, characters: 'any' as TextRule['characters'] };
+    expect(optionProblems(entry([words]), {}, { 'test-options': { text: unknown } })).toContain('text: the character rule is not known');
+    const inherited = { maxLength: 50, characters: 'toString' as TextRule['characters'] };
+    expect(optionProblems(entry([words]), {}, { 'test-options': { text: inherited } })).toContain('text: the character rule is not known');
+  });
+
+  it('fail when the hint names a number of characters other than the most characters', () => {
+    expect(optionProblems(entry([words]), {}, { 'test-options': { text: { maxLength: 40, characters: 'standard-font' } } })).toContain(
+      'text: the hint names 50 characters, not the most characters',
+    );
+    const long = { ...words, hint: 'Up to 1,200 characters.' };
+    expect(optionProblems(entry([long]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toContain(
+      'text: the hint names 1,200 characters, not the most characters',
+    );
   });
 });

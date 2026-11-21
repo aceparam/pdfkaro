@@ -42,12 +42,11 @@ export type ToolPage = {
 export type PageWords = Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>;
 
 /**
- * An option a tool's working area shows once its file has been read, below the file and above
- * the main button. Only one kind for now: a choice of one value from several, drawn as radio
- * buttons. The values each tool accepts are also written in src/widget/option-values.ts, which
- * its engine reads; the registry test checks the two lists are the same.
+ * A choice of one value from several, drawn as radio buttons. The values each tool accepts are
+ * also written in src/widget/option-values.ts, which its engine reads; the registry test checks
+ * the two lists are the same.
  */
-export type ToolOption = {
+export type ChoiceOption = {
   kind: 'choice';
   /** The key the engine receives: `position`. No page preset of the tool uses it. */
   key: string;
@@ -58,6 +57,31 @@ export type ToolOption = {
   /** The value chosen at first, with which the main button works. */
   initial: string;
 };
+
+/**
+ * A typed text, one line. It is the job's input: it starts empty, and the main button waits until
+ * it holds text. Its most characters and character rule are written once, in
+ * src/widget/option-values.ts (`optionTexts`), by tool id and key; the registry holds only its words.
+ */
+export type TextOption = {
+  kind: 'text';
+  /** The key the engine receives: `text`. No page preset of the tool uses it. */
+  key: string;
+  /** The field's visible label: "Watermark text". */
+  label: string;
+  /** Under the field, read with it: what it takes. "Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks." */
+  hint: string;
+  /** Tied to the main button while the field holds no text: "Type the watermark text first." */
+  emptySentence: string;
+  /** When the engine refuses the text. Left out: "The text could not be used. Check it and try again." */
+  refusedSentence?: string;
+};
+
+/**
+ * An option a tool's working area shows once its file has been read, below the file and above
+ * the main button, in registry order: a choice or a text.
+ */
+export type ToolOption = ChoiceOption | TextOption;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';

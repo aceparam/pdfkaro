@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Progress } from '../../engines/types';
-import type { ToolOption, ToolWidgetWords } from '../../tools/registry';
+import type { ToolWidgetWords } from '../../tools/registry';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, focusMovesToOptions, optionsShown, readyKey } from '../../widget/options';
+import { chosenValue, focusMovesToOptions, optionsHold, optionsShown, readyKey, typedText } from '../../widget/options';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
 import type { WorkerLike } from '../../workers/client';
+import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { FilePicker } from '../FilePicker/FilePicker';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
 import { PasswordField } from '../PasswordField/PasswordField';
 import { ProgressBar } from '../ProgressBar/ProgressBar';
 import { Result } from '../Result/Result';
+import { errorId, TextField } from '../TextField/TextField';
 import styles from './ToolWorkspace.module.css';
 
 type Props = {
@@ -59,43 +61,6 @@ function detailFor(file: FileEntry, listPages = true): string {
   }
 }
 
-type ChoiceGroupProps = {
-  option: ToolOption;
-  /** The value shown as chosen. */
-  value: string;
-  /** The radio buttons' shared name, unique on the page. */
-  name: string;
-  onChoose(value: string): void;
-  /** Put on the chosen radio button, so focus can move to it. */
-  chosenRef?: Ref<HTMLInputElement>;
-};
-
-/**
- * One choice: native radio buttons, one per line, in a fieldset named by its legend. The browser's
- * own radio group gives one Tab stop, the arrow keys and the "1 of 6" a screen reader says, so no
- * ARIA role is added. No hooks, so it can be drawn and tested on its own.
- */
-export function ChoiceGroup({ option, value, name, onChoose, chosenRef }: ChoiceGroupProps) {
-  return (
-    <fieldset className={styles.choiceGroup}>
-      <legend className={styles.legend}>{option.legend}</legend>
-      {option.choices.map((choice) => (
-        <label key={choice.value} className={styles.choice}>
-          <input
-            ref={choice.value === value ? chosenRef : undefined}
-            type="radio"
-            name={name}
-            value={choice.value}
-            checked={choice.value === value}
-            onChange={() => onChoose(choice.value)}
-          />
-          <span>{choice.label}</span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 /** Everything after the first pick: the list, problems, progress, the result. */
 export default function ToolWorkspace({ toolId, accepts, words, preset, firstFiles, onEmpty }: Props) {
   const [announcement, setAnnouncementText] = useState('Getting ready');
@@ -128,7 +93,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const damagedRef = useRef<HTMLHeadingElement | null>(null);
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const addRef = useRef<HTMLInputElement | null>(null);
-  // The chosen radio button of the first option, where focus goes once the file has been read.
+  // The first option's focus target, where focus goes once the file has been read: a choice's chosen radio button, or a text's field.
   const optionRef = useRef<HTMLInputElement | null>(null);
   const optionName = useId();
 
@@ -230,8 +195,8 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     if (unreadableSaid) setAnnouncement(unreadableSaid);
   }, [problem, problemKey, state.files, setAnnouncement, unreadableSaid]);
 
-  // A tool with options: once a new set of files has been read, focus moves to the chosen radio button of
-  // the first option, if it is still where the widget put it or on the page body. The status line still
+  // A tool with options: once a new set of files has been read, focus moves to the first option (a choice's
+  // chosen radio button, or a text's field), if it is still where the widget put it or on the page body. The status line still
   // says the file's line. Cancel and "Go back to your file" keep the key, so focus stays on the main button.
   const options = words.options ?? [];
   const showOptions = options.length > 0 && optionsShown(state);
@@ -245,6 +210,21 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     const free = active === null || active === document.body || active === mainRef.current || active === summaryRef.current;
     if (focusMovesToOptions(showOptions, filesRead, before, free)) optionRef.current?.focus();
   }, [filesRead, showOptions]);
+
+  // A text that holds the main button back: empty, too long, or with characters its rule does not take.
+  const hold = optionsHold(toolId, options, state.choices);
+  const fieldId = (key: string) => `${optionName}-${key}`;
+  // Too long or refused characters: the sentence is shown by the field, and tied to the main button from there.
+  const fieldHold = showOptions && hold && hold.kind !== 'empty' ? hold : null;
+  const fieldHoldKey = fieldHold ? `${fieldHold.key}:${fieldHold.kind}` : '';
+  // Typing in a text's field. The sentence by the field is said once by the status line when it first appears
+  // or changes kind; not again for each character typed past the limit, and nothing when it goes, or for an
+  // empty text, which is tied to the main button from the start. Focus never moves for it.
+  const typeText = (key: string, value: string) => {
+    run.setOption(key, value);
+    const next = optionsHold(toolId, options, { ...state.choices, [key]: value });
+    if (next && next.kind !== 'empty' && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
+  };
 
   const count = totals(state);
   const askingPassword = problem?.status === 'needs-password' || problem?.status === 'wrong-password';
@@ -393,9 +373,14 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
   const tooFew = state.files.length < words.minFiles;
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
-  const ready = canRun(state, words.minFiles, blocked === null);
-  const tiedSentence = tooFew ? words.tooFewFiles : blocked;
-  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, ...huge.map(hugeId)].filter(Boolean).join(' ');
+  const ready = canRun(state, words.minFiles, blocked === null) && hold === null;
+  // An empty text's sentence goes under the main button once its field is shown, after too few files and the toggles' sentence.
+  const tiedSentence = tooFew ? words.tooFewFiles : (blocked ?? (showOptions && hold?.kind === 'empty' ? hold.sentence : null));
+  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHold ? errorId(fieldId(fieldHold.key)) : null, ...huge.map(hugeId)].filter(Boolean).join(' ');
+  // The main button's press, and Enter in a text's field: starts the job only when the button works.
+  const pressMain = () => {
+    if (ready) void run.start();
+  };
 
   // More pages: focus goes to the first new page, which sits where the button was.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -548,16 +533,29 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
           ) : null}
 
           {showOptions
-            ? options.map((option, index) => (
-                <ChoiceGroup
-                  key={option.key}
-                  option={option}
-                  value={chosenValue(option, state.choices)}
-                  name={`${optionName}-${option.key}`}
-                  onChoose={(value) => run.setOption(option.key, value)}
-                  chosenRef={index === 0 ? optionRef : undefined}
-                />
-              ))
+            ? options.map((option, index) =>
+                option.kind === 'choice' ? (
+                  <ChoiceGroup
+                    key={option.key}
+                    option={option}
+                    value={chosenValue(option, state.choices)}
+                    name={fieldId(option.key)}
+                    onChoose={(value) => run.setOption(option.key, value)}
+                    chosenRef={index === 0 ? optionRef : undefined}
+                  />
+                ) : (
+                  <TextField
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    raw={typedText(option, state.choices)}
+                    error={fieldHold?.key === option.key ? fieldHold.sentence : undefined}
+                    onType={(value) => typeText(option.key, value)}
+                    onEnter={pressMain}
+                    focusRef={index === 0 ? optionRef : undefined}
+                  />
+                ),
+              )
             : null}
 
           {askingPassword && problem ? (
@@ -625,9 +623,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 className="button"
                 aria-disabled={ready ? undefined : true}
                 aria-describedby={describedBy || undefined}
-                onClick={() => {
-                  if (ready) void run.start();
-                }}
+                onClick={pressMain}
               >
                 {words.actionLabel}
               </button>
