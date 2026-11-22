@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef } from '@cantoo/pdf-lib';
 import { type FileChooser, type Page } from '@playwright/test';
-import { expect, test } from './fixtures';
+import { expect, test, watchPolicy } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
@@ -437,5 +437,35 @@ test.describe('nothing is uploaded', () => {
     const after = await traces(page, context);
     expect(after).toMatchObject({ local: 0, session: 0, databases: 0, caches: 0, opfs: [], cookies: [] });
     await expect(page.locator('main')).not.toContainText('qz7holiday');
+  });
+
+  test('a JPG and a PNG fetch the same files, fflate included, by the time the thumbnail shows and through the download, on a cold cache', async ({ browser, baseURL }) => {
+    const fflate = filesAfterPick().find((path) => /\/fflate-/.test(path))!;
+    const fetched = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))].sort();
+    const run = async (from: string) => {
+      // A fresh context each time, so nothing is cached and every file the run needs is requested.
+      const context = await browser.newContext();
+      await watchPolicy(context);
+      const page = await context.newPage();
+      await open(page, '/image-to-pdf');
+      const seen = watch(context, page);
+      const name = from.endsWith('.png') ? 'qz7only.png' : 'qz7only.jpg';
+      await pick(page, [named(name, from)]);
+      await expect(page.locator('astro-island ol img')).toHaveCount(1, { timeout: 20000 });
+      await headersRead(seen);
+      const atPick = fetched(seen);
+      await convertAndDownload(page);
+      await headersRead(seen);
+      expect(violations(seen, new URL(baseURL!).origin, [name, 'qz7only'], filesAfterPick())).toEqual([]);
+      const whole = fetched(seen);
+      await context.close();
+      return { atPick, whole };
+    };
+    const jpg = await run('tall.jpg');
+    const png = await run('small.png');
+    expect(jpg.atPick).toContain(fflate);
+    expect(png.atPick).toContain(fflate);
+    expect(jpg.atPick).toEqual(png.atPick);
+    expect(jpg.whole).toEqual(png.whole);
   });
 });

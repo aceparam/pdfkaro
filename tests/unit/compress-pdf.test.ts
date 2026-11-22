@@ -604,3 +604,20 @@ describe('hostile files', () => {
     expect(outputs).toEqual([]);
   }, 180_000);
 });
+
+describe('the files fetched do not depend on the file', () => {
+  it('asks for fflate once in every job, before qpdf, with no pictures, JPGs only, a lossless picture, or a JSON too large to read', async () => {
+    for (const name of ['compress-text.pdf', 'compress-small-jpg.pdf', 'compress-lossless.pdf', 'compress-json-bomb.pdf']) {
+      const asked: string[] = [];
+      const counted: EngineTools = {
+        ...tools,
+        fflate: async () => (asked.push('fflate'), { Inflate: CountingInflate, Deflate }),
+        qpdf: async () => (asked.push('qpdf'), makeQpdf()),
+      };
+      // A file the engine cannot read may still throw; what matters is what it asked for first.
+      await run([fixture(name)], { passwords: [] }, () => {}, counted).catch(() => {});
+      expect(asked.filter((each) => each === 'fflate'), name).toEqual(['fflate']);
+      expect(asked[0], name).toBe('fflate');
+    }
+  }, 180_000);
+});

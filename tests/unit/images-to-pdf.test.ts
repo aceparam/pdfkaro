@@ -483,3 +483,14 @@ describe('reading a file before the job', () => {
     expect(thumbnails).toBe('picture');
   });
 });
+
+describe('the files fetched do not depend on the picture', () => {
+  it('asks for fflate once when reading a JPG, a PNG, or a file of neither kind', async () => {
+    for (const bytes of [picture('tall.jpg'), picture('small.png'), pdfFixture('not-a-pdf.pdf'), picture('scan-g4.tif')]) {
+      let asked = 0;
+      const counted: EngineTools = { ...tools, fflate: async () => (asked++, await tools.fflate!()) };
+      await inspect(bytes, undefined, counted);
+      expect(asked).toBe(1);
+    }
+  });
+});

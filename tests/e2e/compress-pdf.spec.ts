@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Download, type Page } from '@playwright/test';
-import { expect, test } from './fixtures';
+import { expect, test, watchPolicy } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -350,6 +350,41 @@ test.describe('nothing is uploaded', () => {
     expect(holding(fetched, 'An object id was not valid.').length).toBe(1);
     for (const other of [/\/pdflib-/, /\/picture-thumbnail-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     await expectNothingHeld(page, context, secrets, consoleText);
+  });
+
+  test('files with no pictures, JPGs only, a JPG with a lossless picture, and one with no new file fetch the same files, fflate included, on a cold cache', async ({ browser, baseURL }) => {
+    test.setTimeout(240_000);
+    const fflate = filesAfterPick().find((path) => /\/fflate-/.test(path))!;
+    const run = async (name: string) => {
+      // A fresh context each time, so nothing is cached and every file the run needs is requested.
+      const context = await browser.newContext();
+      await watchPolicy(context);
+      const page = await context.newPage();
+      await open(page);
+      const seen = watch(context, page);
+      await pickReady(page, name);
+      await mainButton(page).click();
+      // compress-packed.pdf, and perhaps others, end with no new file; either ending is the end of the job.
+      await expect(page.getByRole('heading', { name: /^(Your compressed file is ready|This file could not be made smaller\.)$/ })).toBeFocused({ timeout: 90000 });
+      if (await resultHeading(page).isVisible()) {
+        const download = page.waitForEvent('download');
+        await page.getByRole('link', { name: 'Download' }).click();
+        await download;
+      }
+      await headersRead(seen);
+      expect(violations(seen, new URL(baseURL!).origin, [name], filesAfterPick())).toEqual([]);
+      const fetched = fetchedPaths(seen).sort();
+      await context.close();
+      return fetched;
+    };
+    const none = await run('compress-text.pdf');
+    const jpgs = await run('compress-small-jpg.pdf');
+    const both = await run('compress-scans.pdf');
+    const packed = await run('compress-packed.pdf');
+    for (const [name, fetched] of [['no pictures', none], ['JPGs only', jpgs], ['a lossless picture', both], ['no new file', packed]] as const) expect(fetched, name).toContain(fflate);
+    expect(jpgs).toEqual(none);
+    expect(both).toEqual(none);
+    expect(packed).toEqual(none);
   });
 
   test('a protected file under a telling name, with its password, compressed and downloaded', async ({ page, context, baseURL }) => {
