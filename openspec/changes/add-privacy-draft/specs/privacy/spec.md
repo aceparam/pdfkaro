@@ -22,7 +22,7 @@ Until the owner has reviewed it, the Privacy page SHALL be an agent's draft, wri
 #### Scenario: A password is kept, and forgotten
 
 - **WHEN** the page describes when a password is forgotten
-- **THEN** it says a failed or cancelled job keeps it, and names only the moments the code forgets it: a job that made a new file or found nothing to change, the file replaced or removed, "Start again", and leaving the page
+- **THEN** it says a failed or cancelled job keeps it, and names only the moments the code forgets it: a job that made a new file or told the visitor no new file was needed, the file replaced or removed, "Start again", and leaving the page
 
 ### Requirement: The Privacy draft is marked and kept from search engines
 
@@ -79,7 +79,7 @@ No page SHALL set a cookie or write to `localStorage`, `sessionStorage`, Indexed
 #### Scenario: Every page is opened
 
 - **WHEN** the site end-to-end test opens each built page, including the 404 page, and waits for the network to settle
-- **THEN** the browser holds no cookie for the site, those stores are empty, and every request was a `GET` with no body and no query string to the site's own address
+- **THEN** the browser holds no cookie for the site, those stores are empty, and every request was a `GET` with no body and no query string, to the site's own origin and a path that exists in the build
 
 #### Scenario: A job finishes
 

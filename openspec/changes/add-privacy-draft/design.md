@@ -62,7 +62,7 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > The page holds your file in your browser, on your device, while you work on it. It lets go of the file when you remove or replace it, when you press "Start again", and when you close the tab or open another page in the same tab. Switching to another tab keeps it.
 >
-> While the file is on the page, the worker keeps its own copy open, with the file's password if it has one, to draw the pictures of its pages. It closes that copy when you remove or replace the file, and when the worker is closed.
+> In tools that show every page of one file, the worker keeps its own copy of the file open, with its password if it has one, to draw the pictures of its pages. It closes that copy when you remove or replace the file, and when the worker is closed, which happens after every job. In the other tools, the worker opens the file only to draw each picture and closes it straight away.
 >
 > The new file is held in the same way until you start another job, press "Start again" or leave the page.
 >
@@ -76,7 +76,7 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > The page keeps the password while the file is on the page, so you do not have to type it again after Cancel or a failed job. A wrong try is kept until you type another.
 >
-> The page forgets the password when the job has made the new file, or found nothing to change. It also forgets it when you replace or remove the file, when you press "Start again", and when you leave the page.
+> The page forgets the password when the job has made the new file, or told you no new file was needed. It also forgets it when you replace or remove the file, when you press "Start again", and when you leave the page.
 >
 > Remove a password takes off the password you type. It also takes off print and edit restrictions, which needs no password. The new copy has no password, so anyone who has it can open it.
 >
@@ -120,12 +120,12 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > ## Who serves the site
 >
-> This site is served by GitHub Pages, a service run by GitHub. Each time your browser asks for a page or one of the site's programs, GitHub receives your IP address, the address asked for and the details your browser sends with the request, and may record them. Your files are not sent to GitHub.
+> This site is served by GitHub Pages, a service run by GitHub. Each time your browser asks for a page or one of the site's programs, GitHub receives your IP address, the address of each page it asks for and the details your browser sends with the request, and may record them. Your files are not sent to GitHub.
 
 About 1,000 words. No "100%", "never", "secure", "guaranteed", "safe" or "private"; no banned word; no exclamation mark; nothing in capitals for emphasis; no person, company (other than the host, named as a fact), contact or motive. The hosting sentence says only "may record", so it does not depend on GitHub's own documents.
 
 Notes on wording, from the stage 1 review:
-- "found nothing to change" covers a job that ends with no new file (Compress PDF's "could not be made smaller", Remove a password's "nothing to remove"). The page never says the password is forgotten "when the job ends": a failed or cancelled job keeps it.
+- "told you no new file was needed" covers a job that ends with no new file (Compress PDF's "could not be made smaller", Remove a password's "nothing to remove"); "found nothing to change" was dropped, because Compress can change things and still give no file. The page never says the password is forgotten "when the job ends": a failed or cancelled job keeps it.
 - The first sentence of "What the page may load and send" speaks only of the page. Workers are named only in the sentence about Chrome and Firefox, because the policy in the file-reading workers has not been checked in Safari (`add-content-security-policy`, WebKit risk; issue #7).
 - "Any other address", not "any other site": on GitHub Pages the site's own address is shared with the account's other Pages sites, which the policy allows.
 - The earlier "What the site does not do" list repeated "In short"; only what was new is kept, under "Scripts and the home page".
@@ -157,11 +157,11 @@ Each claim on the page, the code that makes it true today, and what proves it. "
 | The file's name is shown and used to name the new file | `outputName` in `useToolRun`; names never sent | `format.test.ts` output names; no-upload secrets |
 | The new file can keep title, tags, field values of left-out pages, attachments; each tool's page says what | Tools' engines (`keepPages`, Merge's first-file attachments) | Each tool's page text and engine tests (Extract, Delete, Merge); release check that the page text still says so |
 | The page holds the file until remove/replace, "Start again" or leaving; switching tabs keeps it | `removeFile`, `clear`, `pagehide` → `clear` in `useToolRun.ts` | Release check (the repo has no DOM test library); `state.test.ts` for the reducer side; the new e2e step below for the result |
-| The worker keeps its own open copy, with the password, while the file is on the page; closes it on remove, replace or when the worker is closed | `keptFile` and `closeDocument` in `useToolRun.ts` and `client.ts`; PDF.js document in `thumbnail.ts` | `thumbnail-plumbing.test.ts` (document kept and closed); release check for remove and replace in the page |
-| The new file is held until another job, "Start again" or leaving | `releaseResult` in `start` and `clear` revokes the `blob:` address | New e2e step in `merge-pdf.spec.ts`: keep the Download `href` and a thumbnail's `blob:` address, press "Start again", then `fetch` of each in the page fails. Leaving: release check |
+| In tools that show every page of one file (`items: 'pages'`: Split, Extract, Delete, Reorder, Rotate), the worker keeps its own open copy, with the password, while the file is on the page, and closes it on remove, replace or when the worker is closed after every job; other tools open the file for each picture and close it at once | `keep = words.items === 'pages'` and `closeDocument` after each picture otherwise (`useToolRun.ts`, thumbnail step); `closeDocument` in `removeFile`; `ToolClient.run` ends the worker; PDF.js document in `thumbnail.ts` | `thumbnail-plumbing.test.ts` ("draws many pages of one file from one open document", "closes it when another file is asked for"); release check for keep-versus-close per tool and for remove and replace in the page |
+| The new file is held until another job, "Start again" or leaving | `releaseResult` in `start` and `clear` revokes the `blob:` address | New e2e test in `merge-pdf.spec.ts`, in its own context with `bypassCSP: true` (the policy refuses `fetch` of a `blob:` address either way): `fetch` of the Download `href` and a thumbnail's `blob:` address succeeds before "Start again" and fails after. Leaving: release check |
 | The worker is closed after every job and on Cancel | `ToolClient.run` ends it in `finally`; `cancel` calls `end()` | `client.test.ts` "ends the worker when the job is done", "cancels by ending the worker"; `worker-core.test.ts` |
 | The worker is closed on "Start again" and on leaving | `clear` calls `end()`; `pagehide` → `clear` | Release check |
-| An input file's password: kept while on the page and through Cancel and failure; forgotten after a new file or nothing to change, replace/remove, "Start again", leaving; a wrong try kept until replaced | `runJob` `forgetInputPasswords`; `removeFile`; `clear`; `useToolRun` tickets | `run-job.test.ts`; `unlock-pdf.spec.ts` (wrong try answered last); release check for remove, replace and leaving |
+| An input file's password: kept while on the page and through Cancel and failure; forgotten after a new file or a "no new file" outcome, replace/remove, "Start again", leaving; a wrong try kept until replaced | `runJob` `forgetInputPasswords`; `removeFile`; `clear`; `useToolRun` tickets | `run-job.test.ts`; `unlock-pdf.spec.ts` (wrong try answered last); release check for remove, replace and leaving |
 | Remove a password: restrictions removed with no password; the new copy has no password and opens for anyone | `src/engines/tools/unlock-pdf.ts` (`--decrypt`, `encryptedIn` check) | `unlock-pdf.test.ts` (restrictions-only file, result not encrypted); `unlock-pdf.spec.ts` |
 | A new password: only the first box goes; kept through Cancel, failure and another file chosen in its place; forgotten after the protected file, "Start again", removing the file, leaving | `jobOptions` sends `first` only; `forgetNewPasswords` in `runJob`, `removeFile`, `clear` | `run-job.test.ts`; `options.test.ts`; `protect-pdf.spec.ts` emptied-field and no-upload checks; release check for leaving |
 | The site does not have the password and cannot get it back | No request carries it | `protect-pdf.spec.ts` no-upload; `password-rule.test.ts` |
@@ -172,7 +172,7 @@ Each claim on the page, the code that makes it true today, and what proves it. "
 | Tools named per input kind | `options` kinds in the registry | Names guard in `privacy-page.test.ts` (decision 5) |
 | No accounts | No sign-in code anywhere | Release check |
 | No cookies; nothing written to browser storage | No storage API in `src/` or the built files | New check on every page in `site.spec.ts` (decision 6); `traces` after every tool's job; `home.spec.ts`. On the live host (GitHub could set a cookie by header): release check |
-| No adverts, analytics or tracking scripts; every script comes from the site | `script-src 'self'` plus hashes | `npm run check:csp`; `site.spec.ts`: every request same-origin, and, new, every request a `GET` with no body and no query string for a built file; `csp.spec.ts` |
+| No adverts, analytics or tracking scripts; every script comes from the site | `script-src 'self'` plus hashes | `npm run check:csp`; `site.spec.ts`: every request same-origin, and, new, every request a `GET` with no body and no query string, to a path that exists in `dist/`; `csp.spec.ts` |
 | What is typed in the home page box stays on the page | `ToolDirectory` filters in the page | `home.spec.ts` "keeps what is typed on the page" |
 | Downloads list, cache, extensions | Browser behaviour | Release check |
 | The page is blocked from loading from, and sending to, other addresses | `scripts/csp.mjs` meta policy | `npm run check:csp`; `csp.spec.ts` page probes |
@@ -195,14 +195,14 @@ The test reads `src/pages/privacy.astro` as text, strips the frontmatter (betwee
   - The section's first paragraph (the unconditional claim) does not contain "worker"; workers are named only in the paragraph that starts "In Chrome and Firefox".
   - The "does not stop" sentence is present and names a link, another page, WebRTC, DNS prefetch and the site's own address.
 - **Names guard.** From the registry, the page names of published tools whose options include a `text`, `drawing` or `picture` option must be exactly the tool names the "Text, drawings and pictures" section mentions, both ways; today Watermark and Sign PDF. The page names of tools with a `new-password` option, plus Remove a password (the one tool whose job is the input file's password; listed by id `unlock-pdf` in the test, with a comment), must be exactly the tool names the "Passwords" section mentions; today Protect with a password and Remove a password. A tool that gains such an option, or a rename, fails the test with a message to update the page.
-- **Draft guard.** While `footerPage('/privacy').written` is false, the page contains `draftSentence` from `src/site.ts`.
+- No draft guard here: the page writes `{draftSentence}`, so its source never holds the words. `check-seo` rule 8 and the `site.spec.ts` draft test check the built page instead.
 
 ### 6. Checks in the site end-to-end test
 
 - `tests/e2e/no-upload.ts` exports `expectNothingStored(page, context)`, built on `traces`: no cookie, and `localStorage`, `sessionStorage`, `indexedDB.databases()`, `caches.keys()` and the origin private file system all empty. Tools' own tests may move to it later; this change does not touch them.
-- "Every page keeps to the look and the rules" in `site.spec.ts` calls it after the network settles, and also requires every request to be a `GET` with no body and no query string, for the site's own address.
+- "Every page keeps to the look and the rules" in `site.spec.ts` calls it after the network settles, and also requires every request to be a `GET` with no body and no query string, to the site's own origin and a path that exists in `dist/` (the base path removed, `/` and page paths mapped to their `.html` files).
 - "The privacy page makes no claim" becomes "the privacy page is a marked draft": one `h1` "Privacy", the first paragraph of `main` starts with `draftSentence`, and `meta[name="robots"]` is present.
-- `merge-pdf.spec.ts` gains the step in the claim table: after a job, keep the Download `href` and one thumbnail's `blob:` address, press "Start again", and check that `fetch` of each in the page now fails.
+- `merge-pdf.spec.ts` gains one test in its own browser context created with `bypassCSP: true`, because `connect-src 'self'` refuses `fetch` of a `blob:` address whether or not it was revoked, so under the policy the test would fail on the violation or pass for the wrong reason. After a job it keeps the Download `href` and one thumbnail's `blob:` address and checks that `fetch` of each in the page succeeds (the positive control), presses "Start again", and checks that `fetch` of each now fails. Only this test bypasses the policy; every other test keeps the policy watch from `tests/e2e/fixtures.ts`. The test sends nothing outside the page.
 
 ### 7. Page weight, loading and threats
 
