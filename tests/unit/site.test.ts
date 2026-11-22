@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absoluteUrl, defaultOrigin, draftSentence, footerLinks, footerPage, isSiteBase, isSiteOrigin, tagline, withBase } from '../../src/site';
+import { absoluteUrl, defaultOrigin, footerLinks, footerPage, isSiteBase, isSiteOrigin, tagline, withBase } from '../../src/site';
 import { tools as registryTools, type Group, type Tool } from '../../src/tools/registry';
 import { groupsWithItems, relatedItems, toListItem } from '../../src/tools/queries';
 import { serverTools } from './server-tools';
@@ -151,10 +151,6 @@ describe('footer pages', () => {
       ['/known-problems', false],
       ['/contact', false],
     ]);
-  });
-
-  it('share one draft line, a plain sentence the Privacy draft and the search check both read', () => {
-    expect(draftSentence).toBe('This is a draft.');
   });
 });
 

@@ -183,3 +183,12 @@ describe("qpdf's arguments", () => {
     expect(mergeArgs(2, ['pw'])).toEqual(['--progress', '--password=pw', '--decrypt', '/in/0.pdf', '--pages', '.', '1-z', '/in/1.pdf', '1-z', '--', '/out.pdf']);
   });
 });
+
+describe('the document details', () => {
+  // The Privacy page says a merged file's title, author and other details come from the first file.
+  it('come from the first file: its title is kept, and no later file’s', async () => {
+    const titleOf = async (names: string[]) => (await PDFDocument.load((await merge(names)).out, { updateMetadata: false })).getTitle();
+    expect(await titleOf(['text.pdf', 'mixed.pdf'])).toBe('An ordinary text document');
+    expect(await titleOf(['mixed.pdf', 'text.pdf'])).toBe('Mixed sizes and rotation');
+  });
+});

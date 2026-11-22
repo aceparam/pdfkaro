@@ -25,14 +25,19 @@ import { draftSentence, footerPage, siteName } from '../site';
   <h2>What happens to your file</h2>
   <p>You choose a file with the button, by dropping it on the page or by pasting it. Your browser reads it from your device. No tool on this site runs on a server today.</p>
   <p>
-    The work is done by a part of the page that runs in the background, called a worker. The page hands your file to the worker inside your browser, and the worker makes the new file there. The
-    pictures of your pages are drawn by the worker too. You save the new file with the Download button. Nothing is saved on its own.
+    The work is done by parts of the page that run in the background, called workers. The page hands your file to the tool’s worker inside your browser, and that worker makes the new file there. To
+    read a PDF and draw its pages, the tool’s worker starts a second worker and hands it the file too. Both workers get the file’s password, if it has one. The pictures of your pages are drawn by the
+    workers too. You save the new file with the Download button. Nothing is saved on its own.
   </p>
   <p>After you choose a file, the page fetches the programs that read and write PDFs. They come from this site. These requests carry nothing from your file: not its contents, not its name and not a password.</p>
   <p>Your file’s name is shown on the page and used to name the new file.</p>
   <p>
-    The new file can keep things from the old one, such as its title, its accessibility tags, what was typed in form fields on pages you left out, or files attached to it. Each tool’s page says what
-    it keeps.
+    A new PDF can carry the old file’s title, author and other details, its accessibility tags and its attached files. The tags can bring along what was typed in form fields on pages you left out. In
+    Merge PDF, the title, author, other details and attached files come from the first file.
+  </p>
+  <p>
+    Pictures from PDF to JPG and PDF to PNG hold only the drawn page, with what was typed in its form fields as the page shows it, and no title, author or date. Image to PDF copies no details of your
+    pictures, such as the camera, date or place, into the PDF.
   </p>
 
   <h2>How long the page holds your file</h2>
@@ -41,24 +46,27 @@ import { draftSentence, footerPage, siteName } from '../site';
     open another page in the same tab. Switching to another tab keeps it.
   </p>
   <p>
-    In tools that show every page of one file, the worker keeps its own copy of the file open, with its password if it has one, to draw the pictures of its pages. It closes that copy when you remove
-    or replace the file, before each job, and when the worker is closed. In the other tools, the worker opens the file only to draw each picture and closes it straight away.
+    In tools that show every page of one file, the workers keep the file open, with its password if it has one, to draw the pictures of its pages. They close it when you remove or replace the file,
+    before each job, and when the workers are closed. In the other tools, the workers keep nothing open between one picture and the next.
   </p>
   <p>The new file is held in the same way until you start another job, press “Start again” or leave the page.</p>
-  <p>The worker is closed after every job, so it keeps nothing from one job to the next. It is also closed when you press Cancel, when you press “Start again” and when you leave the page.</p>
+  <p>
+    The tool’s worker is closed after every job, and the second worker is closed with it, so they keep nothing from one job to the next. They are also closed when you press Cancel, when you press
+    “Start again” and when you leave the page.
+  </p>
 
   <h2>Passwords</h2>
   <h3>The password of a protected file</h3>
-  <p>A tool asks for this password when you choose a PDF that needs one. The password goes to the worker, inside your browser, to open the file.</p>
+  <p>A tool asks for this password when you choose a PDF that needs one. The password goes to the workers, inside your browser, to open the file.</p>
   <p>The page keeps the password while the file is on the page, so you do not have to type it again after Cancel or a failed job. A wrong try is kept until you type another.</p>
   <p>
     The page forgets the password when the job has made the new file, or told you no new file was needed. It also forgets it when you replace or remove the file, when you press “Start again”, and when
     you leave the page.
   </p>
-  <p>Remove a password takes off the password you type. It also takes off print and edit restrictions, which needs no password. The new copy has no password, so anyone who has it can open it.</p>
+  <p>The Remove a password tool takes off the password you type. It also takes off print and edit restrictions, which needs no password. The new copy has no password, so anyone who has it can open it.</p>
 
   <h3>A new password, in Protect with a password</h3>
-  <p>You type the new password twice. Only what you type in the first box goes to the worker, with the job. The second box stays on the page, to check that both match.</p>
+  <p>You type the new password twice. Only what you type in the first box goes to the tool’s worker, with the job. The second box stays on the page, to check that both match.</p>
   <p>
     The page keeps the new password through Cancel and a failed job, and when you choose another file in its place. It forgets the new password when the job has made the protected file. It also
     forgets it when you press “Start again”, when you remove the file, and when you leave the page.
@@ -73,10 +81,10 @@ import { draftSentence, footerPage, siteName } from '../site';
 
   <h2>Text, drawings and pictures</h2>
   <p>
-    Watermark asks for the text to draw. Sign PDF asks for your name, a drawing of your signature or a picture of it. What you give goes to the worker with the job, as your file does, and is drawn into
+    Watermark asks for the text to draw. Sign PDF asks for your name, a drawing of your signature or a picture of it. What you give goes to the tool’s worker with the job, as your file does, and is drawn into
     the new file. In Sign PDF, only the way you chose goes with the job.
   </p>
-  <p>A drawing goes as a list of points. The page does not turn it into a picture. A picture you choose is read by the worker, like your file.</p>
+  <p>A drawing goes as a list of points. The page does not turn it into a picture. A picture you choose is read by the tool’s worker, like your file.</p>
   <p>
     The page keeps what you gave while you work, so you can try again after Cancel or a failed job. That includes what you gave under another way in Sign PDF. The page lets go of all of it when you
     press “Start again”, when you remove the file, and when you leave the page.
@@ -98,7 +106,7 @@ import { draftSentence, footerPage, siteName } from '../site';
     Each page gives your browser a rule, called a Content Security Policy. Under it, your browser blocks the page from loading scripts and other files from any other address, and from sending requests
     to any other address.
   </p>
-  <p>In Chrome and Firefox, the site’s tests check that the same rule also holds in the workers that read your file. It has not yet been checked in Safari.</p>
+  <p>In Chrome and Firefox, the site’s tests check that the same rule also holds in workers started the same way as those that read your file. It has not yet been checked in Safari.</p>
   <p>
     The rule does not stop following a link, opening another page, a direct connection of the kind used for video calls (WebRTC), or looking up another site’s address in advance (DNS prefetch). It
     does not limit requests to this site’s own address, which on GitHub Pages is shared by every site of the same GitHub account. The site’s tests check that no request carries your file, its name or a

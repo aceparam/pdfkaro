@@ -30,6 +30,17 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 
 - [ ] 5.1 Run the `review-panel` skill, stage 2, with the privacy reviewer reading every sentence against decision 4. Fix every must-fix finding, update design.md where a sentence changes, and put the verdicts and the owner questions from proposal.md in the pull request description. Verify: every reviewer approves.
 
+## 6. Stage 2 review fixes
+
+- [x] 6.1 Privacy (must fix): replace "Each tool's page says what it keeps." with the facts on the Privacy page: a new PDF can carry the title, author and other details, tags and attachments; in Merge PDF the details and attachments are the first file's; PDF to JPG and PNG pictures hold only the drawn page, with typed form values as shown and no title, author or date; Image to PDF copies no picture details. Add a Merge PDF unit test that the first file's title is kept. Add a page text review item to the issue #7 comment for the missing lines on the Merge PDF, Reorder pages and PDF to PNG pages, which this change does not edit. Verify: each fact confirmed in the code; the new test passes.
+- [x] 6.2 Privacy (must fix): name PDF.js's worker. The tool's worker starts a second worker to read a PDF and draw its pages; both get the file and its password; both are closed together. Say "the tool's worker" where only it is meant. Verify: the policy guard still passes.
+- [x] 6.3 Privacy: "the workers keep nothing open between one picture and the next" in place of "opens the file only to draw each picture".
+- [x] 6.4 Privacy: the policy sentence says the rule holds "in workers started the same way as those that read your file", as `csp.spec.ts` proves; the paragraph still starts "In Chrome and Firefox".
+- [x] 6.5 UX: "The Remove a password tool takes off the password you type."
+- [x] 6.6 Code: `builtFileOf` in `site.spec.ts` takes off the base path and percent-decodes the path.
+- [x] 6.7 Architect: drop the `site.test.ts` assertion that `draftSentence` equals its own words; export `notFoundPage` from `tests/e2e/pages.ts` and use it in `site.spec.ts`.
+- [x] 6.8 Run lint, check, test, build, weigh, check:seo, check:csp, spec, and `site.spec.ts` with the privacy-related e2e tests. Verify: all pass.
+
 ## Workflow follow-up
 
 - Add "owner review of the Privacy draft" to issue #7 when the pull request is opened, so the owner's review is tracked with the other Phase 1 hand checks.

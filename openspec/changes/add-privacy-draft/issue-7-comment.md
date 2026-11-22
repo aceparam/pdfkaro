@@ -13,16 +13,18 @@ Owner review of the Privacy draft:
 - [ ] Error reports: add "No error reports are sent anywhere."? Default: no.
 - [ ] Draft and search engines: keep `noindex` and out of the sitemap until approved (the default), so "the sitemap lists every page" in "Definition of done, The site" stays not passed until then.
 
+- [ ] Page text review: the Privacy page now says what a new file can keep, but three tool pages do not say it all yet. Merge PDF's page does not say the merged file keeps the first file's title, author and other details. Reorder pages' page does not name the document's title and details. PDF to PNG's page does not say its pictures hold only the drawn page, with no title, author or date (PDF to JPG's page does). These pages are not changed in `add-privacy-draft`.
+
 Release checks (no automated test watches these; read them again against the code before each release, using the claim table in `openspec/changes/add-privacy-draft/design.md`, decision 4, or its archived copy):
 
 - [ ] The page lets go of the file when it is removed or replaced and on leaving the page; switching tabs keeps it (`removeFile`, `pagehide` → `clear` in `src/hooks/useToolRun.ts`).
-- [ ] In tools that show every page of one file the worker keeps its own copy open; in the others it closes each document after each picture; the page closes the kept copy on remove and replace.
+- [ ] In tools that show every page of one file the workers keep the file open; in the others nothing is kept open between pictures; the page closes the kept copy on remove and replace.
 - [ ] The new file is let go on leaving the page.
-- [ ] The worker is closed on "Start again" and on leaving the page.
+- [ ] The tool's worker, and PDF.js's worker with it, are closed on "Start again" and on leaving the page; ending the tool's worker also ends PDF.js's worker.
 - [ ] An input file's password is forgotten on remove, replace and leaving the page.
 - [ ] A new password is forgotten on leaving the page.
 - [ ] Text, drawings and pictures are let go on leaving the page.
-- [ ] Each tool's page still says what a new file keeps from the old one.
+- [ ] PDF to JPG and PDF to PNG pictures still hold no text, EXIF or comment (the browser's canvas encoder).
 - [ ] The browser may offer to save or suggest a password (`autocomplete="new-password"` in `NewPasswordField`).
 - [ ] No accounts anywhere in the code.
 - [ ] On the live host, no cookie is set by a response header.

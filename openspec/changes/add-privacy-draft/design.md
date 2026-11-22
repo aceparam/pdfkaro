@@ -50,39 +50,41 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > You choose a file with the button, by dropping it on the page or by pasting it. Your browser reads it from your device. No tool on this site runs on a server today.
 >
-> The work is done by a part of the page that runs in the background, called a worker. The page hands your file to the worker inside your browser, and the worker makes the new file there. The pictures of your pages are drawn by the worker too. You save the new file with the Download button. Nothing is saved on its own.
+> The work is done by parts of the page that run in the background, called workers. The page hands your file to the tool's worker inside your browser, and that worker makes the new file there. To read a PDF and draw its pages, the tool's worker starts a second worker and hands it the file too. Both workers get the file's password, if it has one. The pictures of your pages are drawn by the workers too. You save the new file with the Download button. Nothing is saved on its own.
 >
 > After you choose a file, the page fetches the programs that read and write PDFs. They come from this site. These requests carry nothing from your file: not its contents, not its name and not a password.
 >
 > Your file's name is shown on the page and used to name the new file.
 >
-> The new file can keep things from the old one, such as its title, its accessibility tags, what was typed in form fields on pages you left out, or files attached to it. Each tool's page says what it keeps.
+> A new PDF can carry the old file's title, author and other details, its accessibility tags and its attached files. The tags can bring along what was typed in form fields on pages you left out. In Merge PDF, the title, author, other details and attached files come from the first file.
+>
+> Pictures from PDF to JPG and PDF to PNG hold only the drawn page, with what was typed in its form fields as the page shows it, and no title, author or date. Image to PDF copies no details of your pictures, such as the camera, date or place, into the PDF.
 >
 > ## How long the page holds your file
 >
 > The page holds your file in your browser, on your device, while you work on it. It lets go of the file when you remove or replace it, when you press "Start again", and when you close the tab or open another page in the same tab. Switching to another tab keeps it.
 >
-> In tools that show every page of one file, the worker keeps its own copy of the file open, with its password if it has one, to draw the pictures of its pages. It closes that copy when you remove or replace the file, before each job, and when the worker is closed. In the other tools, the worker opens the file only to draw each picture and closes it straight away.
+> In tools that show every page of one file, the workers keep the file open, with its password if it has one, to draw the pictures of its pages. They close it when you remove or replace the file, before each job, and when the workers are closed. In the other tools, the workers keep nothing open between one picture and the next.
 >
 > The new file is held in the same way until you start another job, press "Start again" or leave the page.
 >
-> The worker is closed after every job, so it keeps nothing from one job to the next. It is also closed when you press Cancel, when you press "Start again" and when you leave the page.
+> The tool's worker is closed after every job, and the second worker is closed with it, so they keep nothing from one job to the next. They are also closed when you press Cancel, when you press "Start again" and when you leave the page.
 >
 > ## Passwords
 >
 > ### The password of a protected file
 >
-> A tool asks for this password when you choose a PDF that needs one. The password goes to the worker, inside your browser, to open the file.
+> A tool asks for this password when you choose a PDF that needs one. The password goes to the workers, inside your browser, to open the file.
 >
 > The page keeps the password while the file is on the page, so you do not have to type it again after Cancel or a failed job. A wrong try is kept until you type another.
 >
 > The page forgets the password when the job has made the new file, or told you no new file was needed. It also forgets it when you replace or remove the file, when you press "Start again", and when you leave the page.
 >
-> Remove a password takes off the password you type. It also takes off print and edit restrictions, which needs no password. The new copy has no password, so anyone who has it can open it.
+> The Remove a password tool takes off the password you type. It also takes off print and edit restrictions, which needs no password. The new copy has no password, so anyone who has it can open it.
 >
 > ### A new password, in Protect with a password
 >
-> You type the new password twice. Only what you type in the first box goes to the worker, with the job. The second box stays on the page, to check that both match.
+> You type the new password twice. Only what you type in the first box goes to the tool's worker, with the job. The second box stays on the page, to check that both match.
 >
 > The page keeps the new password through Cancel and a failed job, and when you choose another file in its place. It forgets the new password when the job has made the protected file. It also forgets it when you press "Start again", when you remove the file, and when you leave the page.
 >
@@ -92,9 +94,9 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > ## Text, drawings and pictures
 >
-> Watermark asks for the text to draw. Sign PDF asks for your name, a drawing of your signature or a picture of it. What you give goes to the worker with the job, as your file does, and is drawn into the new file. In Sign PDF, only the way you chose goes with the job.
+> Watermark asks for the text to draw. Sign PDF asks for your name, a drawing of your signature or a picture of it. What you give goes to the tool's worker with the job, as your file does, and is drawn into the new file. In Sign PDF, only the way you chose goes with the job.
 >
-> A drawing goes as a list of points. The page does not turn it into a picture. A picture you choose is read by the worker, like your file.
+> A drawing goes as a list of points. The page does not turn it into a picture. A picture you choose is read by the tool's worker, like your file.
 >
 > The page keeps what you gave while you work, so you can try again after Cancel or a failed job. That includes what you gave under another way in Sign PDF. The page lets go of all of it when you press "Start again", when you remove the file, and when you leave the page.
 >
@@ -114,7 +116,7 @@ Meta description: "What happens to your files, passwords and anything you type o
 >
 > Each page gives your browser a rule, called a Content Security Policy. Under it, your browser blocks the page from loading scripts and other files from any other address, and from sending requests to any other address.
 >
-> In Chrome and Firefox, the site's tests check that the same rule also holds in the workers that read your file. It has not yet been checked in Safari.
+> In Chrome and Firefox, the site's tests check that the same rule also holds in workers started the same way as those that read your file. It has not yet been checked in Safari.
 >
 > The rule does not stop following a link, opening another page, a direct connection of the kind used for video calls (WebRTC), or looking up another site's address in advance (DNS prefetch). It does not limit requests to this site's own address, which on GitHub Pages is shared by every site of the same GitHub account. The site's tests check that no request carries your file, its name or a password.
 >
@@ -129,6 +131,13 @@ Notes on wording, from the stage 1 review:
 - The first sentence of "What the page may load and send" speaks only of the page. Workers are named only in the sentence about Chrome and Firefox, because the policy in the file-reading workers has not been checked in Safari (`add-content-security-policy`, WebKit risk; issue #7).
 - "Any other address", not "any other site": on GitHub Pages the site's own address is shared with the account's other Pages sites, which the policy allows.
 - The earlier "What the site does not do" list repeated "In short"; only what was new is kept, under "Scripts and the home page".
+
+Changed at the stage 2 review (privacy, UX):
+- "Each tool's page says what it keeps" was not true (Merge PDF's, Reorder pages' and PDF to PNG's pages do not say it all). The page now states what a new PDF and the pictures can carry, with Merge PDF's first file and Image to PDF's picture details. The tool pages are not changed here; their missing lines are an issue #7 page text review item.
+- PDF.js's worker was left out. The page now says the tool's worker starts a second worker to read a PDF and draw its pages, that both get the file and its password, and that both are closed together. "The worker" is now "the tool's worker" where only it is meant.
+- "Opens the file only to draw each picture" became "keep nothing open between one picture and the next": the workers also open the file to read it and to run the job.
+- The policy sentence on workers says what `csp.spec.ts` proves: the rule holds in workers started the same way as those that read the file.
+- "The Remove a password tool takes off…", so the tool's name reads as a name.
 
 ### 3. Draft and search engines
 
@@ -153,21 +162,21 @@ Each claim on the page, the code that makes it true today, and what proves it. "
 | Every tool works in the browser; no tool runs on a server today | Every `runsIn: 'browser'` in `src/tools/registry.ts`; jobs go by `postMessage` in `src/workers/client.ts` | Server guard in `tests/unit/privacy-page.test.ts` (decision 5); `tests/unit/client.test.ts` "posts the file itself" |
 | Files, passwords, text, drawings and pictures are not uploaded; requests carry nothing from the file, its name or a password | `useToolRun` holds files, passwords and pictures in refs and sends them only to the worker | Each tool's no-upload test (`violations` in `tests/e2e/no-upload.ts`: no body, no other origin, no secret in an address or header), in the 13 tool specs and `merge-pdf.spec.ts`; secrets include file names, typed text, picture names and passwords |
 | The programs come from this site, after a file is chosen | Late loading in `tool.worker.ts`; `connect-src 'self'` | `npm run check:worker`; `site.spec.ts` "every page" (all requests same-origin); no-upload allow-lists of built files |
-| The worker makes the new file and draws the page pictures; you save it with Download; nothing saves on its own | `worker-core.ts`, `thumbnail.ts`; `Result` has `<a download>` | Every tool's e2e test presses Download; `tool-page` spec |
+| The tool's worker makes the new file; to read a PDF and draw its pages it starts a second worker (PDF.js's) and hands it the file; both get the file's password; the workers draw the page pictures; you save it with Download; nothing saves on its own | `worker-core.ts`; `createPdfjsLoader` in `pdfjs-loader.ts` starts PDF.js's worker through `workerFromBlob`; `openDocument` in `thumbnail.ts` passes the bytes and password to `getDocument` (thumbnails and the PDF to JPG and PNG job); `picture-thumbnail.ts` draws pictures in the tool worker; `Result` has `<a download>` | Every tool's e2e test presses Download; `tool-page` spec; `merge-pdf.spec.ts` no-upload test sees `pdf.worker.min` fetched after thumbnails are asked for; `thumbnail-plumbing.test.ts` (password passed to `openDocument`) |
 | The file's name is shown and used to name the new file | `outputName` in `useToolRun`; names never sent | `format.test.ts` output names; no-upload secrets |
-| The new file can keep title, tags, field values of left-out pages, attachments; each tool's page says what | Tools' engines (`keepPages`, Merge's first-file attachments) | Each tool's page text and engine tests (Extract, Delete, Merge); release check that the page text still says so |
+| A new PDF can carry the title, author and other details, tags and attachments; tags can bring field values of left-out pages; in Merge PDF the details and attachments are the first file's; PDF to JPG and PNG pictures hold only the drawn page (form values as shown), no title, author or date; Image to PDF copies no picture details | qpdf keeps the primary input's trailer `/Info` and catalog (Merge: the first file is the primary input, `mergeArgs`); `keepPages`, `writePages`, `stampPages` keep the catalog; `pdf-to-images.ts` draws with form values and the canvas encoder writes no text, EXIF or comment; `images-to-pdf.ts` creates the document with `updateMetadata: false` and rebuilds JPGs without picture details | `merge-pdf.test.ts` "the document details" (new: the first file's title is kept, no later file's); Extract and Delete engine tests (tags, fields of left-out pages); `images-to-pdf.test.ts` (no `/Info`, no `/Metadata`, no Exif or GPS); release check for the picture encoders (browser behaviour) |
 | The page holds the file until remove/replace, "Start again" or leaving; switching tabs keeps it | `removeFile`, `clear`, `pagehide` → `clear` in `useToolRun.ts` | Release check (the repo has no DOM test library); `state.test.ts` for the reducer side; the new e2e step below for the result |
-| In tools that show every page of one file (`items: 'pages'`: Split, Extract, Delete, Reorder, Rotate), the worker keeps its own open copy, with the password, while the file is on the page, and closes it on remove, replace, before every read and every job, and when the worker is closed; other tools open the file for each picture and close it at once | `keep = words.items === 'pages'` and `closeDocument` after each picture otherwise (`useToolRun.ts`, thumbnail step); `closeDocument` in `removeFile`; `closeKept()` before every read and job in `worker-core.ts`; `ToolClient.run` ends the worker; PDF.js document in `thumbnail.ts` | `thumbnail-plumbing.test.ts` ("draws many pages of one file from one open document", "closes it when another file is asked for", "closes it before a read and before a job"); release check for keep-versus-close per tool and for remove and replace in the page |
+| In tools that show every page of one file (`items: 'pages'`: Split, Extract, Delete, Reorder, Rotate), the workers keep the file open, with the password, while the file is on the page, and close it on remove, replace, before every read and every job, and when the workers are closed; other tools keep nothing open between pictures | `keep = words.items === 'pages'` and `closeDocument` after each picture otherwise (`useToolRun.ts`, thumbnail step); `closeDocument` in `removeFile`; `closeKept()` before every read and job in `worker-core.ts` destroys the PDF.js document, which lives in PDF.js's worker; `ToolClient.run` ends the tool worker | `thumbnail-plumbing.test.ts` ("draws many pages of one file from one open document", "closes it when another file is asked for", "closes it before a read and before a job"); release check for keep-versus-close per tool and for remove and replace in the page |
 | The new file is held until another job, "Start again" or leaving | `releaseResult` in `start` and `clear` revokes the `blob:` address | New e2e test in `merge-pdf.spec.ts`, in its own context with `bypassCSP: true` (the policy refuses `fetch` of a `blob:` address either way): `fetch` of the Download `href` and a thumbnail's `blob:` address succeeds before "Start again" and fails after. Leaving: release check |
-| The worker is closed after every job and on Cancel | `ToolClient.run` ends it in `finally`; `cancel` calls `end()` | `client.test.ts` "ends the worker when the job is done", "cancels by ending the worker"; `worker-core.test.ts` |
-| The worker is closed on "Start again" and on leaving | `clear` calls `end()`; `pagehide` → `clear` | Release check |
+| The tool's worker is closed after every job and on Cancel, and PDF.js's worker, nested in it, is closed with it | `ToolClient.run` ends it in `finally`; `cancel` calls `end()`; `terminate()` of a worker also closes the workers it started (HTML standard) | `client.test.ts` "ends the worker when the job is done", "cancels by ending the worker"; `worker-core.test.ts`; release check that the nested worker goes with it |
+| The workers are closed on "Start again" and on leaving | `clear` calls `end()`; `pagehide` → `clear` | Release check |
 | An input file's password: kept while on the page and through Cancel and failure; forgotten after a new file or a "no new file" outcome, replace/remove, "Start again", leaving; a wrong try kept until replaced | `runJob` `forgetInputPasswords`; `removeFile`; `clear`; `useToolRun` tickets | `run-job.test.ts`; `unlock-pdf.spec.ts` (wrong try answered last); release check for remove, replace and leaving |
 | Remove a password: restrictions removed with no password; the new copy has no password and opens for anyone | `src/engines/tools/unlock-pdf.ts` (`--decrypt`, `encryptedIn` check) | `unlock-pdf.test.ts` (restrictions-only file, result not encrypted); `unlock-pdf.spec.ts` |
 | A new password: only the first box goes; kept through Cancel, failure and another file chosen in its place; forgotten after the protected file, "Start again", removing the file, leaving | `jobOptions` sends `first` only; `forgetNewPasswords` in `runJob`, `removeFile`, `clear` | `run-job.test.ts`; `options.test.ts`; `protect-pdf.spec.ts` emptied-field and no-upload checks; release check for leaving |
 | The site does not have the password and cannot get it back | No request carries it | `protect-pdf.spec.ts` no-upload; `password-rule.test.ts` |
 | The browser may offer to save or suggest a password, and sync it | `autocomplete="new-password"` in `NewPasswordField`; `autocomplete="off"` in `PasswordField`, which browsers may still offer to save | Browser behaviour; release check |
-| Text, drawings and pictures go to the worker with the job and are drawn into the file; in Sign PDF only the chosen way goes | Options in `jobOptions`; hidden options send no key (`optionsToSend`, `picturesToSend`) | `options.test.ts` (hidden option sends no key); `watermark-pdf.spec.ts`, `sign-pdf.spec.ts` no-upload |
-| A drawing goes as points and is not turned into a picture; a picture is read by the worker | `DrawingPad` keeps points; pictures in a ref, `inspect-picture` in the worker | `components.test.tsx` pad source test; `sign-pdf.spec.ts` |
+| Text, drawings and pictures go to the tool's worker with the job and are drawn into the file; in Sign PDF only the chosen way goes | Options in `jobOptions`; hidden options send no key (`optionsToSend`, `picturesToSend`) | `options.test.ts` (hidden option sends no key); `watermark-pdf.spec.ts`, `sign-pdf.spec.ts` no-upload |
+| A drawing goes as points and is not turned into a picture; a picture is read by the tool's worker | `DrawingPad` keeps points; pictures in a ref, `inspect-picture` in the tool worker (no PDF.js) | `components.test.tsx` pad source test; `sign-pdf.spec.ts` |
 | What was given is kept through Cancel and failure, including other ways in Sign PDF; let go on "Start again", removing the file, leaving | Reducer `choices` reset on `reset` and on removing the last file; hidden options keep their values; `pictures` cleared in `clear` and `removeFile` | `state.test.ts` "forgets a choice when the last file is removed"; `options.test.ts`; release check for leaving |
 | Tools named per input kind | `options` kinds in the registry | Names guard in `privacy-page.test.ts` (decision 5) |
 | No accounts | No sign-in code anywhere | Release check |
@@ -176,7 +185,7 @@ Each claim on the page, the code that makes it true today, and what proves it. "
 | What is typed in the home page box stays on the page | `ToolDirectory` filters in the page | `home.spec.ts` "keeps what is typed on the page" |
 | Downloads list, cache, extensions | Browser behaviour | Release check |
 | The page is blocked from loading from, and sending to, other addresses | `scripts/csp.mjs` meta policy | `npm run check:csp`; `csp.spec.ts` page probes |
-| In Chrome and Firefox the same rule holds in the file-reading workers | `workerFromBlob` starts both workers from `blob:` | `csp.spec.ts` in Chromium and the `firefox` project: a probe worker started the same `blob:` way, and one nested in it, have `eval` and other-origin `fetch` blocked; real jobs (Merge, PDF to JPG, Sign, Split) show `blob:` worker starts and no violation |
+| In Chrome and Firefox the same rule holds in workers started the same way as those that read the file | `workerFromBlob` starts both workers from `blob:` | `csp.spec.ts` in Chromium and the `firefox` project: a probe worker started the same `blob:` way, and one nested in it, have `eval` and other-origin `fetch` blocked; real jobs (Merge, PDF to JPG, Sign, Split) show `blob:` worker starts and no violation |
 | Not yet checked in Safari | WebKit dropped from CI (owner, 22 Nov 2026) | Issue #7 hand check; the Safari guard keeps the sentence (decision 5) |
 | The policy does not stop links, opening pages, WebRTC or DNS prefetch, nor requests to the site's own address, shared by every Pages site of the account | Meta policy; `'self'` is the `github.io` origin | `privacy` spec "What the policy does not stop"; no-upload tests guard same-origin requests; the guard keeps the sentence |
 | Served by GitHub Pages, which receives the IP address, the address asked for and request details, and may record them | `.github/workflows/pages.yml` | Release check; owner question 3 |
@@ -200,7 +209,7 @@ The test reads `src/pages/privacy.astro` as text, strips the frontmatter (betwee
 ### 6. Checks in the site end-to-end test
 
 - `tests/e2e/no-upload.ts` exports `expectNothingStored(page, context)`, built on `traces`: no cookie, and `localStorage`, `sessionStorage`, `indexedDB.databases()`, `caches.keys()` and the origin private file system all empty. Tools' own tests may move to it later; this change does not touch them.
-- "Every page keeps to the look and the rules" in `site.spec.ts` calls it after the network settles, and also requires every request to be a `GET` with no body and no query string, to the site's own origin and a path that exists in `dist/` (the base path removed, `/` and page paths mapped to their `.html` files).
+- "Every page keeps to the look and the rules" in `site.spec.ts` calls it after the network settles, and also requires every request to be a `GET` with no body and no query string, to the site's own origin and a path that exists in `dist/` (the base path removed and the path percent-decoded, `/` and page paths mapped to their `.html` files; the 404 test address, `notFoundPage` in `tests/e2e/pages.ts`, maps to `404.html`).
 - "The privacy page makes no claim" becomes "the privacy page is a marked draft": one `h1` "Privacy", the first paragraph of `main` starts with `draftSentence`, and `meta[name="robots"]` is present.
 - `merge-pdf.spec.ts` gains one test in its own browser context created with `bypassCSP: true`, because `connect-src 'self'` refuses `fetch` of a `blob:` address whether or not it was revoked, so under the policy the test would fail on the violation or pass for the wrong reason. After a job it keeps the Download `href` and one thumbnail's `blob:` address and checks that `fetch` of each in the page succeeds (the positive control), presses "Start again", and checks that `fetch` of each now fails. Only this test bypasses the policy; every other test keeps the policy watch from `tests/e2e/fixtures.ts`. The test sends nothing outside the page.
 
