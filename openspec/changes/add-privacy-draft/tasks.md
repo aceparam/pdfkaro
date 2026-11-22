@@ -23,8 +23,8 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 
 ## 4. Whole checks and screenshots
 
-- [ ] 4.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass; paste the real output in the pull request.
-- [ ] 4.2 Take screenshots of `/privacy` at 360px and 1280px wide, in light and dark mode, into `.github/pr-screenshots/privacy/`. Verify: four files, nothing scrolls sideways, and the page passes the look-and-feel screenshot test in `SPEC.md`.
+- [x] 4.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass; paste the real output in the pull request.
+- [x] 4.2 Take screenshots of `/privacy` at 360px and 1280px wide, in light and dark mode, into `.github/pr-screenshots/privacy/`. Verify: four files, nothing scrolls sideways, and the page passes the look-and-feel screenshot test in `SPEC.md`.
 
 ## 5. Review
 
