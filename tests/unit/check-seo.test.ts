@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkSite, checkSocialImage, decode, pathOfFile, settings } from '../../scripts/check-seo.mjs';
-import type { FooterLink } from '../../src/site';
+import { draftSentence, type FooterLink } from '../../src/site';
 import type { Group, Tool } from '../../src/tools/registry';
 
 // A made-up registry and a made-up build that agrees with it. Each test breaks one thing and
@@ -341,17 +341,35 @@ describe('the search check', () => {
   describe('noindex', () => {
     it('fails on a written page', () => {
       expect(problemsWith('contact.html', (page) => page.replace('</head>', '<meta name="robots" content="noindex"></head>'))).toContain(
-        '/contact: carries noindex, but only a placeholder page may',
+        '/contact: carries noindex, but only a placeholder or draft page may',
       );
     });
 
     it('fails on a placeholder page without it', () => {
-      expect(problemsWith('about.html', (page) => page.replace('<meta name="robots" content="noindex">', ''))).toContain('/about: a placeholder page must carry noindex');
+      expect(problemsWith('about.html', (page) => page.replace('<meta name="robots" content="noindex">', ''))).toContain('/about: a placeholder or draft page must carry noindex');
     });
 
-    it('fails on an unwritten page that shows no placeholder sentence', () => {
+    it('fails on an unwritten page that shows no placeholder sentence or draft line', () => {
       expect(problemsWith('about.html', (page) => page.replace('This page has not been written yet.', 'I made this site.'))).toContain(
-        '/about: is marked not written, but shows no placeholder sentence; mark it written in src/site.ts',
+        '/about: is marked not written, but shows no placeholder sentence or draft line; set written: true for it in src/site.ts',
+      );
+    });
+
+    it('passes an unwritten page that shows only the draft line', () => {
+      const site = goodSite();
+      site.set('about.html', (site.get('about.html') as string).replace('This page has not been written yet.', `${draftSentence} It was written from the code.`));
+      expect(checkSite(site, options)).toEqual([]);
+    });
+
+    it('fails on a written page that still shows the draft line', () => {
+      expect(problemsWith('contact.html', (page) => page.replace('Write to us.', `${draftSentence} Write to us.`))).toContain(
+        '/contact: is marked written, but still shows a placeholder sentence or draft line; remove it, or set written: false for it in src/site.ts',
+      );
+    });
+
+    it('fails on a written page that still shows a placeholder sentence', () => {
+      expect(problemsWith('contact.html', (page) => page.replace('Write to us.', 'No contact address has been added yet.'))).toContain(
+        '/contact: is marked written, but still shows a placeholder sentence or draft line; remove it, or set written: false for it in src/site.ts',
       );
     });
 

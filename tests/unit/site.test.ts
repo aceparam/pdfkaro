@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { absoluteUrl, defaultOrigin, footerLinks, footerPage, isSiteBase, isSiteOrigin, tagline, withBase } from '../../src/site';
 import { tools as registryTools, type Group, type Tool } from '../../src/tools/registry';
 import { groupsWithItems, relatedItems, toListItem } from '../../src/tools/queries';
+import { serverTools } from './server-tools';
 
 describe('withBase', () => {
   it('leaves paths alone when the site is at the root', () => {
@@ -159,7 +160,7 @@ describe('footer pages', () => {
  */
 function taglineProblem(words: string, tools: Pick<Tool, 'id' | 'runsIn'>[]): string | null {
   if (!/browser|device/i.test(words)) return null;
-  const server = tools.filter((tool) => tool.runsIn !== 'browser').map((tool) => tool.id);
+  const server = serverTools(tools);
   if (server.length === 0) return null;
   return (
     `The tagline "${words}" is no longer true: ${server.join(', ')} does not run in the browser. ` +

@@ -1,11 +1,37 @@
+import { readdirSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './fixtures';
-import { allPages, bannedWords, hubPages, hubs, placeholderPages, sitePages, staticPages, toolPages } from './pages';
+import { expectNothingStored } from './no-upload';
+import { draftSentence } from '../../src/site';
+import { allPages, bannedWords, hubPages, hubs, notFoundPage, sitePages, staticPages, toolPages, unwrittenPages } from './pages';
+
+/** Every file in the build, as the address path a browser asks for at the root. */
+const distDir = join(dirname(fileURLToPath(import.meta.url)), '../../dist');
+const builtPaths = new Set(
+  readdirSync(distDir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `/${relative(distDir, join(entry.parentPath, entry.name)).split(sep).join('/')}`),
+);
+
+/**
+ * The built file an address path is served from: the base path taken off and the path decoded, then "/" is
+ * index.html and a page path its .html file.
+ */
+function builtFileOf(address: string, base: string): string {
+  const prefix = base.replace(/\/+$/, '');
+  const raw = new URL(address).pathname;
+  const pathname = decodeURIComponent(prefix !== '' && raw.startsWith(`${prefix}/`) ? raw.slice(prefix.length) : raw);
+  if (pathname === '/') return '/index.html';
+  if (pathname.endsWith('/')) return `${pathname}index.html`;
+  return /\.[a-z0-9]+$/i.test(pathname.slice(pathname.lastIndexOf('/'))) ? pathname : `${pathname}.html`;
+}
 
 test.describe('every page', () => {
   for (const path of allPages) {
-    test(`${path} keeps to the look and the rules`, async ({ page, baseURL }) => {
-      const requests: { url: string; type: string }[] = [];
-      page.on('request', (request) => requests.push({ url: request.url(), type: request.resourceType() }));
+    test(`${path} keeps to the look and the rules`, async ({ page, context, baseURL }) => {
+      const requests: { url: string; type: string; method: string; body: string | null }[] = [];
+      page.on('request', (request) => requests.push({ url: request.url(), type: request.resourceType(), method: request.method(), body: request.postData() }));
       await page.goto(path);
       await page.waitForLoadState('networkidle');
 
@@ -21,8 +47,8 @@ test.describe('every page', () => {
       await expect(page.locator('footer a')).toHaveCount(5);
 
       // The real site, at the root of its address, asks search engines to stay away only from a page
-      // that still shows an owner placeholder.
-      await expect(page.locator('meta[name="robots"]')).toHaveCount(placeholderPages.includes(path) ? 1 : 0);
+      // that still shows an owner placeholder or an agent's draft.
+      await expect(page.locator('meta[name="robots"]')).toHaveCount(unwrittenPages.includes(path) ? 1 : 0);
 
       // Nothing scrolls sideways.
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -33,7 +59,18 @@ test.describe('every page', () => {
         expect(['font', 'image'], request.url).not.toContain(request.type);
         // The social image, the sitemap and robots.txt are for crawlers and link previews only.
         expect(new URL(request.url).pathname, request.url).not.toMatch(/\/(social\.png|sitemap\.xml|robots\.txt)$/);
+        // A plain GET with nothing sent: no body, no query string, and a file that is in the build. The page
+        // with no file of its own is served the 404 page.
+        expect(request.method, request.url).toBe('GET');
+        expect(request.body, request.url).toBeNull();
+        expect(new URL(request.url).search, request.url).toBe('');
+        const served = builtFileOf(request.url, new URL(baseURL!).pathname);
+        const file = path === notFoundPage && served === `${notFoundPage}.html` ? '/404.html' : served;
+        expect(builtPaths.has(file), `${request.url} is not a file in the build`).toBe(true);
       }
+
+      // No cookie, and nothing in the browser's storage.
+      await expectNothingStored(page, context);
     });
   }
 
@@ -123,7 +160,7 @@ test.describe('canonical tags', () => {
       await expect(page.locator('link[rel="canonical"]')).toHaveCount(1);
       expect(await page.locator('link[rel="canonical"]').getAttribute('href'), path).toBe(page.url());
     }
-    await page.goto('/no-such-page');
+    await page.goto(notFoundPage);
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
     await expect(page.locator('meta[property^="og:"]')).toHaveCount(0);
   });
@@ -195,7 +232,7 @@ test.describe('home page group headings', () => {
 
 test.describe('page not found', () => {
   test('answers 404 and links to the list of tools', async ({ page }) => {
-    const response = await page.goto('/no-such-page');
+    const response = await page.goto(notFoundPage);
     expect(response?.status()).toBe(404);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Page not found');
     await page.getByRole('link', { name: 'See the list of all tools' }).click();
@@ -203,7 +240,7 @@ test.describe('page not found', () => {
   });
 });
 
-test.describe('placeholder pages', () => {
+test.describe('placeholder and draft pages', () => {
   test('the contact page shows no address', async ({ page }) => {
     await page.goto('/contact');
     await expect(page.locator('main')).toContainText('No contact address has been added yet.');
@@ -211,9 +248,13 @@ test.describe('placeholder pages', () => {
     await expect(page.locator('main a')).toHaveCount(0);
   });
 
-  test('the privacy page makes no claim', async ({ page }) => {
+  test('the privacy page is a marked draft', async ({ page }) => {
     await page.goto('/privacy');
-    expect((await page.locator('main').innerText()).trim()).toBe('Privacy\n\nThis page has not been written yet.');
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.locator('h1')).toHaveText('Privacy');
+    expect((await page.locator('main p').first().innerText()).startsWith(draftSentence)).toBe(true);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+    await expect(page.locator('main a')).toHaveCount(0);
   });
 });
 
