@@ -1,6 +1,6 @@
 # Design: add-uniform-requests
 
-See proposal.md, "Why", for the motivation. The requirements are in `specs/privacy/spec.md` and `specs/tool-engines/spec.md`.
+See proposal.md, "Why", for the motivation. The requirements are in `specs/privacy/spec.md` and `specs/tool-engines/spec.md`. The owner answered two questions on 22 Nov 2026: PDF.js's set is fetched after every pick on a PDF page, and a wrong-kind pick loads the set first, with the wait held to 60 seconds. The stage 1 review panel's findings are settled below; the item numbers (R1 to R17) are the panel's.
 
 ## Context
 
@@ -9,24 +9,23 @@ How a tool page loads code today (read from the code at 18cdb2f; sizes are gzip 
 - **The page.** `ToolWidget` loads `ToolWorkspace` (21.4 KB, and `FilePicker` CSS, 0.3 KB) with `lazy(import())` on any pick, before it looks at the file. `useToolRun.addFiles` then checks each file's first bytes on the page. A file of the wrong kind is refused there, and no worker is started. A worker is started (`createToolWorker` → `workerFromBlob` → `tool.worker-*.js`, 4.2 KB) by the first read or the first thumbnail.
 - **The worker** (`src/workers/tool.worker.ts`, `worker-core.ts`). Each message loads the tool's engine (`import.meta.glob`) together with the engine's static imports. Libraries are loaded through `tools`, each on first ask:
 
-  | Library | How it is loaded | Fetched | Size |
+  | Key | What it loads | Notes | Size |
   | --- | --- | --- | --- |
-  | `tools.qpdf` | the wrapper `qpdf-*.js` (1.3 KB), the Emscripten glue `qpdf-*.js` (15.9 KB), then `qpdf-*.wasm` (442.8 KB) | the glue fetches the WebAssembly once for every qpdf instance made | |
-  | `tools.pdfjs` | `pdf-*.js` (131.8 KB), then PDF.js's own worker `pdf.worker.min-*.mjs` (378.1 KB) | the worker is started only after the import resolves | |
-  | `tools.pdfjsData` | `pdfjs-data-*.js` | | 778.4 KB |
-  | `openDocument` | `thumbnail-*.js` (1.7 KB) for a PDF, or `picture-thumbnail-*.js` (0.5 KB) for a picture | | |
-  | `tools.pdflib` | `pdflib-*.js` | statically imports `fflate-*.js` | 243.5 KB |
-  | `tools.fflate`, `loadZip` | `fflate-*.js` | | 6.3 KB |
+  | `qpdf` | the wrapper `qpdf-*.js` (1.3 KB), the Emscripten glue `qpdf-*.js` (15.9 KB), then `qpdf-*.wasm` (442.8 KB) | the glue fetches the WebAssembly once for every qpdf instance made | |
+  | `pdfjs` | `pdf-*.js` (131.8 KB), then PDF.js's own worker `pdf.worker.min-*.mjs` (378.1 KB) | the nested worker is started only after the import resolves | |
+  | `pdfjsData` | `pdfjs-data-*.js` | | 778.4 KB |
+  | (none: `openDocument`) | `thumbnail-*.js` (1.7 KB) for a PDF, or `picture-thumbnail-*.js` (0.5 KB) for a picture | | |
+  | `pdflib` | `pdflib-*.js` | statically imports `fflate-*.js` | 243.5 KB |
+  | `fflate`, and `loadZip` beside `tools` | `fflate-*.js` | | 6.3 KB |
   | `canvas`, `decodePicture`, `pdfjsGuard` | functions inside the worker | fetch nothing | |
 
   The static imports that come with each engine are `inspect`, `plain`, the qpdf wrapper, `picture`, `stamp`, `option-values` and `thumbnail`, depending on the tool.
-- **The worker's life.** One worker reads files and draws thumbnails. The page ends it after every job, on Cancel, on "Start again", on a failure other than the engine's own, and when a thumbnail takes more than 10 seconds. A job runs in that same worker if it is still alive, or in a fresh one if pressing the button ended it because a thumbnail was being drawn.
+- **The worker's life.** One worker reads files and draws thumbnails. A job runs in that same worker if it is still alive, or in a fresh one if pressing the button ended it. Every way a worker is ended today is listed in the audit's third table.
 - **The host's cache.** GitHub Pages sends `Cache-Control: max-age=600`, an `ETag` and `Last-Modified`. Checked on the preview with `curl -sI` on 22 Nov 2026. Built file names carry a content hash.
   - For 10 minutes, a browser answers a repeated request for the same file from its own cache, and GitHub sees nothing.
   - After that, the next use of each file sends a conditional request, which GitHub answers with 304. The copy is then fresh for another 10 minutes.
+  - A request made while the same file is still arriving for another worker may go to the network again. So a worker ended mid-download, followed by a new one, can show the host a repeat.
   - A new private window, or a browser with its cache off or full, starts with no copies.
-
-  So on a first visit the host sees each file the first time it is used, and later only the checks for stale copies.
 - **Lint and the qpdf build.** Lint forbids `fetch` in `src/workers/`. The qpdf build (`@neslinesli93/qpdf-wasm/dist/qpdf.js`) has no `instantiateWasm` or `wasmBinary` hook: it always calls `fetch(locateFile('qpdf.wasm'))`. So a compiled module cannot be shared between instances without breaking one rule or the other.
 
 ## Audit
@@ -63,7 +62,6 @@ On every page, these also hold today:
 
 - Q's WebAssembly is requested after the file has been copied into the worker (`bytesOf`), so its timing grows with the file's size.
 - Each qpdf instance fetches it again. How many instances there are follows the file: one per file read, two per plain copy, one per batch of Compress PDF's pictures. These repeats are answered from the browser's cache while it is fresh.
-- Whether the job runs in a fresh worker depends on whether a thumbnail was being drawn when the button was pressed, which depends on how slow the file is to draw. A fresh worker asks for its files again. While the cache is fresh this costs nothing visible; after the copies go stale it shows as conditional requests.
 
 ### Which differences leak something about the file
 
@@ -77,35 +75,48 @@ On every page, these also hold today:
 | L missing at a page-numbers, Watermark or Sign job | the job failed before drawing (the file's pages could not be read, a budget) | **leak of file content**; fixed |
 | F at a Sign PDF picture read | a picture of the right kind was chosen | **leak of the picture's type**; fixed |
 | When P, and Q's WebAssembly, are requested | how long the files took to copy and read: their size, number and complexity | **timing leak**; fixed: every request of a phase starts before any file is read |
-| The job's worker reused or fresh | a thumbnail was mid-draw (slow file, or the visitor's timing) | shows only once copies are stale; fixed: every job starts a fresh worker |
-| How many times qpdf's WebAssembly is asked for | how many qpdf instances the file needed | shows only with no usable cache; not fixed (Risks) |
-| A reading worker started again after a thumbnail passed 10 seconds | a page of the file is slow to draw | shows only once copies are stale; not fixed (Risks) |
-| A job longer than 10 minutes | the job is still running when copies go stale | a check for qpdf's WebAssembly mid-job; not fixed (Risks) |
-| The page opened; any pick; the main button pressed; Cancel; "Start again"; a password typed; an option chosen; scrolling (which thumbnails are drawn) | the visitor's own actions and device | **allowed**: visitor choices, not file content. After this change, options and scrolling change no request at all |
+| Repeats from workers ended mid-download | see the next table | **leak**; fixed for every file-driven end before the set settles |
+| How many times qpdf's WebAssembly is asked for | how many qpdf instances the file needed | shows only with no usable cache; not fixed (Risks, R3) |
+| The page opened; any pick; the main button pressed; Cancel; "Start again"; Remove; a password typed; an option chosen; scrolling (which thumbnails are drawn) | the visitor's own actions and device | **allowed**: visitor choices, not file content. After this change, options and scrolling change no request at all |
+
+### Every way a reading worker is ended (R1)
+
+| Where | When | Driven by | Today | After |
+| --- | --- | --- | --- | --- |
+| `client.ts` `thumbnail`, 10-second limit | counted from the send, so it includes P's download (1.29 MB) | the file (only readable files ask for a thumbnail) and a slow link | ends the worker mid-download; the next worker asks for P again, so the host sees a repeat for readable files only | **fixed**: the limit starts only after the worker reports `prepared` (the set has settled). After that, an end is answered from the cache, except with stale copies (Risks) |
+| `useToolRun` `stopThumbnail` → `client.end()`, from `inspect` | each further file, and each password try | the visitor's action, but how often it cuts P depends on how many files and tries there are, and whether the file reads | cuts P short | **fixed**: before the set settles, no drawing can be in progress (drawing needs P), so a waiting thumbnail is dropped by a `drop-thumbnail` message and the worker is kept. After it settles, a drawing in progress is stopped as today |
+| `stopThumbnail` from `readChosenPicture` | a Sign PDF picture of the right kind | the picture's type | as above | **fixed**, as above |
+| `endReplacedRead` | a Sign PDF picture chosen again while the earlier one is still read | the picture's content (a slow read) | ends at once | **fixed**: `client.endWhenSettled()` waits for the set to settle, held to 60 seconds, then ends; the new read starts after that |
+| `failAll` on a reading failure other than `engine` (memory, `engine-load`) | the read fails | the file | ends at once, maybe mid-download | **fixed**: `worker-core` posts `failed` for a read only after the set has settled, held to 60 seconds |
+| `onerror` (the worker crashes) | a crash while reading | the file | ends at once | **not fixed**, a named exception (Risks) |
+| `useToolRun.start`, the main button | the visitor presses it | the visitor, but if P is still arriving, how long the file took to read decides whether P is cut short | ends the worker | **kept**: the job is not held back. A named exception (Risks) |
+| Cancel, "Start again", Remove of the last file, Remove during a wrong-kind wait, `pagehide`, unmount | the visitor | the visitor | ends at once | **kept**, and it also ends a worker waiting in `endWhenSettled` |
+| `run` `finally`, job failures | the job ends | the job's worker, whose set loaded before the engine | ends | **kept**: nothing is left to fetch |
 
 ### What the host can see whatever the code does
 
-These are visible from the requests themselves. The Privacy page says so (decision 9):
+These are visible from the requests themselves. The Privacy page says so (decision 11):
 
 - The visitor's IP address and the headers the browser sends.
-- Which tool page was opened, and when.
+- Which tool page was opened, and when, from the page request itself.
 - From the requests after a pick, that a pick was made (any pick, now also of the wrong kind) and when.
-- From the job's requests, that the main button was pressed and when. Pages whose job needs no file the pick did not already fetch (Merge, Extract, Delete, Reorder, Rotate, Protect, Remove a password) show nothing new on the first job while the cache is fresh, since the job's fresh worker is answered from the cache.
+- On some tools, from the job's requests, that the main button was pressed and when. Pages whose job needs no file the pick did not already fetch (Merge, Extract, Delete, Reorder, Rotate, Protect, Remove a password) show nothing new on the first job while the cache is fresh, since the job's fresh worker is answered from the cache. So the Privacy page says the host "may be able to tell" when a job was started.
 - While copies are fresh, a second pick or job shows nothing. After 10 minutes, the next use of each file shows as a conditional request.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- On every tool page, the requests after a pick, and after the main button, are one fixed set chosen by the tool.
+- On every tool page, the requests after a pick, and after the main button, are one fixed set chosen by the tool, each made once, while the browser keeps the copies the host's cache headers allow.
 - Each request of a phase starts before the worker reads any file, so neither its happening, its order in the code nor its timing comes from the file.
-- A test that checks this the way the host sees it, across very different inputs, on all 17 pages.
-- A true, plain sentence on the Privacy page about it.
+- No reading worker is ended for a file-driven reason before its set has settled.
+- A test that checks this the way the host sees it, across very different inputs, on all 17 pages, and on a slow link for the cases that need one.
+- True, plain sentences on the Privacy page, naming what is not closed.
 
 **Non-Goals:**
 
 - Hiding the phases themselves (page opened, pick, job). They are the visitor's own actions and cannot be hidden from a host that serves the code.
-- Closing the residual cases in Risks. Each needs either a `fetch` in the worker, a patched qpdf build or a service worker, and each is noted for later.
+- Closing the named exceptions in Risks. Each needs a `fetch` in the worker, a patched qpdf build, a service worker, or holding back the visitor's own button. Each is noted for later.
 - Changing what any engine does to a file, its words, or the budget before a pick.
 
 ## Decisions
@@ -126,23 +137,22 @@ Alternatives considered:
 - *Padding*: dummy requests, or requests made to look alike. The brief prefers loading the same modules. Padding is fragile and must be kept in step with every engine.
 - *A service worker that caches everything at once* (phase 2). It does not change a first visit's pattern, and it is out of scope.
 
-### 2. Each engine declares its sets
+### 2. Each engine declares its sets; the thumbnail code follows from `thumbnails` (R11)
 
 `EngineModule` gains:
 
 ```ts
 loads: {
   read: readonly LibraryName[];
-  draw: readonly LibraryName[];
   job: readonly LibraryName[];
 }
 ```
 
-`LibraryName` is one of `'qpdf' | 'fflate' | 'pdflib' | 'pdfjs' | 'pictureThumbnail'`. `'pdfjs'` stands for PDF.js, its worker, `pdfjs-data` and the `thumbnail` step together. Static imports are not listed, because they always come with the engine.
+`LibraryName` is one of `'qpdf' | 'fflate' | 'pdflib' | 'pdfjs' | 'pictureThumbnail'`. The **draw set** is not declared. It follows from the existing `thumbnails` field: `['pictureThumbnail']` when `thumbnails === 'picture'`, otherwise `['pdfjs']`. That makes it one fact, written once. Static imports are not listed, because they always come with the engine.
 
-The declarations, which the unit test of decision 8 confirms against every fixture:
+The declarations, which the unit test of decision 10 confirms against every fixture:
 
-| Engine | `read` | `draw` | `job` |
+| Engine | `read` | draw (from `thumbnails`) | `job` |
 | --- | --- | --- | --- |
 | `merge-pdf`, `extract-pdf-pages`, `delete-pdf-pages`, `rearrange-pdf-pages`, `rotate-pdf`, `protect-pdf`, `unlock-pdf` | qpdf | pdfjs | qpdf |
 | `split-pdf`, `compress-pdf` | qpdf | pdfjs | qpdf, fflate |
@@ -151,7 +161,7 @@ The declarations, which the unit test of decision 8 confirms against every fixtu
 | `sign-pdf` | qpdf, fflate | pdfjs | qpdf, fflate, pdflib |
 | `images-to-pdf` | fflate | pictureThumbnail | fflate, pdflib |
 
-`draw` must match `thumbnails`: `'pictureThumbnail'` exactly when `thumbnails === 'picture'`, `'pdfjs'` otherwise. The unit test checks this.
+Every tool whose registry entry has `outputs: 'several'` (Split, PDF to JPG and PNG) declares `fflate` in `job`, because the zip step comes from it (decision 5). The unit test checks this against the registry.
 
 Why on the engine and not in the registry: the registry drives pages (`SPEC.md` rule 1). What an engine loads is the engine's own concern, like `thumbnails` today, which is also "chosen by tool, never by a file's bytes". The worker learns the sets from the engine it has just loaded, before it touches a file.
 
@@ -160,18 +170,49 @@ Alternatives considered:
 - *A table in the worker.* It would be a second place to forget.
 - *Working the sets out from the bundle.* Fragile, and it cannot see `tools.*` calls.
 
-### 3. The order, and what is waited for
+### 3. One table from `tools` keys to libraries (R6)
+
+`src/workers/libraries.ts` holds, once:
+
+- `LibraryName`;
+- the canonical order `['qpdf', 'fflate', 'pdflib', 'pdfjs', 'pictureThumbnail']`;
+- the table that maps every key of the worker's `tools` to the library it belongs to:
+
+```ts
+export const toolLibrary = {
+  qpdf: 'qpdf',
+  fflate: 'fflate',
+  pdflib: 'pdflib',
+  pdfjs: 'pdfjs',
+  pdfjsData: 'pdfjs',
+  pdfjsGuard: 'always',
+  canvas: 'always',
+  decodePicture: 'always',
+} as const satisfies Record<keyof typeof tools, LibraryName | 'always'>;
+```
+
+`tool.worker.ts` checks its `tools` against it with `satisfies`, so a new key without a row fails the type check. A key with no row is refused at run time too. `'pdfjs'` covers `tools.pdfjs`, `tools.pdfjsData` and the `thumbnail` import used by `openDocument`. `'pictureThumbnail'` covers the `picture-thumbnail` import.
+
+For each phase, `worker-core` hands an engine a `tools` that answers only:
+
+- the keys whose library is in that phase's set;
+- the keys marked `'always'`.
+
+Any other key throws, so the step fails as `engine-load` and fetches nothing new. A thumbnail message's `openDocument` gets the read and draw sets.
+
+### 4. The order, and what is waited for
 
 `worker-core.ts` gets one memoised step per phase, `ready(phase)`. A read, a thumbnail, a picture read and a `prepare` message wait for `ready('read')`. A run waits for `ready('job')`.
 
 `ready('read')`:
 
 1. Load the engine and wait for it.
-2. Start every `read` library in the fixed order `qpdf`, `fflate`, `pdflib`, `pdfjs`, `pictureThumbnail`, in one synchronous step, and wait for them all.
-3. Start every `draw` library in the same synchronous way. Catch any failure, so a missing PDF.js means blank boxes, as today. Do not wait for them.
+2. Start every `read` library in the canonical order, in one synchronous step, and wait for them all.
+3. Start the draw set in the same synchronous way. Catch any failure, so a missing PDF.js means blank boxes, as today. Do not wait for it before reading.
 4. Only then is the message's file copied (`bytesOf`) and read.
+5. When the draw set has loaded or failed, post `prepared` once. This is the signal that the set has **settled** (decision 7).
 
-`ready('job')` does the same with `job`, and waits for all of it. A failure there is `engine-load`, as a failed engine import is today.
+`ready('job')` does the same with `job`, waits for all of it, and includes the zip step (decision 5). A failure there is `engine-load`, as a failed engine import is today.
 
 Why the draw part is not waited for:
 
@@ -182,11 +223,21 @@ Waiting for P (1.29 MB) before reading would break both.
 
 Why the draw part starts only after the read part has loaded, and not alongside it: on a slow link, P would share bandwidth with qpdf. On 1.6 Mbit/s, qpdf alone takes about 2.3 s, and with P beside it up to about 8.8 s, so the page count would come later. Starting P right after the read libraries keeps the time to the page count as it is today. Every request is still started before any file is read.
 
-What remains is the order in which requests started together reach the wire. That comes from the network and the browser, not the file.
+What remains is the order in which requests started together reach the wire. That comes from the network and the browser, not the file, and it is not tested at the server (Risks, R12).
 
-### 4. The first qpdf is made at the fixed point and handed on unused
+### 5. The zip step is loaded inside `ready('job')` (R5)
 
-In `tool.worker.ts`, loading `'qpdf'` for a phase makes one qpdf instance, which requests the WebAssembly, and keeps it as a spare. The next `tools.qpdf()` call takes the spare and clears it. Every later call makes a new instance, as today. qpdf stays fresh for every engine call, because the spare has never been used. Today's first instance is made after `bytesOf(file)`, so this costs nothing extra.
+The separate `loadZip` dependency goes. The `fflate` library loads one module, which gives the inflater, the deflater and `zipSync`. Its import moves into `src/workers/fflate.ts`, which re-exports `Inflate`, `Deflate` and `zipSync`. `worker-core` takes `zipSync` from the loaded `fflate` library for a run whose message asks for a zip. A zip run without `fflate` in the job set is a programming mistake: the unit test of decision 10 catches it, and at run time it fails as `engine-load`.
+
+### 6. The first qpdf is made at the fixed point and handed on unused (R15)
+
+`src/workers/spare-qpdf.ts` holds a plain function, tested in Node.
+
+- Loading `'qpdf'` for a phase makes one qpdf instance, which requests the WebAssembly, and keeps it as a spare.
+- The next `tools.qpdf()` call takes the spare and clears it.
+- Every later call makes a new instance, as today.
+
+qpdf stays fresh for every engine call, because the spare has never been used. For a worker that calls qpdf, it costs nothing extra: today's first instance is made after `bytesOf(file)`. A worker that never calls qpdf still compiles qpdf and holds the spare, about 16.4 MB, until it ends. Examples are a wrong-kind pick, or a reading worker started again only to draw thumbnails.
 
 The repeated per-instance fetch stays: the build has no hook to avoid it, and lint keeps `fetch` out of the worker. While the cache is fresh, the browser answers it from the cache (Risks).
 
@@ -195,100 +246,154 @@ Alternatives considered:
 - *A throwaway instance.* It costs an extra compile and instance per phase.
 - *No early instance.* The WebAssembly's request time would then follow the file's size.
 
-### 5. Every job runs in a fresh worker
+### 7. No reading worker is ended for a file-driven reason before its set settles (R1)
 
-`useToolRun.start` ends the reading worker with `client.end()` before `runJob`, instead of only stopping a thumbnail being drawn. The job's worker is always new, so its requests are always the job set, answered from the cache where the browser holds a copy.
+`ToolClient` learns, per worker, whether the set has settled, from the worker's single `prepared` message.
 
-Before, whether the job reused the reading worker depended on whether a thumbnail was mid-draw. That changed which checks for stale copies the host saw.
+- **The thumbnail time limit** in `thumbnail()` starts its 10-second timer only once `prepared` has arrived. Before that, a thumbnail waits without a limit, but the visitor's own actions still end the worker.
+- **`stopThumbnail`** before `prepared` sends `drop-thumbnail`. The worker answers the waiting thumbnail with no picture and keeps going, and the page calls it stopped. No drawing can be under way before P has loaded. After `prepared`, a drawing in progress is stopped by ending the worker, as today.
+- **`endReplacedRead`** calls `client.endWhenSettled()`. It waits until the set has settled or 60 seconds have passed, then ends the worker. The new picture's read waits for it, and then starts a fresh worker.
+- **A reading failure.** `worker-core` posts `failed` for a read or picture read only after `prepared`, held to 60 seconds. The client's `failAll` then ends a worker whose set has settled.
+- **The visitor's own actions** (`end()`: Cancel, "Start again", Remove of the last file, `pagehide`, unmount, the main button) end the worker at once. They also end one waiting in `endWhenSettled`.
 
-Cost: one worker start and the job set's modules evaluated again from the cache. Task 4.4 measures it, and it is expected to be under 200 ms on a desktop. It is off the main thread, so the 100 ms rule is not touched.
-
-Benefits:
-
-- The reading worker's PDF.js and kept document are gone before the job starts, so peak memory does not rise.
-- `tool-page` "Pressing the main button SHALL stop any thumbnail being drawn, so the job starts at once" still holds.
-
-### 6. A pick that takes no file still loads the pick set
-
-`useToolRun.addFiles` sends a new `prepare` message (`ToolClient.prepare()`, a `ToWorker` type with no file) before it looks at the files. The worker answers `prepared` once `ready('read')` has loaded and every `draw` library has settled, loaded or failed.
-
-- When some file is taken, nothing waits for `prepared`: the reads go ahead as in decision 3.
-- When no file is taken, `addFiles` waits for `prepared` before it returns, so the workspace shows "Getting ready" until then. The refusal sentence and `onEmpty` follow as today.
-  - The wait is held to 60 seconds, so a stalled network cannot hide the sentence. A stall is the network's doing, not the file's.
-  - The worker is then ended, having never been sent a file.
+The 60-second hold means a stalled network cannot keep a worker alive. A stall is the network's doing, not the file's.
 
 Alternatives considered:
 
-- *Say it at once and end the worker.* The set would be cut short, so a wrong pick would show as fewer requests.
+- *Keep the old worker until it settles while a new one starts.* The new worker would ask for the same files while they are still arriving for the old one, and that can reach the network again. So it was rejected.
+
+### 8. Every job runs in a fresh worker
+
+`useToolRun.start` ends the reading worker with `client.end()` before `runJob`. The job's worker is always new, so its requests are always the job set, answered from the cache where the browser holds a copy.
+
+Before, whether the job reused the reading worker depended on whether a thumbnail was mid-draw. That changed which checks for stale copies the host saw.
+
+The job is never held back to let P finish (Risks).
+
+Cost: one worker start and the job set's modules evaluated again from the cache, measured in task 4.4. It is off the main thread, so the 100 ms rule is not touched.
+
+Benefits:
+
+- The reading worker's PDF.js and kept document are gone before the job starts.
+- `tool-page` "Pressing the main button SHALL stop any thumbnail being drawn, so the job starts at once" still holds.
+
+### 9. A pick that takes no file waits for the set, visibly (R4; owner, 22 Nov 2026)
+
+`useToolRun.addFiles` sends `prepare` (`ToolClient.prepare()`, a `ToWorker` type with no file) before it looks at the files.
+
+- When some file is taken, nothing waits for `prepared`. The reads go ahead as in decision 4.
+- When no file is taken, the workspace shows the line the reading path shows today, the file name with "Getting ready" beside it and its Remove button ("notes.docx, Getting ready"). For several files it shows the summary line with "Getting ready".
+  - Focus moves to that line (`summaryRef`, `tabIndex={-1}`), as it does after a pick today.
+  - The wait ends when `prepared` arrives, when the set fails to load (at once), or after 60 seconds. The worker is then ended, having never been sent a file. The picker returns with the refusal sentence in its status line, which is read out, and focus moves to the picker, as `onEmpty` does today.
+  - Remove during the wait ends the wait and the worker, and returns to the picker as removing the last file does. This is the visitor's own action.
+
+Alternatives considered:
+
+- *Say it at once and end the worker.* The set would be cut short, so a wrong pick would show as fewer requests. The owner rejected this.
 - *Say it at once and let the worker finish in the background.* After "Start again" or leaving, the worker would outlive the page's own end call. That breaks the Privacy page's "the workers are closed on 'Start again'".
 
-The owner can choose instead to accept that a wrong pick shows (Open questions, 2).
+### 10. PDF.js's worker starts alongside the PDF.js import, guarded from its first moment (R9)
 
-### 7. PDF.js's worker starts alongside the PDF.js import
+`createPdfjsLoader.load()` starts PDF.js's nested worker in the same step as `import('pdfjs-dist')`, not after the import resolves.
 
-`createPdfjsLoader.load()` starts PDF.js's nested worker in the same step as `import('pdfjs-dist')`, not after the import resolves. The port is handed to PDF.js once the import is there.
+- Its `onerror`, which calls `preventDefault` and sets the failed flag, is attached as soon as `startWorker()` returns.
+- If the import rejects, the nested worker is terminated.
+- The port is handed to PDF.js once the import is there.
 
-Today the nested worker's request waits for the import to arrive and be evaluated. That needs the tool worker's event loop, which a long qpdf call holds, so the request's timing could follow the file. Errors are handled as today: a failed nested worker stops every drawing at once.
+Today the nested worker's request waits for the import to arrive and be evaluated. That needs the tool worker's event loop, which a long qpdf call holds, so the request's timing could follow the file. Unit tests cover these cases:
 
-### 8. The tests
+- the worker starts before the import resolves;
+- an early nested error before the import resolves leaves PDF.js failed;
+- a rejected import terminates the nested worker.
+
+### 11. The tests
 
 - **`tests/unit/worker-core.test.ts`** uses made-up loaders that write to a log.
-  - For a read, the log is: engine, `read` libraries in order, `draw` libraries started, then the file read. The same log for an engine whose `inspect` answers ready, damaged or needs-password.
-  - For a run, every `job` library is loaded before `engine.run` is called, also when `run` throws at once, and when it gives no file.
-  - A `draw` failure does not fail the read.
-  - A `prepare` message loads the read set and answers `prepared`.
-- **`tests/unit/client.test.ts`**: `prepare` posts no file, and resolves on `prepared`.
-- **`tests/unit/engine-loads.test.ts`** (new): for every file in `src/engines/tools/`, it runs `inspect` (and `inspectPicture`) and `run` against every file in `tests/fixtures/` (and `pictures/` for picture engines and Sign PDF's picture). It uses a valid option set per tool, from one small table in the test, and a recording `tools` filled from disk as the engine tests do. It fails if a step asks for a library outside its declared set, if `loads` is missing, or if `draw` does not match `thumbnails`. `canvas`, `decodePicture` and `pdfjsGuard` fetch nothing and are allowed everywhere. This is also how this change runs every engine against every fixture, as the tasks rule asks.
-- **`tests/e2e/host-log.ts`** (new): a small `node:http` server for `dist/` that stands in for the host.
-  - It serves clean URLs and the 404 page, with the content types GitHub Pages sends (`application/wasm`, `text/javascript` for `.mjs`).
-  - It sends `Cache-Control: max-age=600`, an `ETag` and `Last-Modified`, and answers `If-None-Match` with 304.
+  - For a read, the log is: engine, `read` libraries in order, draw set started, then the file read. The same log for an engine whose `inspect` answers ready, damaged or needs-password.
+  - For a run, every `job` library, the zip step included, is loaded before `engine.run`, also when `run` throws at once or gives no file.
+  - A draw failure does not fail the read.
+  - `prepared` is posted once, after the draw set settles.
+  - A reading failure is posted only after `prepared` (held to 60 s).
+  - `drop-thumbnail` answers a waiting thumbnail with no picture.
+  - An undeclared key fails as `engine-load`.
+- **`tests/unit/client.test.ts`**:
+  - `prepare` posts no file and resolves on `prepared`;
+  - the thumbnail limit does not end a worker whose set has not settled, and does once it has;
+  - `endWhenSettled` waits for `prepared` or 60 seconds;
+  - `end()` ends a worker waiting in `endWhenSettled` at once.
+- **`tests/unit/engine-loads.test.ts`** (new): for every file in `src/engines/tools/`, it runs `inspect` (and `inspectPicture`) and `run` against every file in `tests/fixtures/` (and `pictures/` for picture engines and Sign PDF's picture). It uses a valid option set per tool, from one small table in the test, and a recording `tools` filled from disk, as the engine tests do. It fails when:
+  - a step asks for a library outside its declared set;
+  - `loads` is missing;
+  - a tool with `outputs: 'several'` lacks `fflate` in `job`.
+
+  `'always'` keys are allowed everywhere. This is also how this change runs every engine against every fixture, as the tasks rule asks.
+- **`npm run check:worker`** gains a rule (R12): the draw-set chunks (`pdf`, `pdfjs-data`, `thumbnail`, `picture-thumbnail`) may statically import only chunks the worker and the tool's engine already load. So starting the draw set never brings a request that the file could delay.
+- **`tests/e2e/host-log.ts`** (new): a small `node:http` server for `dist/` that stands in for the host (R10).
+  - It binds to `127.0.0.1` on a free port and answers `GET` and `HEAD` only.
+  - It percent-decodes the path once, refuses NUL, resolves with `path.resolve(distRoot, '.' + decoded)`, and refuses anything whose `fs.realpath` is not inside `realpath(distRoot) + sep`.
+  - It serves clean URLs and the 404 page, with GitHub Pages' content types (`application/wasm`, `text/javascript` for `.mjs`).
+  - It sends `Cache-Control: max-age=600`, an `ETag` and `Last-Modified`, and answers `If-None-Match` with 304. It sends no CORS headers and no Content Security Policy header, since the policy is a meta tag, as on the host.
   - It records `method path status` for every request, with a `mark()` to split phases.
-  - It sends no Content Security Policy header, since the policy is a meta tag, as on the host.
+  - It has a **slow mode** that holds each response for P's files (`pdf-*.js`, `pdf.worker.min-*.mjs`, `pdfjs-data-*.js`, `thumbnail-*.js`) for 12 seconds, longer than the thumbnail limit (R2). Holding at the server keeps the browser's cache on, where Chromium's `route` would turn it off.
 - **`tests/e2e/uniform-requests.spec.ts`** (new, tagged `@desktop` so it runs once): one test per tool page, taken from `widgetPages` in `pages.ts`, so a new page without a row in the input table fails.
-  - Each input runs in a new browser context, so the cache starts empty, with the CSP watcher from `fixtures.ts` (`watchPolicy`).
-  - A phase ends when the page shows its outcome and the server has had no request for one second.
+  - Each input runs in a new browser context, so the cache starts empty, with `watchPolicy` from `fixtures.ts`. No compared context uses `route` or `routeFromHAR`, which switch off the HTTP cache (R7).
+  - Each job input's context also counts as a pick input, and duplicate inputs are dropped (R14).
+  - A phase ends when every request expected for it has arrived and none is still open, then one short quiet (`quietMs`, one named constant). The expected requests come from the file table below.
   - It compares, across a page's inputs:
     - the pick phase's multiset of `(method, path)`;
     - after a password is typed, nothing new;
     - the job phase's multiset.
-  - Order is not compared at the server. Requests started together can arrive in any order, and that is not the file's doing; the order that comes from the code is checked in `worker-core.test.ts`.
-  - Every request also passes `violations` from `no-upload.ts`, with the file names and passwords as secrets, against the tool's exact list of files. Those lists move from the 14 tool specs into `tests/e2e/tool-files.ts`, so each list is written once and used by both.
+
+    A mismatch is reported as "expected X, got Y", with the page and the inputs.
+  - Order is not compared at the server (decision 4).
+  - **Slow mode cases:** `text.pdf` against `damaged-xref.pdf` on `/merge-pdf`, and one file against three on `/merge-pdf`. Each fails if any request differs or is repeated.
+  - **The "Getting ready" check** for a wrong-kind pick runs in its own context with the server in slow mode, outside the comparisons (R7). It checks the line, its Remove button, focus, then the sentence.
+  - Every request also passes `violations` from `no-upload.ts`, with the file names and passwords as secrets.
+
+  **Each tool's exact list of files** is built in `tests/e2e/tool-files.ts` (R11), replacing the 14 hand-written lists. It is made from:
+  - one table from `LibraryName` to built-file patterns;
+  - the shared files (WS, W);
+  - the static imports the engine's built chunk names, read from `dist/`.
+
+  The tool specs import it. That keeps one source for "what this tool may fetch" and for "what each phase expects".
 
   The input table:
 
-  | Pages | Pick inputs | Job inputs |
+  | Pages | Pick inputs | Job inputs (also pick inputs) |
   | --- | --- | --- |
-  | Every PDF page | `text.pdf`; `damaged-xref.pdf`; `password.pdf` (before and after its password); `not-a-pdf.pdf` (wrong kind); `scanned.pdf` | `text.pdf`; `rich.pdf`; `password.pdf` with its password |
-  | `/merge-pdf` (and any page that takes several files) | also `text.pdf` + `rich.pdf` + `images.pdf` | also `text.pdf` + `password.pdf` |
-  | `/compress-pdf` | also `compress-lossless.pdf`, `compress-text.pdf` | `compress-lossless.pdf` (smaller); `compress-text.pdf` (no new file); `compress-scans.pdf` (JPG) |
-  | `/unlock-pdf` | also `restricted.pdf` | `password.pdf` with its password; `restricted.pdf`; `text.pdf` (no new file) |
-  | `/sign-pdf` | also a JPG, a PNG and a PDF chosen as the signature picture | typed name; drawn line; JPG picture; PNG picture |
-  | Image to PDF pages | `details.jpg`; `small.png`; `broken.png`; `arithmetic.jpg` (`unsupported`); `text.pdf` (wrong kind); `details.jpg` + `small.png` | `details.jpg`; `small.png`; `details.jpg` + `small.png` |
+  | Every PDF page | `damaged-xref.pdf`; `password.pdf` (before and after its password); `not-a-pdf.pdf` (wrong kind); `scanned.pdf` | `text.pdf`; `rich.pdf`; `password.pdf` with its password |
+  | `/merge-pdf` | also `text.pdf` + `rich.pdf` + `images.pdf` | also `text.pdf` + `password.pdf` |
+  | `/compress-pdf` | — | `compress-lossless.pdf` (smaller); `compress-text.pdf` (no new file); `compress-scans.pdf` (JPG) |
+  | `/unlock-pdf` | — | `password.pdf` with its password; `restricted.pdf`; `text.pdf` (no new file) |
+  | `/sign-pdf` | a PDF chosen as the signature picture | typed name; drawn line; JPG picture; PNG picture |
+  | Image to PDF pages | `broken.png`; `arithmetic.jpg` (`unsupported`); `text.pdf` (wrong kind) | `details.jpg`; `small.png`; `details.jpg` + `small.png` |
 
   Each page's own required input is given the same way for every input, such as one page chosen in Extract pages, one turn in Rotate PDF, text in Watermark, or a new password in Protect.
 
   A job that fails in the browser is included where a fixture makes one fail (task 6.3 looks for one). Otherwise, the worker-core test covers it.
-- **Existing specs** that say a file is *not* fetched in a case that now fetches it are updated to the new rule. These are `pdf-to-images.spec.ts` "a one-page file fetches fflate too, and the same files as a longer one", which folds into the new spec, and any check that `fflate` is absent on Compress PDF. Checks that a file is absent *before the main button* (pdf-lib in `sign-pdf.spec.ts`) and *before a pick* stay as they are.
+- **Existing specs** that say a file is *not* fetched in a case that now fetches it are updated to the new rule. These are `pdf-to-images.spec.ts` "a one-page file fetches fflate too, and the same files as a longer one", which folds into the new spec, and any check that `fflate` is absent on Compress PDF. Checks that a file is absent *before the main button* (pdf-lib in `sign-pdf.spec.ts`) and *before a pick* stay as they are. Tests that hold PDF.js back with `route` (`thumbnails.spec.ts`) are not part of the comparison and stay as they are.
 
-### 9. The Privacy page sentences (draft, marked for the owner)
+### 12. The Privacy page sentences (draft, marked for the owner; R3, R17)
 
 In "What happens to your file", after "These requests carry nothing from your file: not its contents, not its name and not a password.":
 
-> Which programs it fetches, and in what order, does not depend on what your file holds. A damaged file, a protected file or a file of the wrong kind leads to the same requests as any other file.
+> Which programs it fetches does not depend on what your file holds. This is so for a damaged file, a protected file or a file of the wrong kind too.
 
 At the end of "Who serves the site":
 
-> From when your browser asks for the programs, GitHub can tell that a tool page was opened, that a file was chosen and when a job was started. Your browser may ask for the same programs again later, for example after a job or when a page of your file takes long to draw.
+> From your browser's requests, GitHub can tell which tool page you opened and when you chose a file, and may be able to tell when you started a job. Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that.
 
-The last sentence depends on Open questions 3. The words pass the `privacy-page.test.ts` guards: no word from its absolute list, no banned word, no `!` or `@`, no worker named outside the policy section, and no server claim.
+Both are marked for the owner. The last two sentences are Open question 1 either way.
+
+The words claim neither an order nor identical requests. They pass the `privacy-page.test.ts` guards: no word from its absolute list, no banned word, no `!` or `@`, no worker named outside the policy section, and no server claim. Task 5.2 checks them against the named exceptions.
 
 Claim table, added to the one in `add-privacy-draft`'s design:
 
 | Claim | Code | Proof |
 | --- | --- | --- |
-| Which programs are fetched, and in what order, does not depend on what the file holds; a damaged, protected or wrong-kind file leads to the same requests | `loads` on every engine; `ready(phase)` in `worker-core.ts`; `prepare` on every pick and the wait for it in `addFiles`; a fresh worker for every job (`useToolRun.start`) | `tests/e2e/uniform-requests.spec.ts` (the host's record compared across inputs on all 17 pages); `engine-loads.test.ts`; `worker-core.test.ts` order tests |
-| GitHub can tell that a tool page was opened, that a file was chosen and when a job was started | Requests at page load, after a pick (`prepare`) and after the main button (the job's worker) | `uniform-requests.spec.ts` records exactly these phases; release check of the live host's headers |
-| The browser may ask for the programs again later, after a job or when a page takes long to draw | The reading worker starts again after a job, Cancel, a failure or a 10-second thumbnail; the host's 10-minute cache lifetime | Risks below; release check of the host's `Cache-Control` |
+| Which programs are fetched does not depend on what the file holds, damaged, protected and wrong-kind files included | `loads` on every engine; draw set from `thumbnails`; `toolLibrary` and phase-gated `tools`; `ready(phase)` in `worker-core.ts`; `prepare` on every pick and the wrong-kind wait; no file-driven end before `prepared`; a fresh worker for every job | `uniform-requests.spec.ts` (the host's record compared across inputs on all 17 pages, and the slow-mode cases); `engine-loads.test.ts`; `worker-core.test.ts`; `client.test.ts` |
+| GitHub can tell which tool page was opened and when a file was chosen, and may be able to tell when a job was started | Requests at page load, after a pick (`prepare`), and after the main button only when the job needs a file not yet fetched | `uniform-requests.spec.ts` records exactly these phases; release check of the live host's headers |
+| A program may be asked for more than once, and in a few cases how often can depend on the file; a page slow to show can be told that way | The named exceptions in Risks: no usable cache, stale copies, a thumbnail over 10 seconds after the set settled, the main button while P arrives, a crash, jobs over the cache lifetime | Risks below; the host's `Cache-Control` read again at release |
 
 ## Page weight, memory and WebAssembly
 
@@ -310,30 +415,37 @@ Claim table, added to the one in `add-privacy-draft`'s design:
 
 **Memory.**
 
-- PDF.js's nested worker now also runs for damaged, protected and wrong-kind picks, until the reading worker ends. It is idle, and its size is measured in task 4.4, expected at about 10–20 MB.
-- The spare qpdf instance replaces today's first instance, so it adds nothing.
+- PDF.js's nested worker now also runs for damaged, protected and wrong-kind picks, until the reading worker ends. It is idle, and task 4.4 measures it.
+- The spare qpdf replaces today's first instance in workers that call qpdf. In a worker that never calls qpdf, it adds a compile and about 16.4 MB until the worker ends (decision 6).
 - The job's fresh worker replaces the reading worker rather than sitting beside it.
+- A worker waiting in `endWhenSettled` can sit beside the next one only when the next one is started by a visitor's action, which ends it at once. So two reading workers never run together for long.
 
 **When WebAssembly is fetched.** At the pick, as today: now also for a wrong-kind pick, and at a fixed point before the file is read. At the main button, qpdf's WebAssembly is asked for again by the fresh worker, and the browser answers from its cache.
 
 ## Threats considered
 
-- **A hostile PDF or picture** can no longer choose which site files are fetched. Nothing the worker reads is used before the sets are loaded. Engines can only ask for declared libraries. The unit test enforces it. In every build, the `tools` the worker hands an engine for a phase also answer an undeclared library (other than `canvas`, `decodePicture` and `pdfjsGuard`) with an error, so the job fails as `engine-load` and fetches nothing new. Its effect on timing is limited to the residuals in Risks.
+- **A hostile PDF or picture** can no longer choose which site files are fetched, or end a worker before its set settles. Nothing the worker reads is used before the sets are loaded. Engines can only reach libraries declared for the step (decision 3). Its effect is limited to the named exceptions in Risks.
 - **An oversized file** has its timing effect removed. `bytesOf` now runs after every request of the phase has started.
 - **A hostile file name** is not used by any of this. File names stay in the no-upload secrets of the new spec.
-- **The new `prepare` message** carries no file and no password, only `toolId`. `isToWorker` checks its shape.
-- **The local test server** binds to `127.0.0.1` on a free port, serves only `dist/`, refuses `..`, and is closed after the tests. It is test code, not shipped.
+- **The new messages.** `prepare`, `prepared` and `drop-thumbnail` carry no file and no password, only `toolId` and a request id. `isToWorker` and `isFromWorker` check their shape.
+- **The local test server** binds to `127.0.0.1`, answers `GET` and `HEAD` only, and refuses NUL and any path whose real path leaves `dist/` (a self-test asks for `/%2e%2e/package.json`). It sends no CORS headers and is closed after the tests. It is test code, not shipped.
 
 ## Risks / Trade-offs
 
-- [**A browser with no usable cache** (cache off, full, or a "no cache" setting) asks for qpdf's WebAssembly once per qpdf instance. How many instances there are follows the file (files read, plain copies, Compress PDF's picture batches).] → Not closed: the qpdf build has no hook, and lint keeps `fetch` out of the worker. Noted as a later option: a patched qpdf build that takes a compiled module, or a lint exception for one `WebAssembly.compileStreaming(fetch(...))` in `tool.worker.ts`. Both need security review. The Privacy sentence claims only which programs are fetched and in what order, which stays true.
-- [**After 10 minutes, a thumbnail over 10 seconds** restarts the reading worker. The restart's checks for stale copies show the host that a page was slow to draw.] → Not closed. The words "when a page of your file takes long to draw" say so, by default (Open questions, 3).
-- [**A job over 10 minutes** asks again for qpdf's WebAssembly mid-job once the copy goes stale.] → Not closed, and rare. The job set check at the start of the job refreshes the copy, so only a job longer than the cache lifetime shows.
-- [**A slower refusal for a wrong-kind pick**: up to the whole pick set's download, about 1.78 MB on a PDF page, before "cannot be used" is shown.] → The default by decision 6, held to 60 seconds. The owner may prefer an instant sentence (Open questions, 2).
-- [**More bytes for damaged, protected and wrong-kind PDFs** (+1.29 MB on a first visit).] → Only those cases pay. A readable file pays the same as today. Open questions, 1.
+These are the named exceptions. The Privacy page does not claim them closed, and Open question 2 asks the owner to accept them for now.
+
+- [**No usable cache** (cache off, full, or a "no cache" setting): the browser asks for qpdf's WebAssembly once per qpdf instance, and how many instances there are follows the file.] → Not closed: the qpdf build has no hook, and lint keeps `fetch` out of the worker. A later option is a patched qpdf build that takes a compiled module, or a lint exception for one `WebAssembly.compileStreaming(fetch(...))`. Either needs security review.
+- [**Copies older than about 10 minutes**: the next use of each file is a conditional request. A reading worker started again after its set settled, because a thumbnail passed 10 seconds or a drawing was stopped by a further file, therefore shows the host its checks. How often that happens follows how slow the file is to draw and how many files there are.] → Not closed. The Privacy sentence "If a page of your file is slow to show, these later requests can tell GitHub that." says so (Open question 1).
+- [**The main button while P is still arriving**: the reading worker is ended, P is cut short, and P is not asked for again by the job unless the job uses it. Whether P was still arriving follows how long the file took to read, so a big file pressed quickly can show fewer P bytes.] → Not closed. The job is not held back, because the visitor asked for it. This was the panel's choice in R1.
+- [**A worker crash while reading**: the worker ends at once, mid-download.] → Not closed. It is rare, and a crash is itself the browser's failure.
+- [**A job longer than the cache lifetime** asks again for qpdf's WebAssembly mid-job.] → Not closed, and rare. The job set check at the start refreshes the copy.
+- [**The order on the wire is not tested at the server** (R12).] → Requests started together arrive in any order. The order from the code is tested in `worker-core.test.ts`, and the `check:worker` rule keeps the draw set from pulling in late requests.
+- [**A slower refusal for a wrong-kind pick**: up to the whole pick set's download, about 1.78 MB on a PDF page, before "cannot be used".] → The owner's answer of 22 Nov 2026, held to 60 seconds, with Remove as a way out (decision 9). Issue #7 gets a phone hand check on a slow connection (R16).
+- [**A reading failure, or a replaced Sign picture, waits for the set**, up to 60 seconds on a stalled link.] → The visitor sees the file's line with "Getting ready" meanwhile, and can Cancel, Remove or press "Start again".
+- [**More bytes for damaged, protected and wrong-kind PDFs** (+1.29 MB on a first visit).] → The owner's answer of 22 Nov 2026.
 - [**A host other than GitHub Pages** may send different cache headers.] → Only what is asked for again later changes. The release check reads the live host's headers, and the test server's headers are one constant to change.
-- [**Firefox and Safari**: the new spec runs in Chromium. The rule comes from the code, not the engine, but caches differ.] → A release check in issue #7: the host's record for `text.pdf` against `damaged-xref.pdf` on one page, in Firefox and Safari.
-- [**Test time**: about 17 pages × 5–8 inputs in cold contexts.] → One test per page, so `fullyParallel` spreads them, and one project (`@desktop`). Task 6.5 records the run time. If it passes about 5 minutes, task 6.5 says so and stops for a decision; no test is cut silently.
+- [**Firefox and Safari**: the new spec runs in Chromium.] → A release check in issue #7: the host's record for `text.pdf` against `damaged-xref.pdf` on one page, in Firefox and Safari.
+- [**Test time.**] → Decision 11 cuts it: job inputs double as pick inputs, phases end on expected requests, and there is one quiet constant. Task 6.5 records it. If it passes about 5 minutes, task 6.5 says so and stops for a decision; no test is cut silently.
 
 ## Migration Plan
 
@@ -341,8 +453,7 @@ Nothing is stored, so nothing migrates. Rollback is reverting the pull request. 
 
 ## Open Questions
 
-These are for the owner. Each has the default this change builds.
+The owner answered two questions on 22 Nov 2026: PDF.js's set after every pick on a PDF page, and a wrong-kind pick loads the set first with the wait held to 60 seconds. Two remain, for the owner, each with the default this change builds:
 
-1. **PDF.js after every pick.** Fetch PDF.js's set (about 1.3 MB) after every pick on a PDF page, even for a damaged, protected or wrong-kind file? Default: yes.
-2. **A wrong-kind pick.** Load the pick set first, then say the file cannot be used (a few seconds later on a slow connection)? Or say it at once, accepting that the host can tell a wrong pick from the shorter list of requests? Default: load first.
-3. **"May ask again".** Keep the sentence "Your browser may ask for the same programs again later, for example after a job or when a page of your file takes long to draw."? Default: yes.
+1. **The "asked again" sentences on the Privacy page.** Keep "Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that."? Default: yes, marked for review.
+2. **The named exceptions.** Accept the rare cases in Risks for now: no usable cache; copies older than 10 minutes; a page slow to draw; the main button while PDF.js is arriving; a crash; jobs over 10 minutes. The Privacy page will not claim them closed. Default: yes.
