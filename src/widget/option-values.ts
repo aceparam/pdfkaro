@@ -260,8 +260,11 @@ export type PasswordRule = { maxLength: number; characters: PasswordCharacterRul
 
 export type PasswordTable = Readonly<Record<string, Readonly<Record<string, PasswordRule>>>>;
 
-/** Each tool's new passwords, by tool id and key. Empty for now; Protect's change adds `'protect-pdf': { newPassword: {...} }`. */
-export const optionPasswords: PasswordTable = {};
+/** Each tool's new passwords, by tool id and key. */
+export const optionPasswords: PasswordTable = {
+  // 127 is the format's own limit for a 256-bit key.
+  'protect-pdf': { newPassword: { maxLength: 127, characters: 'printable-ascii' } },
+};
 
 /**
  * The characters each rule takes, as one inclusive range of code points. Printable ASCII, U+0020 to U+007E: the

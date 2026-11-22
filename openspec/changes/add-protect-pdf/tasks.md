@@ -4,7 +4,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 1. Registry entry
 
-- [ ] 1.1 Add the `protect-pdf` entry to `src/tools/registry.ts` as the design's decision 1 gives it:
+- [x] 1.1 Add the `protect-pdf` entry to `src/tools/registry.ts` as the design's decision 1 gives it:
   - after Sign PDF, first under "Protect";
   - the page sentence and meta description that make no claim about the password staying on the device;
   - one `new-password` option keyed `newPassword`, with the four-sentence hint and no `refusedSentence`;
@@ -18,7 +18,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 2. Shared: the new password's layout and Enter
 
-- [ ] 2.1 Change `src/components/NewPasswordField/NewPasswordField.tsx` and its CSS Module as the design's decision 2 gives it:
+- [x] 2.1 Change `src/components/NewPasswordField/NewPasswordField.tsx` and its CSS Module as the design's decision 2 gives it:
   - only the tool's hint under the first field;
   - the shared note as its own paragraph after the second field, with an id;
   - the first field's `aria-describedby` naming its error (when there is one), the hint and the note;
@@ -29,14 +29,14 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 3. Shared: the capped write
 
-- [ ] 3.1 Move `OutputLimit` into `src/engines/qpdf.ts`, and add `writePercent` and `cappedWrite` there as the design's decision 5 gives them. `src/engines/stamp.ts` re-exports `OutputLimit`, and `writeUpdate` uses `cappedWrite` with no change in behaviour. Leave `merge-pdf.ts` as it is. Verify:
+- [x] 3.1 Move `OutputLimit` into `src/engines/qpdf.ts`, and add `writePercent` and `cappedWrite` there as the design's decision 5 gives them. `src/engines/stamp.ts` re-exports `OutputLimit`, and `writeUpdate` uses `cappedWrite` with no change in behaviour. Leave `merge-pdf.ts` as it is. Verify:
   - the `cappedWrite` unit tests pass with a fake qpdf, covering a refused write, a no-space print, exit 0 past the limit, an unfinished exit keeping `/in.pdf`, and a passing write removing `/in.pdf` with progress in order and not repeated;
   - every existing `stamp.test.ts`, Add page numbers, Watermark and Sign PDF test passes unchanged;
   - the worker still gives `output-limit` for an `OutputLimit` thrown from either file.
 
 ## 4. Engine
 
-- [ ] 4.1 Write `src/engines/tools/protect-pdf.ts` as the design's decisions 3, 4, 7 and 8 give it:
+- [x] 4.1 Write `src/engines/tools/protect-pdf.ts` as the design's decisions 3, 4, 7 and 8 give it:
   - one file only;
   - `acceptedPassword` before any work, throwing `PasswordRefused`;
   - `protectArgs`, `protectLimit` and `protectedBytes` exported;
@@ -50,7 +50,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 5. Engine unit tests
 
-- [ ] 5.1 Write `tests/unit/protect-pdf.test.ts` as the design's Tests list it:
+- [x] 5.1 Write `tests/unit/protect-pdf.test.ts` as the design's Tests list it:
   - refusals before qpdf is asked for;
   - `protectArgs` and the engine's source holding none of `--cleartext-metadata`, `--allow-insecure`, `--allow-weak-crypto` or `--show-encryption`;
   - `run` on every file in `tests/fixtures/`:
@@ -79,7 +79,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 6. Worker wiring and the job step
 
-- [ ] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it: it returns the outcome with no finish callback, and `start` does the dispatches and the object URL, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
+- [x] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it: it returns the outcome with no finish callback, and `start` does the dispatches and the object URL, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
   - the new password holder is `{}` after a run that gives a file and after one that gives no new file, before anything else clears it;
   - it still holds the password after an engine failure, a run that throws and a cancel.
 - [ ] 6.2 Accept the new shared file:

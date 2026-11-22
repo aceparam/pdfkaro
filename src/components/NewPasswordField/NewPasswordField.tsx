@@ -18,7 +18,7 @@ type Props = {
   /** What is wrong with the second field (the two differ), shown between its label and the field. */
   againError?: string;
   onType(field: Field, value: string): void;
-  /** Enter in either field: does what the main button does. */
+  /** Enter in either field: in the first, moves on to the second once the first is accepted; else does what the main button does. */
   onEnter(field: Field): void;
   /** Focus left the first field, so a space at its end is no longer being typed. */
   onFirstBlur(): void;
@@ -27,7 +27,7 @@ type Props = {
 };
 
 /**
- * The rest of the note under the first field, after `passwordStaysSentence`. A draft for the owner. With
+ * The rest of the shared note under the second field, after `passwordStaysSentence`. A draft for the owner. With
  * `autocomplete="new-password"` the browser may offer to save or suggest a password, so the note says so rather
  * than claiming the password goes nowhere at all. Part of the component, not registry words, so no tool can leave it out.
  */
@@ -36,6 +36,8 @@ export const newPasswordSavingNote =
 
 /** The id of the first field's sentence about what is wrong, which the main button points at too. */
 export const firstPasswordErrorId = (id: string) => `${id}-error`;
+/** The id of the shared note under the second field, which the first field's description names. */
+export const passwordNoteId = (id: string) => `${id}-note`;
 /** The id of the second field. */
 export const againPasswordId = (id: string) => `${id}-again`;
 /** The id of the second field's sentence about what is wrong, which the main button points at too. */
@@ -58,7 +60,8 @@ export function heldValue(held: string, also?: Ref<HTMLInputElement>): RefCallba
 /**
  * A new password, typed twice in two hidden one-line fields, one under the other: each with a visible label and,
  * between the label and the field where a phone keyboard does not cover it, the sentence about what is wrong. Under
- * the first, read with it, the tool's hint and the shared note. Both are `type="password"` always, so no keyboard
+ * the first, the tool's hint only, so the second field's label starts close under it on a phone; under the second,
+ * the shared note as its own paragraph. Both the hint and the note are read with the first field. Both are `type="password"` always, so no keyboard
  * corrects or capitalises them and form restore does not keep them. Both are uncontrolled, so the password is
  * never written to a `value` attribute (`heldValue`); `autocomplete="new-password"` is the token for a
  * password being set, so a password manager fills in no saved one. No name and no form, so neither is ever submitted
@@ -66,6 +69,7 @@ export function heldValue(held: string, also?: Ref<HTMLInputElement>): RefCallba
  */
 export function NewPasswordField({ option, id, first, again, firstError, againError, onType, onEnter, onFirstBlur, focusRef }: Props) {
   const hintId = `${id}-hint`;
+  const noteId = passwordNoteId(id);
   const againId = againPasswordId(id);
   const keyDown = (field: Field) => (event: { key: string; keyCode?: number; nativeEvent?: { isComposing?: boolean }; preventDefault(): void }) => {
     // Not the Enter that confirms a word in an input method or a phone keyboard's suggestion.
@@ -88,15 +92,15 @@ export function NewPasswordField({ option, id, first, again, firstError, againEr
           id={id}
           type="password"
           autoComplete="new-password"
-          enterKeyHint="go"
+          enterKeyHint="next"
           aria-invalid={firstError ? true : undefined}
-          aria-describedby={firstError ? `${firstPasswordErrorId(id)} ${hintId}` : hintId}
+          aria-describedby={[firstError ? firstPasswordErrorId(id) : null, hintId, noteId].filter(Boolean).join(' ')}
           onChange={(event) => onType('first', event.currentTarget.value)}
           onKeyDown={keyDown('first')}
           onBlur={onFirstBlur}
         />
         <p id={hintId} className={styles.note}>
-          {`${option.hint} ${passwordStaysSentence} ${newPasswordSavingNote}`}
+          {option.hint}
         </p>
       </div>
       <div className={`field field-short ${styles.again}`}>
@@ -118,6 +122,10 @@ export function NewPasswordField({ option, id, first, again, firstError, againEr
           onKeyDown={keyDown('again')}
         />
       </div>
+      {/* Shown under the second field, read with the first (its aria-describedby above). */}
+      <p id={noteId} className={styles.note}>
+        {`${passwordStaysSentence} ${newPasswordSavingNote}`}
+      </p>
     </div>
   );
 }

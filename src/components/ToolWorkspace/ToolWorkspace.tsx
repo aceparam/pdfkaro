@@ -11,6 +11,7 @@ import {
   chosenValue,
   drawnLines,
   enterAction,
+  firstPasswordAccepted,
   focusMovesToOptions,
   holdErrorId,
   holdsUnderButton,
@@ -37,7 +38,7 @@ import type { WorkerLike } from '../../workers/client';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
-import { againPasswordErrorId, firstPasswordErrorId, NewPasswordField } from '../NewPasswordField/NewPasswordField';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, NewPasswordField } from '../NewPasswordField/NewPasswordField';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
 import { PasswordField } from '../PasswordField/PasswordField';
@@ -530,15 +531,18 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     else if (action.kind === 'say') setAnnouncement(action.sentence);
   };
   // Enter in a new password's field: the same, once its first field is no longer counted as being typed, so a
-  // space at its end is shown and is the reason said.
-  const enterInPassword = (key: string) => {
+  // space at its end is shown and is the reason said. In the first field, once it holds a password its rule takes,
+  // Enter moves focus to the second field instead, as its phone key "Next" says.
+  const enterInPassword = (key: string, field: PasswordFieldName) => {
     const nextTyping = withTyping(key, false);
     if (nextTyping !== typing) setTyping(nextTyping);
     const next = optionsHold(toolId, options, state.choices, heldNow({ typing: nextTyping }));
     const nextReady = canRun(state, words.minFiles, blocked === null) && next === null;
     const nextField = showOptions && next && !holdsUnderButton(next) ? next : null;
-    const action = enterAction(nextReady, [tiedFor(next), nextField?.sentence]);
+    const accepted = field === 'first' && firstPasswordAccepted(toolId, { key }, heldNow());
+    const action = enterAction(nextReady, [tiedFor(next), nextField?.sentence], accepted);
     if (action.kind === 'start') void run.start();
+    else if (action.kind === 'next-field') document.getElementById(againPasswordId(fieldId(key)))?.focus();
     else if (action.kind === 'say') setAnnouncement(action.sentence);
   };
 
@@ -743,7 +747,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     firstError={fieldHold?.key === option.key && fieldHold.field === 'first' ? fieldHold.sentence : undefined}
                     againError={fieldHold?.key === option.key && fieldHold.field === 'again' ? fieldHold.sentence : undefined}
                     onType={(field, value) => typeNewPassword(option.key, field, value)}
-                    onEnter={() => enterInPassword(option.key)}
+                    onEnter={(field) => enterInPassword(option.key, field)}
                     onFirstBlur={() => leaveFirstPassword(option.key)}
                     focusRef={index === 0 ? optionRef : undefined}
                   />

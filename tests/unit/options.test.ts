@@ -35,6 +35,7 @@ import {
   chosenValue,
   drawnLines,
   enterAction,
+  firstPasswordAccepted,
   focusMovesToOptions,
   holdErrorId,
   holdsUnderButton,
@@ -516,6 +517,35 @@ describe('Enter in a text field', () => {
 
   it('does nothing when the button waits with no sentence', () => {
     expect(enterAction(false, [null, undefined, ''])).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe("Enter in a new password's first field", () => {
+  const option: NewPasswordOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const table: PasswordTable = { 'test-tool': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } };
+  const accepted = (first: string, again = '') => firstPasswordAccepted('test-tool', option, { passwordTable: table, newPasswords: { newPassword: { first, again } } });
+
+  it('moves on to the second field once the first holds a password its rule takes, even when the button works', () => {
+    expect(accepted('Kv4 #%@ wq9')).toBe(true);
+    expect(accepted('Kv4 #%@ wq9', 'Kv4 #%@ wq9')).toBe(true);
+    expect(enterAction(false, ['Type the password again to check it.'], true)).toEqual({ kind: 'next-field' });
+    expect(enterAction(true, [], true)).toEqual({ kind: 'next-field' });
+  });
+
+  it('gives the answers of a text field otherwise: empty, refused characters, a space at an end, too long, no rule', () => {
+    for (const first of ['', 'café', 'open ', ' open', 'x'.repeat(128)]) expect(accepted(first), first).toBe(false);
+    expect(firstPasswordAccepted('no-such-tool', option, { passwordTable: table, newPasswords: { newPassword: { first: 'open', again: '' } } })).toBe(false);
+    expect(firstPasswordAccepted('test-tool', option, { passwordTable: table })).toBe(false);
+    expect(enterAction(false, ['Type a password first.'], false)).toEqual({ kind: 'say', sentence: 'Type a password first.' });
+    expect(enterAction(false, [null, 'A password cannot start or end with a space.'])).toEqual({ kind: 'say', sentence: 'A password cannot start or end with a space.' });
   });
 });
 
@@ -1049,8 +1079,8 @@ describe('what a new password takes', () => {
 
   it('is one range of code points, printable ASCII, written once', () => {
     expect(passwordCharacters['printable-ascii']).toEqual({ from: 0x20, to: 0x7e });
-    // No tool has a new password yet: Protect adds its own line.
-    expect(optionPasswords).toEqual({});
+    // Protect is the one tool with a new password.
+    expect(optionPasswords).toEqual({ 'protect-pdf': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } });
   });
 
   it('takes a password of one character up to the limit, and every printable ASCII character with spaces inside', () => {

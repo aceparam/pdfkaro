@@ -24,7 +24,7 @@
 // are taken only as `N G R`. Document text never goes into an error.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
-import { finished, type Qpdf } from './qpdf';
+import { cappedWrite, finished, OutputLimit, type Qpdf } from './qpdf';
 import { freshQpdf } from './plain';
 import { callWithArgumentFile, isDict, isRef, readDictionaries, type Dict, type ObjectEntry } from './qpdf-json';
 import type { EngineTools } from './types';
@@ -43,22 +43,8 @@ export const largestSide = 1e8;
 /** The smallest scale the layer's matrix may have (1 / the user unit). Below it, the job stops. */
 export const smallestScale = 1e-6;
 
-/**
- * The new file, and the update that makes it, would pass their size budget.
- * Known to the worker by its name, so the page can say so in its own sentence.
- */
-export class OutputLimit extends Error {
-  override name = 'OutputLimit';
-  /**
-   * `'shared'` when the chosen pages alone fit the budget and what they share (`sharedBytes`, such as Sign PDF's
-   * picture) is what would pass it, found before anything is drawn, so the tool can say so in its own sentence.
-   */
-  readonly reason: 'shared' | undefined;
-  constructor(reason?: 'shared') {
-    super('The new file would pass its size limit.');
-    this.reason = reason;
-  }
-}
+/** Moved to qpdf.ts with the capped write; re-exported so this file's importers are unchanged. */
+export { OutputLimit } from './qpdf';
 
 /** The size budget of the update and of the new file: twice the plain copy, 2 KB a page and 16 MB. */
 export function sizeLimit(plainBytes: number, pages: number): number {
@@ -437,8 +423,6 @@ export function freeName(xobjects: Dict): string {
   return name;
 }
 
-const writeProgress = /write progress:\s*(\d+(?:\.\d+)?)%/;
-
 /**
  * Writes the update held in /update.json into the file held as /in.pdf, as
  * /out.pdf, capped at `limit`; removes /in.pdf and /update.json; checks the
@@ -446,24 +430,13 @@ const writeProgress = /write progress:\s*(\d+(?:\.\d+)?)%/;
  * or a file past it, throws `OutputLimit`; any other failure is the engine's.
  */
 export function writeUpdate(qpdf: Qpdf, limit: number, onWriting?: (percent: number) => void): Uint8Array {
-  const capped = qpdf.capFile('/out.pdf', limit);
-  let last = -1;
-  qpdf.onLine = (line) => {
-    const match = writeProgress.exec(line);
-    if (!match) return;
-    const percent = Math.min(100, Number(match[1]));
-    if (percent === last) return;
-    last = percent;
-    onWriting?.(percent);
-  };
-  const written = callWithArgumentFile(qpdf, ['--progress', '/in.pdf', '--update-from-json=/update.json', '--object-streams=generate', '/out.pdf']);
-  qpdf.onLine = null;
-  // qpdf can finish with exit 0 and a cut-off file when a write is refused while it writes object streams,
-  // so the capped file's own record is asked first.
-  if (qpdf.refused('/out.pdf') || (capped && /no space left/i.test(written.printed))) throw new OutputLimit();
+  const written = cappedWrite(
+    qpdf,
+    limit,
+    (q) => callWithArgumentFile(q, ['--progress', '/in.pdf', '--update-from-json=/update.json', '--object-streams=generate', '/out.pdf']),
+    onWriting,
+  );
   if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
-  if (qpdf.size('/out.pdf') > limit) throw new OutputLimit();
-  qpdf.remove('/in.pdf');
   qpdf.remove('/update.json');
   if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
   return qpdf.read('/out.pdf');

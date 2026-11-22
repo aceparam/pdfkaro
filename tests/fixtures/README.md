@@ -625,3 +625,48 @@ The two 8 MB picture, every page rows were measured again after the stage 2 revi
 On the last page, each file grows by under 1 KB over the plain copy written with object streams, as the design asks. Every page stays inside the size budget; the update carries the picture once, as base64. Two every-page figures are more than 20% worse than Watermark's, both on small and medium files: `pages-500.pdf` (2.2 s against 0.44 s in Node, 2.3 s against 0.9 s in Chromium, and 0.35 GB against 0.17 GB) and `make-large.mjs`'s file (3.0 s against 1.8 s, 3.4 s against 2.4 s). The difference is reading the 8 MB picture once: pdf-lib decodes the PNG and compresses its pixels again (about 1.4 s in Node for this picture), which no Watermark job does; the pages themselves take what Watermark's take. On the 120,000-page file Sign PDF is faster than Watermark and its file 35% smaller, as each page's layer only places the one shared signature form. A grainy 16-million-pixel photo compresses to 21 MB, past the budget of any file under about 2.5 MB or a few thousand pages, so the job stops with the picture's own sentence after the picture is read (4 s in Node, 11 s in Chromium, where reading it before the job also takes time), and never writes the file; on a long file it fits and is written once.
 
 The multilingual file is still missing; Sign PDF leaves existing text alone, so it would change nothing there.
+
+### Protect with a password (`src/engines/tools/protect-pdf.ts`)
+
+Each file was protected in Node with the same qpdf the browser uses, with the new password `Qz7 pw#%@ Kv4` (`tests/unit/protect-pdf.test.ts`), and each result read back by qpdf and by PDF.js's legacy build. Every result passes `qpdf --check` with the password, reports 256-bit AES (R 6, V 5, AESv3 for strings, streams and files) with every permission allowed, and is refused by qpdf and PDF.js with no password, with the password less its last character and with one character more. Opened with the password, each page's size, turn and text through PDF.js, and the bookmarks, form fields with their values and attached files with their contents through qpdf's JSON, are exactly as in the file chosen. The password is in no result's bytes, and no result shows `/MediaBox` in plain text: page dictionaries go into encrypted object streams. Sizes in bytes, from a run on 22 Nov 2026; encryption is random, so each run differs by a few bytes.
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 4,302 | Protected; written in object streams, so smaller. qpdf's warning does not stop the job. Progress "Reading the file", then writing up to 90%, then 93, 96 and 100 as each check of the result passes |
+| `pages-500.pdf` | 198,025 | 112,521 | All 500 pages, with their text |
+| `scanned.pdf` | 6,191 | 6,746 | Protected; its two pictures' dictionaries (`/Width`, `/Height`, colour space, format) stay readable |
+| `password.pdf` | 7,178 | 4,302 | With `open-sesame`: the new password only, every permission allowed; `open-sesame` no longer opens it and is not in its bytes. Without it, or with `open-sesam`: "A password did not open the file." |
+| `restricted.pdf` | 7,181 | 4,302 | Needs the new password, with no restrictions |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not write the protected file." and hands back nothing |
+| `form.pdf` | 3,189 | 3,491 | Both fields kept, with the value `Sample text`; the field's appearance names `/Helvetica`, readable |
+| `mixed.pdf` | 2,257 | 2,378 | Sizes and turns kept |
+| `rich.pdf` | 2,064 | 2,757 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` with its contents kept. The attachment's name, dates and contents are not readable; its type (`/Subtype /text#2fplain`) and size are |
+| `images.pdf` | 1,642 | 2,290 | Protected; the JPEG 2000 picture's dictionary (`/Width`, format) stays readable |
+| `tagged.pdf` | 5,118 | 3,400 | Tags, destination, thread, the tagged field and its value, note and link kept. Every `SECRET-` marker held in a string or a stream is gone from the bytes, the field's hex strings too; `SECRET-DEST-NAME`, a name in the catalog's old-style `/Dests`, stays readable, as the format leaves names |
+| `compress-scans.pdf` | 634,679 | 635,113 | Protected; each picture stored as it was, encrypted |
+| `compress-lossless.pdf` | 16,884 | 17,572 | Protected |
+| `compress-small-jpg.pdf` | 12,852 | 9,531 | Protected; its uncompressed text stream is compressed, as qpdf does by default when it writes, so smaller |
+| `compress-kinds.pdf` | 41,034 | 40,966 | Protected |
+| `compress-text.pdf` | 21,019 | 3,164 | Protected; its uncompressed content streams are compressed, as qpdf does by default when it writes |
+| `compress-packed.pdf` | 3,441 | 4,208 | Protected |
+| `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,718 | Protected in about 0.2 seconds: the 1 GB attachment is encrypted as stored and never inflated, by the write or the check |
+| `compress-flate-bomb.pdf` | 103,018 | 103,703 | Protected; the picture's data is encrypted as stored and never inflated |
+| `compress-jpeg-mismatch.pdf` | 15,014 | 15,559 | Protected; neither JPG is decoded |
+| `compress-json-bomb.pdf` | 140,759 | 172,932 | Protected in about 9 seconds in Node: its 5,000 long strings are each encrypted, inside object streams; well inside the cap |
+| `compress-password.pdf` | 36,730 | 36,610 | With `open-sesame`: the new password only |
+
+Files and inputs made in the test (`tests/unit/protect-pdf.test.ts`):
+
+| File or input | Outcome |
+| --- | --- |
+| A page whose title (a literal string) and XMP stream hold `SECRET-TITLE-WORD` and `SECRET-XMP-WORD` | Neither word in the result's bytes; PDF.js reads both back once the file is opened with the password |
+| `text.pdf` with 128-bit RC4 (made with `--allow-weak-crypto`, in the test only), opened with its password | AES-256 only; the old password refused |
+| `text.pdf` protected twice with the same password | Different `/U`, `/O`, `/UE` and `/OE`, and different bytes |
+| The passwords `--help`, `@in.pdf` and `--decrypt` | Each taken as a password: the result opens with it, AES-256 |
+| 20,000 empty streams (which cannot go in object streams, so each grows when encrypted) | Larger once protected, but inside the cap of twice the file and 16 MB; written under a cap of the file's own size, stopped with `OutputLimit` (`output-limit`) |
+| No new password, an empty one, 128 characters, "café", a space first or last, a line break, a number, `null`, one under `__proto__` or under `password` | Refused with `PasswordRefused` (`password-refused`) before qpdf is asked for; no error holds what was sent |
+| Every failure above, with both marked passwords | No error's message or stack holds either password or its parts |
+
+What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; and names in the catalog, such as old-style destination names. What is hidden: its pages and their sizes, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
+
+The multilingual file is still missing. Protect leaves text as it is, but the test set needs the file, so Protect is not done until it exists and Protect has been run on it.
