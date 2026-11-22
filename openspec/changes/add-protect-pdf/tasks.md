@@ -1,59 +1,221 @@
 # Tasks
 
-Built on `add-password-option` (PR #28), merged first.
+Built on `add-password-option` (PR #28), merged first. Two shared changes and one hook seam ride along by the coordinator's decision (stage 1): the `NewPasswordField` layout (group 2), `OutputLimit` and `cappedWrite` in `qpdf.ts` (group 3) and the job step as a plain function (group 6). Each is named in the pull request as a shared change that alters no published page.
 
 ## 1. Registry entry
 
-- [ ] 1.1 Add the `protect-pdf` entry to `src/tools/registry.ts` as the design's decision 1 gives it (after Sign PDF, first under "Protect", one `new-password` option keyed `newPassword` with its words and no `refusedSentence`, no preset), its line `'protect-pdf': { newPassword: { maxLength: 127, characters: 'printable-ascii' } }` in `optionPasswords` in `src/widget/option-values.ts`, and change the one assertion in `tests/unit/options.test.ts` that expects `optionPasswords` to be empty; verify with `npm test` (catalogue order, the new-password checks from `add-password-option`, the hint ending with `passwordAdvice` and naming 127) and that the built home page lists "Protect with a password" first under "Protect" and Watermark's and Sign PDF's pages now link to it
+- [ ] 1.1 Add the `protect-pdf` entry to `src/tools/registry.ts` as the design's decision 1 gives it:
+  - after Sign PDF, first under "Protect";
+  - the page sentence and meta description that make no claim about the password staying on the device;
+  - one `new-password` option keyed `newPassword`, with the four-sentence hint and no `refusedSentence`;
+  - three result notes, with no short-password sentence among them;
+  - no preset.
 
-## 2. Engine
+  Add its line `'protect-pdf': { newPassword: { maxLength: 127, characters: 'printable-ascii' } }` to `optionPasswords` in `src/widget/option-values.ts`. Change the one assertion in `tests/unit/options.test.ts` that expects `optionPasswords` to be empty. Verify:
+  - `npm test` passes: catalogue order, the new-password checks from `add-password-option`, and the hint ending with `passwordAdvice` and naming 127;
+  - the built home page lists "Protect with a password" first under "Protect";
+  - Watermark's and Sign PDF's pages now link to it.
 
-- [ ] 2.1 Write `src/engines/tools/protect-pdf.ts` as the design's decisions 2 to 6 give it: one file only; `acceptedPassword` before any work, throwing `PasswordRefused`; `protectLimit` and `writeProtected` exported; one qpdf call with `--progress`, `passwordArgsFor(old)`, `--object-streams=generate`, `--encrypt --user-password=P --owner-password=P --bits=256 --`, in the in-memory argument list only; the cap with `capFile` and `refused`, throwing `OutputLimit` imported from `../stamp`; the check on a fresh qpdf (JSON `encrypt` R 6, V 5, AESv3 three times, every capability; `--check` with the password; refused without it); progress reading, writing scaled to 90, then 100; fixed error sentences that never hold qpdf's printed text or a password; `inspect` is `inspectPdf`; no change to shared engine files; verify with `npm run lint`, `npm run check` and the tests in 3.1
+## 2. Shared: the new password's layout and Enter
 
-## 3. Engine unit tests
+- [ ] 2.1 Change `src/components/NewPasswordField/NewPasswordField.tsx` and its CSS Module as the design's decision 2 gives it:
+  - only the tool's hint under the first field;
+  - the shared note as its own paragraph after the second field, with an id;
+  - the first field's `aria-describedby` naming its error (when there is one), the hint and the note;
+  - `enterkeyhint="next"` on the first field, `"go"` on the second;
+  - still uncontrolled, with no `value` attribute.
 
-- [ ] 3.1 `tests/unit/protect-pdf.test.ts` as the design's Tests list it: refusals before qpdf is asked for; the argument list and the engine's source with none of `--cleartext-metadata`, `--allow-insecure`, `--allow-weak-crypto`, `--show-encryption`; `run` on every file in `tests/fixtures/` (check, R 6 and AESv3, every capability, opens with the password only in qpdf and PDF.js, pages and text as before, the password not in the bytes, bookmarks, link, attachment, fields and values, tags, destination, thread, sizes and turns kept, `password.pdf` and `restricted.pdf` with the new password only, `warning.pdf`, the damaged files and `not-a-pdf.pdf` failing); the title and XMP file made in the test; `tagged.pdf`'s markers with `SECRET-DEST-NAME` recorded as the one readable name; an RC4 file made in the test; two runs giving different keys; progress order; the output cap with a fake qpdf and with a real file under a small limit; verify the tests pass, then record each fixture's outcome in `tests/fixtures/README.md` under a new "Protect with a password" table, with the readable-name finding and the multilingual file still missing
-- [ ] 3.2 Measure time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s file, in Node and in Chromium, with and without the check of decision 4; verify the numbers are in the fixtures README and that no genuine file comes near the cap; if the check more than doubles the time on the largest file, raise it in the pull request
+  Add the `next-field` answer to `enterAction` in `src/widget/options.ts`: for a new password's first field holding a password with no problem. Otherwise it gives today's answers, and a quiet trailing space is shown. Make `ToolWorkspace` move focus to the second field on it. Verify with unit tests for `enterAction`, and with component tests for the markup and order, including that Enter in the first field calls the handler with its field and a composing Enter does not.
 
-## 4. Worker wiring
+## 3. Shared: the capped write
 
-- [ ] 4.1 Confirm `tool.worker.ts` already gives `qpdf` and the worker maps `PasswordRefused` and `OutputLimit` with no change; confirm `check-worker.mjs` finds the engine, that it loads late and stays out of the worker file (by a sentence from its source), and that `page-weight.mjs` needs a `loadedLater` line only for a new chunk; verify with `npm run build`, `npm run check:worker` and `npm run weigh`
+- [ ] 3.1 Move `OutputLimit` into `src/engines/qpdf.ts`, and add `writePercent` and `cappedWrite` there as the design's decision 5 gives them. `src/engines/stamp.ts` re-exports `OutputLimit`, and `writeUpdate` uses `cappedWrite` with no change in behaviour. Leave `merge-pdf.ts` as it is. Verify:
+  - the `cappedWrite` unit tests pass with a fake qpdf, covering a refused write, a no-space print, exit 0 past the limit, an unfinished exit keeping `/in.pdf`, and a passing write removing `/in.pdf` with progress in order and not repeated;
+  - every existing `stamp.test.ts`, Add page numbers, Watermark and Sign PDF test passes unchanged;
+  - the worker still gives `output-limit` for an `OutputLimit` thrown from either file.
 
-## 5. Page and page text
+## 4. Engine
 
-- [ ] 5.1 Check the page renders with its heading, sentence, title and description, and that once the file is read the two empty fields show with the hint (cannot-be-recovered sentence first) and the shared note, focus in the first, and the main button waits with "Type a password first."; verify with the built page and a component test with this entry
-- [ ] 5.2 Write `src/content/tools/protect-pdf.md`, 250 to 500 words, marked as a draft, covering the design's section 8, with "A short password can be guessed by anyone who has the file." word for word, the browser's offer to save or suggest the password and that a saved one may be copied to the browser account, signatures, an earlier password and restrictions replaced, and what a password does not hide; privacy words saying only what the page controls; no "unlock", no "100%", no capitals for emphasis, no question that restates the title; check it against "Banned patterns"; verify the built page holds the heading, sentence, steps and questions with scripts off
+- [ ] 4.1 Write `src/engines/tools/protect-pdf.ts` as the design's decisions 3, 4, 7 and 8 give it:
+  - one file only;
+  - `acceptedPassword` before any work, throwing `PasswordRefused`;
+  - `protectArgs`, `protectLimit` and `protectedBytes` exported;
+  - one qpdf call in the in-memory argument list only, through `cappedWrite`, so `/in.pdf` is removed before the output is read, and the writer is local to `protectedBytes`;
+  - the check on a fresh qpdf: JSON `encrypt` with R 6, V 5, AESv3 three times and every capability; `--check` with the password; refused without it;
+  - progress: reading, then writing scaled to 90, then 93, 96 and 100 after each check step;
+  - fixed error sentences that never hold qpdf's printed text or a password;
+  - `inspect` is `inspectPdf`.
 
-## 6. End-to-end test
+  No other engine file changes beyond group 3. Verify with `npm run lint`, `npm run check` and the tests in 5.1.
 
-- [ ] 6.1 `tests/e2e/protect-pdf.spec.ts` at 360px and 1280px:
-  - choosing a file: one row, no summary line, no Remove, "Getting ready" seen with the engine's route held until checked, the status line, focus in "New password" once read; two files dropped; not a PDF;
-  - the fields: labels, `type="password"`, `autocomplete="new-password"`, no `name`, no `maxlength`, in no form; the hint beginning "If you forget this password" and the shared note in the first field's description; Tab order first field, second field, "Choose another file", main button;
-  - holding: empty ("Type a password first."), typed once and part-typed again ("Type the password again to check it.", no field marked), different (second field marked, its sentence, said once), "café" and a 128-character paste (first field marked, the shared sentence, kept whole), a space at the end shown only on leaving the field; a press while waiting starts no job; Enter while waiting says why on every press;
-  - protecting `text.pdf` with "Kv4 #%@ wq9" by Enter in the second field: the download is `text-protected.pdf`, passes `qpdf --check` with the password, opens in PDF.js with it and not without, and does not hold the password;
-  - progress "Reading the file" and "Writing the protected file"; Cancel keeping both fields and the main button ready; a failure from a fake engine (memory, output-limit, password-refused saying "The password could not be used. Go back to your file and type it again."); engine-load failure; "Go back to your file" keeping both fields with focus on the main button;
-  - forgetting: after the result both fields are empty for the next file; "Start again" empties them; "Choose another file" keeps them; a second file that needs its own password, then "Choose another file" at its field, empties them; leaving the page and coming back with Back holds no file and no password;
-  - in the real browser, after typing in both fields, neither input has a `value` attribute and `document.documentElement.outerHTML` does not hold the password;
-  - password right and wrong for `password.pdf`, focus moving to "New password" once it opens; damaged files;
-  - the 100 MB notice; the 20,000-page notice on the generated 120,000-page file, typing in the fields blocking nothing for more than 100 ms;
-  - verify it passes, with the other tools' e2e tests unchanged
+## 5. Engine unit tests
 
-## 7. No-upload test
+- [ ] 5.1 Write `tests/unit/protect-pdf.test.ts` as the design's Tests list it:
+  - refusals before qpdf is asked for;
+  - `protectArgs` and the engine's source holding none of `--cleartext-metadata`, `--allow-insecure`, `--allow-weak-crypto` or `--show-encryption`;
+  - `run` on every file in `tests/fixtures/`:
+    - the result passes the check and reports R 6, AESv3 and every capability;
+    - it opens with the password only, in qpdf and PDF.js;
+    - pages and text are as before, and the password is not in the bytes;
+    - kept: bookmarks, link, attachment, fields and values, tags, destination, thread, sizes and turns;
+    - `password.pdf` and `restricted.pdf` come back with the new password only, and `open-sesame` is not in `password.pdf`'s result;
+    - `warning.pdf` is protected;
+    - the damaged files and `not-a-pdf.pdf` fail;
+  - the title and XMP file made in the test;
+  - `tagged.pdf`'s markers, with `SECRET-DEST-NAME` recorded as the one readable name, and no `/MediaBox` readable in any result;
+  - an RC4 file made in the test;
+  - two runs giving different keys;
+  - the order of progress;
+  - the cap, with a real file under a small limit;
+  - no error holding either marked password.
 
-- [ ] 7.1 The tool's no-upload test: its exact allowlist from the build (the engine, `plain`, `inspect`, the shared chunk with the option values, no pdf-lib, no other tool's engine), positive checks that the engine was fetched and a download happened; `qz7report.pdf` (a copy of `password.pdf`), its stem, `open-sesame`, the new password `Qz7 pw#%@ Kv4` and its parts (`Qz7`, `pw#%@`, `Kv4`), plain and URL-encoded, as secrets for requests, headers, the page's console, the worker's console (`page.on('worker')`, then each worker's `console` events), the title, storage and the address; page errors recorded (`page.on('pageerror')`) and none allowed; the downloaded file's bytes do not hold the password; runs on `rich.pdf`, `tagged.pdf` and `form.pdf` with their markers as secrets; if the shared chunk's name changed, the other tools' allowlists updated with their checks unchanged; verify all pass
+  Verify the tests pass. Then record each fixture's outcome in `tests/fixtures/README.md` under a new "Protect with a password" table, with what stays readable and a note that the multilingual file is still missing.
+- [ ] 5.2 Measure time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s 100 MB file, in Node and in Chromium. Record separately how long the check of decision 4 takes on each. Verify:
+  - the numbers are in the fixtures README;
+  - no genuine file comes near the cap;
+  - the peak on the 100 MB file shows the input let go before the output is read.
 
-## 8. Screenshots
+  If the check more than doubles the time on the largest file, raise it in the pull request.
 
-- [ ] 8.1 Screenshots of `/protect-pdf` at 360px and 1280px, light and dark: empty, getting ready, listed with empty fields and the waiting button, typed once, different, refused characters, both matching, working, result, input password, damaged, failed, the 20,000-page notice; the listed states with an error and the result at 200% text size, with nothing overflowing sideways; verify by looking at each and adding them to the change folder
+## 6. Worker wiring and the job step
 
-## 9. Checks and review
+- [ ] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
+  - the new password holder is `{}` after a run that gives a file and after one that gives no new file, before anything else clears it;
+  - it still holds the password after an engine failure, a run that throws and a cancel.
+- [ ] 6.2 Accept the new shared file:
+  - add an `option-values` line to `loadedLater` in `scripts/page-weight.mjs`, and change the `stamp` line's description so it no longer claims the option values;
+  - update the exact allowlists in `tests/e2e/add-page-numbers.spec.ts`, `watermark-pdf.spec.ts` and `sign-pdf.spec.ts` to include `option-values-*.js`, and any other allowlist the build changes, with their other checks unchanged;
+  - confirm `check-worker.mjs` finds the engine, and that the engine loads late and stays out of the worker file, by a sentence from its source; adjust the script's shared-step sentences if `cappedWrite`'s move changes which file holds them.
 
-- [ ] 9.1 `LICENSES.md`: no change, as no dependency is added
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`; verify each passes
-- [ ] 9.3 Add Protect's hand checks to issue #7: the result opened with the password and refused without it in Chrome, Firefox, Adobe Reader and macOS Preview; browsers and phones, including each browser's offer to save or suggest the password and whether the on-screen keyboard opens when focus moves to the field; a screen reader on the two fields; the owner's review of the page text
-- [ ] 9.4 When the pull request opens, add to "Questions waiting for the owner" in `CLAUDE.md` the two questions from the proposal (old restrictions; where the short-password sentence goes), and in the pull request list for the program manager: the Content Security Policy as an open scheduling point (before Protect is published, or before launch), and the Privacy page facts of the design's section 7 for the Phase 1 site-work change
-- [ ] 9.5 Run the review panel (see the review-panel skill) and resolve its findings; the pull request names the agent's choices (the same password for opening and permissions; every permission allowed; object streams generated; old restrictions dropped; the check before giving the file back; the output cap; the hint's and the result's words; `-protected`), the readable-names finding, the PR #28 owner questions now on a live page, the missing multilingual test file, and next steps as a site-wide gap; it does not call the tool done
+  Verify with `npm run build`, `npm run check:worker` and `npm run weigh`, and that the three tools' no-upload tests pass.
+
+## 7. Page and page text
+
+- [ ] 7.1 Check the page renders with its heading, sentence, title and description. Once the file is read, check that:
+  - the two empty fields show, the four-sentence hint under the first and the note under the second;
+  - focus is in the first field;
+  - the main button waits with "Type a password first.".
+
+  Verify with the built page and a component test with this entry.
+- [ ] 7.2 Write `src/content/tools/protect-pdf.md`, 250 to 500 words, marked as a draft, covering the design's section 10:
+  - "A short password can be guessed by anyone who has the file." word for word;
+  - the browser's offer to save or suggest the password, and that a saved one may be copied to the browser account;
+  - one question on what changes and what stays;
+  - signatures;
+  - an earlier password and restrictions being replaced;
+  - what a password hides and does not hide: the file's name, whether it has bookmarks, attachments or a form, rough size and some names stay visible; pages, page sizes and text do not.
+
+  The privacy words say only what the page controls. No "unlock", no "100%", no capitals for emphasis, and no question that restates the title. Check it against "Banned patterns". Verify that the built page holds the heading, sentence, steps and questions with scripts off, and that the word count is within range.
+
+## 8. End-to-end test
+
+- [ ] 8.1 Write `tests/e2e/protect-pdf.spec.ts`, at 360px and 1280px:
+  - **Choosing a file:**
+    - one row, no summary line, no Remove;
+    - "Getting ready" seen, with the engine's route held until it is checked;
+    - the status line;
+    - focus in "New password" once the file is read;
+    - two files dropped; not a PDF.
+  - **The fields:**
+    - labels, `type="password"`, `autocomplete="new-password"`, no `name`, no `maxlength`, in no form;
+    - `enterkeyhint` "next" then "go";
+    - the hint, beginning "If you forget this password", as the only text between the fields;
+    - the note after the second field and in the first field's description;
+    - at 360px, the second field's label starts within 200px of the first field's bottom;
+    - Tab goes first field, second field, "Choose another file", main button.
+  - **Enter:**
+    - Enter in the first field with an accepted password moves focus to the second and starts no job;
+    - Enter in the first field when it is empty or holds "café" says why and stays;
+    - Enter in the second field starts the job when both match.
+  - **Holding:**
+    - empty: "Type a password first.";
+    - typed once, and part-typed again: "Type the password again to check it.", with no field marked;
+    - different: the second field marked, its sentence said once;
+    - "café", and a pasted 128 characters kept whole: the first field marked, with the shared sentence;
+    - a space at the end shown only on leaving the field;
+    - a press while waiting starts no job.
+  - **Protecting `text.pdf` with "Kv4 #%@ wq9":**
+    - the download is `text-protected.pdf`;
+    - it passes `qpdf --check` with the password;
+    - it opens in PDF.js with the password and not without;
+    - it does not hold the password.
+  - **Progress, Cancel and failures:**
+    - progress "Reading the file" and "Writing the protected file", the bar never going back;
+    - Cancel keeps both fields and leaves the main button ready;
+    - failures from a fake engine: memory, output-limit, and password-refused saying "The password could not be used. Go back to your file and type it again.";
+    - an engine that cannot be fetched;
+    - "Go back to your file" keeps both fields, with focus on the main button.
+  - **No password in the markup.** In the real browser, after typing in both fields, after Cancel and after "Go back to your file", neither input has a `value` attribute and `document.documentElement.outerHTML` does not hold the password.
+  - **Forgetting:**
+    - after the result, both fields are empty for the next file;
+    - "Start again" empties them;
+    - "Choose another file" keeps them;
+    - choosing a second file that needs its own password, then pressing "Choose another file" at its password field, empties them;
+    - after typing in both fields, as `merge-pdf.spec.ts` does in its "leaving the page" test, dispatch `new PageTransitionEvent('pagehide', { persisted: true })`; in the same `evaluate`, no password input remains or each `.value` is empty, and the page's HTML does not hold the password;
+    - a separate test: leaving and coming back with Back shows no file.
+  - **Other states:**
+    - for `password.pdf`, the right and a wrong password, with focus moving to "New password" once it opens;
+    - damaged files;
+    - the 100 MB notice;
+    - the 20,000-page notice on the generated 120,000-page file, with typing in the fields blocking nothing for more than 100 ms.
+
+  Verify it passes, with the other tools' e2e tests passing, changed only by task 6.2.
+
+## 9. No-upload test
+
+- [ ] 9.1 Write the tool's no-upload test:
+  - **The allowlist** is exact, read from the build: the engine, `plain`, `inspect`, `option-values`, qpdf, the worker and workspace, and PDF.js for the thumbnail. No `stamp`, no pdf-lib, no `fflate`, no other tool's engine.
+  - **Positive checks:** the engine was fetched, and a download happened.
+  - **Secrets:** `qz7report.pdf` (a copy of `password.pdf`), its stem, `open-sesame`, and the new password `Qz7 pw#%@ Kv4` with its parts `Qz7`, `pw#%@` and `Kv4`, plain and URL-encoded. They must not appear in requests, headers, the title, storage or the address.
+  - **The consoles:** `page.on('worker')` is attached before `open(page)`, and each worker's `console` events are listened to. For the page's and each worker's messages, both `text()` and the serialised `args()` are checked. Uncaught worker errors are covered by the engine's fixed-sentence unit test.
+  - **Page errors** are recorded with `page.on('pageerror')`, and none are allowed.
+  - **The download:** its bytes do not hold the new password or `open-sesame`.
+  - **Further runs** on `rich.pdf`, `tagged.pdf` and `form.pdf`, with their markers as secrets.
+
+  Verify all pass.
+
+## 10. Screenshots
+
+- [ ] 10.1 Take screenshots of `/protect-pdf` at 360px and 1280px, light and dark, of these states:
+  - empty and getting ready;
+  - listed with empty fields and the waiting button;
+  - typed once, different, refused characters, both matching;
+  - working, result;
+  - input password, damaged, failed;
+  - the 20,000-page notice.
+
+  Also take a 360 × 640 screenshot with focus in the first field, showing both fields and the hint above the fold. Take the listed states with an error, and the result, at 200% text size, with nothing overflowing sideways. Verify by looking at each, and add them to the change folder.
+
+## 11. Checks and review
+
+- [ ] 11.1 `LICENSES.md`: no change, as no dependency is added.
+- [ ] 11.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`. Verify each passes.
+- [ ] 11.3 Add Protect's hand checks to issue #7:
+  - the result opened with the password and refused without it, in Chrome, Firefox, Adobe Reader and macOS Preview;
+  - browsers and phones, including each browser's offer to save or suggest the password, the "Next" and "Go" keys, and whether the on-screen keyboard opens when focus moves to the field;
+  - a screen reader on the two fields, checking the note is read with the first;
+  - the owner's review of the page text;
+  - the multilingual test file, which must exist and be run before Protect is called done.
+- [ ] 11.4 When the pull request opens:
+  - add the two questions from the proposal to "Questions waiting for the owner" in `CLAUDE.md`;
+  - in the pull request, name the shared changes (the `NewPasswordField` layout and Enter, `OutputLimit` and `cappedWrite` in `qpdf.ts`, `runJob`) and the new `option-values-*.js` file with the three allowlists it changes;
+  - name the program manager's CSP decision: the CSP change comes straight after Protect, before Unlock PDF, as a `<meta>` tag with no `frame-ancestors` on GitHub Pages, and it blocks launch and the Phase 1 gate;
+  - list the Privacy page facts of the design's section 9 for the Phase 1 site-work change;
+  - say that the branch also carries the `add-password-option` archive commit (64271b5);
+  - say that Protect cannot be called done until the multilingual test file exists.
+- [ ] 11.5 Run the review panel (see the review-panel skill) and resolve its findings. The pull request names:
+  - the agent's choices: the same password for opening and permissions; every permission allowed; object streams generated; old restrictions dropped; the check before giving the file back, with its progress steps; the output cap; the hint's and the result's words; `-protected`;
+  - the finding on what stays readable;
+  - the PR #28 owner questions, now on a live page;
+  - the missing multilingual test file;
+  - next steps, as a site-wide gap.
+
+  It does not call the tool done.
 
 ## Workflow follow-up
 
-- After merge, archive the change with `/opsx:archive` and add Protect to "Where the project stands" in `CLAUDE.md`.
+- After merge, archive the change with `/opsx:archive`.
+- Add Protect to "Where the project stands" in `CLAUDE.md`. Its entry carries forward:
+  - that the Content Security Policy change comes next, before Unlock PDF, as a `<meta>` tag with no `frame-ancestors`, blocking launch and the Phase 1 gate;
+  - the Privacy page facts of the design's section 9, for the Phase 1 site-work change;
+  - that Protect is not done until the multilingual test file exists and Protect has been run on it.

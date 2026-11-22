@@ -8,12 +8,12 @@ What the Protect with a password tool at `/protect-pdf` does: it writes one PDF 
 
 ### Requirement: The page
 
-The tool SHALL be served at `/protect-pdf` with the title tag "Protect a PDF with a password in your browser - PDFkaro", the heading "Protect a PDF with a password" and the sentence "Add a password that is needed to open a PDF. Your file and the password stay on your device." Its meta description SHALL say the file stays on the device and is not uploaded. It SHALL be listed first under "Protect". (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; SEO, Every tool page)
+The tool SHALL be served at `/protect-pdf`, listed first under "Protect", with the title, heading, sentence and meta description given in the scenario below. Neither the sentence nor the meta description SHALL claim the password stays on the device, since the browser may offer to save it. (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; SEO, Every tool page)
 
 #### Scenario: The page is opened
 
 - **WHEN** a visitor opens `/protect-pdf`
-- **THEN** the heading, sentence and title are as above, the picker reads "Choose a PDF file", and nothing else of the tool is shown
+- **THEN** the title tag reads "Protect a PDF with a password in your browser - PDFkaro", the heading "Protect a PDF with a password", the sentence "Add a password that is needed to open a PDF. Your file stays on your device. This site does not upload your file or the password.", the meta description reads "Add a password to a PDF so it cannot be opened without it. The file and the password are not uploaded.", the picker reads "Choose a PDF file", and nothing else of the tool is shown
 
 #### Scenario: The home page lists it
 
@@ -46,7 +46,7 @@ While the engine loads, the file's row SHALL show "Getting ready". Once read, th
 #### Scenario: A file has been read
 
 - **WHEN** `report.pdf`, 12 pages and 1.4 MB, has been read
-- **THEN** its row shows its first page and "12 pages, 1.4 MB", with no Remove, then the two empty fields with the hint and the shared note under the first, focus in the first, then "Protect and download" with "Type a password first." under it and read with it, and the status region says "report.pdf, 12 pages, 1.4 MB."
+- **THEN** its row shows its first page and "12 pages, 1.4 MB", with no Remove, then the two empty fields, the hint under the first and the shared note under the second, focus in the first, then "Protect and download" with "Type a password first." under it and read with it, and the status region says "report.pdf, 12 pages, 1.4 MB."
 
 ### Requirement: The new password
 
@@ -72,9 +72,14 @@ The new password SHALL be typed twice in two hidden fields, as every new passwor
 - **WHEN** the visitor types "café", "पासवर्ड" or a password longer than 127 characters
 - **THEN** the first field is marked invalid with the shared sentence for that problem, which never names a character, a length or the password, and the main button does nothing
 
+#### Scenario: Enter in the first field
+
+- **WHEN** the first field holds "Kv4 #%@ wq9" and the visitor presses Enter in it
+- **THEN** focus moves to "Type the new password again", and no job starts
+
 #### Scenario: Both fields match
 
-- **WHEN** both fields hold "Kv4 #%@ wq9" and the visitor presses Enter in either field
+- **WHEN** both fields hold "Kv4 #%@ wq9" and the visitor presses Enter in the second field
 - **THEN** the job starts, as if the main button had been pressed
 
 #### Scenario: Keyboard only
@@ -85,7 +90,7 @@ The new password SHALL be typed twice in two hidden fields, as every new passwor
 #### Scenario: Screen reader
 
 - **WHEN** a screen reader user reaches "New password"
-- **THEN** it is announced as a password field with its label, the hint saying the password cannot be recovered, and the note that the password stays in the browser
+- **THEN** it is announced as a password field with its label, the hint saying the password cannot be recovered and a short one can be guessed, and the note that the password stays in the browser, though the note is shown under the second field
 
 #### Scenario: The engine is sent a password it does not accept
 
@@ -94,12 +99,12 @@ The new password SHALL be typed twice in two hidden fields, as every new passwor
 
 ### Requirement: The cannot-be-recovered warning
 
-The hint next to the first field SHALL say, before the length and the rule, that if the password is forgotten the file cannot be opened and no one can get it back. (SPEC.md: What we are building, rule 4, "Honest about limits")
+The hint next to the first field SHALL say first that if the password is forgotten the file cannot be opened and no one can get it back, then that a short password can be guessed by anyone who has the file, then the length and the rule. (SPEC.md: What we are building, rule 4, "Honest about limits")
 
 #### Scenario: The hint is read
 
 - **WHEN** the file has been read and the fields are shown
-- **THEN** the hint under "New password" begins "If you forget this password, the file cannot be opened, and no one can get it back." and is part of the field's description
+- **THEN** the hint under "New password" begins "If you forget this password, the file cannot be opened, and no one can get it back. A short password can be guessed by anyone who has the file." and is part of the field's description
 
 ### Requirement: Writing the protected file
 
@@ -132,7 +137,7 @@ A file that needs a password SHALL be opened with its own password, as every too
 #### Scenario: A protected file
 
 - **WHEN** `password.pdf`, opened with `open-sesame`, is protected with a new password
-- **THEN** the result opens with the new password, no longer with `open-sesame`, and has AES-256 encryption with every permission allowed
+- **THEN** the result opens with the new password, no longer with `open-sesame`, has AES-256 encryption with every permission allowed, and holds neither `open-sesame` nor the new password in its bytes
 
 #### Scenario: A file with restrictions only
 
@@ -165,21 +170,21 @@ The new file SHALL keep every page and everything on it: text, links, form field
 
 ### Requirement: What the page says about the new file
 
-The result SHALL say that the file now needs the password, that a forgotten password cannot be recovered and a short one can be guessed, that text, links, form fields, bookmarks and attached files are kept, that earlier saved versions are not and a digital signature will no longer be valid, and that an earlier password or restrictions are replaced. (SPEC.md: What we are building, rule 4; CLAUDE.md: Signed files)
+The result SHALL say that the file now needs the password and that a forgotten password cannot be recovered, that text, links, form fields, bookmarks and attached files are kept, that earlier saved versions are not and a digital signature will no longer be valid, and that an earlier password or restrictions are replaced. (SPEC.md: What we are building, rule 4; CLAUDE.md: Signed files)
 
 #### Scenario: The result notes
 
 - **WHEN** a job finishes
-- **THEN** the result shows these notes, and the questions below the tool cover them, the browser's offer to save the password, and what a password does not hide
+- **THEN** the result shows these notes, and the questions below the tool cover them, a short password, the browser's offer to save the password, and what a password does not hide
 
 ### Requirement: Progress and cancel
 
-While the job runs the page SHALL show progress in real units with Cancel: "Reading the file", then "Writing the protected file" with a bar that never goes back. Cancel SHALL stop the work and return to the file with both fields as typed. The page MUST stay responsive. (SPEC.md: States every tool handles, Working; Definition of done)
+While the job runs the page SHALL show progress in real units with Cancel: "Reading the file", then "Writing the protected file" with a bar that never goes back and moves on during the final checks. Cancel SHALL stop the work and return to the file with both fields as typed. The page MUST stay responsive. (SPEC.md: States every tool handles, Working; Definition of done)
 
 #### Scenario: A job is running
 
 - **WHEN** `pages-500.pdf` is protected
-- **THEN** the page shows "Reading the file", then "Writing the protected file" and a bar that fills as qpdf writes, and Cancel
+- **THEN** the page shows "Reading the file", then "Writing the protected file" and a bar that fills as qpdf writes and moves on after each check of the result, and Cancel
 
 #### Scenario: Cancel is pressed
 
@@ -209,14 +214,19 @@ The page SHALL forget the new password when the job finishes, on "Start again", 
 - **WHEN** the visitor has typed the password twice, chooses another file that needs its own password, and presses "Choose another file" at its password field
 - **THEN** once a new file is read, both fields are empty
 
+#### Scenario: Leaving the page
+
+- **WHEN** the visitor has typed the password twice and the page receives the `pagehide` event a browser sends when it keeps a page for the Back button
+- **THEN** straight after it, no password field remains on the page or each holds nothing, and the page's HTML does not hold the password
+
 #### Scenario: Back to the page
 
-- **WHEN** the visitor has typed the password twice, goes to another page and comes back with the browser's Back button
-- **THEN** no file is listed and no password is held
+- **WHEN** the visitor leaves the page and comes back with the browser's Back button
+- **THEN** the page shows no file
 
 #### Scenario: The markup
 
-- **WHEN** the password has been typed in both fields in a real browser
+- **WHEN** the password has been typed in both fields in a real browser, and again after Cancel and after "Go back to your file"
 - **THEN** neither input has a `value` attribute, and the page's HTML does not hold the password
 
 ### Requirement: A file that needs a password
@@ -282,7 +292,7 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, types "Qz7 pw#%@ Kv4" in both fields, protects the file and downloads it, while watching every request, page error and console message from the page and its worker
-- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, either password or the new password's parts, plain or URL-encoded; storage, the title, the address and both consoles hold none of them; no page error occurred; and the downloaded file does not hold the new password
+- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, either password or the new password's parts, plain or URL-encoded; storage, the title, the address and both consoles (the text and the arguments of each message, the worker's watched from before the page opens) hold none of them; no page error occurred; and the downloaded file does not hold the new password
 
 #### Scenario: No hidden text reaches a request
 
@@ -291,9 +301,9 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft for the owner, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover uploading, a forgotten password, a short password, the browser's offer to save it, signatures, an earlier password, and what a password hides. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft for the owner, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover uploading, a forgotten password, a short password, the browser's offer to save it, signatures, an earlier password, and what a password does and does not hide. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
 
 #### Scenario: The text is in the served page
 
 - **WHEN** the built `/protect-pdf` page is fetched without running scripts
-- **THEN** its heading, sentence, steps and questions are in the HTML, and they include "A short password can be guessed by anyone who has the file."
+- **THEN** its heading, sentence, steps and questions are in the HTML, they include "A short password can be guessed by anyone who has the file.", and they say that without the password the file's name (ending `-protected`), whether it holds bookmarks, attached files or a form, roughly how large its parts are, and some names inside it stay visible, while its pages, their sizes and its text do not
