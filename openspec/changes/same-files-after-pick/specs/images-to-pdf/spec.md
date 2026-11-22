@@ -4,7 +4,7 @@
 
 ### Requirement: Nothing is uploaded
 
-No request that leaves the page SHALL carry a picture's contents, its name or its details. After a pick the page SHALL fetch only the site's own files the tool needs, and which of them it fetches SHALL NOT depend on the pictures: reading any picture fetches `fflate`, whether it is a JPG, a PNG or neither. (SPEC.md: Privacy, limits and security, Browser tools; owner's decision of 11 Nov 2026, "PDF.js's helper data is one fixed set")
+No request that leaves the page SHALL carry a picture's contents, its name or its details. After a pick the page SHALL fetch only the site's own files the tool needs, and for any two pictures read as ready, the set it fetches SHALL be the same, whether JPG or PNG: reading any picture fetches `fflate`, whatever its type. (A picture refused or read as damaged fetches no thumbnail file; that is outside this requirement.) (SPEC.md: Privacy, limits and security, Browser tools; owner's decision of 11 Nov 2026, "PDF.js's helper data is one fixed set")
 
 #### Scenario: The no-upload test
 

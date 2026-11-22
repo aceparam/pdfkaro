@@ -485,12 +485,18 @@ describe('reading a file before the job', () => {
 });
 
 describe('the files fetched do not depend on the picture', () => {
-  it('asks for fflate once when reading a JPG, a PNG, or a file of neither kind', async () => {
-    for (const bytes of [picture('tall.jpg'), picture('small.png'), pdfFixture('not-a-pdf.pdf'), picture('scan-g4.tif')]) {
+  it('asks for fflate once when reading a JPG, a PNG, an unsupported or damaged one, or a file of neither kind', async () => {
+    // arithmetic.jpg (unsupported), broken.jpg and data-bomb.png (damaged) pass the page's first-bytes check, so the browser sends them here;
+    // the PDF and the TIFF are turned away by that check first, and are here for the engine alone.
+    for (const name of ['tall.jpg', 'small.png', 'arithmetic.jpg', 'broken.jpg', 'data-bomb.png', 'scan-g4.tif']) {
+      const bytes = picture(name);
       let asked = 0;
       const counted: EngineTools = { ...tools, fflate: async () => (asked++, await tools.fflate!()) };
       await inspect(bytes, undefined, counted);
-      expect(asked).toBe(1);
+      expect(asked, name).toBe(1);
     }
+    let asked = 0;
+    await inspect(pdfFixture('not-a-pdf.pdf'), undefined, { ...tools, fflate: async () => (asked++, await tools.fflate!()) });
+    expect(asked).toBe(1);
   });
 });

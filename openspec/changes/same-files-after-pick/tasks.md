@@ -10,7 +10,7 @@ No registry entry, page, page text or dependency changes: this is a privacy fix 
 ## 2. Engine unit tests
 
 - [ ] 2.1 In `tests/unit/compress-pdf.test.ts`, add a test with a counting `fflate`: `compress-text.pdf`, `compress-small-jpg.pdf`, `compress-lossless.pdf` and `compress-json-bomb.pdf` (a JSON too large, so the picture step is skipped) each ask for it exactly once per job, before the first qpdf call (security, stage 1). Verify it fails before 1.1 and passes after.
-- [ ] 2.2 In `tests/unit/images-to-pdf.test.ts`, add a test: `inspect` on a JPG, a PNG and a file of neither kind each ask for `fflate` exactly once. Verify it fails before 1.2 and passes after.
+- [ ] 2.2 In `tests/unit/images-to-pdf.test.ts`, add a test: `inspect` on a JPG, a PNG, an unsupported JPG, damaged pictures that pass the first-bytes check, and files of neither kind each ask for `fflate` exactly once. Verify it fails before 1.2 and passes after.
 - [ ] 2.3 Run `npm test`; every existing test passes unchanged. Run both engines on every file in `tests/fixtures/` (the existing fixture tests) and confirm no outcome changed.
 
 ## 3. End-to-end tests
@@ -26,5 +26,5 @@ No registry entry, page, page text or dependency changes: this is a privacy fix 
 
 ## 5. Record and review
 
-- [ ] 5.1 Add an entry for this change under "Where the project stands" in `CLAUDE.md`, with "Left for later": a site-wide test that every tool's requests after a pick are the same for every file (other tools were checked by reading only).
+- [ ] 5.1 Add the owner question on files not read as ready (proposal) under "Questions waiting for the owner" in `CLAUDE.md`. Add an entry for this change under "Where the project stands" in `CLAUDE.md`, with "Left for later": a site-wide test that every tool's requests after a pick are the same for every file (other tools were checked by reading only).
 - [ ] 5.2 Run the review panel, stage 2 (see the review-panel skill), and resolve its findings.

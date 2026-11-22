@@ -4,7 +4,7 @@
 
 ### Requirement: Nothing is uploaded
 
-No request that leaves the page SHALL carry the file's contents, its name or its password. After a pick the page SHALL fetch only the site's own files the tool needs, and which of them it fetches SHALL NOT depend on what the file holds: every job fetches `fflate`, whether or not the file has a picture it uses it for. (SPEC.md: Privacy, limits and security, Browser tools; owner's decision of 11 Nov 2026, "PDF.js's helper data is one fixed set")
+No request that leaves the page SHALL carry the file's contents, its name or its password. After a pick the page SHALL fetch only the site's own files the tool needs, and for any two files read as ready and compressed, the set it fetches SHALL be the same, whatever the files hold: every job fetches `fflate`, whether or not the file has a picture it uses it for. (A file read as damaged, or waiting for its password, fetches no thumbnail files; that is outside this requirement.) (SPEC.md: Privacy, limits and security, Browser tools; owner's decision of 11 Nov 2026, "PDF.js's helper data is one fixed set")
 
 #### Scenario: The no-upload test
 

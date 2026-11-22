@@ -28,7 +28,8 @@ fflate's built file is 13,650 bytes, 6,282 bytes by gzip (measured on this branc
 
 - **In:** the two engines named above, their unit tests, their end-to-end tests, the two spec deltas.
 - **Out:**
-  - a site-wide rule and test that every tool's requests after a pick are the same for every file. Other tools were checked by reading their engines (design.md); none fetches a file depending on content, apart from a job that never runs (a damaged file, or a password never typed), which leaves the engine's own files unfetched on every tool;
+  - a site-wide rule and test that every tool's requests after a pick are the same for every file. Other tools were checked by reading their engines (design.md); among files read as ready, none fetches a file depending on content;
+  - files not read as ready (damaged, unsupported, waiting for a password): on every tool they fetch no thumbnail files and run no job, so the host can tell them from readable ones. This is put to the owner as a question (design.md), not fixed here;
   - the Privacy page wording (`add-privacy-draft`);
   - the order of requests, which can differ (for example, a protected file's thumbnail waits for its password); the set is what is checked.
 
@@ -42,7 +43,8 @@ Phase 1, not a tool: a privacy fix to two Phase 1 tools already published (Compr
 
 ## Open decisions and owner questions touched
 
-- None needs the owner. The fix follows the owner's 11 Nov decision. "Compress PDF keeps passwords" and "Very large PNGs" are untouched.
+- None blocks this change. The fix follows the owner's 11 Nov decision.
+- New question for the owner, raised at stage 1 and carried in CLAUDE.md: a damaged, unsupported or still-locked file fetches no thumbnail files, so it can be told apart from a readable one. Is that acceptable under the 11 Nov decision, or should every pick fetch the thumbnail files (a separate change)? "Compress PDF keeps passwords" and "Very large PNGs" are untouched.
 
 ## Where the file is processed
 

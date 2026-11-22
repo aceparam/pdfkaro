@@ -9,13 +9,13 @@ Read across `src/engines/` on this branch:
 | Tool | Fetching entries asked for | Depends on the file? |
 | --- | --- | --- |
 | Merge, Split, Extract, Delete, Reorder, Rotate, Protect, Unlock | `qpdf`; zip step for Split by the page's `zip` flag, not the file | No |
-| Add page numbers, Watermark, Sign PDF | `qpdf`, `pdflib` at the start of `stampPages`; Sign asks for `fflate` for a JPG and a PNG alike | No |
+| Add page numbers, Watermark, Sign PDF | `qpdf`, `pdflib` at the start of `stampPages`; Sign asks for `fflate` for a JPG and a PNG alike, and at job time `fflate` and `pdflib` in `chosenSignature` only on the picture way (a choice the visitor makes, not the file; the picture pick has already fetched fflate) | No |
 | PDF to JPG and PNG | `pdfjs`, `pdfjsData`, zip step by the page's flag | No |
-| Thumbnails (`thumbnail.ts`, `picture-thumbnail.ts`) | fixed per kind of tool | No |
+| Thumbnails (`thumbnail.ts`, `picture-thumbnail.ts`; PDF.js, its worker and `pdfjs-data`) | fixed per kind of tool, but drawn only for files read as ready (`next()` in `src/widget/thumbnails.ts`) | **Yes, for files not read as ready**: a damaged, unsupported or still-locked PDF, or a refused or damaged picture, fetches none of these (architect, stage 1). Out of scope; see below |
 | **Compress PDF** | `qpdf`; `fflate` only when `needsLossless` | **Yes** |
 | **Image to PDF** | job: `pdflib`, `fflate` always. `inspect`: `fflate` only for a PNG | **Yes, at pick** |
 
-On every tool, a job that never runs (a damaged file, or a protected file whose password is never typed) leaves the engine's job-time files unfetched. That is the visitor not pressing the button, which the host also sees from the page alone; it is out of scope here.
+So this change fixes the two content-dependent fetches among files read as ready. A file that is not read as ready differs too, on every tool: it fetches no thumbnail files at pick, and its job never runs. A host could tell a damaged, unsupported or still-locked file from a readable one by those missing requests. Whether that is inside the owner's 11 Nov decision ("no request depends on what a PDF needs") is an owner question, carried in the pull request and CLAUDE.md; closing it would mean fetching the tool's thumbnail files as part of every read, whatever its outcome and before any password is asked for (the privacy reviewer's preferred fix, stage 1), a separate change to shared worker code. Until it is in, the Privacy page draft must not claim that fetches never depend on the file. The specs here are worded for files read as ready, so they say only what the code makes true.
 
 ## Decisions
 
@@ -33,10 +33,11 @@ In `inspect`, fflate is asked for first, before `readPicture`, so a JPG, a PNG a
 
 ### 3. Tests
 
-- **Unit** (`tests/unit/compress-pdf.test.ts`, `tests/unit/images-to-pdf.test.ts`): a `tools` with a counting `fflate`. Compress: `compress-text.pdf` (no pictures), `compress-small-jpg.pdf` (JPG only), `compress-lossless.pdf` and `compress-json-bomb.pdf` (a JSON too large, which skips the picture step) each ask for fflate once per job, and before the first qpdf call, so a later edit cannot move the fetch below a branch (security, stage 1). Image to PDF: `inspect` on a JPG, a PNG and `not-a-pdf.pdf`'s bytes each ask once. This mirrors Sign PDF's "asks for fflate for a JPG as for a PNG".
+- **Unit** (`tests/unit/compress-pdf.test.ts`, `tests/unit/images-to-pdf.test.ts`): a `tools` with a counting `fflate`. Compress: `compress-text.pdf` (no pictures), `compress-small-jpg.pdf` (JPG only), `compress-lossless.pdf` and `compress-json-bomb.pdf` (a JSON too large, which skips the picture step) each ask for fflate once per job, and before the first qpdf call, so a later edit cannot move the fetch below a branch (security, stage 1). Image to PDF: `inspect` on a JPG, a PNG, an unsupported JPG (`arithmetic.jpg`), damaged ones that pass the page's first-bytes check (`broken.jpg`, `data-bomb.png`), and files of neither kind each ask once (privacy, stage 1). This mirrors Sign PDF's "asks for fflate for a JPG as for a PNG".
 - **End-to-end** (in each tool's spec, under "nothing is uploaded"), in the shape of Split's "one part and several parts fetch the same files": each run in a fresh browser context (an empty cache) with `watchPolicy`, watching from before the pick to the download or the no-new-file result, then `violations(...)` against the existing exact list, then the set of paths without `blob:` addresses.
   - Compress: `compress-text.pdf`, `compress-small-jpg.pdf`, `compress-scans.pdf` (a JPG and a lossless picture) and `compress-packed.pdf`, which ends in "This file could not be made smaller.", so both endings are recorded. Each set includes fflate's exact path; all four sets are equal.
   - Image to PDF on `/image-to-pdf`: a JPG alone and a PNG alone, first recorded from pick until the thumbnail shows (the pick-time set, where the leak was), then through convert and download. Both sets include fflate's exact path at pick time; the pick-time sets are equal and the whole-run sets are equal.
+  - `/image-to-pdf` alone is enough: `/jpg-to-pdf`, `/png-to-pdf` and `/image-to-pdf` share one engine, one worker path and one `accepts` list (registry), so the fetched set is the page's, not the address's.
   - The existing tests that say fflate is fetched for the scans stay.
 - `tests/e2e/no-upload.spec.ts` needs no change: the watcher is not changed.
 
