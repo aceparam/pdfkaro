@@ -295,7 +295,8 @@ describe('Images to PDF', () => {
       if (each.id === 'images-to-pdf') continue;
       expect(each.widget?.refusedAdvice).toBeUndefined();
       expect(each.widget?.listPages).toBeUndefined();
-      expect(each.widget?.unsupportedAdvice).toBeUndefined();
+      // Remove a password (Unlock PDF) also names a file it cannot read: one protected with a certificate.
+      if (each.id !== 'unlock-pdf') expect(each.widget?.unsupportedAdvice).toBeUndefined();
       expect(each.widget?.damagedAdvice).toBeUndefined();
     }
   });
@@ -359,8 +360,74 @@ describe('Compress PDF', () => {
     for (const each of tools) {
       if (each.id === 'compress-pdf') continue;
       expect(each.widget?.resultWas).toBeUndefined();
-      expect(each.widget?.noSmaller).toBeUndefined();
+      // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
+      if (each.id !== 'unlock-pdf') expect(each.widget?.noSmaller).toBeUndefined();
     }
+  });
+});
+
+describe('Remove a password (Unlock PDF)', () => {
+  const tool = tools.find((each) => each.id === 'unlock-pdf')!;
+
+  it('is the second row of "Protect", right after Protect with a password, taking one PDF, at the catalogue\'s address', () => {
+    expect(tool).toMatchObject({ group: 'protect', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['protect-pdf', 'compress-pdf', 'merge-pdf', 'split-pdf', 'extract-pdf-pages']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('unlock-pdf')).toBe(ids.indexOf('protect-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'unlock-pdf',
+        name: 'Remove a password',
+        summary: 'Remove print and edit restrictions from a PDF, and its password if you know it.',
+        title: 'Remove a password from a PDF in your browser - PDFkaro',
+        description: 'Remove print and edit restrictions from a PDF, and its password if you know it. The file and the password are not uploaded.',
+        heading: 'Remove a password from a PDF',
+        sentence: 'Remove print and edit restrictions from a PDF, and its password if you know it. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ]);
+    expect(tool.widget?.options).toBeUndefined();
+    expect(tool.pages[0]!.preset).toBeUndefined();
+  });
+
+  it('has the widget words of the design, with the words for no new file and for a file it cannot read', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      tooFewFiles: 'Choose a PDF file.',
+      actionLabel: 'Remove protection and download',
+      writingLabel: 'Writing the unprotected file',
+      doneHeading: 'Your unprotected file is ready',
+      failedHeading: 'The protection was not removed.',
+      outputSuffix: 'unprotected',
+      outputs: 'one',
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      unsupportedAdvice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      noSmaller: {
+        heading: 'This file has no password or restrictions.',
+        advice: 'There was nothing to remove, so no new file was made. You can use your file as it is.',
+      },
+    });
+    expect(tool.widget!.resultNotes).toEqual([
+      'The file now opens without a password, and its print, copy and edit restrictions are removed. Anyone who has this copy can open it.',
+      'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+    ]);
+  });
+
+  it('says "unlock" nowhere but its id and address, by the owner\'s decision of 22 Nov 2026', () => {
+    const { id, pages, ...rest } = tool;
+    const { slug, ...pageWords } = pages[0]!;
+    expect(id).toBe('unlock-pdf');
+    expect(slug).toBe('unlock-pdf');
+    expect(JSON.stringify({ rest, pageWords })).not.toMatch(/unlock/i);
+    expect(tool.pages[0]!.title.length).toBeLessThan(60);
+    expect(tool.pages[0]!.description.length).toBeLessThan(155);
   });
 });
 

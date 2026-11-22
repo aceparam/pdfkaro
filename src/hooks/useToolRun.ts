@@ -224,19 +224,25 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     [],
   );
 
+  // Each file's latest read: a password can be tried again before the last try is answered, and the worker reads
+  // both at once, so their answers can come back in either order. Only the latest read's answer is shown.
+  const inspectTickets = useRef(new Map<string, number>());
   const inspect = useCallback(
     async (id: string) => {
       const file = files.current.get(id);
       if (!file) return;
       const password = passwords.current.get(id);
+      const ticket = (inspectTickets.current.get(id) ?? 0) + 1;
+      inspectTickets.current.set(id, ticket);
+      const latest = () => files.current.has(id) && inspectTickets.current.get(id) === ticket;
       stopThumbnail();
       try {
         const outcome = await getClient().inspect(file, password);
         const shown = outcome.kind === 'needs-password' && password !== undefined ? { kind: 'wrong-password' as const } : outcome;
-        if (files.current.has(id)) dispatch({ type: 'inspected', id, outcome: shown });
+        if (latest()) dispatch({ type: 'inspected', id, outcome: shown });
       } catch (error) {
         if (error instanceof ToolError && error.kind === 'cancelled') return;
-        if (files.current.has(id)) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
+        if (latest()) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
       }
     },
     [getClient, stopThumbnail],
@@ -253,6 +259,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       }
       files.current.delete(id);
       passwords.current.delete(id);
+      inspectTickets.current.delete(id);
       // Removing the last file ends the working area and resets the state, so the pictures and new passwords go with it.
       if (files.current.size === 0) {
         pictures.current.clear();
@@ -407,7 +414,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       const extension = words.outputExtension ?? 'pdf';
       const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix, extension } : undefined;
       // Sending the job and reading its outcome is a plain function (run-job.ts), which forgets the new passwords
-      // itself once the job has finished with a file or with no new file.
+      // and the input files' own passwords itself once the job has finished with a file or with no new file.
       const outcome = await runJob({
         client: getClient(),
         inputs,
@@ -424,6 +431,9 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
         pictures: picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
         hasNoSmallerWords: words.noSmaller !== undefined,
         forgetNewPasswords,
+        // The listed files keep their status; the worker that held them opened was ended with the job, and no
+        // result screen reads this map (no way back to the files from a result, no thumbnails there).
+        forgetInputPasswords: () => passwords.current.clear(),
       });
       if (outcome.kind === 'cancelled') return;
       if (outcome.kind === 'failed') {
@@ -508,6 +518,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     client.current = null;
     files.current.clear();
     passwords.current.clear();
+    inspectTickets.current.clear();
     pictures.current.clear();
     picturesInFlight.current.clear();
     forgetNewPasswords();

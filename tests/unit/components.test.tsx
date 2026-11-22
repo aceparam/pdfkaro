@@ -987,3 +987,40 @@ describe('PasswordField is uncontrolled', () => {
     expect(input).not.toMatch(/defaultValue=/);
   });
 });
+
+describe("Remove a password's entry, drawn by Result and Notice", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { unreadableNotice } = await import('../../src/widget/failures');
+  const widget = tools.find((tool) => tool.id === 'unlock-pdf')!.widget!;
+
+  it('a file given back: its name, size and pages, Download, the two notes and Start again', () => {
+    const html = renderToStaticMarkup(
+      <Result heading={widget.doneHeading} file={{ name: 'password-unprotected.pdf', detail: '6 KB, 3 pages', href: 'blob:abc' }} notes={widget.resultNotes ?? []} onStartAgain={noop} />,
+    );
+    expect(html).toContain('Your unprotected file is ready');
+    expect(html).toContain('download="password-unprotected.pdf">Download</a>');
+    for (const note of widget.resultNotes!) expect(html).toContain(note.replaceAll("'", '&#x27;'));
+    expect(html).toContain('>Start again</button>');
+    expect(html.toLowerCase()).not.toContain('unlock');
+  });
+
+  it('nothing to remove: the sentence and its advice, no Download and no notes', () => {
+    const html = renderToStaticMarkup(<Result heading={widget.noSmaller!.heading} advice={widget.noSmaller!.advice} notes={[]} onStartAgain={noop} />);
+    expect(html).toContain('This file has no password or restrictions.');
+    expect(html).toContain('There was nothing to remove, so no new file was made. You can use your file as it is.');
+    expect(html).not.toContain('Download');
+    expect(html).toContain('>Start again</button>');
+  });
+
+  it('a file protected with a certificate: named as one this tool cannot read, with the advice, never as damaged', () => {
+    const notice = unreadableNotice('certified.pdf', 'unsupported', widget);
+    expect(notice).toEqual({
+      heading: 'certified.pdf is saved in a way this tool cannot read.',
+      advice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      announcement:
+        'certified.pdf is saved in a way this tool cannot read. It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+    });
+    expect(renderToStaticMarkup(<Notice heading={notice.heading} />)).toContain('certified.pdf is saved in a way this tool cannot read.');
+    expect(unreadableNotice('broken.pdf', 'damaged', widget)).toEqual({ heading: 'broken.pdf is damaged and cannot be read.', announcement: 'broken.pdf is damaged and cannot be read.' });
+  });
+});

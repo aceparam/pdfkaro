@@ -74,7 +74,7 @@ This change adds no tool, so the usual tool order does not apply: there is no re
   - a Merge PDF job in which both real workers are seen as `blob:` workers and no violation is recorded.
 
   Verify: `npm run e2e -- csp.spec.ts --trace off` passes in the phone and desktop projects.
-- [ ] 3.4 Add a `firefox` project (WebKit dropped by the owner on 22 Nov 2026, see design.md Risks; Safari is checked by hand in issue #7) to `playwright.config.ts` that runs only `csp.spec.ts` at desktop size. Add to `csp.spec.ts` one ordinary job per engine kind under the watch: Merge PDF (qpdf), PDF to JPG (PDF.js drawing and decoders), Sign PDF (pdf-lib) and Split PDF (zip). Change the CI install step to `npx playwright install --with-deps chromium firefox`. Only Chromium is installed in this container, and others must not be installed locally, so this project runs in CI, or wherever Firefox is installed. Verify: the CI run on the pull request passes the `firefox` project; link the run in the pull request.
+- [x] 3.4 Add a `firefox` project (WebKit dropped by the owner on 22 Nov 2026, see design.md Risks; Safari is checked by hand in issue #7) to `playwright.config.ts` that runs only `csp.spec.ts` at desktop size. Add to `csp.spec.ts` one ordinary job per engine kind under the watch: Merge PDF (qpdf), PDF to JPG (PDF.js drawing and decoders), Sign PDF (pdf-lib) and Split PDF (zip). Change the CI install step to `npx playwright install --with-deps chromium firefox`. Only Chromium is installed in this container, and others must not be installed locally, so this project runs in CI, or wherever Firefox is installed. Verify: the CI run on the pull request passes the `firefox` project; link the run in the pull request.
 - [x] 3.5 Run every tool's page against every file in `tests/fixtures/` under the policy, and record any violation or new failure in the pull request. This uses the existing thumbnails and per-tool tests, plus a local run that picks each fixture on its tools' pages and draws its thumbnails. Verify: the record lists each fixture with "no violation", or the problem found and fixed.
 
 ## 4. No-upload, weight, sub-path and screenshots
@@ -89,7 +89,7 @@ This change adds no tool, so the usual tool order does not apply: there is no re
 ## 5. Review
 
 - [x] 5.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass and none are skipped (the `firefox` project in CI).
-- [ ] 5.2 Run the review panel, stage 2 (the `review-panel` skill), including the ux-designer. Settle every must-fix finding. Put the verdicts in the pull request description, with:
+- [x] 5.2 Run the review panel, stage 2 (the `review-panel` skill), including the ux-designer. Settle every must-fix finding. Put the verdicts in the pull request description, with:
   - the evidence from 2.5, 3.4, 3.5, 4.2 and 4.5;
   - the decision 6 facts for the Privacy page;
   - a note that `frame-ancestors` waits for a host that sends headers.

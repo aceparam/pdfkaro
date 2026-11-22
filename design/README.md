@@ -68,7 +68,7 @@ Layout and behaviour:
 Content:
 
 - **Which tools the home page lists.** It shows the 16 phase 1 tools in six groups. Read and check has no phase 1 tool, and Image to PDF is left out until the owner answers the question in `CLAUDE.md`.
-- **"Unlock PDF".** The word "unlock" is on the banned list in `SPEC.md` and is also this tool's name in the catalogue. The owner settles that.
+- **"Unlock PDF".** The word "unlock" is on the banned list in `SPEC.md` and is also this tool's name in the catalogue. The owner settled it on 22 Nov 2026: the address keeps `/unlock-pdf`, no page says "unlock", and the tool is named "Remove a password".
 - **All page text.** Tool descriptions, how-to steps, questions and messages are drafts for the owner to review. Each screen carries a comment saying so. The text below the tool on `merge-pdf-empty.html` is a short sample of about 190 words; the real text is 250 to 500 words.
 
 ## Notes for building from these
