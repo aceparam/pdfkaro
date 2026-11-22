@@ -6,7 +6,7 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { BrowserContext, Page, Request } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Request } from '@playwright/test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -154,4 +154,17 @@ export async function traces(page: Page, context: BrowserContext) {
     };
   });
   return { ...stored, cookies: await context.cookies() };
+}
+
+/**
+ * Fails unless the browser holds nothing for the site: no cookie, and empty localStorage, sessionStorage,
+ * IndexedDB, Cache API and origin private file system. Until the phase 2 offline service worker ships, the
+ * cache must be empty too; the change that adds it lets the check find only the site's own pages and engines.
+ */
+export async function expectNothingStored(page: Page, context: BrowserContext): Promise<void> {
+  const held = await traces(page, context);
+  expect(
+    { cookies: held.cookies, local: held.local, session: held.session, databases: held.databases, caches: held.caches, opfs: held.opfs },
+    'the browser holds something for the site',
+  ).toEqual({ cookies: [], local: 0, session: 0, databases: 0, caches: 0, opfs: [] });
 }

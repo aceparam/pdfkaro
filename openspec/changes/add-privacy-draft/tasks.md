@@ -16,10 +16,10 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 
 ## 3. End-to-end checks
 
-- [ ] 3.1 Export `expectNothingStored(page, context)` from `tests/e2e/no-upload.ts`, built on `traces`. In `tests/e2e/site.spec.ts`, call it in "every page keeps to the look and the rules", and require every request to be a `GET` with no body and no query string, to the site's own origin and a path that exists in `dist/` (decision 6). Verify: `npm run e2e -- --trace off` passes at 360px and 1280px.
-- [ ] 3.2 Replace "the privacy page makes no claim" with "the privacy page is a marked draft" (decision 6). Verify: it passes, and fails if the draft line is removed (checked, not committed).
-- [ ] 3.3 No-upload: the page has no tool and no script; confirm `/privacy` stays in `staticPages` and "loads no script" passes. Verify: that test passes.
-- [ ] 3.4 In `tests/e2e/merge-pdf.spec.ts`, add the test in decision 6 in its own context with `bypassCSP: true`: after a job, `fetch` of the Download `href` and one thumbnail's `blob:` address succeeds, then after "Start again" each fails. Verify: it passes; it fails if `clear` stops revoking the addresses, and the positive control fails if `bypassCSP` is removed (both checked, not committed); every other test still runs under the policy watch.
+- [x] 3.1 Export `expectNothingStored(page, context)` from `tests/e2e/no-upload.ts`, built on `traces`. In `tests/e2e/site.spec.ts`, call it in "every page keeps to the look and the rules", and require every request to be a `GET` with no body and no query string, to the site's own origin and a path that exists in `dist/` (decision 6). Verify: `npm run e2e -- --trace off` passes at 360px and 1280px.
+- [x] 3.2 Replace "the privacy page makes no claim" with "the privacy page is a marked draft" (decision 6). Verify: it passes, and fails if the draft line is removed (checked, not committed).
+- [x] 3.3 No-upload: the page has no tool and no script; confirm `/privacy` stays in `staticPages` and "loads no script" passes. Verify: that test passes.
+- [x] 3.4 In `tests/e2e/merge-pdf.spec.ts`, add the test in decision 6 in its own context with `bypassCSP: true`: after a job, `fetch` of the Download `href` and one thumbnail's `blob:` address succeeds, then after "Start again" each fails. Verify: it passes; it fails if `clear` stops revoking the addresses, and the positive control fails if `bypassCSP` is removed (both checked, not committed); every other test still runs under the policy watch.
 
 ## 4. Whole checks and screenshots
 
