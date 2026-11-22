@@ -798,3 +798,49 @@ describe('a thumbnail asked for before the set settles', () => {
     expect(posted.map((message) => message.type)).toEqual(['prepared', 'thumbnail']);
   });
 });
+
+describe('libraries refused in a read', () => {
+  it('fail a read and a picture read as engine-load even when the engine catches the refusal', async () => {
+    const posted: FromWorker[] = [];
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async () => [],
+      inspect: async (_file, _password, tools) => {
+        try {
+          await tools.pdflib!();
+        } catch {
+          throw new Error('damaged, says the engine');
+        }
+        return { kind: 'ready', pages: 1 };
+      },
+      inspectPicture: async (_key, _bytes, tools) => {
+        await tools.fflate!().catch(() => {});
+        return { kind: 'ready', pixels: 1 };
+      },
+    };
+    const handle = createHandler({ loadEngine: async () => engine, libraries: {}, tools: { pdflib: async () => 'x', fflate: async () => 'y' }, post: (message) => posted.push(message), settleHoldMs: 10 });
+    await handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: blob('a') });
+    await handle({ type: 'inspect-picture', requestId: 2, toolId: 'sign-pdf', key: 'picture', file: blob('b') });
+    expect(replies(posted)).toEqual([
+      { type: 'failed', requestId: 1, kind: 'engine-load' },
+      { type: 'failed', requestId: 2, kind: 'engine-load' },
+    ]);
+  });
+
+  it('are handed in a `tools` that is not thenable, so awaiting it asks for nothing', async () => {
+    let seen: unknown = 'unset';
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async (_files, _options, _progress, tools) => {
+        seen = (tools as unknown as { then?: unknown }).then;
+        await (tools as unknown as Promise<unknown>);
+        return [new Uint8Array([1])];
+      },
+    };
+    const posted: FromWorker[] = [];
+    const handle = createHandler({ loadEngine: async () => engine, libraries: {}, tools: {}, post: (message) => posted.push(message) });
+    await handle({ type: 'run', requestId: 1, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(seen).toBeUndefined();
+    expect(posted.at(-1)?.type).toBe('done');
+  });
+});

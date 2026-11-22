@@ -382,6 +382,16 @@ describe('the PDF.js loader', () => {
     await expect(loader.load()).rejects.toThrow(/unavailable/);
   });
 
+  it('ends the nested worker when it fails after saying ready but before the import resolves', async () => {
+    const { log, loader, nested, resolve, ready } = held();
+    const loading = loader.load();
+    ready();
+    nested.onerror!({ preventDefault() {} });
+    resolve();
+    await expect(loading).rejects.toThrow(/stopped|unavailable/);
+    expect(log).toContain('terminated');
+  });
+
   it('ends the nested worker when the import fails', async () => {
     const { log, loader, reject } = held();
     const loading = loader.load();

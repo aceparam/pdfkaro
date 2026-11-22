@@ -6,13 +6,11 @@
 //
 // Set ENGINE_LOADS_REPORT to a path to write what each engine asked for and how each step ended.
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { EngineModule } from '../../src/engines/types';
 import { tools as registryTools } from '../../src/tools/registry';
 import { libraryOrder } from '../../src/workers/libraries';
-import { engineIds } from './engine-loads-helpers';
+import { engineIds, options, shard } from './engine-loads-helpers';
 
 describe('every engine declares what it loads', () => {
   it('declares both sets, with known library names only', async () => {
@@ -33,11 +31,8 @@ describe('every engine declares what it loads', () => {
     }
   });
 
-  it('runs every engine against the fixtures in exactly one of the engine-loads files', () => {
-    const listed = ['a', 'b', 'c', 'd'].flatMap((shard) => {
-      const text = readFileSync(join(__dirname, `engine-loads-${shard}.test.ts`), 'utf8');
-      return [...(/const engines = \[([^\]]*)\]/.exec(text)?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((match) => match[1]);
-    });
-    expect([...listed].sort()).toEqual(engineIds);
+  it('gives a job option table for exactly the engines there are, and runs each in one of the four files', () => {
+    expect(Object.keys(options).sort()).toEqual(engineIds);
+    expect([0, 1, 2, 3].flatMap(shard).sort()).toEqual(engineIds);
   });
 });

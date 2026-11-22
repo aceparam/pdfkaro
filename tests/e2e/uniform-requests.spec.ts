@@ -17,6 +17,7 @@ import { expect, test, watchPolicy } from './fixtures';
 import { startHostLog, type HostLog } from './host-log';
 import { headersRead, violations, watch } from './no-upload';
 import { widgetPages } from './pages';
+import { acrossInputs, recordProblems, type InputRecord } from './request-record';
 import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -118,7 +119,6 @@ function imageInputs(): Input[] {
 
 const picker = (page: Page) => page.locator('input[type=file]').first();
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-const counted = (paths: string[]) => [...paths].sort();
 
 /**
  * Waits for a phase to end: every expected path received and no request still being answered, then `quietMs`
@@ -162,10 +162,28 @@ async function getReady(page: Page, slug: string, input: Input): Promise<void> {
   }
 }
 
-type Record_ = { pick: string[]; password?: string[]; picture?: string[]; job?: string[]; problems: string[] };
+/** A fixture picked under a unique, long name, so every input's name and stem are secrets no site file can hold. */
+let pickCount = 0;
+function asPicked(name: string): { name: string; mimeType: string; buffer: Buffer } {
+  const base = name.split('/').pop()!;
+  const type = base.endsWith('.png') ? 'image/png' : base.endsWith('.jpg') ? 'image/jpeg' : 'application/pdf';
+  pickCount += 1;
+  return { name: `qz7pick${pickCount}x${base}`, mimeType: type, buffer: readFileSync(fixture(name)) };
+}
 
-/** Runs one input in a fresh browser and gives what the host received in each phase, and any no-upload problem. */
-async function runInput(browser: Browser, log: HostLog, slug: string, input: Input, slowMode = false): Promise<Record_> {
+/** What a pick shows once it has been read: a thumbnail, a file it cannot read, a password field, or the picker saying why. */
+const pickShown = (page: Page) =>
+  page
+    .locator('astro-island img')
+    .or(page.getByText(/Damaged and cannot be read|Saved in a way this tool cannot read/))
+    .or(page.getByLabel(/^Password for /))
+    .or(page.getByRole('status').filter({ hasText: /is not a/ }))
+    .first();
+
+type Run = { record: InputRecord; problems: string[] };
+
+/** Runs one input in a fresh browser and gives what the host received in each phase and between them, and any no-upload problem. */
+async function runInput(browser: Browser, log: HostLog, slug: string, input: Input, slowMode = false): Promise<Run> {
   const entry = findPage(tools, slug.slice(1))!;
   const words = pageWords(entry.tool, entry.page)!;
   const files = toolFiles(entry.tool.id);
@@ -173,56 +191,76 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
   const context = await browser.newContext({ baseURL: log.origin, viewport: { width: 1280, height: 800 }, acceptDownloads: true });
   await watchPolicy(context);
   const page = await context.newPage();
+  const record: InputRecord = { label: input.label, phases: [], gaps: [] };
+  // Each phase's record, then what arrived after it and before the next phase began, which must be nothing.
+  let phaseEnd = 0;
+  let lastPhase = '';
+  const begin = () => {
+    const from = log.mark();
+    if (lastPhase) record.gaps.push({ after: lastPhase, got: log.since(phaseEnd, from).map((each) => `${each.method} ${each.path}`) });
+    return from;
+  };
+  const end = async (what: string, from: number, expected: string[]) => {
+    record.phases.push({ what, expected: expected.map((path) => `GET ${path}`), got: await phase(log, from, expected, limit) });
+    phaseEnd = log.mark();
+    lastPhase = what;
+  };
   try {
     await page.goto(slug);
     await page.waitForLoadState('networkidle');
     await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
     const seen = watch(context, page);
-    const record: Record_ = { pick: [], problems: [] };
+    const picked = input.files.map(asPicked);
 
-    let from = log.mark();
-    await picker(page).setInputFiles(input.files.map(fixture));
-    record.pick = await phase(log, from, files.pick, limit);
+    let from = begin();
+    await picker(page).setInputFiles(picked);
+    // Read only once the pick has shown its outcome, so nothing it asks for later is missed.
+    await expect(pickShown(page)).toBeVisible({ timeout: limit });
+    await end('the pick', from, files.pick);
 
     if (input.password) {
       const field = page.getByLabel(/^Password for /);
       await expect(field).toBeVisible({ timeout: limit });
-      from = log.mark();
+      from = begin();
       await field.fill(input.password);
       await page.keyboard.press('Enter');
       await expect(field).toHaveCount(0, { timeout: limit });
-      record.password = await phase(log, from, [], limit);
+      await end('the password', from, []);
     }
 
+    let picture: { name: string } | undefined;
     if (input.picture) {
       await page.getByRole('radio', { name: 'Use a picture of it', exact: true }).check();
-      from = log.mark();
-      await page.getByLabel(/^Choose (a|another) picture$/).setInputFiles(fixture(input.picture));
+      from = begin();
+      const chosen = asPicked(input.picture);
+      picture = chosen;
+      await page.getByLabel(/^Choose (a|another) picture$/).setInputFiles(chosen);
       // Read and ready, or refused by its first bytes: either way the field has answered.
       await expect(page.getByLabel(/^Choose another picture$/).or(page.locator('p:not([role=status])', { hasText: /is not a JPG or PNG/ })).first()).toBeVisible({ timeout: limit });
-      record.picture = await phase(log, from, [], limit);
+      await end('the signature picture', from, []);
     }
 
     if (input.job) {
       await getReady(page, slug, input);
       const main = page.getByRole('button', { name: words.actionLabel });
       await expect(main).not.toHaveAttribute('aria-disabled', 'true', { timeout: limit });
-      from = log.mark();
+      from = begin();
       await main.click();
       const endings = [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
       await expect(page.getByRole('heading').filter({ hasText: new RegExp(`^(${endings.map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`) })).toBeVisible({ timeout: 120_000 });
-      record.job = await phase(log, from, files.job, limit);
+      await end('the main button', from, files.job);
     }
 
-    // Every request passes the no-upload watcher, with the file names, their stems, the passwords and anything typed as secrets.
-    const names = [...input.files, ...(input.picture ? [input.picture] : [])].map((name) => name.split('/').pop()!);
-    // A stem shorter than six letters is an ordinary word the browser writes itself ("text" in `Accept: text/css`), and
-    // one inside the site's own file names ("images" in pdf-to-images) is the site's; the full names are secrets still.
-    const stems = names.map((name) => name.replace(/\.[a-z]+$/, '')).filter((stem) => stem.length >= 6 && !files.all.some((path) => path.includes(stem)));
+    // Nothing more arrives after the last phase.
+    await sleep(quietMs);
+    record.gaps.push({ after: lastPhase, got: log.since(phaseEnd).map((each) => `${each.method} ${each.path}`) });
+
+    // Every request passes the no-upload watcher, with every name picked, its stem, the passwords and anything typed as secrets.
+    const names = [...picked.map((file) => file.name), ...(picture ? [picture.name] : [])];
+    const stems = names.map((name) => name.replace(/\.[a-z]+$/, ''));
     const secrets = [...names, ...stems, password, typedName, typedText, newPassword];
     await headersRead(seen);
-    record.problems = violations(seen, log.origin, secrets, files.all).map((problem) => `${slug}, ${input.label}: ${problem}`);
-    return record;
+    return { record, problems: violations(seen, log.origin, secrets, files.all).map((problem) => `${slug}, ${input.label}: ${problem}`) };
   } finally {
     await context.close();
   }
@@ -238,9 +276,6 @@ function uniqueInputs(list: Input[]): Input[] {
     return true;
   });
 }
-
-const differs = (slug: string, what: string, label: string, expected: string[], got: string[]) =>
-  `${slug}: after ${what} for ${label}, expected ${JSON.stringify(counted(expected))}, got ${JSON.stringify(counted(got))}`;
 
 test.describe('what the host sees of a file @desktop', () => {
   let log: HostLog;
@@ -260,19 +295,14 @@ test.describe('what the host sees of a file @desktop', () => {
       const list = inputs[slug];
       expect(list, `${slug} has no inputs in uniform-requests.spec.ts`).toBeDefined();
       test.setTimeout(30_000 + 40_000 * list!.length);
-      const entry = findPage(tools, slug.slice(1))!;
-      const files = toolFiles(entry.tool.id);
-      const expectedPick = files.pick.map((path) => `GET ${path}`);
-      const expectedJob = files.job.map((path) => `GET ${path}`);
       const problems: string[] = [];
+      const records: InputRecord[] = [];
       for (const input of uniqueInputs(list!)) {
-        const record = await runInput(browser, log, slug, input);
-        problems.push(...record.problems);
-        if (JSON.stringify(counted(record.pick)) !== JSON.stringify(counted(expectedPick))) problems.push(differs(slug, 'the pick', input.label, expectedPick, record.pick));
-        if (record.password && record.password.length > 0) problems.push(differs(slug, 'the password', input.label, [], record.password));
-        if (record.picture && record.picture.length > 0) problems.push(differs(slug, 'the signature picture', input.label, [], record.picture));
-        if (record.job && JSON.stringify(counted(record.job)) !== JSON.stringify(counted(expectedJob))) problems.push(differs(slug, 'the main button', input.label, expectedJob, record.job));
+        const { record, problems: noUpload } = await runInput(browser, log, slug, input);
+        records.push(record);
+        problems.push(...noUpload, ...recordProblems(slug, record));
       }
+      for (const what of ['the pick', 'the main button']) problems.push(...acrossInputs(slug, records, what));
       expect(problems).toEqual([]);
     });
   }
@@ -293,13 +323,14 @@ test.describe('what the host sees of a file @desktop', () => {
     ] as [Input, Input][]) {
       test(`/merge-pdf: ${left.label} and ${right.label} ask for the same files, each once`, async ({ browser }) => {
         test.setTimeout(180_000);
-        const expected = toolFiles('merge-pdf').pick.map((path) => `GET ${path}`);
         const problems: string[] = [];
+        const records: InputRecord[] = [];
         for (const input of [left, right]) {
-          const record = await runInput(browser, log, '/merge-pdf', input, true);
-          problems.push(...record.problems);
-          if (JSON.stringify(counted(record.pick)) !== JSON.stringify(counted(expected))) problems.push(differs('/merge-pdf', 'the pick (slow)', input.label, expected, record.pick));
+          const { record, problems: noUpload } = await runInput(browser, log, '/merge-pdf', input, true);
+          records.push(record);
+          problems.push(...noUpload, ...recordProblems('/merge-pdf', record));
         }
+        problems.push(...acrossInputs('/merge-pdf', records, 'the pick'));
         expect(problems).toEqual([]);
       });
     }

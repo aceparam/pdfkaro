@@ -87,7 +87,7 @@ Files are processed where they are today, in the browser. No new kind of request
 - **The Privacy page draft** (issue #7): two draft sentences are added for the owner's review.
 - **Answered by the owner on 22 Nov 2026:** PDF.js's set (about 1.3 MB) is fetched after every pick on a PDF page, including damaged, protected and wrong-kind files; and for a pick of the wrong kind the set is loaded first and only then is the file said to be unusable (the wait held to 60 s).
 - New questions, with the default this change builds (design.md, Open questions):
-  1. Keep the Privacy sentences "Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that."? Default: yes, marked for review.
+  1. Keep the Privacy sentences "Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, asking again can tell GitHub that."? Default: yes, marked for review.
   2. Accept the named rare exceptions (design.md, Risks) for now, with the Privacy page not claiming them closed? Default: yes.
 
 ## Capabilities

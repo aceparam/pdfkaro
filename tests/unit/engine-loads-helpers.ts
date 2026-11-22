@@ -1,7 +1,9 @@
 // Shared by the engine-loads tests: runs one engine's reading, picture reading and job against every file in
 // tests/fixtures/ with a `tools` that records what is asked for, and gives back each step that asked for a
 // library outside the set the engine declares (`loads` in src/engines/types.ts), with a row for each step.
-// The engines are split over four test files so that Vitest runs them side by side.
+// The engines are split over four test files, by their place in the sorted list (`shard`), so that Vitest runs them
+// side by side and a new engine lands in one without anyone listing it. Hand-balanced lists ran about 70 s each;
+// by index the slowest file takes about 90 s, which is kept for the simpler rule.
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,7 +51,7 @@ const undeclared = (asked: Set<string>, declared: readonly LibraryName[]) =>
   [...asked].filter((library) => library !== 'always' && !(declared as readonly string[]).includes(library));
 
 /** A valid option set for each tool's job, from the page count its reading gave (1 when it gave none). */
-const options: Record<string, (pages: number) => Record<string, unknown>> = {
+export const options: Record<string, (pages: number) => Record<string, unknown>> = {
   'merge-pdf': () => ({}),
   'split-pdf': () => ({ cuts: [] }),
   'extract-pdf-pages': () => ({ pages: [1] }),
@@ -131,3 +133,6 @@ export function report(name: string, rows: Row[]): void {
   const target = process.env.ENGINE_LOADS_REPORT;
   if (target) writeFileSync(`${target}.${name}.json`, JSON.stringify(rows, null, 1));
 }
+
+/** The engines of one of the four engine-loads files: every fourth, from `index`. */
+export const shard = (index: number) => engineIds.filter((_, place) => place % 4 === index);

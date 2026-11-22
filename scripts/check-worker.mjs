@@ -225,7 +225,14 @@ const workerLoads = staticClosure(workers[0]);
 for (const id of engineIds) {
   const chunk = files.find((name) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(name));
   if (!chunk) continue;
-  const kind = /export const thumbnails = 'picture'/.test(readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8')) ? 'picture' : 'pdf';
+  // How the engine draws its thumbnails: `export const thumbnails = 'picture'`, with or without a type. Any other
+  // mention of `thumbnails` as an export is a form this check does not know, so it fails rather than guess.
+  const source = readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8');
+  const declared = /export\s+const\s+thumbnails\s*(?::\s*[^=;]+)?=\s*(['"])picture\1\s*(?:as\s+const\s*)?;/.test(source);
+  if (!declared && /export\s+(?:const|let|var|function|\{[^}]*\bthumbnails\b)[^;]*\bthumbnails\b/.test(source)) {
+    problems.push(`The ${id} engine exports thumbnails in a form check-worker.mjs cannot read.`);
+  }
+  const kind = declared ? 'picture' : 'pdf';
   const already = new Set([...workerLoads, ...staticClosure(chunk)]);
   for (const draw of drawChunks[kind]) {
     for (const brought of staticClosure(draw)) {

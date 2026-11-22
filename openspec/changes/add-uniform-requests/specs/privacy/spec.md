@@ -32,7 +32,7 @@ While the browser keeps the copies the host's cache headers allow, the site file
 #### Scenario: A slow connection
 
 - **WHEN** the site's files arrive slowly, so that PDF.js's files take longer than the 10-second thumbnail limit
-- **THEN** a readable file and a damaged file, and one file and three, still lead to the same requests, each made once
+- **THEN** a readable file and a damaged file, and one file and three, still lead to the same requests, each made once; and when they take longer than the page waits (60 seconds), no worker is ended before its files have arrived, so none is asked for again because of the file
 
 #### Scenario: Jobs that end differently
 

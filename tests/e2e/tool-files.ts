@@ -6,44 +6,22 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { EngineModule, LibraryName } from '../../src/engines/types';
 import { drawSet, inOrder } from '../../src/workers/libraries';
-import * as addPageNumbers from '../../src/engines/tools/add-page-numbers';
-import * as compressPdf from '../../src/engines/tools/compress-pdf';
-import * as deletePdfPages from '../../src/engines/tools/delete-pdf-pages';
-import * as extractPdfPages from '../../src/engines/tools/extract-pdf-pages';
-import * as imagesToPdf from '../../src/engines/tools/images-to-pdf';
-import * as mergePdf from '../../src/engines/tools/merge-pdf';
-import * as pdfToImages from '../../src/engines/tools/pdf-to-images';
-import * as protectPdf from '../../src/engines/tools/protect-pdf';
-import * as rearrangePdfPages from '../../src/engines/tools/rearrange-pdf-pages';
-import * as rotatePdf from '../../src/engines/tools/rotate-pdf';
-import * as signPdf from '../../src/engines/tools/sign-pdf';
-import * as splitPdf from '../../src/engines/tools/split-pdf';
-import * as unlockPdf from '../../src/engines/tools/unlock-pdf';
-import * as watermarkPdf from '../../src/engines/tools/watermark-pdf';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const assets = join(here, '../../dist/_astro');
 
-/** Every engine, by tool id. A new engine file must be added here; `engineFor` fails for one that is not. */
-const engines: Record<string, Pick<EngineModule, 'loads' | 'thumbnails'>> = {
-  'add-page-numbers': addPageNumbers,
-  'compress-pdf': compressPdf,
-  'delete-pdf-pages': deletePdfPages,
-  'extract-pdf-pages': extractPdfPages,
-  'images-to-pdf': imagesToPdf,
-  'merge-pdf': mergePdf,
-  'pdf-to-images': pdfToImages,
-  'protect-pdf': protectPdf,
-  'rearrange-pdf-pages': rearrangePdfPages,
-  'rotate-pdf': rotatePdf,
-  'sign-pdf': signPdf,
-  'split-pdf': splitPdf,
-  'unlock-pdf': unlockPdf,
-  'watermark-pdf': watermarkPdf,
-};
+/** Every engine in src/engines/tools/, by tool id, read once when this file loads: a new engine is found without a list. */
+const engineDir = join(here, '../../src/engines/tools');
+const engines: Record<string, Pick<EngineModule, 'loads' | 'thumbnails'>> = Object.fromEntries(
+  await Promise.all(
+    readdirSync(engineDir)
+      .filter((name) => name.endsWith('.ts'))
+      .map(async (name) => [name.replace(/\.ts$/, ''), (await import(pathToFileURL(join(engineDir, name)).href)) as EngineModule] as const),
+  ),
+);
 
 const hash = '[A-Za-z0-9_-]{8}';
 
@@ -80,7 +58,7 @@ function staticClosure(name: string, files: string[]): Set<string> {
 
 function engineFor(toolId: string): Pick<EngineModule, 'loads' | 'thumbnails'> {
   const engine = engines[toolId];
-  if (!engine) throw new Error(`No engine listed for ${toolId} in tests/e2e/tool-files.ts.`);
+  if (!engine) throw new Error(`No engine file for ${toolId} in src/engines/tools/.`);
   return engine;
 }
 

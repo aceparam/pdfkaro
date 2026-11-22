@@ -45,6 +45,12 @@ export type ZipNaming = { stem: string; partSuffix: string; extension?: OutputEx
 /** The extensions a file inside a zip may have: the closed list of output extensions, so no name the page sends can carry anything else. */
 export const zipExtensions: readonly OutputExtension[] = outputExtensions;
 
+/**
+ * The longest the page waits for a reading worker's set to settle, and the longest the worker holds back a reading
+ * failure for it: then the page goes on, but no worker is ended for it (add-uniform-requests, decision 7).
+ */
+export const settleHoldMs = 60_000;
+
 /** The most a thumbnail may measure, in pixels; the page fits inside it. */
 export type ThumbnailBox = { width: number; height: number };
 

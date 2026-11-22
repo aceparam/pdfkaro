@@ -22,7 +22,7 @@ Each engine SHALL declare what its reading uses; its thumbnail code follows from
 #### Scenario: A pick that takes no file
 
 - **WHEN** every file picked is of a kind the page does not take
-- **THEN** the file's line is shown with "Getting ready" and its Remove button ("notes.docx, Getting ready"), or for several files the summary line with "Getting ready", until the set has loaded or failed, held to 60 seconds; then the picker returns with the sentence saying the file cannot be used, read out in the status line
+- **THEN** the file's line is shown with "Getting ready" and its Remove button ("notes.docx, Getting ready"), or for several files the summary line with "Getting ready", until the set has loaded or failed, or for at most 60 seconds; then the picker returns with the sentence saying the file cannot be used, read out in the status line, and a worker whose set has not yet loaded is left to finish loading it before it is ended
 
 #### Scenario: Remove during that wait
 
@@ -41,7 +41,7 @@ Each engine SHALL declare what its reading uses; its thumbnail code follows from
 
 ### Requirement: A reading worker is not ended while its set is loading
 
-Until a reading worker's pick set, thumbnail code included, has loaded or failed, the page SHALL end it only for the visitor's Cancel, "Start again", Remove of the last file, leaving the page or the main button. A thumbnail waiting in that time SHALL be dropped by message. The thumbnail time limit SHALL start only once the set has settled, and a reading failure SHALL be reported only then. (SPEC.md: Privacy, limits and security; owner, 22 Nov 2026)
+Until a reading worker's pick set, thumbnail code included, has loaded or failed, the page SHALL end it only for the visitor's own actions, and a thumbnail waiting in that time SHALL be dropped by message. The thumbnail limit SHALL start only once the set has settled. When the page stops waiting (after 60 seconds), it SHALL NOT end the worker. (SPEC.md: Privacy, limits and security; owner, 22 Nov 2026)
 
 #### Scenario: The thumbnail limit on a slow connection
 
@@ -56,17 +56,22 @@ Until a reading worker's pick set, thumbnail code included, has loaded or failed
 #### Scenario: A signature picture chosen again while the set loads
 
 - **WHEN** a Sign PDF picture is chosen again while the set is still loading and the earlier picture is still being read
-- **THEN** the old worker is ended once its set has settled, held to 60 seconds, and the new read starts after that
+- **THEN** the old worker is ended once its set has settled and the new read starts after that; if the set has not settled within 60 seconds, the new read starts on a fresh worker and the old one is ended only once its set has settled
 
 #### Scenario: A reading failure while the set loads
 
 - **WHEN** reading a file fails, such as by running out of memory, while the set is still loading
-- **THEN** the failure is shown once the set has settled, held to 60 seconds, as before
+- **THEN** the failure is shown once the set has settled, or after 60 seconds, as before, and the worker is ended only once its set has settled
+
+#### Scenario: A thumbnail waiting longer than the page waits
+
+- **WHEN** a thumbnail has waited 60 seconds for a set that has not settled
+- **THEN** it gives no picture and is dropped by message, and the worker is kept until its set settles
 
 #### Scenario: The visitor's own actions
 
 - **WHEN** the visitor presses Cancel, "Start again" or the main button, removes the last file, or leaves the page while the set is loading
-- **THEN** every worker of the page is ended at once, as before
+- **THEN** every worker of the page, any left to finish loading included, is ended at once, as before
 
 ### Requirement: Each job loads one fixed set in a fresh worker
 

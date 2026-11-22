@@ -11,7 +11,18 @@ import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
-import { settleHoldMs, ToolClient, ToolError, type WorkerLike } from '../workers/client';
+import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
+import { settleHoldMs } from '../workers/messages';
+
+// Clients whose workspace has gone while a retired worker was still finishing its set (a pick of the wrong kind past
+// the hold): that worker is left to finish, and ended on leaving the page or at the visitor's next pick.
+const lingering = new Set<ToolClient>();
+function endLingering(): void {
+  for (const each of lingering) each.end();
+  lingering.clear();
+}
+// Registered when this file is first loaded, so it runs on leaving even after the workspace has unmounted.
+if (typeof window !== 'undefined') window.addEventListener('pagehide', endLingering);
 import { runJob } from './run-job';
 
 export type ToolRunResult = { url: string; name: string };
@@ -66,8 +77,11 @@ export type ToolRun = {
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
-  /** Forgets every file, password (an input file's and a new one) and result, and ends the worker. */
-  clear(): void;
+  /**
+   * Forgets every file, password (an input file's and a new one) and result, and ends every worker. On unmount alone,
+   * a retired worker still finishing its set is left to finish, and ended on leaving or at the next pick.
+   */
+  clear(how?: 'all' | 'unmount'): void;
 };
 
 /** The thumbnail box, twice the 52 by 68 CSS slot so the picture is sharp on a phone. */
@@ -190,7 +204,12 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     if (!forgetDrawing()) return;
     const current = client.current;
     if (!current) return;
-    if ((await current.dropThumbnail()) === 'too-late' && client.current === current) current.end();
+    if ((await current.dropThumbnail()) !== 'too-late' || client.current !== current) return;
+    // While the drop was answered, the queue may have started another drawing on this worker (a file was removed
+    // meanwhile). It is forgotten too, so it is asked for again, before the worker it runs on is ended.
+    forgetDrawing();
+    current.endCurrent('cancelled');
+    pumpRef.current();
   }, [forgetDrawing]);
 
   const pump = useCallback(() => {
@@ -299,9 +318,11 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
 
   const addFiles = useCallback(
     async (picked: File[]): Promise<{ added: number; refused: string[]; leftOut: string[]; ended?: 'removed' | 'cleared' }> => {
+      // A worker an earlier wrong-kind pick left finishing its set is ended now: this pick is the visitor's action.
+      endLingering();
       // Every pick loads the tool's pick set first, before the files are looked at, so a pick that takes no file
       // fetches the same files as any other. A worker already running answers at once.
-      const preparing = getClient().prepare();
+      const preparing = getClient().prepare(settleHoldMs);
       const looked: File[] = [];
       const refused: string[] = [];
       for (const file of picked) {
@@ -311,22 +332,22 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       }
       const listed = stateRef.current.files.map((entry) => entry.id);
       if (looked.length === 0 && listed.length === 0 && refused.length > 0) {
-        // Nothing to list: the files' line says "Getting ready" until the set has loaded or failed, held to a limit,
-        // then the worker, never sent a file, is ended and the picker says why. Remove ends the wait at once.
+        // Nothing to list: the files' line says "Getting ready" until the set has loaded or failed, or the page has
+        // waited the hold; then the picker says why. The worker, never sent a file, is ended if its set has settled,
+        // and otherwise retired, so it finishes loading first. Remove ends the wait and the worker at once.
         setWaiting(picked.map((file) => ({ name: file.name, size: file.size })));
         const ended = await new Promise<'removed' | 'cleared' | undefined>((resolve) => {
           const finish = (how?: 'removed' | 'cleared') => {
-            clearTimeout(timer);
             if (endWait.current === finish) endWait.current = null;
             resolve(how);
           };
-          const timer = setTimeout(() => finish(), settleHoldMs);
           endWait.current = finish;
           void preparing.then(() => finish());
         });
+        if (ended === 'removed') client.current?.end();
         if (ended !== 'cleared') {
           setWaiting(null);
-          client.current?.end();
+          client.current?.retire();
         }
         return { added: 0, refused: ended ? [] : refused, leftOut: [], ...(ended ? { ended } : {}) };
       }
@@ -403,7 +424,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
       picturesInFlight.current.delete(key);
       await stopThumbnail();
-      await client.current?.endWhenSettled();
+      await client.current?.retireWhenSettled();
     },
     [stopThumbnail],
   );
@@ -566,13 +587,18 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     })();
   }, [inspect, rereadPictures]);
 
-  const clear = useCallback(() => {
+  // Forgets everything and ends every worker: "Start again" and leaving the page. On unmount alone (the picker came
+  // back after a wrong-kind pick), a retired worker still finishing its set is left to finish (`lingering`).
+  const clear = useCallback((how: 'all' | 'unmount' = 'all') => {
     endWait.current?.('cleared');
     setWaiting(null);
     if (drawing.current) drawing.current.stopped = true;
     drawing.current = null;
     keptFile.current = null;
-    client.current?.end();
+    if (how === 'unmount' && client.current?.lingering) {
+      client.current.endCurrent('cancelled');
+      lingering.add(client.current);
+    } else client.current?.end();
     client.current = null;
     files.current.clear();
     passwords.current.clear();
@@ -590,10 +616,11 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
 
   // Leaving the page, including into the back-forward cache, drops everything.
   useEffect(() => {
-    window.addEventListener('pagehide', clear);
+    const leave = () => clear('all');
+    window.addEventListener('pagehide', leave);
     return () => {
-      window.removeEventListener('pagehide', clear);
-      clear();
+      window.removeEventListener('pagehide', leave);
+      clear('unmount');
     };
   }, [clear]);
 

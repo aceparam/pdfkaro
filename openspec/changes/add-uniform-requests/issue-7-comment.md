@@ -6,11 +6,11 @@ Which of the site's files a tool page fetches no longer depends on what the visi
 
 Under "What happens to your file", after "These requests carry nothing from your file: not its contents, not its name and not a password.":
 
-> Which programs it fetches does not depend on what your file holds. This is so for a damaged file, a protected file or a file of the wrong kind too.
+> Which programs the page fetches does not depend on what your file holds. This is true for a damaged file, a protected file or a file of the wrong kind too.
 
 At the end of "Who serves the site":
 
-> From your browser's requests, GitHub can tell which tool page you opened and when you first chose a file, and may be able to tell when you started a job. Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that.
+> From your browser's requests, GitHub can tell which tool page you opened and when you chose a file: in practice your first file, and later ones once your browser's copies of the programs are about 10 minutes old, or if your browser keeps no copies. It may be able to tell when you started a job. GitHub does not receive your file, its name or a password. Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, asking again can tell GitHub that.
 
 Three questions go with them, each with the default that is built:
 
@@ -18,7 +18,7 @@ Three questions go with them, each with the default that is built:
 2. Accept, for now, the rare cases where a program is asked for again and how often can depend on the file: no usable browser cache; copies older than about 10 minutes; a page of the file slow to draw; the main button pressed while PDF.js's files are still arriving; a worker crash; a job longer than 10 minutes. The Privacy page does not claim them closed. Default: yes.
 3. When several files of the wrong kind are picked, keep a Remove button on the "Getting ready" line (read out as "Remove 2 files")? Default: yes.
 
-Please do not approve the sentence "Which programs it fetches does not depend on what your file holds…" until the Firefox and Safari release check below has passed: the automated test runs in Chromium only.
+Please do not approve the sentence "Which programs the page fetches does not depend on what your file holds…" until the Firefox and Safari release check below has passed: the automated test runs in Chromium only.
 
 ### Release checks
 

@@ -71,7 +71,11 @@ export function createPdfjsLoader(
         };
         return Promise.all([imported, started]).then(
           ([pdfjs]) => {
-            if (failed) throw new Error('PDF.js is unavailable in this worker.');
+            if (failed) {
+              // Ready, then failed before PDF.js arrived: end its worker, as for a failed import.
+              port.terminate();
+              throw new Error('PDF.js is unavailable in this worker.');
+            }
             pdfjs.GlobalWorkerOptions.workerPort = port;
             return pdfjs;
           },

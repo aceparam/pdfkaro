@@ -7,7 +7,7 @@ import { partName } from '../widget/format';
 import { outOfMemory } from '../widget/memory';
 import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
 import { drawSet, inOrder, libraryOf } from './libraries';
-import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
+import { isToWorker, settleHoldMs, type FromWorker, type ThumbnailBox } from './messages';
 
 /** A document kept open so that several pages can be drawn without reading the file again. */
 export type KeptDocument = {
@@ -40,8 +40,6 @@ export type WorkerDeps = {
   settleHoldMs?: number;
 };
 
-/** The longest a reading failure, or a page's wait, is held for the pick set to settle: a stalled network cannot hold a worker for longer. */
-export const settleHoldMs = 60_000;
 
 class EngineLoadError extends Error {}
 
@@ -195,7 +193,8 @@ export function createHandler(deps: WorkerDeps) {
     let refused = false;
     const tools = new Proxy(deps.tools, {
       get(target, key) {
-        if (typeof key !== 'string') return undefined;
+        // Not thenable: awaiting the tools themselves must not ask for a library called `then`.
+        if (typeof key !== 'string' || key === 'then') return undefined;
         const library = libraryOf(key);
         const make = Object.hasOwn(target, key) ? target[key] : undefined;
         if (make && (library === 'always' || (library !== undefined && allowed.includes(library)))) return make;
@@ -303,9 +302,18 @@ export function createHandler(deps: WorkerDeps) {
         if (refused()) throw new EngineLoadError();
         return value;
       };
+      // A refused library fails the step as engine-load even when the engine caught the refusal and threw something else.
+      const guarded = async <T>(step: () => Promise<T>): Promise<T> => {
+        try {
+          return checked(await step());
+        } catch (error) {
+          throw refused() ? new EngineLoadError() : error;
+        }
+      };
       if (data.type === 'inspect-picture') {
         // A tool with no picture reader calls every picture damaged, so nothing unread is ever called ready.
-        const outcome = checked(engine.inspectPicture ? await engine.inspectPicture(data.key, await bytesOf(data.file), tools) : { kind: 'damaged' as const });
+        const inspectPicture = engine.inspectPicture;
+        const outcome = inspectPicture ? await guarded(async () => inspectPicture(data.key, await bytesOf(data.file), tools)) : { kind: 'damaged' as const };
         deps.post({ type: 'picture-inspected', requestId, outcome });
         return;
       }
@@ -314,7 +322,8 @@ export function createHandler(deps: WorkerDeps) {
           deps.post({ type: 'inspected', requestId, outcome: { kind: 'ready', pages: 0 } });
           return;
         }
-        const outcome = checked(await engine.inspect(await bytesOf(data.file), data.password, tools));
+        const inspect = engine.inspect;
+        const outcome = await guarded(async () => inspect(await bytesOf(data.file), data.password, tools));
         deps.post({ type: 'inspected', requestId, outcome });
         return;
       }
