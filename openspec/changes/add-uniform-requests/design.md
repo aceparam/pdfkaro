@@ -271,7 +271,26 @@ Before, whether the job reused the reading worker depended on whether a thumbnai
 
 The job is never held back to let P finish (Risks).
 
-Cost: one worker start and the job set's modules evaluated again from the cache, measured in task 4.4. It is off the main thread, so the 100 ms rule is not touched.
+Cost: one worker start and the job set's modules evaluated again from the cache, measured in task 4.5. It is off the main thread, so the 100 ms rule is not touched.
+
+**Owner decision (22 Nov 2026): accept the slower job start on PDF to JPG and PDF to PNG, and keep every job in a fresh worker on every page.** Task 4.5 measured, in Chromium, the median ms from the main button to the result heading, before (7d79211) and after, on a local server with GitHub Pages' cache headers (CPU slowdown by CDP, which may not slow worker threads):
+
+| Job | Before | After | Difference |
+| --- | --- | --- | --- |
+| Merge, text.pdf, 1× | 114 | 124 | +10 |
+| Merge, text.pdf, 4× | 140 | 210 | +70 |
+| Merge, 100 MB, 1× | 1335 | 1346 | +11 |
+| Merge, 100 MB, 4× | 1726 | 2067 | **+341** |
+| PDF to JPG, text.pdf, 1× | 213 | 832 | **+619** |
+| PDF to JPG, text.pdf, 4× | 322 | 936 | **+614** |
+| PDF to JPG, 100 MB, 1× | 226 | 362 | +136 |
+| PDF to JPG, 100 MB, 4× | 382 | 424 | +42 |
+| Sign, text.pdf, 1× | 211 | 342 | +131 (noisy: runs 209 to 355) |
+| Sign, text.pdf, 4× | 292 | 414 | +122 |
+| Sign, 100 MB, 1× | 1849 | 1868 | +19 |
+| Sign, 100 MB, 4× | 2691 | 2297 | −394 |
+
+PDF to JPG and PNG pay about 0.6 s because the fresh job worker loads and evaluates PDF.js, its data and its own worker again before the engine runs. Merge at 100 MB with 4× CPU also passes 200 ms (+341 ms). Memory: peak resident memory on the 100 MB file went 1264 → 1130 MB (Merge), 636 → 577 MB (PDF to JPG), 1898 → 1909 MB (Sign); PDF.js's idle worker after a `damaged-xref.pdf` pick adds about 15 MB (30 → 44 to 47 MB); the spare qpdf reserves 16.4 MB of WebAssembly memory (6.1 MB resident in Node).
 
 Benefits:
 
@@ -287,6 +306,7 @@ Benefits:
   - Focus moves to that line (`summaryRef`, `tabIndex={-1}`), as it does after a pick today.
   - The wait ends when `prepared` arrives, when the set fails to load (at once), or after 60 seconds. The worker is then ended, having never been sent a file. The picker returns with the refusal sentence in its status line, which is read out, and focus moves to the picker, as `onEmpty` does today.
   - Remove during the wait ends the wait and the worker, and returns to the picker as removing the last file does. This is the visitor's own action.
+  - **For the owner:** as built, Remove also appears for a pick of several files of the wrong kind, on the summary line, labelled for screen readers "Remove 2 files" (the file count). The design first showed it for one file only; it is kept so a multi-file pick has the same way out.
 
 Alternatives considered:
 
