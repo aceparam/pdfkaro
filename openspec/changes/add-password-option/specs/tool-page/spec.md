@@ -45,12 +45,12 @@ A tool with options SHALL show them once its file has been read, below the file 
 
 ### Requirement: A new password a tool needs
 
-A new password SHALL be two hidden one-line fields, one under the other, each with a visible label: the password, then the same password again. The hint, then "The password stays in your browser. It is not sent anywhere.", SHALL be shown under the first field and read with it. Both fields SHALL start empty, and the main button SHALL wait until both hold the same password the tool's rule takes. (SPEC.md: Tool page anatomy, 4 and 5; States every tool handles, Password needed; Definition of done)
+A new password SHALL be two hidden one-line fields, one under the other, each with a visible label: the password, then the same password again. The tool's hint, then a shared note on where the password goes, SHALL be shown under the first field and read with it. Both fields SHALL start empty, and the main button SHALL wait until both hold the same password the tool's rule takes. (SPEC.md: Tool page anatomy, 4 and 5; States every tool handles, Password needed; Definition of done)
 
 #### Scenario: A file is read in a tool with a new password
 
 - **WHEN** a file has been read in a tool whose first option is a new password
-- **THEN** both empty fields are shown below the file with their labels, the hint and the note under the first, focus moves to the first field, and the main button waits with the tool's first sentence ("Type a password first.") shown under it and read with it
+- **THEN** both empty fields are shown below the file with their labels, the hint and the shared note under the first, focus moves to the first field, and the main button waits with the tool's first sentence ("Type a password first.") shown under it and read with it
 
 #### Scenario: The password is typed in the first field only
 
@@ -67,20 +67,30 @@ A new password SHALL be two hidden one-line fields, one under the other, each wi
 - **WHEN** both fields hold "open  Sesame-9", with two spaces inside
 - **THEN** the sentence under the main button goes, the main button works, and the job is sent "open  Sesame-9" exactly as typed, and nothing from the second field
 
-#### Scenario: A space first or last
+#### Scenario: A space first
 
-- **WHEN** the first field holds " open sesame" or "open sesame "
-- **THEN** the first field is marked invalid, "A password cannot start or end with a space." is shown between its label and the field, read with it and tied to the main button, which does nothing when pressed
+- **WHEN** the first field holds " open sesame"
+- **THEN** the first field is marked invalid at once, "A password cannot start or end with a space." is shown between its label and the field, read with it and tied to the main button, which does nothing when pressed
+
+#### Scenario: A space last
+
+- **WHEN** the first field holds "open sesame " and focus is still in it
+- **THEN** no sentence is shown by the field and nothing is announced, and the main button waits with the tool's first sentence under it; once focus leaves the first field, or Enter is pressed, or the main button is pressed, the field is marked invalid and "A password cannot start or end with a space." is shown between its label and the field, tied to the main button
+
+#### Scenario: Typing a password with a space inside, one key at a time
+
+- **WHEN** the visitor types "open sesame" into the first field one key at a time, passing through "open "
+- **THEN** no sentence is shown by either field at any point, the field is never marked invalid, and the status region announces nothing
 
 #### Scenario: The two passwords differ
 
 - **WHEN** the second field holds something that is not the start of the first field's password, or is longer than it
-- **THEN** the second field is marked invalid, "The two passwords are not the same." is shown between its label and the field, read with it and tied to the main button, which stays focusable and does nothing when pressed
+- **THEN** the second field is marked invalid, "The two passwords are not the same. Type the password again in this box." is shown between its label and the field, read with it and tied to the main button, which stays focusable and does nothing when pressed
 
 #### Scenario: Characters the rule does not take
 
 - **WHEN** the visitor types "café", "पासवर्ड", a tab, a no-break space or "£" into the first field of a field whose rule is printable ASCII
-- **THEN** the first field is marked invalid and "Some characters cannot be used." is shown between its label and the field, naming no character, read with the field and tied to the main button, which does nothing when pressed; the hint under the field says which characters can be used
+- **THEN** the first field is marked invalid and "Some characters cannot be used. Use only the characters listed under the box." is shown between its label and the field, naming no character, read with the field and tied to the main button, which does nothing when pressed; the hint under the field says which characters can be used
 
 #### Scenario: The password is too long
 
@@ -100,12 +110,17 @@ A new password SHALL be two hidden one-line fields, one under the other, each wi
 #### Scenario: A screen reader user reaches the fields
 
 - **WHEN** focus moves into the first field, then the second, with a screen reader running
-- **THEN** the first is read with its label, as a password field, then the hint and the note, and, when something is wrong with it, that it is invalid and the sentence; the second with its label, as a password field, and, when the two differ, that it is invalid and its sentence; a sentence is said once by the status region when it first appears or changes kind, never holds the password, and nothing is announced twice
+- **THEN** the first is read with its label, as a password field, then the hint and the shared note, and, when something is wrong with it, that it is invalid and the sentence; the second with its label, as a password field, and, when the two differ, that it is invalid and its sentence; a sentence is said once by the status region when it first appears or changes kind, never holds the password, and nothing is announced twice
 
 #### Scenario: How the fields look
 
 - **WHEN** the fields are shown at 360px, at 1280px, in dark mode or with text at 200%
 - **THEN** each has the site's field style, a label that looks like the other field labels and a height of at least 2.75rem, a sentence sits between its field's label and the field, bold in the text colour as a wrong password's is, the hint and note sit under the first field, and nothing overflows sideways
+
+#### Scenario: The note under the first field
+
+- **WHEN** a new password's fields are drawn
+- **THEN** the note under the first field reads, in draft words for the owner, "The password stays in your browser. This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account."; it never claims the password goes nowhere at all
 
 #### Scenario: Cancel, a failure and another file
 
