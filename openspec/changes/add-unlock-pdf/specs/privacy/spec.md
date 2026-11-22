@@ -4,7 +4,7 @@
 
 ### Requirement: A file's own password is forgotten when it is no longer needed
 
-On every tool, the password a visitor types to open a protected input file SHALL be kept only in the page's memory while that file is listed, through Cancel and a failure, and SHALL be forgotten when a job ends with a file or with no new file, on "Start again", when the file is replaced or left out, and when the page is left. A wrong try is kept until replaced and forgotten in the same cases. (SPEC.md: Privacy, limits and security, Browser tools)
+On every tool, the password a visitor types to open a protected input file SHALL be kept only in the memory of the page and its workers while that file is listed, through Cancel and a failure, and SHALL be forgotten when a job ends with a file or with no new file, on "Start again", when the file is replaced or left out, and when the page is left. A wrong try is kept until replaced and forgotten in the same cases. (SPEC.md: Privacy, limits and security, Browser tools)
 
 #### Scenario: After a result
 
