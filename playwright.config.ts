@@ -17,6 +17,8 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   reporter: process.env.CI ? 'github' : 'list',
   use: {
+    // Must equal defaultOrigin in src/site.ts, the origin a build with no SITE_ORIGIN writes into its
+    // canonical tags, so the end-to-end tests can check that each canonical is the address shown.
     baseURL: 'http://localhost:4321',
     trace: 'off',
   },

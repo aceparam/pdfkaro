@@ -40,6 +40,8 @@ jobs:
         run: npm run check:base
       - name: Content Security Policy
         run: npm run check:csp
+      - name: Search tags and sitemap
+        run: npm run check:seo
       - name: Install the test browsers
         run: npx playwright install --with-deps chromium firefox
       - name: End-to-end tests

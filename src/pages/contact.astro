@@ -2,10 +2,10 @@
 // Placeholder. No address is shown until the owner gives one.
 import Base from '../layouts/Base.astro';
 import { OwnerPlaceholder } from '../components/OwnerPlaceholder/OwnerPlaceholder';
-import { siteName } from '../site';
+import { footerPage, siteName } from '../site';
 ---
 
-<Base title={`Contact - ${siteName}`} description="No contact address has been added yet.">
+<Base path={footerPage('/contact').href} title={`Contact - ${siteName}`} description="No contact address has been added yet.">
   <h1>Contact</h1>
   <OwnerPlaceholder title="No contact address has been added yet.">The person who runs this site will add one.</OwnerPlaceholder>
 </Base>

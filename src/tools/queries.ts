@@ -2,7 +2,7 @@
 // Node and could be reused by an app with different views.
 
 import { withBase } from '../site';
-import type { Group, GroupId, PageWords, Tool, ToolPage, ToolWidgetWords } from './registry';
+import type { Group, GroupId, HubSlug, PageWords, Tool, ToolPage, ToolWidgetWords } from './registry';
 
 /** What a list of tools shows for one page. */
 export type ListItem = {
@@ -50,6 +50,47 @@ export function groupsWithItems(groups: Group[], tools: Tool[], base: string): G
         .flatMap((tool) => tool.pages.map((page) => toListItem(page, base))),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+/** A group's hub page: its words, its address and the list it shows. */
+export type HubPage = GroupWithItems & {
+  slug: HubSlug;
+  /** The hub page's address under the base. */
+  href: string;
+  title: string;
+  description: string;
+  sentence: string;
+};
+
+/**
+ * The hub pages to build: one for each group with a published page, in registry order. Built on
+ * `groupsWithItems`, so the home page, the routes and the sitemap take which groups show from one rule.
+ */
+export function hubPages(groups: Group[], tools: Tool[], base: string): HubPage[] {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  return groupsWithItems(groups, tools, base).map((shown) => {
+    const group = byId.get(shown.id)!;
+    return {
+      ...shown,
+      slug: group.slug,
+      href: withBase(base, `/${group.slug}`),
+      title: group.title,
+      description: group.description,
+      sentence: group.sentence,
+    };
+  });
+}
+
+/** The group a tool belongs to. Throws for a group that is not in the registry. */
+export function groupOf(groups: Group[], tool: Tool): Group {
+  const group = groups.find((each) => each.id === tool.group);
+  if (!group) throw new Error(`Tool ${tool.id} names a group that is not in the registry.`);
+  return group;
+}
+
+/** The link to a group's hub page, as a tool page shows it. */
+export function hubLink(group: Group, base: string): { name: string; href: string } {
+  return { name: group.name, href: withBase(base, `/${group.slug}`) };
 }
 
 /**

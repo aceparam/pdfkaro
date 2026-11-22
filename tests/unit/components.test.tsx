@@ -14,6 +14,7 @@ import { errorId, TextField } from '../../src/components/TextField/TextField';
 import { DrawingPad } from '../../src/components/DrawingPad/DrawingPad';
 import { PictureField, pictureErrorId } from '../../src/components/PictureField/PictureField';
 import { readFileSync } from 'node:fs';
+import { ToolShell } from '../../src/components/ToolShell/ToolShell';
 
 const noop = () => {};
 
@@ -1022,5 +1023,39 @@ describe("Remove a password's entry, drawn by Result and Notice", async () => {
     });
     expect(renderToStaticMarkup(<Notice heading={notice.heading} />)).toContain('certified.pdf is saved in a way this tool cannot read.');
     expect(unreadableNotice('broken.pdf', 'damaged', widget)).toEqual({ heading: 'broken.pdf is damaged and cannot be read.', announcement: 'broken.pdf is damaged and cannot be read.' });
+  });
+});
+
+describe('ToolShell', () => {
+  const related = [
+    { name: 'Split PDF', href: '/split-pdf', summary: 'Cut one PDF into several.' },
+    { name: 'Rotate PDF', href: '/rotate-pdf', summary: 'Turn the pages of a PDF.' },
+  ];
+  const group = { name: 'Organise pages', href: '/organise-pages' };
+
+  it('links to the group\'s hub page once, after the related tools, as a tap link', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." related={related} group={group} />);
+    const link = '<a class="tap" href="/organise-pages">All tools in Organise pages</a>';
+    expect(html.split(link)).toHaveLength(2);
+    expect(html.indexOf(link)).toBeGreaterThan(html.indexOf('href="/rotate-pdf"'));
+    expect(html).toContain('<h2>Related tools</h2>');
+  });
+
+  it('shows the hub link on a page with no related tools and no text below', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." group={group} />);
+    expect(html).toContain('All tools in Organise pages');
+    expect(html).not.toContain('Related tools');
+    expect(html).toContain('<section');
+  });
+
+  it('draws no section and no hub link without a group, related tools or text below', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." />);
+    expect(html).not.toContain('<section');
+    expect(html).not.toContain('All tools in');
+  });
+
+  it('gives the related list role="list"', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." related={related} group={group} />);
+    expect(html).toMatch(/<ul[^>]* role="list"/);
   });
 });

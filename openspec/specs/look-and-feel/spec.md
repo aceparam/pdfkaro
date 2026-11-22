@@ -109,7 +109,7 @@ Page text SHALL use short sentences and plain verbs, say what the tool does and 
 
 ### Requirement: Banned patterns
 
-Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The list in `SPEC.md` is the one to check against; it is not copied here so that the two cannot drift apart. The list bans the word "unlock" while the catalogue names a tool Unlock PDF; that conflict is the owner's to settle and is not settled here. (SPEC.md: Banned patterns; Tool catalogue)
+Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The list in `SPEC.md` is the one to check against; it is not copied here so that the two cannot drift apart. By the owner's decision of 22 Nov 2026, the word "unlock" stays banned on every page: only the address `/unlock-pdf` and the registry id keep it, and the tool is named "Remove a password". (SPEC.md: Banned patterns; Tool catalogue; CLAUDE.md: Owner decisions)
 
 #### Scenario: A page is checked before it is called done
 
@@ -128,8 +128,8 @@ Nothing on the "Banned patterns" list in `SPEC.md` SHALL appear on any page. The
 
 #### Scenario: Unlock PDF is built
 
-- **WHEN** a change builds the Unlock PDF tool
-- **THEN** the change asks the owner how the banned word is to be treated before the page text is written
+- **WHEN** the tool at `/unlock-pdf` is built, and the visible text and title of every built page, the home page and `/unlock-pdf` among them, are searched
+- **THEN** none holds "unlock"; the word appears only in the address `/unlock-pdf` (in links, the canonical tag, `og:url`, structured data and the sitemap), and the tool is listed and headed as "Remove a password" and "Remove a password from a PDF"
 
 ### Requirement: Pages only the owner writes
 

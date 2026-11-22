@@ -172,6 +172,18 @@ describe('the build check', () => {
     expect(checkPage(good.replace('</main>', '<script src="//example.com/a.js"></script></main>'))).toEqual(['a script comes from another site: //example.com/a.js']);
   });
 
+  it('refuses a link to another site, except a canonical link, which is never fetched', () => {
+    expect(checkPage(good.replace('</main>', '<link rel="stylesheet" href="https://example.com/a.css"></main>'))).toEqual([
+      'a <link> points to another site: https://example.com/a.css',
+    ]);
+    expect(checkPage(good.replace('</main>', '<link rel="canonical" href="https://example.org/merge-pdf"></main>'))).toEqual([]);
+    expect(checkPage(good.replace('</main>', '<link rel=" Canonical " href="https://example.org/merge-pdf"></main>'))).toEqual([]);
+    expect(checkPage(good.replace('</main>', '<link rel="canonical stylesheet" href="https://example.com/a.css"></main>'))).toEqual([
+      'a <link> points to another site: https://example.com/a.css',
+    ]);
+    expect(checkPage(good.replace('</main>', '<link rel="preload" href="//example.com/a.js"></main>'))).toEqual(['a <link> points to another site: //example.com/a.js']);
+  });
+
   it('refuses a directive the site does not use, and a missing one', () => {
     expect(checkPage(good.replace("; form-action 'none'", "; frame-ancestors 'none'"))).toEqual([
       'the policy has a directive it should not: frame-ancestors',
