@@ -4,14 +4,25 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withPolicy } from './scripts/csp.mjs';
+import { defaultOrigin, isSiteBase, isSiteOrigin } from './src/site.ts';
 
 // The site normally sits at the root of its address. A preview on GitHub Pages
 // sits under the repo name instead, such as /pdfkaro, and sets SITE_BASE to say so.
 const base = process.env.SITE_BASE || '/';
 
 // The base ends up in every link and script address, so only a plain path is taken.
-if (!/^\/$|^(\/[A-Za-z0-9._-]+)+$/.test(base)) {
+if (!isSiteBase(base)) {
   throw new Error(`SITE_BASE must be "/" or a plain path such as "/pdfkaro", not "${base}".`);
+}
+
+// The origin goes in front of every absolute address the site writes: canonical tags,
+// social tags, the JSON-LD, the sitemap and robots.txt. With no setting it is the local
+// preview address, so no build names a domain the owner has not given.
+const origin = process.env.SITE_ORIGIN || defaultOrigin;
+if (!isSiteOrigin(origin)) {
+  throw new Error(
+    `SITE_ORIGIN must be a plain origin: "https://" and a lower-case host, with no port, path, query or trailing slash, such as "https://example.org", or "http://localhost:" and a port. It is "${origin}".`,
+  );
 }
 
 // Every built page gets its Content Security Policy as a meta tag, straight
@@ -38,6 +49,7 @@ function cspMeta() {
 
 // Static HTML, one file per page, so /merge-pdf is served with no trailing slash.
 export default defineConfig({
+  site: origin,
   base,
   output: 'static',
   trailingSlash: 'never',

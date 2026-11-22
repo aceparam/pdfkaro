@@ -1,14 +1,36 @@
-// The one place a tool is declared. Pages, the home page list and related
-// links are all generated from this file. Data and types only: no logic here.
+// The one place a tool is declared. Pages, the home page list, related
+// links, the group hub pages and the sitemap are all generated from this file.
+// Data and types only: no logic here.
+//
+// Keep every import an `import type` line, and use no syntax that Node's type
+// stripping refuses (such as `enum`): scripts/check-seo.mjs imports this file
+// straight into Node, with no build step, to read the registry with its own code.
 
 import type { CatalogueSlug } from './catalogue';
 import type { OutputExtension } from '../widget/format';
 
 export type GroupId = 'organise' | 'smaller' | 'to-pdf' | 'from-pdf' | 'edit' | 'protect' | 'read';
 
+/** The address of a group's hub page, at the site root. A published address never changes. */
+export type HubSlug = 'organise-pages' | 'make-smaller-and-fix' | 'convert-to-pdf' | 'convert-from-pdf' | 'edit-and-sign' | 'protect' | 'read-and-check';
+
 export type Group = {
   id: GroupId;
+  /** The group's heading on the home page, and the h1 of its hub page. */
   name: string;
+  /** The hub page's address. Declared, not derived, so renaming a group never moves it. */
+  slug: HubSlug;
+  /** The hub page's title tag: under 60 characters, ending with the brand. */
+  title: string;
+  /** The hub page's meta description, under 155 characters. */
+  description: string;
+  /** The one sentence under the hub page's h1. */
+  sentence: string;
+  /**
+   * True when the title, sentence or description says where files go (the device, the browser,
+   * uploads). The registry test then requires every published tool in the group to run in the browser.
+   */
+  claimsDevice: boolean;
 };
 
 /** One URL that a tool serves. Most tools have one; some have several. */
@@ -301,15 +323,79 @@ export type Tool = {
   widget?: ToolWidgetWords;
 };
 
-/** The seven groups, in the order the home page shows them. */
+/**
+ * The seven groups, in the order the home page shows them. A group gets a hub page once it has a
+ * published tool. The hub words (title, description, sentence) are drafts for the owner to review.
+ * A tool whose addition makes its group's words untrue changes them in its own change.
+ */
 export const groups: Group[] = [
-  { id: 'organise', name: 'Organise pages' },
-  { id: 'smaller', name: 'Make smaller and fix' },
-  { id: 'to-pdf', name: 'Convert to PDF' },
-  { id: 'from-pdf', name: 'Convert from PDF' },
-  { id: 'edit', name: 'Edit and sign' },
-  { id: 'protect', name: 'Protect' },
-  { id: 'read', name: 'Read and check' },
+  {
+    id: 'organise',
+    name: 'Organise pages',
+    slug: 'organise-pages',
+    title: 'Organise PDF pages - PDFkaro',
+    description:
+      'Combine, split, copy out, remove, reorder and turn the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
+    sentence: 'Tools that combine, split and reorder the pages of a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'smaller',
+    name: 'Make smaller and fix',
+    slug: 'make-smaller-and-fix',
+    title: 'Make a PDF smaller - PDFkaro',
+    description: 'Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Make a PDF file smaller by shrinking its pictures.',
+    claimsDevice: true,
+  },
+  {
+    id: 'to-pdf',
+    name: 'Convert to PDF',
+    slug: 'convert-to-pdf',
+    title: 'Convert pictures to PDF - PDFkaro',
+    description: 'Turn JPG and PNG pictures into one PDF, in your browser. The pictures stay on your device and are not uploaded.',
+    sentence: 'Tools that turn JPG and PNG pictures into a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'from-pdf',
+    name: 'Convert from PDF',
+    slug: 'convert-from-pdf',
+    title: 'Convert a PDF to pictures - PDFkaro',
+    description: 'Turn each page of a PDF into a JPG or PNG picture, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that turn the pages of a PDF into JPG or PNG pictures.',
+    claimsDevice: true,
+  },
+  {
+    id: 'edit',
+    name: 'Edit and sign',
+    slug: 'edit-and-sign',
+    title: 'Edit and sign a PDF - PDFkaro',
+    description:
+      'Add page numbers, a watermark or a signature to a PDF, in your browser. The file and any signature picture stay on your device and are not uploaded.',
+    sentence: 'Tools that add page numbers, a watermark or a signature to a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'protect',
+    name: 'Protect',
+    slug: 'protect',
+    title: 'Add or remove a PDF password - PDFkaro',
+    description:
+      'Add a password to a PDF, or remove a password or restrictions, in your browser. The file and any password stay on your device and are not uploaded.',
+    sentence: 'Tools that add a password to a PDF, or remove a password or restrictions.',
+    claimsDevice: true,
+  },
+  {
+    // No published tool yet, so no hub page. Its first tool's change rewrites these words.
+    id: 'read',
+    name: 'Read and check',
+    slug: 'read-and-check',
+    title: 'Read and check a PDF - PDFkaro',
+    description: 'Tools that read a PDF and tell you about it.',
+    sentence: 'Tools that read a PDF and tell you about it.',
+    claimsDevice: false,
+  },
 ];
 
 // A tool is published when it has an entry here. An entry is added in the

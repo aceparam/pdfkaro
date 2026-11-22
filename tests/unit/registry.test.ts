@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type DrawingOption, type NewPasswordOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import { footerLinks } from '../../src/site';
+import { groups, tools, type Group, type HubSlug, type DrawingOption, type NewPasswordOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
 import {
   characterRules,
   drawingRule,
@@ -1233,5 +1235,111 @@ describe('new passwords', () => {
     expect(check([password], passwords, { newPassword: 'x' })).toContain(`newPassword: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
     expect(check([{ ...password, key: 'pages' }], { 'test-options': { pages: rule } })).toContain("pages: the key is one the page's items send");
     expect(check([{ ...password, key: 'passwords' }], { 'test-options': { passwords: rule } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('group hub pages', () => {
+  // catalogue.ts is a type, so its 54 slugs are read as text, as catalogue.test.ts does.
+  const catalogueSlugs = [...readFileSync('src/tools/catalogue.ts', 'utf8').matchAll(/\| '([^']+)'/g)].map((match) => match[1] ?? '');
+  // Addresses a hub page may never take: every footer page (so a new one is covered with no second list), 404 and the two crawler files.
+  const reserved = [...footerLinks.map((link) => link.href.slice(1)), '404', 'sitemap.xml', 'robots.txt'];
+  const deviceWords = /device|browser|upload|never leaves|not sent/i;
+
+  /** Everything wrong with the groups' hub words and addresses, as plain lines naming the group. */
+  function groupProblems(all: Group[], published: Tool[]): string[] {
+    const problems: string[] = [];
+    const slugs = all.map((group) => group.slug);
+    if (new Set(slugs).size !== slugs.length) problems.push('a hub address is used twice');
+    for (const group of all) {
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(group.slug)) problems.push(`${group.name}: the address is not lowercase with hyphens`);
+      if (catalogueSlugs.includes(group.slug)) problems.push(`${group.name}: the address is a catalogue slug`);
+      if (reserved.includes(group.slug)) problems.push(`${group.name}: the address is a site page or a crawler file`);
+      if (group.title.length >= 60 || !group.title.endsWith(' - PDFkaro')) problems.push(`${group.name}: the title is 60 characters or more, or does not end with the brand`);
+      if (group.description.length >= 155) problems.push(`${group.name}: the description is 155 characters or more`);
+      for (const words of [group.title, group.description, group.sentence]) {
+        if (words.trim() === '' || words.includes('!')) problems.push(`${group.name}: a hub word is empty or has an exclamation mark`);
+      }
+      const claims = deviceWords.test([group.title, group.sentence, group.description].join(' '));
+      if (claims && !group.claimsDevice) problems.push(`${group.name}: its words say where files go, but it does not declare claimsDevice`);
+      if (group.claimsDevice) {
+        const server = published.filter((tool) => tool.group === group.id && tool.runsIn !== 'browser').map((tool) => tool.id);
+        if (server.length > 0) problems.push(`${group.name}: its words claim the device, but ${server.join(', ')} does not run in the browser`);
+      }
+    }
+    const pageWordsOf = (key: 'title' | 'description') => [
+      ...allPages(published).map(({ page }) => page[key]),
+      ...all.filter((group) => published.some((tool) => tool.group === group.id)).map((group) => group[key]),
+    ];
+    for (const key of ['title', 'description'] as const) {
+      const words = pageWordsOf(key);
+      if (new Set(words).size !== words.length) problems.push(`a ${key} is shared by two tool or hub pages`);
+    }
+    return problems;
+  }
+
+  const organise = groups.find((group) => group.id === 'organise')!;
+  const others = groups.filter((group) => group.id !== 'organise');
+  const withOrganise = (change: Partial<Group>) => [{ ...organise, ...change }, ...others];
+
+  it('are sound for every group', () => {
+    expect(groupProblems(groups, tools)).toEqual([]);
+  });
+
+  it('use the agent\'s default addresses, the group name at the root, until the owner answers', () => {
+    expect(groups.map((group) => group.slug)).toEqual([
+      'organise-pages',
+      'make-smaller-and-fix',
+      'convert-to-pdf',
+      'convert-from-pdf',
+      'edit-and-sign',
+      'protect',
+      'read-and-check',
+    ]);
+  });
+
+  it('fail when an address is a tool slug, a site page or a crawler file, or is used twice', () => {
+    expect(groupProblems(withOrganise({ slug: 'merge-pdf' as HubSlug }), tools)).toContain('Organise pages: the address is a catalogue slug');
+    // An unpublished catalogue slug is refused too.
+    expect(groupProblems(withOrganise({ slug: 'pdf-viewer' as HubSlug }), tools)).toContain('Organise pages: the address is a catalogue slug');
+    for (const slug of ['about', 'contact', '404', 'sitemap.xml', 'robots.txt']) {
+      expect(groupProblems(withOrganise({ slug: slug as HubSlug }), tools), slug).toContain('Organise pages: the address is a site page or a crawler file');
+    }
+    expect(groupProblems(withOrganise({ slug: 'protect' }), tools)).toContain('a hub address is used twice');
+    expect(groupProblems(withOrganise({ slug: 'Organise_Pages' as HubSlug }), tools)).toContain('Organise pages: the address is not lowercase with hyphens');
+  });
+
+  it('fail on a long title, a title without the brand or a long description', () => {
+    expect(groupProblems(withOrganise({ title: `${'x'.repeat(50)} - PDFkaro` }), tools)).toContain(
+      'Organise pages: the title is 60 characters or more, or does not end with the brand',
+    );
+    expect(groupProblems(withOrganise({ title: 'Organise PDF pages' }), tools)).toContain(
+      'Organise pages: the title is 60 characters or more, or does not end with the brand',
+    );
+    expect(groupProblems(withOrganise({ description: 'x'.repeat(155) }), tools)).toContain('Organise pages: the description is 155 characters or more');
+  });
+
+  it('fail when a hub title or description repeats a tool page\'s', () => {
+    const merge = tools.find((tool) => tool.id === 'merge-pdf')!.pages[0]!;
+    expect(groupProblems(withOrganise({ title: merge.title }), tools)).toContain('a title is shared by two tool or hub pages');
+    expect(groupProblems(withOrganise({ description: merge.description }), tools)).toContain('a description is shared by two tool or hub pages');
+  });
+
+  it('fail when words say where files go but the group does not declare it', () => {
+    expect(groupProblems(withOrganise({ sentence: 'Tools that work in your browser.', claimsDevice: false, description: 'Organise.' }), tools)).toContain(
+      'Organise pages: its words say where files go, but it does not declare claimsDevice',
+    );
+    for (const words of ['Files are not uploaded.', 'Your file never leaves.', 'It is not sent anywhere.', 'On your device.']) {
+      expect(groupProblems(withOrganise({ sentence: words, description: 'Organise.', claimsDevice: false }), tools), words).toContain(
+        'Organise pages: its words say where files go, but it does not declare claimsDevice',
+      );
+    }
+  });
+
+  it('fail, naming the group, when a server tool joins a group whose words claim the device', () => {
+    const merge = tools.find((tool) => tool.id === 'merge-pdf')!;
+    const server: Tool = { ...merge, id: 'test-server-tool', runsIn: 'server', pages: [{ ...merge.pages[0]!, slug: 'word-to-pdf', title: 'Test - PDFkaro', description: 'Test.' }] };
+    expect(groupProblems(groups, [...tools, server])).toContain(
+      'Organise pages: its words claim the device, but test-server-tool does not run in the browser',
+    );
   });
 });
