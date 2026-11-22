@@ -142,7 +142,7 @@
 
 - After the pull request is merged, archive with `/opsx:archive`.
 - Add a CLAUDE.md "Where the project stands" entry. Record its named exceptions (design.md, Risks) under "Left for later".
-- Add this change's two owner questions (design.md, Open questions 1 and 2) under "Questions waiting for the owner".
+- Add this change's three owner questions (design.md, Open questions 1 and 2) under "Questions waiting for the owner".
 - List the new Privacy sentences:
   - in issue #7, under the Privacy draft review;
   - in CLAUDE.md's "The Privacy page draft" owner item.

@@ -306,7 +306,7 @@ Benefits:
   - Focus moves to that line (`summaryRef`, `tabIndex={-1}`), as it does after a pick today.
   - The wait ends when `prepared` arrives, when the set fails to load (at once), or after 60 seconds. The worker is then ended, having never been sent a file. The picker returns with the refusal sentence in its status line, which is read out, and focus moves to the picker, as `onEmpty` does today.
   - Remove during the wait ends the wait and the worker, and returns to the picker as removing the last file does. This is the visitor's own action.
-  - **For the owner:** as built, Remove also appears for a pick of several files of the wrong kind, on the summary line, labelled for screen readers "Remove 2 files" (the file count). The design first showed it for one file only; it is kept so a multi-file pick has the same way out.
+  - **For the owner (Open question 3):** as built, Remove also appears for a pick of several files of the wrong kind, on the summary line, labelled for screen readers "Remove 2 files" (the file count). The design first showed it for one file only; it is kept so a multi-file pick has the same way out.
 
 Alternatives considered:
 
@@ -477,7 +477,8 @@ Nothing is stored, so nothing migrates. Rollback is reverting the pull request. 
 
 ## Open Questions
 
-The owner answered two questions on 22 Nov 2026: PDF.js's set after every pick on a PDF page, and a wrong-kind pick loads the set first with the wait held to 60 seconds. Two remain, for the owner, each with the default this change builds:
+The owner answered two questions on 22 Nov 2026: PDF.js's set after every pick on a PDF page, and a wrong-kind pick loads the set first with the wait held to 60 seconds. Three remain, for the owner, each with the default this change builds:
 
 1. **The "asked again" sentences on the Privacy page.** Keep "Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that."? Default: yes, marked for review.
 2. **The named exceptions.** Accept the rare cases in Risks for now: no usable cache; copies older than 10 minutes; a page slow to draw; the main button while PDF.js is arriving; a crash; jobs over 10 minutes. The Privacy page will not claim them closed. Default: yes.
+3. **Remove for several wrong-kind files.** When several files of the wrong kind are picked, keep a Remove button on the "Getting ready" summary line (read out as "Remove 2 files")? Default: yes.
