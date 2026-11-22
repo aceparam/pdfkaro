@@ -28,7 +28,7 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 
 ## 5. Review
 
-- [ ] 5.1 Run the `review-panel` skill, stage 2, with the privacy reviewer reading every sentence against decision 4. Fix every must-fix finding, update design.md where a sentence changes, and put the verdicts and the owner questions from proposal.md in the pull request description. Verify: every reviewer approves.
+- [x] 5.1 Run the `review-panel` skill, stage 2, with the privacy reviewer reading every sentence against decision 4. Fix every must-fix finding, update design.md where a sentence changes, and put the verdicts and the owner questions from proposal.md in the pull request description. Verify: every reviewer approves.
 
 ## 6. Stage 2 review fixes
 
