@@ -79,6 +79,7 @@ The JSON-LD, when given, is written as `<script type="application/ld+json" set:h
 
 - **On every page, not only tool pages.** One rule in the shared layout is plainer, and a shared link to the home page or a hub page then gets a proper preview too. `SPEC.md` asks for tool pages at least and forbids nothing more.
 - **None on the 404 page.** It is served at every missing address, so it has no address of its own to point at.
+- **`check:csp` and the canonical link.** Found while building: `scripts/check-csp.mjs` refuses every `<link>` whose address names a scheme or starts with `//`, so the absolute canonical address failed it. A link whose only `rel` is `canonical` is never fetched by a browser, so `check-csp.mjs` now lets that one link carry an absolute address. A link with any other `rel`, including `canonical` with another word added, is still refused. `tests/unit/csp.test.ts` covers each case. The policy itself is unchanged.
 
 ### 3. JSON-LD
 
@@ -212,7 +213,7 @@ It exports pure functions over strings for unit tests (`tests/unit/check-seo.tes
 - the site's system font stack;
 - centred on both axes.
 
-It saves a PNG screenshot to `public/social.png`. The script is run by hand when the image should change, and the PNG is committed. It is not rebuilt in CI, because a different machine's fonts would change its bytes.
+Before it saves anything, it asks Chromium through the DevTools protocol (`CSS.getPlatformFontsForNode`) which fonts it really drew, and writes nothing if one is Inter, a banned font. Found while building: on the agent's Linux machine `system-ui` resolves to Inter, so the committed image was made with a `FONTCONFIG_FILE` that rejects Inter, and the site's stack fell through to Liberation Sans (Arial's metrics). The stack in the script is unchanged. It saves a PNG screenshot to `public/social.png`. The script is run by hand when the image should change, and the PNG is committed. It is not rebuilt in CI, because a different machine's fonts would change its bytes.
 
 - **No picture, icon, border, shadow or gradient,** following "Look and feel" and "Banned patterns". Light colours only: a link preview is not on the visitor's device setting.
 - **The tagline guard.** The image and its alt text say "done in your browser", which stops being true once a server tool ships. A unit test in `tests/unit/site.test.ts` fails while `tagline` contains "browser" or "device" and any published tool has `runsIn !== 'browser'`. Its message says the change must stop and ask the owner for a new tagline (the owner's text, set in `SPEC.md` "Names"), then make `public/social.png` again with `scripts/social-image.mjs`. A test entry with a server tool proves it trips.
