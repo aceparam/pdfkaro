@@ -632,13 +632,13 @@ Each file was protected in Node with the same qpdf the browser uses, with the ne
 
 | File | Before | After | Outcome |
 | --- | --- | --- | --- |
-| `text.pdf`, `warning.pdf` | 6,057 | 4,302 | Protected; written in object streams, so smaller. qpdf's warning does not stop the job. Progress "Reading the file", then writing up to 90%, then 93, 96 and 100 as each check of the result passes |
+| `text.pdf`, `warning.pdf` | 6,057 | 4,302 | Protected; written in object streams, so smaller. qpdf's warning does not stop the job. Progress "Reading the file", then writing up to 50%, then 55, 95 and 100 as each check of the result passes |
 | `pages-500.pdf` | 198,025 | 112,521 | All 500 pages, with their text |
 | `scanned.pdf` | 6,191 | 6,746 | Protected; its two pictures' dictionaries (`/Width`, `/Height`, colour space, format) stay readable |
 | `password.pdf` | 7,178 | 4,302 | With `open-sesame`: the new password only, every permission allowed; `open-sesame` no longer opens it and is not in its bytes. Without it, or with `open-sesam`: "A password did not open the file." |
 | `restricted.pdf` | 7,181 | 4,302 | Needs the new password, with no restrictions |
 | `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not write the protected file." and hands back nothing |
-| `form.pdf` | 3,189 | 3,491 | Both fields kept, with the value `Sample text`; the field's appearance names `/Helvetica`, readable |
+| `form.pdf` | 3,189 | 3,491 | Both fields kept, with the value `Sample text`; the field's appearance names `/Helvetica` and gives its `/BBox`, both readable |
 | `mixed.pdf` | 2,257 | 2,378 | Sizes and turns kept |
 | `rich.pdf` | 2,064 | 2,757 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` with its contents kept. The attachment's name, dates and contents are not readable; its type (`/Subtype /text#2fplain`) and size are |
 | `images.pdf` | 1,642 | 2,290 | Protected; the JPEG 2000 picture's dictionary (`/Width`, format) stays readable |
@@ -667,7 +667,7 @@ Files and inputs made in the test (`tests/unit/protect-pdf.test.ts`):
 | No new password, an empty one, 128 characters, "café", a space first or last, a line break, a number, `null`, one under `__proto__` or under `password` | Refused with `PasswordRefused` (`password-refused`) before qpdf is asked for; no error holds what was sent |
 | Every failure above, with both marked passwords | No error's message or stack holds either password or its parts |
 
-Measured on 22 Nov 2026 in Node, each case in a process of its own under the test runner, with qpdf loaded first on `text.pdf`; peak is the process's highest resident memory, including the runner's own (about 0.1 GB before a small job, 0.28 GB once the 100 MB file is read). The time is split at the end of qpdf's write (the write, then the check of the result). In Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, the check timed from the bar reaching 90%, with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press.
+Measured on 22 Nov 2026 in Node, each case in a process of its own under the test runner, with qpdf loaded first on `text.pdf`; peak is the process's highest resident memory, including the runner's own (about 0.1 GB before a small job, 0.28 GB once the 100 MB file is read). The time is split at the end of qpdf's write (the write, then the check of the result). In Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, the check timed from the bar reaching 90%, where the write ended under the bar's weighting at the time (the write now fills it to 50%), with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press.
 
 | File | In | Out | Node: time (write, check) | Node: peak | Chromium: time (check) | Chromium: peak over baseline |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -679,6 +679,6 @@ The check of the result (decision 4 of the change) takes a little longer than th
 
 The input is let go before the output is read: in Node, with the 100 MB file written by `cappedWrite`, which removes `/in.pdf` once the write has passed, the memory held right after the output is read (after a garbage collection) is 318 MB, against 423 MB when the same call keeps `/in.pdf`, each from 210 MB held at the start (the file and qpdf's copy of it). The peak itself comes during the write, when the file, qpdf's copy and the growing output all exist.
 
-What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; and names in the catalog, such as old-style destination names. What is hidden: its pages and their sizes, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
+What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; each drawn part's box (a form XObject's `/BBox`), such as a form field's appearance (`/BBox` on `form.pdf`'s result) and, in a file that carries a layer of Add page numbers, Watermark or Sign PDF, each page's size; and names in the catalog, such as old-style destination names. What is hidden: its pages and the sizes their dictionaries give, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
 
 The multilingual file is still missing. Protect leaves text as it is, but the test set needs the file, so Protect is not done until it exists and Protect has been run on it.

@@ -31,11 +31,12 @@ Protect with a password (`/protect-pdf`) is the next Phase 1 tool in catalogue o
   - roughly how large its parts are;
   - for each picture, its pixel size, colour space and format, though not what it shows;
   - for each attached file, its type and size, though not its name, dates or contents;
-  - font names, and other names used inside it, such as old-style link names.
+  - font names, and other names used inside it, such as old-style link names;
+  - the size of some drawn parts, such as form-field boxes, and, in a file that already has page numbers, a watermark or a signature added on this site, each page's size (privacy reviewer, stage 2).
 
   The page says so, and never says pictures or attached files are hidden, only what they show and contain (privacy reviewer, round 2).
 - **Output** is named `report-protected.pdf`.
-- **Progress** shows "Reading the file", then "Writing the protected file" with qpdf's own percentage up to 90, then 93, 96 and 100 as each check of the result passes. Cancel works throughout.
+- **Progress** shows "Reading the file", then "Writing the protected file" with qpdf's own percentage up to 50, then 55, 95 and 100 as each check of the result passes (the check with the password takes about as long as the write). Cancel works throughout.
 - **The output is capped** at `2 × file + 16 MB`. Encryption adds at most 32 bytes to each string and stream of a genuine file. Past the cap, the page shows the existing `output-limit` failure.
 - **The password's life,** unchanged from `add-password-option`:
   - It is held in `useToolRun` only.

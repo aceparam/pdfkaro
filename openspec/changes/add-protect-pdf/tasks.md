@@ -42,7 +42,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - `protectArgs`, `protectLimit` and `protectedBytes` exported;
   - one qpdf call in the in-memory argument list only, through `cappedWrite`, so `/in.pdf` is removed before the output is read, and the writer is local to `protectedBytes`;
   - the check on a fresh qpdf: JSON `encrypt` with R 6, V 5, AESv3 three times and every capability; `--check` with the password; refused without it;
-  - progress: reading, then writing scaled to 90, then 93, 96 and 100 after each check step;
+  - progress: reading, then writing scaled to 50, then 55, 95 and 100 after each check step (stage 2: the check with the password takes about as long as the write);
   - fixed error sentences that never hold qpdf's printed text or a password;
   - `inspect` is `inspectPdf`.
 
@@ -103,7 +103,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - one question on what changes and what stays;
   - signatures;
   - an earlier password and restrictions being replaced;
-  - what a password hides and does not hide: the file's name, whether it has bookmarks, attached files or a form, rough size, each picture's pixel size and format, each attached file's type and size, font names and some other names stay visible; pages, page sizes, text, what pictures show and the names and contents of attached files do not; it never says pictures or attached files are hidden as a whole (wording a draft for the owner).
+  - what a password hides and does not hide: the file's name, whether it has bookmarks, attached files or a form, rough size, each picture's pixel size and format, each attached file's type and size, font names, the size of some drawn parts, such as form-field boxes, and, in a file that already has page numbers, a watermark or a signature added on this site, each page's size, and some other names stay visible, as a plain bulleted list; pages, text, what pictures show and the names and contents of attached files do not; it never says pictures or attached files are hidden as a whole (wording a draft for the owner).
 
   The privacy words say only what the page controls. No "unlock", no "100%", no capitals for emphasis, and no question that restates the title. Check it against "Banned patterns". Verify that the built page holds the heading, sentence, steps and questions with scripts off, and that the word count is within range.
 
@@ -184,7 +184,14 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - input password, damaged, failed;
   - the 20,000-page notice.
 
-  Also take a 360 × 640 screenshot with focus in the first field, showing both fields and the hint above the fold. Take the listed states with an error, and the result, at 200% text size, with nothing overflowing sideways. Verify by looking at each, and add them to the change folder.
+  Also take a 360 × 640 screenshot with focus in the first field, showing both fields and the hint above the fold. Take the listed states with an error, and the result, at 200% text size, with nothing overflowing sideways. Verify by looking at each.
+
+  Every state above, in each width and scheme, was taken and checked at commit 50251ca, before the hint changed; nothing scrolled sideways. To keep the folder small (coordinator, stage 2), the pull request carries these 19, taken again after the hint change and the stage 2 page text, in `.github/pr-screenshots/protect-pdf/`:
+  - at 360px and 1280px, light: empty, listed, typed once, different, result and failed;
+  - at 360px, light: refused characters and both matching;
+  - at 360 × 640, light and dark: focus in the first field, with the first label near the top, both fields, the hint and the note above the fold;
+  - at 360px, dark: result and different;
+  - at 360px, light, 200% text: different.
 
 ## 11. Checks and review
 

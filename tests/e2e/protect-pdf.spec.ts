@@ -606,9 +606,14 @@ test.describe('the words below the tool', () => {
       'My file already has a password',
       'What does a password hide?',
       'which now ends in “-protected”',
+      '<li>the size of some drawn parts, such as form-field boxes, and each page’s size if page numbers, a watermark or a signature were added on this site</li>',
+      'Switching to another tab keeps them.',
     ]) {
       expect(html).toContain(words);
     }
+    // What can still be seen is a plain list, and page sizes are not claimed as hidden.
+    expect(html.match(/<ul>[\s\S]*?<\/ul>/)?.[0].match(/<li>/g)).toHaveLength(7);
+    expect(html).not.toContain('pages and their sizes');
     expect(html.toLowerCase()).not.toContain('unlock');
   });
 });

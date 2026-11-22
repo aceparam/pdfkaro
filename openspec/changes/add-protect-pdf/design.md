@@ -18,7 +18,7 @@
   - **Nothing secret was in the bytes.** P never appeared in a result. The marked title and XMP words did not either, and PDF.js read the title back once the file was opened with P. PDF.js refused no password, and refused P less its last character.
   - **Progress:** qpdf printed several `write progress: N%` lines (52 for `pages-500.pdf`).
   - **Sizes went down** with object streams generated: `text.pdf` from 6,057 to 4,302 bytes, `pages-500.pdf` from 198,025 to 112,521, `tagged.pdf` from 5,118 to about 3,400. With object streams preserved, `tagged.pdf` came out at 6,448. `pages-500.pdf` took about 0.2 s.
-  - **What stays readable.** PDF encryption covers strings and streams only. Names, numbers and dictionaries outside an encrypted object stream are written as they are, and qpdf keeps the catalog outside object streams. So `tagged.pdf`'s `SECRET-DEST-NAME`, a key of the catalog's old-style `/Dests`, stayed readable. The catalog's keys also show whether the file has bookmarks (`/Outlines`), attached files (`/Names /EmbeddedFiles`, with the attachment's name encrypted) or a form. Page dictionaries went into encrypted object streams, so `/MediaBox` and `/Count` were not readable in `text.pdf`, `mixed.pdf` or `rich.pdf`: page sizes and the page count are hidden. But a stream's own dictionary can never go in an object stream, so it stays readable (the privacy reviewer, round 2, with the repo's qpdf): for pictures, how many there are, their pixel size (`/Width`, `/Height`), bits, colour space and format (such as `/JPXDecode`), as on `images.pdf` and `scanned.pdf`; for attached files, their type (`/Subtype`, such as `text/plain`) and size (`/Params /Size`), as on `rich.pdf`, whose attachment's name and dates are encrypted; and font names named in appearance streams (`/Helvetica` on `tagged.pdf` and `form.pdf`). Font names were absent only from `text.pdf`, `mixed.pdf` and `rich.pdf`, whose fonts sit in page resources inside object streams. The file's own name is outside the file and is always visible. Every encrypting tool behaves this way, because it is the format.
+  - **What stays readable.** PDF encryption covers strings and streams only. Names, numbers and dictionaries outside an encrypted object stream are written as they are, and qpdf keeps the catalog outside object streams. So `tagged.pdf`'s `SECRET-DEST-NAME`, a key of the catalog's old-style `/Dests`, stayed readable. The catalog's keys also show whether the file has bookmarks (`/Outlines`), attached files (`/Names /EmbeddedFiles`, with the attachment's name encrypted) or a form. Page dictionaries went into encrypted object streams, so `/MediaBox` and `/Count` were not readable in `text.pdf`, `mixed.pdf` or `rich.pdf`: the page count, and page sizes as the page dictionaries give them, are hidden; but a form XObject's own `/BBox` stays readable, so a file whose pages carry a layer of Add page numbers, Watermark or Sign PDF shows each page's size through it, and form-field appearances show their boxes (privacy reviewer, stage 2). But a stream's own dictionary can never go in an object stream, so it stays readable (the privacy reviewer, round 2, with the repo's qpdf): for pictures, how many there are, their pixel size (`/Width`, `/Height`), bits, colour space and format (such as `/JPXDecode`), as on `images.pdf` and `scanned.pdf`; for attached files, their type (`/Subtype`, such as `text/plain`) and size (`/Params /Size`), as on `rich.pdf`, whose attachment's name and dates are encrypted; and font names named in appearance streams (`/Helvetica` on `tagged.pdf` and `form.pdf`). Font names were absent only from `text.pdf`, `mixed.pdf` and `rich.pdf`, whose fonts sit in page resources inside object streams. The file's own name is outside the file and is always visible. Every encrypting tool behaves this way, because it is the format.
   - **Two qpdf options are unusable here.** `--requires-password` is not usable in this build: it gave exit 2 with "invalid password" on an encrypted file. And qpdf will not write JSON on an instance that has already written. So the result is checked on a fresh instance (decision 4).
   - **`--show-encryption` prints the password.** It prints "User password = P". The JSON form (`--json=2 --json-key=encrypt`) gives R, V, the methods and the capabilities without the password, so the engine reads that.
 
@@ -118,8 +118,8 @@ run([file], options, onProgress, tools):
   password = acceptedPassword('protect-pdf', 'newPassword', options.newPassword)   // undefined: throw new PasswordRefused() before any work
   old = passwordFrom(options)
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 })
-  out = await protectedBytes(tools, file, old, password, (percent) => onProgress({ stage: 'writing', percent: percent * 0.9 }))
-  await verify(tools, out, password, (percent) => onProgress({ stage: 'writing', percent }))   // 93, 96, 100
+  out = await protectedBytes(tools, file, old, password, (percent) => onProgress({ stage: 'writing', percent: percent * 0.5 }))
+  await verify(tools, out, password, (percent) => onProgress({ stage: 'writing', percent }))   // 55, 95, 100
   return [out]
 
 protectedBytes(tools, file, old, password, onWriting):      // the writer lives only inside this function
@@ -144,8 +144,8 @@ inspect = inspectPdf
 
 The check runs on a fresh qpdf holding only `out`. It is fresh because qpdf will not write JSON on an instance that has written, and because the writer's memory can be let go first.
 
-1. Run `--password=P --json=2 --json-key=encrypt /in.pdf`. The answer must say `encrypted` true, `userpasswordmatched` true, R 6, V 5 and bits 256 in `parameters`, `AESv3` for `stringmethod`, `streammethod` and `filemethod`, and every `capabilities` entry true. The JSON holds no password; it is parsed and dropped. Progress goes to 93.
-2. Run `--password=P --check /in.pdf`; it must finish. Progress goes to 96.
+1. Run `--password=P --json=2 --json-key=encrypt /in.pdf`. The answer must say `encrypted` true, `userpasswordmatched` true, R 6, V 5 and bits 256 in `parameters`, `AESv3` for `stringmethod`, `streammethod` and `filemethod`, and every `capabilities` entry true. The JSON holds no password; it is parsed and dropped. Progress goes to 55.
+2. Run `--password=P --check /in.pdf`; it must finish. Progress goes to 95.
 3. Run `--check /in.pdf` with no password; it must fail, with qpdf saying the password is invalid (`saidInvalidPassword`). Progress goes to 100.
 
 Any other answer throws "The protected file did not pass its check."
@@ -214,16 +214,16 @@ The moved code keeps its comments. `useToolRun` behaves exactly as before; the e
 - **Never used:** `--cleartext-metadata` (the title and XMP stay encrypted), `--allow-insecure`, `--allow-weak-crypto` or `--show-encryption`. A unit test reads the engine's source and `protectArgs`, and fails if any of the four appears.
 - **`--object-streams=generate`,** as `writeTurned` and Compress PDF write.
   - It gives smaller files.
-  - It hides page dictionaries (page sizes and count) inside encrypted streams. Stream dictionaries (pictures, attached files, appearance streams) cannot go in object streams and stay readable.
+  - It hides page dictionaries (their sizes and count) inside encrypted streams. Stream dictionaries (pictures, attached files, appearance streams, drawn layers with their `/BBox`) cannot go in object streams and stay readable.
   - Strings packed in object streams are encrypted with their stream rather than one by one, which bounds the growth of a hostile file of many tiny strings.
   - AES-256 needs PDF 1.7 extension level 8, which qpdf sets, so object streams (PDF 1.5) shut out no reader.
 - **Also not used:** `--decrypt`, `--qdf` and linearization.
 
 ### 8. Size, memory, progress and cancel
 
-- **The cap,** `2 × file + 16 MB`, goes through `cappedWrite`. Encryption adds at most 32 bytes (a 16-byte start value and up to 16 bytes of padding) to each stream and each string outside an object stream. With object streams generated, a genuine file grows by far less than its own size, and the experiment's files all shrank. A hostile file built of millions of empty strings in the catalog would grow many times; the cap stops it with the existing sentence.
+- **The cap,** `2 × file + 16 MB`, goes through `cappedWrite`. Encryption adds at most 32 bytes (a 16-byte start value and up to 16 bytes of padding) to each stream and each string outside an object stream. With object streams generated, a genuine file grows by far less than its own size, and the experiment's files all shrank. A hostile file built of millions of empty streams, which can never go in an object stream, would grow by up to 32 bytes each; the cap stops such a file with the existing sentence once it passes. (Empty strings in the catalog do not do it: qpdf packs them into an object stream, which is compressed, as found while building.)
 - **Memory:** decision 3. The peak is the output plus qpdf's own working memory during the write, then one copy of the output in the checker. Task 3.2 measures it.
-- **Progress:** "Reading the file" (`reading`, `file`, 0 of 1) while qpdf parses. Then "Writing the protected file", with qpdf's own percentage scaled to 90, then 93, 96 and 100 as the checks pass.
+- **Progress:** "Reading the file" (`reading`, `file`, 0 of 1) while qpdf parses. Then "Writing the protected file", with qpdf's own percentage scaled to 50, then 55, 95 and 100 as the checks pass. The check with the password reads every stream and takes about as long as the write (measured while building), so the write and the checks each take about half of the bar (architect, stage 2).
 - **Cancel** ends the worker, as for every tool. The fields keep the password (`add-password-option`).
 - **No fixed limit;** the 100 MB notice and the 20,000-page notice are shown, as for every one-file tool.
 
@@ -240,7 +240,7 @@ These are the facts, checked against the code, for that change to use (privacy V
 - **The input file's own password,** typed to open a protected file, is kept while that file is listed. It is forgotten when the file is replaced or left out, on "Start again", and when the page is left.
 - **The browser's offer.** The browser may offer to save the new password, or suggest one. A saved password is kept by the browser and may be copied to the visitor's browser account. That is the browser's offer, which the visitor accepts or not.
 - **It cannot be recovered.** The site never has the password, so it cannot reset it.
-- **What a protected file does not hide:** the file's name; whether it holds bookmarks, attached files or a form; roughly how large its parts are; for each picture, its pixel size, colour space and format; for each attached file, its type and size; font names; and names in the catalog, such as old-style link names. What is hidden: its pages and their sizes, its text, the picture data itself, bookmarks' titles, the contents, names and dates of attached files, and its title and details. The page must not say pictures or attached files are hidden, only their contents. Wording is a draft for the owner.
+- **What a protected file does not hide:** the file's name; whether it holds bookmarks, attached files or a form; roughly how large its parts are; for each picture, its pixel size, colour space and format; for each attached file, its type and size; font names; the size of some drawn parts, such as form-field boxes, and, in a file that already has page numbers, a watermark or a signature added on this site, each page's size; and names in the catalog, such as old-style link names. What is hidden: its pages, its text, the picture data itself, bookmarks' titles, the contents, names and dates of attached files, and its title and details. The page must not say pictures or attached files are hidden, only their contents. Wording is a draft for the owner.
 
 ### 10. The page text
 
@@ -251,7 +251,7 @@ These are the facts, checked against the code, for that change to use (privacy V
 **Questions,** each answered plainly:
 - **Is my file uploaded?**
   - No. The file and the password are not uploaded.
-  - The page keeps them only while the tab is open, and lets go of them on "Start again" or when the tab is closed or left.
+  - The page lets go of the file and the password on "Start again", when the tab is closed or another page is opened in it, and, for the new password, once a job gives a file. Switching to another tab keeps them (privacy reviewer, stage 2; draft wording for the owner).
   - It claims nothing about downloads, keyboard apps or extensions, and makes no "100%" claim.
 - **What if I forget the password?**
   - The file cannot be opened, and no one can get it back. This site never has it.
@@ -266,7 +266,7 @@ These are the facts, checked against the code, for that change to use (privacy V
 - **My file already has a password.** You type it first. The new password replaces it, and restrictions are removed.
 - **What does a password hide?**
   - It hides the pages, the text, what the pictures show, bookmarks' titles, the contents and names of attached files, and the file's title and details.
-  - It does not hide the file's name (which now ends in "-protected"), whether the file holds bookmarks, attached files or a form, roughly how large it is, how many pictures it has with their size in pixels and format, the type and size of each attached file, the names of fonts, or some other names used inside it.
+  - It does not hide the file's name (which now ends in "-protected"), whether the file holds bookmarks, attached files or a form, roughly how large it is, how many pictures it has with their size in pixels and format, the type and size of each attached file, the names of fonts, the size of some drawn parts such as form-field boxes (and each page's size in a file that already has page numbers, a watermark or a signature added on this site), or some other names used inside it. These go in a plain bulleted list (UX reviewer, stage 2).
   - The page does not say pictures or attached files are hidden, only what they show and contain.
   - It stops someone opening the file. It does not stop someone who has the password from passing the file on.
 
@@ -330,8 +330,8 @@ None added.
   - **What stays readable.** In `tagged.pdf`, every `SECRET-` marker held in a string or stream is absent from the bytes. `SECRET-DEST-NAME`, a name, is present, because the format leaves names readable; it is recorded, not hidden. Recorded the same way: `/Width` on `images.pdf`'s result, the attached file's `/Subtype` on `rich.pdf`'s, and `/Helvetica` on `form.pdf`'s, as stream dictionaries stay readable. No result shows `/MediaBox` in plain text, and `rich.pdf`'s attachment name `note.txt` is not readable.
   - **Older encryption.** A file made in the test with RC4 128-bit encryption (made with `--allow-weak-crypto` in the test only) comes back AESv3 only, and the old password is refused.
   - **Fresh keys.** The same file protected twice gives different `/U`, `/O`, `/UE` and `/OE`.
-  - **Progress:** reading first, then writing percentages that never go back, with 93, 96 and 100 last.
-  - **The cap.** `protectLimit` is checked directly. A real file made in the test, with many empty strings in its catalog, is written through `protectedBytes` under a small limit and refused with `OutputLimit`.
+  - **Progress:** reading first, then writing percentages that never go back, the write at most 50, with 55, 95 and 100 last.
+  - **The cap.** `protectLimit` is checked directly. A real file made in the test, with 20,000 empty streams, grows when protected but stays inside its real cap, and written through `protectedBytes` under a cap of its own size it is refused with `OutputLimit`.
   - **No error holds a password.** Every error the engine can throw holds neither marked password.
 - **`tests/unit/qpdf.test.ts`, or the existing qpdf test file:** `cappedWrite` and `writePercent`, as decision 5 lists.
 - **`tests/unit/run-job.test.ts`:** decision 6.

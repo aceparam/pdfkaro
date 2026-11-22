@@ -22,7 +22,7 @@
 import { inspectPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
 import { cappedWrite, finished, saidInvalidPassword } from '../qpdf';
-import { passwordArgsFor } from '../qpdf-json';
+import { isDict, passwordArgsFor } from '../qpdf-json';
 import type { Engine, EngineTools, Inspector } from '../types';
 import { acceptedPassword, PasswordRefused } from '../../widget/option-values';
 
@@ -74,28 +74,30 @@ const capabilities = ['accessibility', 'extract', 'modify', 'modifyannotations',
 
 /** Whether qpdf's `encrypt` answer is 256-bit AES, revision 6, opened by the password, with every permission. */
 export function strongEncryption(answer: unknown): boolean {
-  const encrypt = (answer as { encrypt?: Record<string, unknown> } | null)?.encrypt;
-  if (typeof encrypt !== 'object' || encrypt === null) return false;
-  const parameters = encrypt.parameters as Record<string, unknown> | undefined;
-  const allowed = encrypt.capabilities as Record<string, unknown> | undefined;
+  if (!isDict(answer) || !isDict(answer.encrypt)) return false;
+  const { encrypt } = answer;
+  const parameters = encrypt.parameters;
+  const allowed = encrypt.capabilities;
+  if (!isDict(parameters) || !isDict(allowed)) return false;
   return (
     encrypt.encrypted === true &&
     encrypt.userpasswordmatched === true &&
-    parameters?.R === 6 &&
+    parameters.R === 6 &&
     parameters.V === 5 &&
     parameters.bits === 256 &&
     parameters.stringmethod === 'AESv3' &&
     parameters.streammethod === 'AESv3' &&
     parameters.filemethod === 'AESv3' &&
-    typeof allowed === 'object' &&
-    allowed !== null &&
     capabilities.every((name) => allowed[name] === true)
   );
 }
 
 const notChecked = 'The protected file did not pass its check.';
 
-/** Checks the new file on a fresh qpdf, moving progress to 93, 96 and 100 as each step passes. */
+/**
+ * Checks the new file on a fresh qpdf, moving progress to 55, 95 and 100 as each step passes: the JSON answer is
+ * quick, `--check` with the password reads every stream and takes about as long as the write, the refusal is quick.
+ */
 async function verify(tools: EngineTools, out: Uint8Array, password: string, onStep: (percent: number) => void): Promise<void> {
   const checker = await freshQpdf(tools, out);
   const described = checker.call([`--password=${password}`, '--json=2', '--json-key=encrypt', '/in.pdf']);
@@ -107,9 +109,9 @@ async function verify(tools: EngineTools, out: Uint8Array, password: string, onS
     throw new Error(notChecked);
   }
   if (!strongEncryption(answer)) throw new Error(notChecked);
-  onStep(93);
+  onStep(55);
   if (!finished(checker.call([`--password=${password}`, '--check', '/in.pdf']).code)) throw new Error(notChecked);
-  onStep(96);
+  onStep(95);
   const without = checker.call(['--check', '/in.pdf']);
   if (finished(without.code) || !saidInvalidPassword(without.printed)) throw new Error(notChecked);
   onStep(100);
@@ -123,7 +125,7 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   if (password === undefined) throw new PasswordRefused();
   const old = passwordFrom(options);
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 });
-  const out = await protectedBytes(tools, file, old, password, (percent) => onProgress({ stage: 'writing', percent: percent * 0.9 }));
+  const out = await protectedBytes(tools, file, old, password, (percent) => onProgress({ stage: 'writing', percent: percent * 0.5 }));
   await verify(tools, out, password, (percent) => onProgress({ stage: 'writing', percent }));
   return [out];
 };

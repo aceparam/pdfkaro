@@ -12,7 +12,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 ### Is my file uploaded?
 
-No. The password is added in your browser, on your device. The file and the password are not uploaded. The page keeps them only while this tab is open, and lets go of them when you press Start again or close or leave the tab.
+No. The password is added in your browser, on your device. The file and the password are not uploaded. The page lets go of them when you press Start again, close the tab or go to another page in it, and lets go of the new password once your file is ready. Switching to another tab keeps them.
 
 ### What if I forget the password?
 
@@ -20,7 +20,7 @@ Then the file cannot be opened, and no one can get it back. This site never has 
 
 ### How long should the password be?
 
-A short password can be guessed by anyone who has the file. Use several words, or a long mix of letters, numbers and marks. Only English letters without accents, numbers, spaces and common marks can be used for now, because PDF readers treat other letters differently and the file might not open.
+A short password can be guessed by anyone who has the file. Use several words, or a long mix of letters, numbers and marks. For now, only English letters without accents, numbers, spaces and common marks can be used, because PDF readers treat other letters differently.
 
 ### My browser offered to save the password
 
@@ -36,9 +36,15 @@ The page asks for it first, to open the file. The new password replaces it, and 
 
 ### What does a password hide?
 
-It hides the pages and their sizes, the text, what the pictures show, the titles of bookmarks, the names and contents of attached files, and the file’s title and details.
+It hides the pages, the text, what the pictures show, the titles of bookmarks, the names and contents of attached files, and the file’s title and details. Some things can still be seen without it, because the PDF format leaves them so:
 
-Some things can still be seen without it, because the PDF format leaves them so: the file’s name, which now ends in “-protected”; whether the file has bookmarks, attached files or a form; roughly how large its parts are; how many pictures it has, with their size in pixels and their format; the type and size of each attached file; the names of fonts; and some other names used inside it.
+- the file’s name, which now ends in “-protected”
+- whether the file has bookmarks, attached files or a form
+- roughly how large its parts are
+- how many pictures it has, with their size in pixels and their format
+- the type and size of each attached file
+- the names of fonts, and some other names used inside it
+- the size of some drawn parts, such as form-field boxes, and each page’s size if page numbers, a watermark or a signature were added on this site
 
 A password stops someone opening the file. It does not stop someone who knows the password from passing the file on.
 

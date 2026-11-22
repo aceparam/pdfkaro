@@ -362,7 +362,44 @@ describe('what the password hides, and what the format leaves readable', () => {
     // The attached file's name, its dates and its contents are not readable.
     expect(rich).not.toContain('note.txt');
     expect(rich).not.toContain('A note kept inside');
-    expect(latin1((await protect(fixture('form.pdf'))).output)).toContain('/Helvetica');
+    const form = latin1((await protect(fixture('form.pdf'))).output);
+    expect(form).toContain('/Helvetica');
+    // A drawn part's own box, such as a form field's appearance, stays readable too.
+    expect(form).toMatch(/\/BBox\s*\[/);
+  });
+});
+
+describe('strongEncryption, the check of qpdf\'s answer', () => {
+  it('takes the answer for a protected file, and refuses each weaker or broken answer', async () => {
+    const good = await encryptionOf((await protect(fixture('text.pdf'))).output, P);
+    expect(strongEncryption({ encrypt: good })).toBe(true);
+    const parameters = good.parameters as Record<string, unknown>;
+    const capabilities = good.capabilities as Record<string, unknown>;
+    const changed = (change: Record<string, unknown>) => ({ encrypt: { ...good, ...change } });
+    expect(strongEncryption(changed({ encrypted: false }))).toBe(false);
+    expect(strongEncryption(changed({ userpasswordmatched: false }))).toBe(false);
+    expect(strongEncryption(changed({ parameters: { ...parameters, R: 5 } }))).toBe(false);
+    expect(strongEncryption(changed({ parameters: { ...parameters, V: 4 } }))).toBe(false);
+    expect(strongEncryption(changed({ parameters: { ...parameters, bits: 128 } }))).toBe(false);
+    for (const method of ['stringmethod', 'streammethod', 'filemethod']) expect(strongEncryption(changed({ parameters: { ...parameters, [method]: 'AESv2' } })), method).toBe(false);
+    for (const name of Object.keys(capabilities)) {
+      const fewer = Object.fromEntries(Object.entries(capabilities).filter(([key]) => key !== name));
+      expect(strongEncryption(changed({ capabilities: fewer })), name).toBe(false);
+      expect(strongEncryption(changed({ capabilities: { ...capabilities, [name]: false } })), name).toBe(false);
+    }
+    expect(strongEncryption(changed({ parameters: null }))).toBe(false);
+    expect(strongEncryption(changed({ capabilities: [] }))).toBe(false);
+    for (const broken of [null, undefined, {}, { encrypt: 'x' }, { encrypt: null }, { encrypt: [] }, 'encrypt', 42]) expect(strongEncryption(broken), JSON.stringify(broken)).toBe(false);
+  });
+
+  it("refuses restricted.pdf's own answer and a 128-bit RC4 file's", async () => {
+    expect(strongEncryption({ encrypt: await encryptionOf(fixture('restricted.pdf')) })).toBe(false);
+    const qpdf = await makeQpdf();
+    qpdf.write('/in.pdf', fixture('text.pdf'));
+    // Weak encryption is made here, in the test only.
+    const made = qpdf.call(['/in.pdf', '--allow-weak-crypto', '--encrypt', '--user-password=old-rc4', '--owner-password=old-rc4', '--bits=128', '--use-aes=n', '--', '/out.pdf']);
+    expect(finished(made.code)).toBe(true);
+    expect(strongEncryption({ encrypt: await encryptionOf(qpdf.read('/out.pdf'), 'old-rc4') })).toBe(false);
   });
 });
 
@@ -382,14 +419,14 @@ describe('keys, progress and the cap', () => {
     expect(Buffer.from(one).equals(Buffer.from(two))).toBe(false);
   });
 
-  it('progress: reading first, then writing percentages that never go back, with 93, 96 and 100 last', async () => {
+  it('progress: reading first, then writing percentages that never go back, the write up to 50, with 55, 95 and 100 last', async () => {
     const { progress } = await protect(fixture('pages-500.pdf'));
     expect(progress[0]).toEqual({ stage: 'reading', unit: 'file', done: 0, total: 1 });
     const percents = progress.slice(1).map((step) => (step.stage === 'writing' ? step.percent : Number.NaN));
     expect(percents.every((percent) => Number.isFinite(percent))).toBe(true);
     expect(percents).toEqual([...percents].sort((x, y) => x - y));
-    expect(percents.slice(-3)).toEqual([93, 96, 100]);
-    expect(percents.slice(0, -3).every((percent) => percent <= 90)).toBe(true);
+    expect(percents.slice(-3)).toEqual([55, 95, 100]);
+    expect(percents.slice(0, -3).every((percent) => percent <= 50)).toBe(true);
     expect(percents.length).toBeGreaterThan(4);
   });
 
