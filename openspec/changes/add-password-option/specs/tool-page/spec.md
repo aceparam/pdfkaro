@@ -75,7 +75,7 @@ A new password SHALL be two hidden one-line fields, one under the other, each wi
 #### Scenario: A space last
 
 - **WHEN** the first field holds "open sesame " and focus is still in it
-- **THEN** no sentence is shown by the field and nothing is announced, and the main button waits with the tool's first sentence under it; once focus leaves the first field, or Enter is pressed, or the main button is pressed, the field is marked invalid and "A password cannot start or end with a space." is shown between its label and the field, tied to the main button
+- **THEN** no sentence is shown by the field and nothing is announced, and the main button waits with the tool's second sentence ("Type the password again to check it.") under it; once focus leaves the first field, or Enter is pressed, or the main button is pressed, the field is marked invalid and "A password cannot start or end with a space." is shown between its label and the field, tied to the main button
 
 #### Scenario: Typing a password with a space inside, one key at a time
 
