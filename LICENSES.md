@@ -45,4 +45,4 @@ The project's own licence is not set yet. It waits on the owner's decision under
 
 `culori`, `node-html-better-parser`, `html-entities` and `tslib` are pinned under `overrides` because pdf-lib asks for open ranges (`>=4`, `>=1.5.9`, `>=2`), and a lockfile refresh must not take a new major version into shipped code. All are MIT or 0BSD with no install scripts.
 
-In CI, Playwright downloads Chromium, Firefox and WebKit builds from Microsoft's servers. Firefox and WebKit run only the Content Security Policy checks (`tests/e2e/csp.spec.ts`), to show that workers started from a `blob:` address run under the page's policy in those engines too. These downloads are outside `package-lock.json`, are used only by the tests and are never shipped.
+In CI, Playwright downloads Chromium and Firefox builds from Microsoft's servers. Firefox runs only the Content Security Policy checks (`tests/e2e/csp.spec.ts`), to show that workers started from a `blob:` address run under the page's policy in that engine too. These downloads are outside `package-lock.json`, are used only by the tests and are never shipped.

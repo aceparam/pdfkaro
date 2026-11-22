@@ -89,7 +89,7 @@ Every worker the site starts, the tool worker and any worker started inside it, 
 
 #### Scenario: Other browser engines
 
-- **WHEN** CI runs the policy checks in Firefox and WebKit
+- **WHEN** CI runs the policy checks in Firefox
 - **THEN** eval and a request to another origin are blocked in a worker started the site's way and in one nested in it, and one ordinary job of each engine kind finishes with no violation
 
 ### Requirement: The policy is checked on every build and in every end-to-end test

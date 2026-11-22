@@ -1,14 +1,12 @@
 import { existsSync } from 'node:fs';
-import { defineConfig, devices, firefox, webkit } from '@playwright/test';
+import { defineConfig, devices, firefox } from '@playwright/test';
 
-// The Content Security Policy checks (csp.spec.ts) also run in Firefox and WebKit. These projects have no
-// grepInvert, so csp.spec.ts's @desktop tests (the tag on every page) run in them too, by intent. CI installs both
-// browsers; elsewhere they run only where they are installed, so a machine with Chromium alone still
-// runs every other test.
-const otherEngines = [
-  { name: 'firefox', browser: firefox, device: devices['Desktop Firefox'] },
-  { name: 'webkit', browser: webkit, device: devices['Desktop Safari'] },
-]
+// The Content Security Policy checks (csp.spec.ts) also run in Firefox. This project has no grepInvert, so
+// csp.spec.ts's @desktop tests (the tag on every page) run in it too, by intent. CI installs Firefox; elsewhere it
+// runs only where it is installed, so a machine with Chromium alone still runs every other test.
+// WebKit is not run (owner, 22 Nov 2026): Playwright's WebKit does not report a worker started inside a worker
+// (CI run 44998603164), so the policy in PDF.js's worker is checked by hand in Safari instead (issue #7).
+const otherEngines = [{ name: 'firefox', browser: firefox, device: devices['Desktop Firefox'] }]
   .filter(({ browser }) => Boolean(process.env.CI) || existsSync(browser.executablePath()))
   .map(({ name, device }) => ({ name, use: { ...device, viewport: { width: 1280, height: 800 } }, testMatch: /csp\.spec\.ts/ }));
 

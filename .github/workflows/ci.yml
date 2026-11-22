@@ -41,7 +41,7 @@ jobs:
       - name: Content Security Policy
         run: npm run check:csp
       - name: Install the test browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps chromium firefox
       - name: End-to-end tests
         run: npm run e2e
       - name: OpenSpec changes and specs

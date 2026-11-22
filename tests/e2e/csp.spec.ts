@@ -3,7 +3,7 @@
 // imports the real file), nested ones included; and real jobs of each engine
 // kind, shown to run under it with no violation.
 //
-// The firefox and webkit projects in playwright.config.ts run this file only.
+// The firefox project in playwright.config.ts runs this file only.
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

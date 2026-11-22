@@ -19,7 +19,7 @@ A policy also adds a wall the browser enforces behind the privacy promise. With 
   - A rule in the code, not in the policy, keeps every worker on this path. A lint rule allows `new Worker` and `new SharedWorker` only in the one start helper. A check of the built files finds `new Worker(` only in that helper's code, plus PDF.js's display file, which never starts one here.
 - `'wasm-unsafe-eval'` is the one allowance beyond the site's own scripts, because qpdf and PDF.js's picture decoders are WebAssembly. There is no `'unsafe-eval'` and no `'unsafe-inline'` anywhere. No shipped code uses `eval` or `new Function` (checked in the build).
 - End-to-end tests watch every page and every job for violations. A shared test fixture listens for the `securitypolicyviolation` event on the page, and on the scope of each worker, the PDF.js worker included. Any test that sees a violation fails. Every existing end-to-end test runs under it, so every page and every tool's jobs are covered.
-- A new `csp.spec.ts` proves the policy actually blocks things, including inside a worker started the same way and a worker nested in it. Its worker checks and one ordinary job of each engine kind also run in Firefox and WebKit in CI.
+- A new `csp.spec.ts` proves the policy actually blocks things, including inside a worker started the same way and a worker nested in it. Its worker checks and one ordinary job of each engine kind also run in Firefox in CI. Safari's engine is checked by hand (issue #7).
 
 A meta tag cannot carry `frame-ancestors`, `report-uri`/`report-to` or `sandbox`. This is recorded, not worked around (design.md, Risks). A host that sends headers at launch can add `frame-ancestors 'none'` and send the same policy as a header. Where the site launches is already the owner's open question ("Pages for previews only, or for launch too?").
 
@@ -80,13 +80,13 @@ None.
   - `scripts/check-worker.mjs`, which checks where `new Worker(` appears.
   - `scripts/check-base.mjs`, which runs the CSP check on its sub-path build.
   - `eslint.config.js`. The new rules ban `new Worker` outside the start helper, and in e2e specs ban importing `test` from `@playwright/test`.
-  - `playwright.config.ts`, which gains `firefox` and `webkit` projects for the policy checks.
+  - `playwright.config.ts`, which gains a `firefox` project for the policy checks.
   - `.github/workflows/ci.yml`, with one step plus the extra browsers.
   - Every end-to-end spec's `test` import.
   - Four test helpers that fetched a `blob:` address, read a worker's own address or listed every `Blob` the page made, which the policy and the `blob:` start change (design.md decision 4, "Existing tests stay as they are, except four helpers"). Each keeps its assertion.
   - CLAUDE.md's commands list.
   - `tests/e2e/no-upload.ts` stays byte-for-byte unchanged.
-- **Dependencies:** none new. Firefox and WebKit are Playwright's own browsers, installed in CI only.
+- **Dependencies:** none new. Firefox is Playwright's own browser, installed in CI only.
 - **Page weight:** about 0.3 KB more per page by gzip for the tag, and a few hundred bytes more in the chunks loaded after a pick. The largest page today is 79.0 KB of the 100 KB budget.
 - **When WebAssembly is fetched:** unchanged, after a file is picked.
 - **Review note:** the ux-designer was not run at stage 1 because nothing visible changes. It is required at stage 2, comparing task 4.4's screenshots against `main`.
