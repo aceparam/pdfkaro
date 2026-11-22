@@ -2,7 +2,7 @@
 
 ## 1. Registry and dependencies
 
-- [ ] 1.1 Confirm that no registry entry changes and no dependency is added. Verify at the end that `git diff main --stat` shows no change to `src/tools/registry.ts`, `package.json`, `package-lock.json` or `LICENSES.md`.
+- [x] 1.1 Confirm that no registry entry changes and no dependency is added. Verify at the end that `git diff main --stat` shows no change to `src/tools/registry.ts`, `package.json`, `package-lock.json` or `LICENSES.md`.
 
 ## 2. Engine declarations
 
@@ -60,7 +60,7 @@
 ## 4. Page wiring
 
 - [x] 4.1 In `src/hooks/useToolRun.ts`, have `addFiles` call `prepare()` before it looks at the files. Make `stopThumbnail` use `dropThumbnail()` before the set has settled and end the worker only after, as today. Make `endReplacedRead` use `endWhenSettled()` and start the new read after it. Verify `npm run check`, and the client tests of 3.7.
-- [ ] 4.2 Build the wrong-kind wait (design.md, decision 9), in `useToolRun` and `ToolWorkspace`:
+- [x] 4.2 (Keyboard checked in Chromium by the end-to-end test; the screen-reader and phone checks are hand checks in issue #7.) Build the wrong-kind wait (design.md, decision 9), in `useToolRun` and `ToolWorkspace`:
   - the file's line with "Getting ready" and its Remove button, or the summary line with "Getting ready" for several files;
   - focus on that line (`summaryRef`, `tabIndex={-1}`);
   - the wait ends on `prepared`, at once on a failed set load, or after 60 seconds;
@@ -68,7 +68,7 @@
   - Remove ends the wait and the worker.
 
   Verify by the e2e check of 6.4 and by keyboard by hand (Tab reaches Remove; focus moves as described).
-- [ ] 4.3 In `useToolRun.start`, end the reading worker (`client.end()`) before `runJob`, so every job runs in a fresh worker. Update the comment. Verify `thumbnails.spec.ts` ("with PDF.js held back, Merge and download merges at once", and the main button while a thumbnail is drawn) and every tool spec still pass.
+- [x] 4.3 In `useToolRun.start`, end the reading worker (`client.end()`) before `runJob`, so every job runs in a fresh worker. Update the comment. Verify `thumbnails.spec.ts` ("with PDF.js held back, Merge and download merges at once", and the main button while a thumbnail is drawn) and every tool spec still pass.
 - [x] 4.4 Update the `why` text of `fflate`, `pdf`, `pdf.worker.min`, `pdfjs-data`, `thumbnail` and `picture-thumbnail` in `scripts/page-weight.mjs` to say when each is now fetched. Verify `npm run build && npm run weigh` passes, and record the before-pick totals and the "after a pick, at most" total before and after the change in the pull request.
 - [x] 4.5 **Owner decision (22 Nov 2026): accepted.** PDF to JPG's job start went from 213 ms to 832 ms with `text.pdf` on a desktop (+0.6 s on PDF to JPG and PNG), past the 200 ms stop; Merge at 100 MB with 4× CPU is +341 ms, Sign with text.pdf +131 ms (noisy). The owner chose to keep every job in a fresh worker; the full table is in design.md, decision 8. Measure in Chromium, at normal speed and at 4× CPU slowdown, on Merge PDF, PDF to JPG and Sign PDF (R13):
   - the extra time to start a job in a fresh worker, with `text.pdf` and with the 100 MB file from `make-large.mjs`;
@@ -103,8 +103,8 @@
   - `/%2e%2e/package.json` and a NUL are refused;
   - `POST` is refused;
   - slow mode delays a P file by about 12 seconds.
-- [ ] 6.2 Write `tests/e2e/tool-files.ts`. It builds each tool's exact list of files from a `LibraryName` → built-file pattern table, the shared files, and the static imports the engine's built chunk names in `dist/`. Replace the 14 hand-written lists in the tool specs with it. Verify every tool spec's no-upload test passes, with each built list equal to the hand-written one it replaces, or the difference explained in the pull request.
-- [ ] 6.3 Write `tests/e2e/uniform-requests.spec.ts`, tagged `@desktop`, with one test per page in `widgetPages` and the input table of design.md, decision 11.
+- [x] 6.2 Write `tests/e2e/tool-files.ts`. It builds each tool's exact list of files from a `LibraryName` → built-file pattern table, the shared files, and the static imports the engine's built chunk names in `dist/`. Replace the 14 hand-written lists in the tool specs with it. Verify every tool spec's no-upload test passes, with each built list equal to the hand-written one it replaces, or the difference explained in the pull request.
+- [x] 6.3 Write `tests/e2e/uniform-requests.spec.ts`, tagged `@desktop`, with one test per page in `widgetPages` and the input table of design.md, decision 11.
   - Each input runs in a new context with `watchPolicy`, and no `route` or `routeFromHAR`.
   - Job inputs double as pick inputs; duplicates are dropped.
   - A phase ends when every request expected from `tool-files.ts` has arrived and none is open, then `quietMs`. The job phase's expected set is the job libraries not already fetched at the pick; the rest come from the cache.
@@ -113,16 +113,16 @@
 
   For each page, look in `tests/fixtures/README.md` and the tool's spec for an input whose job fails in the browser, and add it if there is one; name the pages without one in the pull request. Verify the spec passes, and that it fails, naming `/compress-pdf`, when `compress-pdf`'s `needsLossless` gate on `fflate` is put back locally (do not commit it).
 - [x] 6.4 Add the slow-mode cases (R2) to the spec: `text.pdf` against `damaged-xref.pdf` on `/merge-pdf`, and one file against three on `/merge-pdf`, each failing if a request differs or repeats. Add, in its own context in slow mode and outside the comparisons, the wrong-kind "Getting ready" check: the line, its Remove button, focus on it, then the sentence and focus on the picker. Verify both pass, and that the slow-mode case fails when the thumbnail limit is put back to count from the send (try locally, do not commit).
-- [ ] 6.5 Update existing end-to-end checks that now contradict the rule. Fold `pdf-to-images.spec.ts` "a one-page file fetches fflate too, and the same files as a longer one" into the new spec, and fix any check that `fflate` or PDF.js is absent after a pick or a job in a case that now fetches it. Keep checks that a file is absent before a pick or before the main button. Verify `npm run build && npm run e2e -- --trace off` passes.
-- [ ] 6.6 Record the new spec's run time in CI and locally in the pull request. Verify the time is recorded. If it passes about 5 minutes, stop and report it rather than cutting inputs.
+- [x] 6.5 Update existing end-to-end checks that now contradict the rule. Fold `pdf-to-images.spec.ts` "a one-page file fetches fflate too, and the same files as a longer one" into the new spec, and fix any check that `fflate` or PDF.js is absent after a pick or a job in a case that now fetches it. Keep checks that a file is absent before a pick or before the main button. Verify `npm run build && npm run e2e -- --trace off` passes.
+- [ ] 6.6 (Locally: 4.7 min for `uniform-requests` and `host-log` alone, inside a full run of 14.6 min; the CI time waits for the pull request.) Record the new spec's run time in CI and locally in the pull request. Verify the time is recorded. If it passes about 5 minutes, stop and report it rather than cutting inputs.
 
 ## 7. No-upload test
 
-- [ ] 7.1 In `uniform-requests.spec.ts`, check every recorded request with `violations` from `tests/e2e/no-upload.ts`, against the tool's list from `tool-files.ts`. Use the input file names, their stems, the passwords, the typed name and text, and the picture names as secrets. Verify the spec passes, and that the existing no-upload self-test in `no-upload.spec.ts` still passes.
+- [x] 7.1 In `uniform-requests.spec.ts`, check every recorded request with `violations` from `tests/e2e/no-upload.ts`, against the tool's list from `tool-files.ts`. Use the input file names, their stems, the passwords, the typed name and text, and the picture names as secrets. Verify the spec passes, and that the existing no-upload self-test in `no-upload.spec.ts` still passes.
 
 ## 8. Screenshots
 
-- [ ] 8.1 Take screenshots at 360px and 1280px wide of:
+- [x] 8.1 Take screenshots at 360px and 1280px wide of:
   - `/privacy` with the new sentences;
   - `/merge-pdf` during a wrong-kind pick in slow mode, showing "notes.docx, Getting ready" with its Remove button;
   - the picker with the refusal sentence after the wait.
@@ -131,7 +131,7 @@
 
 ## 9. Checks and review
 
-- [ ] 9.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify each passes, and paste the real output in the pull request.
+- [x] 9.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify each passes, and paste the real output in the pull request.
 - [ ] 9.2 Draft the hand and release checks for issue #7, and verify the draft is in the pull request description:
   - the host's record for `text.pdf` against `damaged-xref.pdf` on one PDF page in Firefox and in Safari;
   - the live host's `Cache-Control` against the 10 minutes the Privacy sentences rely on;
