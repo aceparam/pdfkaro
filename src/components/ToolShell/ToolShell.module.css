@@ -11,3 +11,7 @@
 .below p {
   margin: 0;
 }
+/* The link to the group's hub page stands apart from the related list, with no heading or border. */
+.below p.hub {
+  margin-top: 2.25rem;
+}

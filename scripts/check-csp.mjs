@@ -184,7 +184,12 @@ export function checkPage(html) {
     const src = attribute(tag.attributes, 'src');
     if (tag.name === 'script' && src !== undefined && isOtherSite(src)) problems.push(`a script comes from another site: ${src}`);
     const href = attribute(tag.attributes, 'href');
-    if (tag.name === 'link' && href !== undefined && isOtherSite(href)) problems.push(`a <link> points to another site: ${href}`);
+    // A link whose only rel is "canonical" names the page's own address for search engines; a browser
+    // never fetches it, and it is absolute by rule (scripts/check-seo.mjs checks its value). Any other
+    // link, or a rel that adds another word to canonical, may load something, so it must stay on the site.
+    const rels = (attribute(tag.attributes, 'rel') ?? '').trim().toLowerCase().split(/\s+/);
+    const onlyNames = rels.length === 1 && rels[0] === 'canonical';
+    if (tag.name === 'link' && href !== undefined && isOtherSite(href) && !onlyNames) problems.push(`a <link> points to another site: ${href}`);
   }
   return problems;
 }
