@@ -155,6 +155,10 @@ Today an input file's own password stays in `useToolRun`'s `passwords` map throu
 - **Other tools:** every tool that opens a protected input forgets its password once the result shows. Their result screens have no way back to the files, so nothing they do changes; their e2e tests pass unchanged. Named in the pull request as a shared change.
 - **Tests:** `tests/unit/run-job.test.ts` checks the input passwords are forgotten after a file and after no new file, before anything else clears them, and kept after an engine failure, a throw and a cancel; Unlock's e2e test checks that after a result and "Start again", the same file asks again, and that after a failure "Go back to your file" needs no password.
 
+### 5b. Shared fix: only the latest read of a file is shown (stage 2)
+
+The password field stays on screen while a try is read ("Trying the password"), so a visitor can send a second try before the first is answered. The worker reads both at once (`worker-core.ts` does not queue messages), so the answers can come back in either order, and `useToolRun`'s `inspect` dispatched each one: a wrong try answered after the right one put the file back to "wrong-password", with no main button. Each read of a file now takes a ticket in `useToolRun`; an answer whose ticket is no longer the file's latest is dropped. Nothing else changes: one read at a time behaves as before. Tested in `tests/e2e/unlock-pdf.spec.ts` with a stand-in engine that answers the wrong try last.
+
 ### 6. The typed password's life, and the Privacy page facts
 
 Recorded for the Phase 1 site-work change that drafts the Privacy page, and in Unlock's `CLAUDE.md` entry after merge:
@@ -244,6 +248,8 @@ None added. qpdf 12.2.0 (`@neslinesli93/qpdf-wasm` 0.3.1) and PDF.js are already
 - **[A probe before writing]** One extra parse. → Small next to the write and the check; it lets a file with nothing to remove end without writing.
 - **[Certificate files elsewhere]** Other tools still call them damaged. → Found, not changed; named in the pull request.
 - **[Certified files]** Adobe Reader may still limit a certified file by its certification. → The result note says only that restrictions are removed; a hand check tries one.
+- **[A way back to the files after a result]** Input passwords are now forgotten after a result, so a result that later goes back to the files (such as the owner's "Redoing a signature" question) must inspect the files again or mark protected files as needing their password. → Named in the pull request beside that question.
+- **[A copied writer]** `unprotectLimit` and `unprotectedBytes` copy Protect's `protectLimit` and `protectedBytes`. → To be shared as one `rewrite` helper in `qpdf.ts`, in its own change, before the next one-file qpdf writer.
 - **[Signatures]** A digital signature stops being valid. → Said in the result and the page text; the owner's "Signed files" question.
 
 ## Migration Plan

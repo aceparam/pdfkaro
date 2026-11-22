@@ -12,7 +12,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 ### Is my file uploaded?
 
-No. The protection is removed in your browser, on your device. The file and the password are not uploaded. The page lets go of the password once the new file is ready, and of both when you press Start again, close the tab or go to another page in it.
+No. The protection is removed in your browser, on your device. The file and the password are not uploaded. The page lets go of the password once the new file is ready, and of both when you press Start again, close the tab, or leave this page.
 
 ### I have forgotten the password
 

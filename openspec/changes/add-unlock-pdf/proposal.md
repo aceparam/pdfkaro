@@ -34,10 +34,12 @@ Unlock PDF (`/unlock-pdf`) is the next Phase 1 tool in catalogue order: the seco
 
 ### Shared changes riding along
 
-Two small shared changes, each named in the pull request:
+Three small shared changes, each named in the pull request:
 
 1. **Input passwords are forgotten when a job ends with a file or with no new file** (privacy reviewer, stage 1). `runJob` (`src/hooks/run-job.ts`) already forgets new passwords at that point; it will also forget the input files' own passwords through a second callback that empties `useToolRun`'s `passwords` map. Nothing on a result screen can use them: no result offers to go back to the files, and "Start again" already forgets them. A failure, a run that throws and Cancel keep them, for "Go back to your file". Every tool that opens a protected file is affected only in this.
 2. **`readPdf` in `src/engines/inspect.ts`** (architect, stage 1): the qpdf call `inspectPdf` makes, exported as a function that gives the outcome and qpdf's printed text, so Unlock can tell a certificate from damage without parsing the file twice. `inspectPdf` returns its outcome as now; no behaviour changes. The printed text never leaves the worker.
+
+3. **Only the latest read of a file is shown** (found at stage 2): a wrong password answered after the right one no longer replaces "ready" (`useToolRun`, design 5b).
 
 ### Scope
 

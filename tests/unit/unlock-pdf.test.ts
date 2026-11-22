@@ -462,6 +462,41 @@ describe('the check, progress and the cap', () => {
     await expect(unprotectedBytes(tools, file, P, () => {}, 10_000)).rejects.toBeInstanceOf(OutputLimit);
   });
 
+  it('running out of memory while the result is read or the input\'s answer is parsed comes out of run unchanged', async () => {
+    // The third qpdf made is the checker: its first call (the reading of the result) runs out of memory.
+    let made = 0;
+    const checkerOutOfMemory: EngineTools = {
+      qpdf: async () => {
+        const real = await makeQpdf();
+        made += 1;
+        if (made !== 3) return real;
+        return {
+          ...real,
+          call: () => {
+            throw new RangeError('Array buffer allocation failed');
+          },
+        } satisfies Qpdf;
+      },
+    };
+    const failed = (await unprotect(fixture('restricted.pdf'), [], checkerOutOfMemory).catch((error: unknown) => error)) as Error;
+    expect(failed).toBeInstanceOf(RangeError);
+    expect(failed.message).toBe('Array buffer allocation failed');
+    expect(made).toBe(3);
+
+    // The input's answer, parsed: an out-of-memory error from JSON.parse goes through too.
+    const parse = JSON.parse;
+    JSON.parse = () => {
+      throw new RangeError('Invalid string length: out of memory');
+    };
+    try {
+      const parsed = (await isEncrypted(tools, fixture('restricted.pdf'), undefined).catch((error: unknown) => error)) as Error;
+      expect(parsed).toBeInstanceOf(RangeError);
+      expect(parsed.message).toBe('Invalid string length: out of memory');
+    } finally {
+      JSON.parse = parse;
+    }
+  });
+
   it('isEncrypted refuses an answer without a boolean, and holds nothing of it', async () => {
     const fake: EngineTools = {
       qpdf: async () => {

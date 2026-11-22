@@ -16,7 +16,7 @@ function setUp(answer: () => Promise<RunResult>, hasNoSmallerWords = false) {
   const holder: { current: NewPasswords } = { current: { newPassword: { first: typed, again: typed } } };
   // Like useToolRun's map of each listed file's own password.
   const inputPasswords = new Map([['f1', 'open-sesame']]);
-  // What each forget saw of the other holder when it ran, so a test can tell they ran before the job returned.
+  // Which forgets ran, in order, so a test can tell they ran before the job returned.
   const order: string[] = [];
   const sent: { options?: Record<string, unknown>; passwords?: (string | undefined)[] } = {};
   const progress: Progress[] = [];

@@ -328,6 +328,29 @@ test.describe('removing the protection', () => {
     await expectNotInMarkup(page, open);
   });
 
+  test('a wrong password still being tried, then the right one: the later answer wins, and the main button stays', async ({ page, context }) => {
+    // The wrong try's answer is held back until the right one has been answered, so it arrives last, as it can when
+    // the worker reads two tries at once.
+    const slowWrong = `export const inspect = async (file, password) => { if (password === undefined) return { kind: 'needs-password' }; if (password === '${open}') return { kind: 'ready', pages: 3 }; await new Promise((resolve) => setTimeout(resolve, 1500)); return { kind: 'wrong-password' }; };
+      export const run = async () => [new Uint8Array([37, 80, 68, 70, 45])];`;
+    await context.route(engineFile, (route) => route.fulfill({ contentType: 'text/javascript', body: slowWrong }));
+    await openPage(page);
+    await pick(page, 'password.pdf');
+    const field = page.getByLabel('Password for password.pdf');
+    await expect(field).toBeFocused({ timeout: 30000 });
+    await field.fill('not-it');
+    await page.keyboard.press('Enter');
+    await expect(rows(page)).toContainText('Trying the password');
+    await field.fill(open);
+    await page.keyboard.press('Enter');
+    await expect(mainButton(page)).toBeVisible({ timeout: 30000 });
+    // Well after the wrong try's answer has come back.
+    await page.waitForTimeout(2500);
+    await expect(mainButton(page)).toBeVisible();
+    await expect(page.getByText('That password did not open the file.')).toHaveCount(0);
+    await expect(passwordField(page)).toHaveCount(0);
+  });
+
   test('password.pdf opens with its password for permissions, owner-secret, too', async ({ page }) => {
     test.setTimeout(120_000);
     await openPage(page);
@@ -544,7 +567,7 @@ test.describe('the words below the tool', () => {
       'How to remove a password from a PDF',
       'Press “Remove protection and download”',
       'Is my file uploaded?',
-      'The page lets go of the password once the new file is ready',
+      'The page lets go of the password once the new file is ready, and of both when you press Start again, close the tab, or leave this page.',
       'It does not guess, crack or recover one.',
       'No password is asked for',
       'Remove them only from a file you are allowed to change.',
@@ -657,7 +680,7 @@ test.describe('nothing is uploaded', () => {
     expect(heard.errors).toEqual([]);
   });
 
-  test('restricted.pdf, with no password typed: its page text in no request and not in either console', async ({ page, context, baseURL }) => {
+  test('restricted.pdf, with no password typed: its name and page text in no request and not in either console', async ({ page, context, baseURL }) => {
     test.setTimeout(120_000);
     const text = await firstPageText(new Uint8Array(readFileSync(fixture('restricted.pdf'))));
     expect(text.length).toBeGreaterThan(10);
@@ -666,7 +689,7 @@ test.describe('nothing is uploaded', () => {
     const seen = watch(context, page);
     await pickReady(page, 'restricted.pdf');
     await removeAndDownload(page);
-    const secrets = withEncoded([text, ...pageLines(text)]);
+    const secrets = withEncoded(['restricted.pdf', 'restricted', text, ...pageLines(text)]);
     await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     await expectNothingHeld(page, context, secrets, heard.said);

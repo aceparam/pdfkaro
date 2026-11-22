@@ -26,6 +26,7 @@ import { freshQpdf, passwordFrom } from '../plain';
 import { cappedWrite, finished, saidInvalidPassword, type Qpdf } from '../qpdf';
 import { isDict, passwordArgsFor } from '../qpdf-json';
 import type { Engine, EngineTools, Inspector } from '../types';
+import { outOfMemory } from '../../widget/memory';
 
 type Options = { passwords?: unknown };
 
@@ -54,7 +55,9 @@ export function encryptedIn(reader: Qpdf, password: string | undefined): boolean
   try {
     const answer: unknown = JSON.parse(out);
     encrypted = isDict(answer) && isDict(answer.encrypt) ? answer.encrypt.encrypted : undefined;
-  } catch {
+  } catch (error) {
+    // Running out of memory goes through unchanged, so the page says so; anything else is an answer not understood.
+    if (outOfMemory(error)) throw error;
     encrypted = undefined;
   }
   if (typeof encrypted !== 'boolean') throw new Error(unreadable);
@@ -92,13 +95,15 @@ const notChecked = 'The unprotected file did not pass its check.';
 async function verify(tools: EngineTools, out: Uint8Array, onStep: (percent: number) => void): Promise<void> {
   // One fresh qpdf holds only the new file for both steps: the JSON reading first, as it must come before any write.
   const checker = await freshQpdf(tools, out);
-  let encrypted: boolean;
+  // A reading that fails is the check failing, with the check's own sentence; running out of memory goes through
+  // unchanged, by the test the worker uses (`outOfMemory`), so the page says so.
+  let encrypted: boolean | undefined;
   try {
     encrypted = encryptedIn(checker, undefined);
-  } catch {
-    throw new Error(notChecked);
+  } catch (error) {
+    if (outOfMemory(error)) throw error;
   }
-  if (encrypted) throw new Error(notChecked);
+  if (encrypted !== false) throw new Error(notChecked);
   onStep(55);
   if (!finished(checker.call(['--check', '/in.pdf']).code)) throw new Error(notChecked);
   onStep(100);
