@@ -92,7 +92,9 @@ function scan(html) {
   return { tags, blocks };
 }
 
-const sha256 = (text) => `'sha256-${createHash('sha256').update(Buffer.from(text, 'utf8')).digest('base64')}'`;
+// The HTML parser turns CR LF and a lone CR into LF before a block's text exists, so the hash is over that.
+const newlines = (text) => text.split('\r\n').join('\n').split('\r').join('\n');
+const sha256 = (text) => `'sha256-${createHash('sha256').update(Buffer.from(newlines(text), 'utf8')).digest('base64')}'`;
 
 const expected = {
   'default-src': ["'none'"],

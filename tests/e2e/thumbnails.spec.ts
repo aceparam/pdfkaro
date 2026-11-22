@@ -242,6 +242,8 @@ test.describe('thumbnails are forgotten with their files', () => {
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
     await expect(pictures(page)).toHaveCount(1);
     expect(await stillOpen(page, [removed!])).toEqual([false]);
+    // The kept file's picture still opens, so the check above can tell the two apart.
+    expect(await stillOpen(page, await addresses(page))).toEqual([true]);
   });
 
   test('a picture that arrives after its file was removed is thrown away before any address is made', async ({ page }) => {
@@ -297,6 +299,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     await pick(page, ['text.pdf', 'mixed.pdf']);
     await expect(pictures(page)).toHaveCount(2, { timeout: 20000 });
     let urls = await addresses(page);
+    expect(await stillOpen(page, urls)).toEqual([true, true]);
     await mainButton(page).click();
     await page.getByRole('button', { name: 'Start again' }).click();
     await expect(page.locator('astro-island img')).toHaveCount(0);
@@ -305,6 +308,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     await pick(page, ['text.pdf', 'scanned.pdf']);
     await expect(pictures(page)).toHaveCount(2, { timeout: 20000 });
     urls = await addresses(page);
+    expect(await stillOpen(page, urls)).toEqual([true, true]);
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
     await expect(page.locator('astro-island img')).toHaveCount(0);
     expect(await stillOpen(page, urls)).toEqual([false, false]);

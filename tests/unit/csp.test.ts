@@ -52,6 +52,25 @@ describe('inlineBlocks', () => {
   });
 });
 
+describe('line ends', () => {
+  it('hashes CR LF and a lone CR as LF, as a browser reads them', () => {
+    expect(inlineBlocks(page('', '<script>a()\r\nb()\rc()</script>'))).toEqual([{ kind: 'script', text: 'a()\nb()\nc()' }]);
+    expect(policyFor(page('', '<style>p{}\r\nq{}</style>'))).toContain(hashOf('p{}\nq{}'));
+  });
+
+  it('the build check hashes them the same way', () => {
+    const html = withPolicy(page('', '<script>a()\r\nb()\rc()</script><style>p{}\r\nq{}</style>'));
+    expect(html).toContain(hashOf('a()\nb()\nc()'));
+    expect(checkPage(html)).toEqual([]);
+    // A policy holding the hash of the raw CR LF text is refused: no block on the page has that text.
+    const raw = html.replace(hashOf('a()\nb()\nc()'), hashOf('a()\r\nb()\rc()'));
+    expect(checkPage(raw)).toEqual([
+      'an inline script has no hash in the policy: "a()\\r\\nb()\\rc()"',
+      `script-src lists ${hashOf('a()\r\nb()\rc()')}, which matches no block on the page`,
+    ]);
+  });
+});
+
 describe('policyFor', () => {
   it('lists no hash on a page with no inline block', () => {
     expect(policyFor(page('<link rel="stylesheet" href="/_astro/a.css">'))).toBe(fixed);

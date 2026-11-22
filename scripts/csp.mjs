@@ -63,7 +63,8 @@ export function inlineBlocks(html) {
   for (const match of html.matchAll(/<(script|style)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
     const kind = match[1].toLowerCase();
     const attributes = attributesOf(match[2]);
-    const text = match[3];
+    // A browser reads CR LF and a lone CR as LF before it sees the block, so it hashes the text that way.
+    const text = match[3].replace(/\r\n?/g, '\n');
     if (kind === 'script' && runsAsScript(attributes) && text !== '') blocks.push({ kind: 'script', text });
     if (kind === 'style' && appliesAsStyle(attributes)) blocks.push({ kind: 'style', text });
   }

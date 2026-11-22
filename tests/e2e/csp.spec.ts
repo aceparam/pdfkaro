@@ -162,15 +162,28 @@ test.describe('real jobs run under the policy, with no violation', () => {
   };
 
   test('Merge PDF (qpdf): the tool worker and PDF.js worker both start from blob: addresses', async ({ page }) => {
+    // The page makes the tool worker's start script; PDF.js's is made inside the tool worker, out of the page's sight.
+    await page.addInitScript(() => {
+      const scripts: string[] = [];
+      (window as unknown as { workerScripts: string[] }).workerScripts = scripts;
+      const create = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = (object: Blob | MediaSource) => {
+        const url = create(object);
+        if (object instanceof Blob && object.type === 'text/javascript') scripts.push(url);
+        return url;
+      };
+    });
     const workers = startedWorkers(page);
     await open(page, '/merge-pdf');
     await page.locator('input[type=file]').first().setInputFiles([fixture('text.pdf'), fixture('images.pdf')]);
     await expect(page.locator('astro-island ol img')).toHaveCount(2, { timeout: 20000 });
     await page.getByRole('button', { name: 'Merge and download' }).click();
     await expect(page.getByRole('heading', { name: 'Your merged file is ready' })).toBeVisible({ timeout: 60000 });
-    // At least a tool worker and the PDF.js worker it started for the thumbnails.
-    expect(workers.length).toBeGreaterThanOrEqual(2);
     expect(workers.every((url) => url.startsWith('blob:'))).toBe(true);
+    // At least one tool worker, started by the page, and one PDF.js worker, started inside a tool worker.
+    const madeByPage = await page.evaluate(() => (window as unknown as { workerScripts: string[] }).workerScripts);
+    expect(workers.filter((url) => madeByPage.includes(url)).length).toBeGreaterThanOrEqual(1);
+    expect(workers.filter((url) => !madeByPage.includes(url)).length).toBeGreaterThanOrEqual(1);
   });
 
   test('PDF to JPG (PDF.js drawing and its picture decoders)', async ({ page }) => {

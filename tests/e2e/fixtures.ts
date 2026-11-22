@@ -25,6 +25,40 @@ const marker = '[pdfkaro csp violation] ';
 // The watches opened during the current test; the automatic fixture checks them all after it.
 let current: PolicyViolation[][] = [];
 
+// Every page and worker watched in the current test, each able to say when its console has caught up.
+// A violation's line can reach the test a moment after the test's last step, so before the check each live
+// page and worker writes a line of its own and the check waits for it, at most two seconds. Console lines from
+// one page or worker arrive in order, so once that line is in, every earlier one is too. A page or worker
+// already closed is skipped.
+const sentinel = '[pdfkaro csp watch caught up] ';
+const flushWait = 2000;
+let flushers: (() => Promise<void>)[] = [];
+
+function flusher(target: { evaluate(fn: (token: string) => void, token: string): Promise<unknown> }) {
+  const waiting = new Map<string, () => void>();
+  const onConsole = (message: ConsoleMessage) => {
+    const done = waiting.get(message.text());
+    if (done) {
+      waiting.delete(message.text());
+      done();
+    }
+  };
+  const flush = async () => {
+    const token = `${sentinel}${Math.random()}`;
+    const arrived = new Promise<void>((done) => waiting.set(token, done));
+    try {
+      await target.evaluate((line) => console.log(line), token);
+    } catch {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([arrived, new Promise<void>((done) => (timer = setTimeout(done, flushWait)))]);
+    clearTimeout(timer);
+  };
+  flushers.push(flush);
+  return onConsole;
+}
+
 function readLine(where: string, records: PolicyViolation[]) {
   return (message: ConsoleMessage) => {
     const text = message.text();
@@ -36,6 +70,7 @@ function readLine(where: string, records: PolicyViolation[]) {
 
 function watchWorker(worker: Worker, records: PolicyViolation[]) {
   worker.on('console', readLine(`worker ${worker.url()}`, records));
+  worker.on('console', flusher(worker));
   // The tool client ends a worker after every job, so it may be gone before the listener is added.
   worker
     .evaluate((line) => {
@@ -51,8 +86,11 @@ function watchWorker(worker: Worker, records: PolicyViolation[]) {
 function watchPage(page: Page, records: PolicyViolation[]) {
   // Playwright gives the page a worker's console lines too; those are read from the worker itself, below.
   const fromPage = readLine('page', records);
+  const caughtUp = flusher(page);
   page.on('console', (message) => {
-    if (!message.worker()) fromPage(message);
+    if (message.worker()) return;
+    fromPage(message);
+    caughtUp(message);
   });
   page.on('worker', (worker) => watchWorker(worker, records));
 }
@@ -92,10 +130,13 @@ export const test = base.extend<PolicyFixtures>({
   policyViolations: [
     async ({ context, blocksOnPurpose }, use) => {
       current = [];
+      flushers = [];
       const records = await watchPolicy(context);
       await use(records);
+      await Promise.all(flushers.map((flush) => flush()));
       const seen = current.flat();
       current = [];
+      flushers = [];
       if (!blocksOnPurpose) {
         expect(
           seen.map(({ where, directive, blocked }) => `${directive} blocked ${blocked || '(inline)'} in the ${where}`),

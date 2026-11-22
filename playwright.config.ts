@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices, firefox, webkit } from '@playwright/test';
 
-// The Content Security Policy checks (csp.spec.ts) also run in Firefox and WebKit. CI installs both
+// The Content Security Policy checks (csp.spec.ts) also run in Firefox and WebKit. These projects have no
+// grepInvert, so csp.spec.ts's @desktop tests (the tag on every page) run in them too, by intent. CI installs both
 // browsers; elsewhere they run only where they are installed, so a machine with Chromium alone still
 // runs every other test.
 const otherEngines = [

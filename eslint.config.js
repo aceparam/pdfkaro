@@ -14,6 +14,7 @@ const workerStarts = [
   'NewExpression[callee.name=/^(Shared)?Worker$/]',
   'NewExpression[callee.property.name=/^(Shared)?Worker$/]',
   'NewExpression[callee.property.value=/^(Shared)?Worker$/]',
+  'NewExpression[callee.property.quasis.0.value.raw=/^(Shared)?Worker$/]',
 ].map((selector) => ({
   selector,
   message: 'Start a worker only with workerFromBlob in src/workers/start-worker.ts, so it runs under the page policy.',

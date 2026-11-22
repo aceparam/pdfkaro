@@ -159,9 +159,11 @@ for (const [what, pattern, markers] of [
 // address. The one named exception is PDF.js's display file, whose own worker starts are never reached:
 // the site sets GlobalWorkerOptions.workerPort and never workerSrc or rendererSrc (a unit test checks).
 // No SharedWorker is started anywhere.
-const workerStart = /new\s+(?:[\w$]+\.)*(Shared)?Worker\s*\(/g;
+// `new Worker(`, `new self.Worker(`, and a computed `new globalThis["Worker"](`, '…' or `…` form.
+const workerStart = /new\s+(?:[\w$]+(?:\.|\[\s*["'`](?=(?:Shared)?Worker["'`])))*(Shared)?Worker(?:["'`]\s*\])?\s*\(/g;
 const blobText = 'new Blob([`import ${JSON.stringify(';
 let helperStarts = 0;
+const helperFiles = [];
 for (const name of files.filter((each) => /\.m?js$/.test(each))) {
   const source = readFileSync(join(assets, name), 'utf8');
   for (const match of source.matchAll(workerStart)) {
@@ -182,12 +184,18 @@ for (const name of files.filter((each) => /\.m?js$/.test(each))) {
       object !== null &&
       started !== null &&
       started[1] === object[1];
-    if (isHelper) helperStarts += 1;
+    if (isHelper) {
+      helperStarts += 1;
+      helperFiles.push(name);
+    }
     else problems.push(`${name} starts a worker outside the blob: start helper (src/workers/start-worker.ts), so it would run with no policy.`);
   }
 }
-// The page starts the tool worker and the tool worker starts PDF.js's: the helper is in both files.
-if (helperStarts < 2) problems.push(`Expected the blob: start helper in the page's code and in the tool worker, found it ${helperStarts} time(s).`);
+// The page starts the tool worker and the tool worker starts PDF.js's: the helper starts a worker in the page's
+// workspace chunk and in the tool worker file, once each.
+const helperIn = (pattern) => helperFiles.filter((name) => pattern.test(name)).length;
+if (helperIn(/^ToolWorkspace\.[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the page's ToolWorkspace chunk, found ${helperIn(/^ToolWorkspace\./)}.`);
+if (helperIn(/^tool\.worker-[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the tool worker file, found ${helperIn(/^tool\.worker-/)}.`);
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
