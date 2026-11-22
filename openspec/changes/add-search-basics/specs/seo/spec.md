@@ -58,6 +58,11 @@ Every page except the 404 page SHALL carry `og:type` ("website"), `og:title` and
 - **WHEN** the social image is reviewed, and again cropped to a centred square
 - **THEN** it shows "PDFkaro" and the tagline as plain text on the site's background, with no picture, icon, shape, gradient or shadow, and both lines are whole in the square
 
+#### Scenario: The tagline stops being true
+
+- **WHEN** the tagline, which is the image's text and alt text, says "browser" or "device" and a published tool does not run in the browser, as a test entry does
+- **THEN** a unit test fails, and its message says to change the tagline and make `public/social.png` again with `scripts/social-image.mjs`
+
 #### Scenario: Weight and policy
 
 - **WHEN** any page is loaded

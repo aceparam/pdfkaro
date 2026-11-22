@@ -16,7 +16,7 @@ The site SHALL generate one page for each URL the registry serves, from `src/pag
 
 ### Requirement: Seven groups
 
-The registry SHALL place every tool in exactly one of seven groups: Organise pages, Make smaller and fix, Convert to PDF, Convert from PDF, Edit and sign, Protect, Read and check. Each group SHALL declare its hub page's address, title, description and sentence, and SHALL have a hub page once it has a published tool, at an address that is no tool slug or site page. (SPEC.md: Tool catalogue; SEO, Site-wide)
+The registry SHALL place every tool in exactly one of seven groups: Organise pages, Make smaller and fix, Convert to PDF, Convert from PDF, Edit and sign, Protect, Read and check. Each group SHALL declare its hub page's address, title, description, sentence and whether its words claim the device, and SHALL have a hub page once it has a published tool, at an address that is no tool slug or site page. (SPEC.md: Tool catalogue; SEO, Site-wide)
 
 #### Scenario: A hub page is opened
 
@@ -38,15 +38,25 @@ The registry SHALL place every tool in exactly one of seven groups: Organise pag
 - **WHEN** the site is built while "Read and check" has no published tool
 - **THEN** it has no hub page, no home heading and no sitemap entry, and its first tool's change adds them with no hand-written list
 
+#### Scenario: The hub rules rest on open owner questions
+
+- **WHEN** hub pages are built while owner questions 1 and 3 of `add-search-basics` (hub addresses, no hub page for an empty group) are open
+- **THEN** the addresses and the empty-group rule are the agent's defaults, the pull request says so, and the "Definition of done, The site" hub item is reported as not passed until the owner answers
+
 #### Scenario: The registry test checks the groups
 
 - **WHEN** the registry test runs
-- **THEN** it fails unless every hub address is lowercase with hyphens, unique, and equal to no catalogue slug and no site page path, and every hub title is under 60 characters and ends with the brand, every hub description is under 155 characters, and titles and descriptions differ from every other page's
+- **THEN** it fails unless every hub address is lowercase with hyphens, unique, and equal to no catalogue slug, footer page path, `/404`, `/sitemap.xml` or `/robots.txt`, and every hub title is under 60 characters and ends with the brand, every hub description is under 155 characters, and the titles and descriptions of tool pages and hub pages all differ from each other
 
 #### Scenario: A hub's words claim the device
 
-- **WHEN** a group's sentence or description says files stay on the device or that its tools run in the browser
-- **THEN** the registry test fails if any published tool in that group runs on the server
+- **WHEN** a group's title, sentence or description matches `/device|browser|upload|never leaves|not sent/i`
+- **THEN** the registry test fails unless that group declares that its words claim the device, and fails if a group that declares so has any published tool that does not run in the browser
+
+#### Scenario: A server tool joins a group that claims the device
+
+- **WHEN** a test entry adds a server tool to a group whose words claim the device
+- **THEN** the registry test fails and names the group
 
 #### Scenario: Keyboard and screen reader
 

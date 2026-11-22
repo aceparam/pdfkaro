@@ -13,3 +13,8 @@ The site SHALL meet these checks: the speed and Lighthouse targets of the `seo` 
 
 - **WHEN** the site is built in CI
 - **THEN** the search check of the `seo` capability confirms the unique titles and descriptions and the sitemap's pages, so this part of the site check is never left to launch day
+
+#### Scenario: The sitemap item rests on an open owner question
+
+- **WHEN** the site checks are reported while owner question 2 of `add-search-basics` (placeholders out of the sitemap) is open
+- **THEN** the "Definition of done, The site" item "the sitemap lists every page" is reported as not passed, because the rule that leaves placeholders out is the agent's default, not the owner's
