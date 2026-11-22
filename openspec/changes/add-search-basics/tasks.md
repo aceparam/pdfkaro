@@ -136,7 +136,7 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
 - [x] 6.1 Run `no-upload.spec.ts` and every tool's no-upload test with `tests/e2e/no-upload.ts` unchanged. Confirm in a test run that no page requests `social.png`, `sitemap.xml` or `robots.txt`. Verify: they pass, and `git diff main -- tests/e2e/no-upload.ts` is empty.
 - [x] 6.2 Run `npm run weigh` before (on `main`) and after, and record each page's size in the pull request. Verify: every page stays under 100 KB, no page grows by more than 1 KB by gzip, and the home page's size is unchanged apart from its head tags.
 - [x] 6.3 Confirm no dependency was added, so `LICENSES.md` needs no new line. Verify: `git diff main -- package-lock.json` is empty and `package.json` changes only the script and `engines`.
-- [ ] 6.4 Add to the hand checks in issue #7: with VoiceOver in Safari (macOS and iOS), a hub page and a tool page's related tools are announced as a list with a count, and the "All tools in …" link reads as shown. Verify: the issue lists it.
+- [x] 6.4 Add to the hand checks in issue #7: with VoiceOver in Safari (macOS and iOS), a hub page and a tool page's related tools are announced as a list with a count, and the "All tools in …" link reads as shown. Verify: the issue lists it.
 - [x] 6.5 Take screenshots and put them in `.github/pr-screenshots/search/`:
   - the "Organise pages" and "Protect" hub pages at 360px and 1280px in light, and the "Organise pages" hub page at 360px in dark;
   - `/merge-pdf` scrolled to its related tools and hub link, at 360px and 1280px, beside the same view from `main`;
@@ -147,7 +147,7 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
 ## 7. Review
 
 - [x] 7.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass and none are skipped.
-- [ ] 7.2 Run the review panel, stage 2 (the `review-panel` skill), including the ux-designer, the security reviewer (JSON-LD escaping, the origin check, the image script) and the program manager (owner questions). Settle every must-fix finding. In the pull request description, put:
+- [x] 7.2 Run the review panel, stage 2 (the `review-panel` skill), including the ux-designer, the security reviewer (JSON-LD escaping, the origin check, the image script) and the program manager (owner questions). Settle every must-fix finding. In the pull request description, put:
   - the verdicts;
   - the evidence from 3.6, 4.4, 6.2 and 6.5;
   - the six owner questions from proposal.md, with questions 1 to 3 marked as needing an answer before launch;
