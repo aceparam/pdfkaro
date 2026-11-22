@@ -81,10 +81,15 @@ export function hubPages(groups: Group[], tools: Tool[], base: string): HubPage[
   });
 }
 
-/** The hub page link of the group a tool belongs to, as a tool page shows it. */
-export function hubLink(groups: Group[], tool: Tool, base: string): { name: string; href: string } {
+/** The group a tool belongs to. Throws for a group that is not in the registry. */
+export function groupOf(groups: Group[], tool: Tool): Group {
   const group = groups.find((each) => each.id === tool.group);
   if (!group) throw new Error(`Tool ${tool.id} names a group that is not in the registry.`);
+  return group;
+}
+
+/** The link to a group's hub page, as a tool page shows it. */
+export function hubLink(group: Group, base: string): { name: string; href: string } {
   return { name: group.name, href: withBase(base, `/${group.slug}`) };
 }
 

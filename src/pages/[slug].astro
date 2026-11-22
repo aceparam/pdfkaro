@@ -6,7 +6,7 @@ import { ToolShell } from '../components/ToolShell/ToolShell';
 import { ToolWidget } from '../components/ToolWidget/ToolWidget';
 import { ToolList } from '../components/ToolList/ToolList';
 import { groups, tools } from '../tools/registry';
-import { allPages, hubLink, hubPages, pageWords, relatedItems } from '../tools/queries';
+import { allPages, groupOf, hubLink, hubPages, pageWords, relatedItems } from '../tools/queries';
 import type { HubPage, PageWithTool } from '../tools/queries';
 import { toolStructuredData } from '../tools/seo';
 import { siteName } from '../site';
@@ -23,7 +23,8 @@ type Props = ({ kind: 'tool' } & PageWithTool) | { kind: 'hub'; hub: HubPage };
 
 const props = Astro.props;
 const base = import.meta.env.BASE_URL;
-const origin = import.meta.env.SITE.replace(/\/+$/, '');
+// The origin from SITE_ORIGIN, checked in astro.config.mjs: never a trailing slash.
+const origin = import.meta.env.SITE;
 
 // The text below each tool, written in Markdown and rendered to plain HTML at build time.
 const texts = import.meta.glob<{ Content: unknown }>('../content/tools/*.md', { eager: true });
@@ -33,8 +34,8 @@ const entry = props.kind === 'tool' ? { tool: props.tool, page: props.page } : u
 // The tool's widget words, with this page's own in place of them where it has any.
 const words = entry && pageWords(entry.tool, entry.page);
 const Below = entry && (texts[`../content/tools/${entry.page.slug}.md`]?.Content as ((props: object) => unknown) | undefined);
-const group = entry && groups.find((each) => each.id === entry.tool.group);
-if (entry && !group) throw new Error(`Tool ${entry.tool.id} names a group that is not in the registry.`);
+// Looked up once, for the JSON-LD's breadcrumb and the link to the hub page.
+const group = entry && groupOf(groups, entry.tool);
 ---
 
 {
@@ -52,13 +53,13 @@ if (entry && !group) throw new Error(`Tool ${entry.tool.id} names a group that i
       path={`/${entry.page.slug}`}
       title={entry.page.title}
       description={entry.page.description}
-      structuredData={toolStructuredData({ tool: entry.tool, page: entry.page, group, origin, base, siteName })}
+      structuredData={toolStructuredData({ page: entry.page, group, origin, base, siteName })}
     >
       <ToolShell
         heading={entry.page.heading}
         sentence={entry.page.sentence}
         related={relatedItems(tools, entry.tool, base, entry.page)}
-        group={hubLink(groups, entry.tool, base)}
+        group={hubLink(group, base)}
       >
         {words && <ToolWidget client:load toolId={entry.tool.id} accepts={entry.page.accepts ?? entry.tool.accepts} words={words} preset={entry.page.preset} />}
         {Below && (

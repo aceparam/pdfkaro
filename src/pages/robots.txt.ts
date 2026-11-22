@@ -4,6 +4,6 @@ import type { APIRoute } from 'astro';
 import { robotsTxt } from '../tools/seo';
 
 export const GET: APIRoute = () => {
-  const body = robotsTxt(import.meta.env.SITE.replace(/\/+$/, ''), import.meta.env.BASE_URL);
+  const body = robotsTxt(import.meta.env.SITE, import.meta.env.BASE_URL);
   return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 };

@@ -134,16 +134,16 @@ These are draft words for the owner's review. Each sentence uses the tools' own 
 | Group | Address | Title | Sentence | Description | `claimsDevice` |
 | --- | --- | --- | --- | --- | --- |
 | Organise pages | `/organise-pages` | Organise PDF pages - PDFkaro | Tools that combine, split and reorder the pages of a PDF. | Combine, split, copy out, remove, reorder and turn the pages of a PDF, in your browser. Files stay on your device and are not uploaded. (135) | true |
-| Make smaller and fix | `/make-smaller-and-fix` | Make a PDF smaller - PDFkaro | Make a PDF file smaller by shrinking its pictures. | Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded. (118) | true |
+| Make smaller and fix | `/make-smaller-and-fix` | Make a PDF smaller - PDFkaro | Tools that make a PDF file smaller. | Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded. (118) | true |
 | Convert to PDF | `/convert-to-pdf` | Convert pictures to PDF - PDFkaro | Tools that turn JPG and PNG pictures into a PDF. | Turn JPG and PNG pictures into one PDF, in your browser. The pictures stay on your device and are not uploaded. (111) | true |
 | Convert from PDF | `/convert-from-pdf` | Convert a PDF to pictures - PDFkaro | Tools that turn the pages of a PDF into JPG or PNG pictures. | Turn each page of a PDF into a JPG or PNG picture, in your browser. The file stays on your device and is not uploaded. (118) | true |
-| Edit and sign | `/edit-and-sign` | Edit and sign a PDF - PDFkaro | Tools that add page numbers, a watermark or a signature to a PDF. | Add page numbers, a watermark or a signature to a PDF, in your browser. The file and any signature picture stay on your device and are not uploaded. (148) | true |
-| Protect | `/protect` | Add or remove a PDF password - PDFkaro | Tools that add a password to a PDF, or remove a password or restrictions. | Add a password to a PDF, or remove a password or restrictions, in your browser. The file and any password stay on your device and are not uploaded. (147) | true |
+| Edit and sign | `/edit-and-sign` | Edit and sign a PDF - PDFkaro | Tools that add page numbers, a watermark or a signature to a PDF. | Add page numbers, a watermark or a signature to a PDF, in your browser. The file stays on your device and is not uploaded. (122) | true |
+| Protect | `/protect` | Add or remove a PDF password - PDFkaro | Tools that add a password to a PDF, or remove a password or restrictions. | Add a password to a PDF, or remove a password or restrictions. The file stays on your device. This site does not upload the file or the password. (145) | true |
 | Read and check | `/read-and-check` | Read and check a PDF - PDFkaro | Tools that read a PDF and tell you about it. | Tools that read a PDF and tell you about it. (44) | false |
 
 Numbers in brackets are character counts; each description is under 155. "Read and check" is not built until its first tool, whose change rewrites its words.
 
-- **What the claims cover.** Each device claim names everything its group's tools handle. Edit and sign names the signature picture as well as the file, and Protect names the password. No description says "100%", "never leaves", "secure", or anything about servers. "Stay on your device and are not uploaded" is what each tool page already says.
+- **What the claims cover.** Each device claim uses its tools' own words about where files go, and claims no more (stage 2 privacy review). Edit and sign says "The file stays on your device and is not uploaded", as Sign PDF's page does. Protect says "The file stays on your device. This site does not upload the file or the password", as Protect's and Remove a password's pages do: the browser may save and sync a new password, so no hub says a password stays on the device. No description says "100%", "never leaves", "secure", or anything about servers. "Stay on your device and are not uploaded" is what each tool page already says.
 - **The device-claim guard** (`tool-registry`, "A hub's words claim the device"). The registry test joins each group's title, sentence and description. If they match `/device|browser|upload|never leaves|not sent/i`, the group must declare `claimsDevice: true`. If a group declares it, every published tool in that group must have `runsIn: 'browser'`. Task 1.1 adds a test entry: a server tool in a `claimsDevice` group must trip the guard.
 - **Keeping the words accurate.** A later tool whose addition makes its group's words inaccurate updates them in its own change: a server tool in "Convert to PDF" (the guard forces this), or Repair PDF in "Make smaller and fix", whose sentence fits one tool today.
 
@@ -186,7 +186,7 @@ This rule rests on owner question 2, still open. Until the owner answers, the pu
   Sitemap: <absolute sitemap address>
   ```
 
-- **The preview.** The same files are built under `/pdfkaro/`. Crawlers read `robots.txt` only at an origin's root (`aceparam.github.io/robots.txt`, which this repo does not serve), so the preview's copy is never read. That is fine: `noindex` on every page is what keeps the preview out. A `Disallow` there would do nothing, and if it were ever read it would hide the `noindex` from crawlers. No crawler is pointed at the preview's sitemap.
+- **The preview.** The same files are built under `/pdfkaro/`. Crawlers read `robots.txt` only at an origin's root (the GitHub Pages origin's `/robots.txt`, which this repo does not serve), so the preview's copy is never read. That is fine: `noindex` on every page is what keeps the preview out. A `Disallow` there would do nothing, and if it were ever read it would hide the `noindex` from crawlers. No crawler is pointed at the preview's sitemap.
 - **No `lastmod`.** The build has no honest per-page date. A build date on every page would be noise.
 
 ### 8. `npm run check:seo`
@@ -224,6 +224,7 @@ Before it saves anything, it asks Chromium through the DevTools protocol (`CSS.g
 ## Effect on page weight and late loading
 
 - No script or stylesheet is added, and `weigh` counts HTML, CSS and JavaScript only. Each page gains its head tags: about 0.4 KB raw, under 0.2 KB by gzip. Tool pages also gain the JSON-LD, about 0.6 KB raw and under 0.3 KB by gzip, plus the hub link. The home page does not change.
+- **The cost of one route.** Hub pages share `[slug].astro` with tool pages, so Astro gives them the route's stylesheets too: `ToolWorkspace` and `_slug_`, about 2.2 KB by gzip of CSS a hub page does not use, in two extra stylesheet requests. Measured: hub pages weigh 4.1 to 4.3 KB. No script is shipped. Accepted as the price of one route (decision 4).
 - The social image is not fetched by any page.
 - The task measures the largest page before and after against the 100 KB budget.
 - WebAssembly is still fetched only after a file is picked; nothing here touches the worker.

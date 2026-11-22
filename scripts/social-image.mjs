@@ -76,7 +76,8 @@ try {
   await page.route('**', (route) => route.abort());
   await page.setContent(html);
   const drawn = await fontsDrawn(page);
-  const banned = drawn.filter((family) => /\binter\b/i.test(family));
+  // Any family whose name holds "inter": Inter, Inter Display, InterVariable.
+  const banned = drawn.filter((family) => /inter/i.test(family));
   if (banned.length > 0) {
     console.error(`This machine draws the text in ${banned.join(', ')}, a banned font. Nothing was written. Reject it with FONTCONFIG_FILE and run again.`);
     process.exitCode = 1;

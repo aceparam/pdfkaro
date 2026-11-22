@@ -9,7 +9,6 @@ import type { Group, Tool, ToolPage } from './registry';
 import type { HubPage } from './queries';
 
 type StructuredDataInput = {
-  tool: Tool;
   page: ToolPage;
   group: Group;
   origin: string;
@@ -20,7 +19,6 @@ type StructuredDataInput = {
 /**
  * The JSON-LD of a tool page: one `WebApplication` and one `BreadcrumbList` (home, the
  * group's hub page, the page). Nothing that is not on the page: no rating, review, price or offer.
- * `tool` is taken so a caller passes the page together with the tool that serves it.
  */
 export function toolStructuredData({ page, group, origin, base, siteName }: StructuredDataInput) {
   const url = absoluteUrl(origin, base, `/${page.slug}`);

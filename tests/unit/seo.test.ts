@@ -9,7 +9,7 @@ const origin = 'https://example.org';
 function dataFor(slug: string, base = '/') {
   const found = findPage(tools, slug)!;
   const group = groups.find((each) => each.id === found.tool.group)!;
-  return toolStructuredData({ tool: found.tool, page: found.page, group, origin, base, siteName });
+  return toolStructuredData({ page: found.page, group, origin, base, siteName });
 }
 
 describe('toolStructuredData', () => {
@@ -76,7 +76,7 @@ describe('jsonForScript', () => {
   const merge = tools.find((tool) => tool.id === 'merge-pdf')!;
   const entry: Tool = { ...merge, id: 'test-hostile', pages: [{ ...merge.pages[0]!, name: hostile, description: `Text ${hostile} here.` }] };
   const group = groups.find((each) => each.id === 'organise')!;
-  const value = toolStructuredData({ tool: entry, page: entry.pages[0]!, group, origin, base: '/', siteName });
+  const value = toolStructuredData({ page: entry.pages[0]!, group, origin, base: '/', siteName });
   const text = jsonForScript(value);
 
   it('leaves no raw <, > or & in the text', () => {

@@ -65,6 +65,8 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
 
   Pass `path` from `index.astro` (`/`), from each site page (taken from its `footerLinks` entry) and from `404.astro` (`null`).
 
+  Added while building: `footerPage(href)` in `src/site.ts`, which each site page uses to take its path from its `footerLinks` entry and which throws for a path with no entry (tested with `/nope`).
+
   Added while building: `scripts/check-csp.mjs` refused the absolute canonical address as "a <link> points to another site". Let a link whose only `rel` is `canonical` carry an absolute address there, keep refusing every other link (including `rel="canonical stylesheet"`), and cover each case in `tests/unit/csp.test.ts` (design.md decision 2).
 
   Verify: `npm run check` passes. After `npm run build`, `dist/about.html`, `dist/index.html` and `dist/404.html` show the tags of `seo` "Social tags" and "Canonical tag" (none on 404), and only About carries `noindex`.
@@ -76,6 +78,8 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
   - a clear gap above it in `ToolShell.module.css`, with no heading and no border;
   - `hasBelow` gains `|| Boolean(group)`.
 
+  Added while building: `groupOf(groups, tool)` (throws for a group not in the registry) and `hubLink(group, base)` in `queries.ts`; `[slug].astro` looks the group up once and passes it to `toolStructuredData` and `hubLink`. `toolStructuredData` takes no `tool` (stage 2 review).
+
   In `ToolList`, add `role="list"` to its `ul`. `ToolDirectory` and the home page are not changed. Update `tests/unit/components.test.tsx` and `tests/unit/ToolList.test.tsx`.
 
   Verify: `npm test` passes. The rendered HTML has one hub link per tool page, a tool page with no related tools still shows it, and every `ToolList` has `role="list"`.
@@ -86,6 +90,8 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
   - `dist/social.png` exists after a build;
   - `npm run check:worker` and `npm run weigh` still pass (neither counts it).
 - [x] 3.6 Check the changed and new pages against "Banned patterns" and "How the words should read": a hub page, a tool page, About and 404. Search their visible text, and every hub title, sentence and description, for the banned words, "unlock", exclamation marks, "100%", "never leaves", "secure" and anything about servers. Verify: nothing is found, and this is recorded in the pull request.
+
+- [x] 3.7 Added at stage 2 (privacy): each hub description claims no more than its tools' own pages. Edit and sign: "The file stays on your device and is not uploaded." Protect: "The file stays on your device. This site does not upload the file or the password." (the browser may save and sync a new password). "Make smaller and fix" sentence: "Tools that make a PDF file smaller." The design table follows. Verify: `npm test` and `npm run check:seo` pass.
 
 ## 4. Build check
 
@@ -159,4 +165,4 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
   - Add the six owner questions under "Questions waiting for the owner". Mark questions 1 to 3 as needing an answer before launch, and say so beside the Phase 1 gate note in "Where the project stands", because they decide whether the "Definition of done, The site" sitemap and hub items pass.
   - Add the hub and hub-link words to the page text review in issue #7.
 - The Privacy page draft change sets `/privacy` to `written: true` in `footerLinks`.
-- Any later tool whose addition makes its group's hub words inaccurate updates them in its own change. The device-claim guard forces this for a server tool; Repair PDF must update "Make smaller and fix". The first server tool trips the tagline guard: its change stops and asks the owner for a new tagline, then makes the social image again. The first "Read and check" tool's change writes that group's words, and gets its hub page with no extra work.
+- A tool that joins a group with a hub page updates that group's description prose in its own change, matching its own page's words about where files go (also said in the comment above `groups` in `registry.ts`). Any later tool whose addition makes its group's hub words inaccurate updates them in its own change. The device-claim guard forces this for a server tool; Repair PDF must update "Make smaller and fix". The first server tool trips the tagline guard: its change stops and asks the owner for a new tagline, then makes the social image again. The first "Read and check" tool's change writes that group's words, and gets its hub page with no extra work.

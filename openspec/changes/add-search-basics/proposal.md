@@ -6,7 +6,7 @@
 
 ## What Changes
 
-- **One build setting for absolute addresses.** A new `SITE_ORIGIN` setting is used by the canonical tag, `og:url`, `og:image`, the JSON-LD and the sitemap. It is a plain origin such as `https://aceparam.github.io`, checked like `SITE_BASE`. With no setting it is `http://localhost:4321`, the address of `npm run preview` and the end-to-end tests. No build writes an address on a domain the owner does not hold. The preview workflow sets it to the GitHub Pages origin, and the preview keeps its `noindex` tag.
+- **One build setting for absolute addresses.** A new `SITE_ORIGIN` setting is used by the canonical tag, `og:url`, `og:image`, the JSON-LD and the sitemap. It is a plain origin such as `https://example.org`, checked like `SITE_BASE`. With no setting it is `http://localhost:4321`, the address of `npm run preview` and the end-to-end tests. No build writes an address on a domain the owner does not hold. The preview workflow sets it to the GitHub Pages origin, and the preview keeps its `noindex` tag.
 - **Canonical and social tags on every page** except the 404 page, which is served at any missing address and so has no address of its own:
   - a self-referencing `<link rel="canonical">`;
   - `og:type`, `og:title`, `og:description`, `og:url`, `og:image` with its width, height and alt text.
@@ -113,7 +113,7 @@ None.
   - `scripts/check-base.mjs`: runs the search check on its build.
   - `.github/workflows/ci.yml` and `pages.yml`.
   - `package.json`: the script, and `engines` raised to Node 22.18 so the check can import the registry's TypeScript.
-  - `tests/e2e/pages.ts`, `site.spec.ts` and `home.spec.ts`.
+  - `tests/e2e/pages.ts` and `site.spec.ts`.
   - CLAUDE.md's commands list (after merge, by the coordinator).
 - **Dependencies:** none new.
 - **Page weight:** a few hundred bytes of HTML by gzip on each page for the head tags, and under 1 KB on tool pages with the JSON-LD. The home page changes only by its head tags. No script or stylesheet is added. Measured in tasks against the 100 KB budget.

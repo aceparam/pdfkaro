@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Group, Tool, ToolWidgetWords } from '../../src/tools/registry';
-import { acceptsFor, allPages, findPage, groupsWithItems, hubLink, hubPages, pageWords, relatedItems } from '../../src/tools/queries';
+import { acceptsFor, allPages, findPage, groupOf, groupsWithItems, hubLink, hubPages, pageWords, relatedItems } from '../../src/tools/queries';
 
 const group = (id: Group['id'], name: string, slug: Group['slug']): Group => ({
   id,
@@ -180,13 +180,15 @@ describe('hubPages', () => {
   });
 });
 
-describe('hubLink', () => {
-  it("names the tool's group and links to its hub page under the base", () => {
-    expect(hubLink(groups, tools[1]!, '/')).toEqual({ name: 'Organise pages', href: '/organise-pages' });
-    expect(hubLink(groups, tools[1]!, '/pdfkaro')).toEqual({ name: 'Organise pages', href: '/pdfkaro/organise-pages' });
+describe('groupOf and hubLink', () => {
+  it("find the tool's group and link to its hub page under the base", () => {
+    const group = groupOf(groups, tools[1]!);
+    expect(group.id).toBe('organise');
+    expect(hubLink(group, '/')).toEqual({ name: 'Organise pages', href: '/organise-pages' });
+    expect(hubLink(group, '/pdfkaro')).toEqual({ name: 'Organise pages', href: '/pdfkaro/organise-pages' });
   });
 
-  it('throws for a tool whose group is not in the registry', () => {
-    expect(() => hubLink(groups.slice(0, 1), tools[1]!, '/')).toThrow(/merge/);
+  it('throw for a tool whose group is not in the registry', () => {
+    expect(() => groupOf(groups.slice(0, 1), tools[1]!)).toThrow(/merge/);
   });
 });

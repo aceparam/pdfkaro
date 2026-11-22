@@ -8,7 +8,8 @@ import { sitemapPaths, sitemapXml } from '../tools/seo';
 
 export const GET: APIRoute = () => {
   const base = import.meta.env.BASE_URL;
-  const origin = import.meta.env.SITE.replace(/\/+$/, '');
+  // The origin from SITE_ORIGIN, checked in astro.config.mjs: never a trailing slash.
+  const origin = import.meta.env.SITE;
   const paths = sitemapPaths(hubPages(groups, tools, base), tools, footerLinks);
   const body = sitemapXml(paths.map((path) => absoluteUrl(origin, base, path)));
   return new Response(body, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });

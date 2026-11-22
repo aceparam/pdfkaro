@@ -34,7 +34,7 @@ export const placeholderSentences = ['has not been written yet', 'No contact add
 /** Chunk types a plain screenshot from Chromium may carry. Anything else (text, metadata, pictures) is refused. */
 export const allowedChunks = ['IHDR', 'IDAT', 'IEND', 'sRGB', 'gAMA', 'pHYs'];
 
-const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
+const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 /** Turns HTML or XML character references back into characters. */
 export function decode(text) {

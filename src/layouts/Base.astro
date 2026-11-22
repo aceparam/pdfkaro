@@ -27,8 +27,8 @@ const { title, description, path, structuredData } = Astro.props;
 
 // "/" when the site is at the root of its address; a sub-path for a preview.
 const base = import.meta.env.BASE_URL;
-// The origin from SITE_ORIGIN (astro.config.mjs), checked there.
-const origin = import.meta.env.SITE.replace(/\/+$/, '');
+// The origin from SITE_ORIGIN, checked in astro.config.mjs: never a trailing slash.
+const origin = import.meta.env.SITE;
 const atRoot = withBase(base, '/') === '/';
 // A footer page that still shows a placeholder is not offered to search engines (src/site.ts, `written`).
 const placeholder = footerLinks.some((link) => link.href === path && !link.written);

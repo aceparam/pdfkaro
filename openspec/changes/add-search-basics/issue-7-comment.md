@@ -9,7 +9,7 @@ Hand checks and page text added by `add-search-basics` (search basics: canonical
 Every tool list now has `role="list"`, because its bullets are hidden and VoiceOver in Safari stops announcing a list without bullets as a list. Nothing changes on screen.
 
 **Page text review (drafts for the owner)**
-- [ ] The words of the six hub pages: each hub's title, description and one sentence, in `groups` in `src/tools/registry.ts`. They are listed in `openspec/changes/add-search-basics/design.md`, decision 4.
+- [ ] The words of the six hub pages: each hub's title, description and one sentence, in `groups` in `src/tools/registry.ts`. They are listed in `openspec/changes/add-search-basics/design.md`, decision 4. Each description says no more about where files go than its tools' own pages: Protect's says "The file stays on your device. This site does not upload the file or the password."
 - [ ] The link words on every tool page: "All tools in Organise pages", "All tools in Make smaller and fix", "All tools in Convert to PDF", "All tools in Convert from PDF", "All tools in Edit and sign", "All tools in Protect". "All tools in Protect" and "All tools in Edit and sign" read a little awkwardly; the alternative is "More tools: Protect".
 - [ ] The social image, `public/social.png`: "PDFkaro" and the tagline, dark text on the site's background. Its alt text is "PDFkaro. Every PDF job, done in your browser."
 

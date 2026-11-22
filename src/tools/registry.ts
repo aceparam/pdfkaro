@@ -326,7 +326,9 @@ export type Tool = {
 /**
  * The seven groups, in the order the home page shows them. A group gets a hub page once it has a
  * published tool. The hub words (title, description, sentence) are drafts for the owner to review.
- * A tool whose addition makes its group's words untrue changes them in its own change.
+ * A tool that joins a group with a hub page updates that group's words in its own change, so the
+ * description still names what the group's tools do and still matches each tool page's own words
+ * about where files go.
  */
 export const groups: Group[] = [
   {
@@ -345,7 +347,7 @@ export const groups: Group[] = [
     slug: 'make-smaller-and-fix',
     title: 'Make a PDF smaller - PDFkaro',
     description: 'Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded.',
-    sentence: 'Make a PDF file smaller by shrinking its pictures.',
+    sentence: 'Tools that make a PDF file smaller.',
     claimsDevice: true,
   },
   {
@@ -371,8 +373,7 @@ export const groups: Group[] = [
     name: 'Edit and sign',
     slug: 'edit-and-sign',
     title: 'Edit and sign a PDF - PDFkaro',
-    description:
-      'Add page numbers, a watermark or a signature to a PDF, in your browser. The file and any signature picture stay on your device and are not uploaded.',
+    description: 'Add page numbers, a watermark or a signature to a PDF, in your browser. The file stays on your device and is not uploaded.',
     sentence: 'Tools that add page numbers, a watermark or a signature to a PDF.',
     claimsDevice: true,
   },
@@ -382,7 +383,7 @@ export const groups: Group[] = [
     slug: 'protect',
     title: 'Add or remove a PDF password - PDFkaro',
     description:
-      'Add a password to a PDF, or remove a password or restrictions, in your browser. The file and any password stay on your device and are not uploaded.',
+      'Add a password to a PDF, or remove a password or restrictions. The file stays on your device. This site does not upload the file or the password.',
     sentence: 'Tools that add a password to a PDF, or remove a password or restrictions.',
     claimsDevice: true,
   },

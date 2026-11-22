@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absoluteUrl, defaultOrigin, footerLinks, isSiteBase, isSiteOrigin, tagline, withBase } from '../../src/site';
+import { absoluteUrl, defaultOrigin, footerLinks, footerPage, isSiteBase, isSiteOrigin, tagline, withBase } from '../../src/site';
 import { tools as registryTools, type Group, type Tool } from '../../src/tools/registry';
 import { groupsWithItems, relatedItems, toListItem } from '../../src/tools/queries';
 
@@ -137,6 +137,11 @@ describe('the base setting', () => {
 });
 
 describe('footer pages', () => {
+  it('are found by path, and a path with no entry throws', () => {
+    expect(footerPage('/about').label).toBe('About');
+    expect(() => footerPage('/nope')).toThrow('/nope');
+  });
+
   it('each say whether the owner has written them; none is written yet', () => {
     expect(footerLinks.map((link) => [link.href, link.written])).toEqual([
       ['/about', false],

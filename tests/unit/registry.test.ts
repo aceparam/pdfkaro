@@ -1239,7 +1239,8 @@ describe('new passwords', () => {
 });
 
 describe('group hub pages', () => {
-  // catalogue.ts is a type, so its 54 slugs are read as text, as catalogue.test.ts does.
+  // catalogue.ts is a type, so its slugs are read as text, as catalogue.test.ts does. The pattern matches every
+  // quoted name in the file, a few more than the catalogue's slugs, which only widens what is refused.
   const catalogueSlugs = [...readFileSync('src/tools/catalogue.ts', 'utf8').matchAll(/\| '([^']+)'/g)].map((match) => match[1] ?? '');
   // Addresses a hub page may never take: every footer page (so a new one is covered with no second list), 404 and the two crawler files.
   const reserved = [...footerLinks.map((link) => link.href.slice(1)), '404', 'sitemap.xml', 'robots.txt'];
