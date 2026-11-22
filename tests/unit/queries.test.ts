@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Group, Tool, ToolWidgetWords } from '../../src/tools/registry';
-import { acceptsFor, allPages, findPage, groupsWithItems, pageWords, relatedItems } from '../../src/tools/queries';
+import { acceptsFor, allPages, findPage, groupsWithItems, hubLink, hubPages, pageWords, relatedItems } from '../../src/tools/queries';
+
+const group = (id: Group['id'], name: string, slug: Group['slug']): Group => ({
+  id,
+  name,
+  slug,
+  title: `${name} - PDFkaro`,
+  description: `${name} description.`,
+  sentence: `${name} sentence.`,
+  claimsDevice: false,
+});
 
 // A made-up registry: one tool with three URLs, one with one URL, and a group left empty.
 const groups: Group[] = [
-  { id: 'smaller', name: 'Make smaller and fix' },
-  { id: 'organise', name: 'Organise pages' },
-  { id: 'read', name: 'Read and check' },
+  group('smaller', 'Make smaller and fix', 'make-smaller-and-fix'),
+  group('organise', 'Organise pages', 'organise-pages'),
+  group('read', 'Read and check', 'read-and-check'),
 ];
 
 const page = (slug: string, name: string) => ({
@@ -136,5 +146,47 @@ describe('page words', () => {
   it('lets a page change no other word, whatever it carries', () => {
     const page = { ...tool.pages[0]!, words: { actionLabel: 'Own button', partSuffix: '../x', minFiles: 0, outputs: 'one' } as never };
     expect(pageWords(tool, page)).toEqual({ ...widget, actionLabel: 'Own button' });
+  });
+});
+
+describe('hubPages', () => {
+  it('gives the same groups as groupsWithItems, in the same order, with the same items', () => {
+    const hubs = hubPages(groups, tools, '/');
+    const shown = groupsWithItems(groups, tools, '/');
+    expect(hubs.map((hub) => hub.id)).toEqual(shown.map((each) => each.id));
+    expect(hubs.map((hub) => hub.items)).toEqual(shown.map((each) => each.items));
+  });
+
+  it('leaves out a group with no published page', () => {
+    expect(hubPages(groups, tools, '/').map((hub) => hub.slug)).toEqual(['make-smaller-and-fix', 'organise-pages']);
+  });
+
+  it("carries each group's words and its address under the base", () => {
+    const [smaller] = hubPages(groups, tools, '/pdfkaro');
+    expect(smaller).toMatchObject({
+      name: 'Make smaller and fix',
+      slug: 'make-smaller-and-fix',
+      href: '/pdfkaro/make-smaller-and-fix',
+      title: 'Make smaller and fix - PDFkaro',
+      description: 'Make smaller and fix description.',
+      sentence: 'Make smaller and fix sentence.',
+    });
+    expect(smaller?.items[0]?.href).toBe('/pdfkaro/compress-pdf');
+    expect(hubPages(groups, tools, '/')[0]?.href).toBe('/make-smaller-and-fix');
+  });
+
+  it('adds no address to the groups the home page lists', () => {
+    for (const each of groupsWithItems(groups, tools, '/')) expect(Object.keys(each).sort()).toEqual(['id', 'items', 'name']);
+  });
+});
+
+describe('hubLink', () => {
+  it("names the tool's group and links to its hub page under the base", () => {
+    expect(hubLink(groups, tools[1]!, '/')).toEqual({ name: 'Organise pages', href: '/organise-pages' });
+    expect(hubLink(groups, tools[1]!, '/pdfkaro')).toEqual({ name: 'Organise pages', href: '/pdfkaro/organise-pages' });
+  });
+
+  it('throws for a tool whose group is not in the registry', () => {
+    expect(() => hubLink(groups.slice(0, 1), tools[1]!, '/')).toThrow(/merge/);
   });
 });
