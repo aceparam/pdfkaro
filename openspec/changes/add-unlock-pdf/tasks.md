@@ -4,11 +4,13 @@ No shared change and no dependency: the tool is built on the input-password flow
 
 ## 0. The owner's word on "unlock"
 
-- [ ] 0.1 Record the owner's answer to owner question 1 (proposal) in this change before group 1 starts:
+- [x] 0.1 Record the owner's answer to owner question 1 (proposal) in this change before group 1 starts:
   - with the default (nothing on any page says "unlock"), no artifact changes;
   - if the owner lets the name "Unlock PDF" through, first add a MODIFIED `look-and-feel` delta ("Banned patterns") allowing that exact name and nothing else, and change the design's decision 1 words and the `unlock-pdf` spec's page scenarios to match, then run `npm run spec`.
 
   Record the answers to owner questions 2 to 4 too, or keep their defaults. Groups 2 to 6 do not depend on this and may start first.
+
+  **Answered by the owner on 22 Nov 2026: all four defaults.** (1) The URL stays `/unlock-pdf` and no page says "unlock": the name is "Remove a password". (2) The output is `report-unprotected.pdf`. (3) A file with nothing to remove gives no new file, with a sentence. (4) The text below the tool says to remove restrictions only from a file you are allowed to change. No artifact changes beyond this note.
 
 ## 1. Registry entry
 

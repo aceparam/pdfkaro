@@ -64,6 +64,8 @@ After a pick, the page fetches only the site's own files: the worker and the wor
 
 ## Open decisions and owner questions touched
 
+**The owner answered questions 1 to 4 on 22 Nov 2026, choosing every default** (tasks.md 0.1). They are no longer open.
+
 - **The word "unlock"** (`look-and-feel`: "Unlock PDF is built"; `design/README.md`). Asked now, as owner question 1. Default planned: the URL keeps the word; nothing on any page says it.
 - **Signed files** (waiting for the owner). Unlock writes the file afresh, so a digital signature stops being valid. The result and the page text say so.
 - **Waiting main buttons** (waiting for the owner). Unlock has no option, so its button works once the file is read, as Reorder's and Compress's do.
