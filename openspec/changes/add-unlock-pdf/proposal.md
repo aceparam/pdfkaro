@@ -99,6 +99,7 @@ No new owner question. No open decision needs more than its assumed default.
 ### Modified Capabilities
 
 - `look-and-feel`: "Banned patterns" records the owner's answer of 22 Nov 2026: the word stays banned on every page; only the address `/unlock-pdf` and the id keep it.
+- `privacy`: a new requirement that, on every tool, an input file's own password is forgotten when a job ends with a file or with no new file, as well as on "Start again", when the file is replaced or left out, and when the page is left (the shared change in `run-job.ts`).
 - `tool-registry`: a new requirement that `unlock-pdf` keeps the catalogue's URL, group, runs-in and phase and takes the name "Remove a password".
 
 ## Impact
