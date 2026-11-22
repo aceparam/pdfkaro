@@ -27,9 +27,9 @@ let current: PolicyViolation[][] = [];
 
 // Every page and worker watched in the current test, each able to say when its console has caught up.
 // A violation's line can reach the test a moment after the test's last step, so before the check each live
-// page and worker writes a line of its own and the check waits for it, at most two seconds. Console lines from
-// one page or worker arrive in order, so once that line is in, every earlier one is too. A page or worker
-// already closed is skipped.
+// page and worker writes a line of its own and the check waits for it, at most two seconds in all. Console lines
+// from one page or worker arrive in order, so once that line is in, every earlier one is too. A page or worker
+// already closed, or one that never answers, is not waited for beyond that.
 const sentinel = '[pdfkaro csp watch caught up] ';
 const flushWait = 2000;
 let flushers: (() => Promise<void>)[] = [];
@@ -46,13 +46,14 @@ function flusher(target: { evaluate(fn: (token: string) => void, token: string):
   const flush = async () => {
     const token = `${sentinel}${Math.random()}`;
     const arrived = new Promise<void>((done) => waiting.set(token, done));
-    try {
-      await target.evaluate((line) => console.log(line), token);
-    } catch {
-      return;
-    }
+    // A closed page or worker refuses the evaluate; one still loading may never answer it. Either way the
+    // wait ends: the evaluate, the line coming back and the two-second limit are raced together.
+    const asked = target.evaluate((line) => console.log(line), token).then(
+      () => arrived,
+      () => undefined,
+    );
     let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([arrived, new Promise<void>((done) => (timer = setTimeout(done, flushWait)))]);
+    await Promise.race([asked, new Promise<void>((done) => (timer = setTimeout(done, flushWait)))]);
     clearTimeout(timer);
   };
   flushers.push(flush);

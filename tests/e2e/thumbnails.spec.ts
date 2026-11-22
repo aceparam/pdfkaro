@@ -262,9 +262,14 @@ test.describe('thumbnails are forgotten with their files', () => {
         return url;
       };
     });
-    // Hold PDF.js's data back, so the first thumbnail is still being drawn when its file is removed.
+    // Hold PDF.js's data back, so the first thumbnail is still being drawn when its file is removed. The route
+    // stays in place for the whole test and lets requests through once `released` is set: removing it with
+    // unroute() while the fresh worker makes its first request can leave that request paused for good in
+    // Chromium, since the worker now starts from a blob: script and imports its file from inside the worker.
     const held: Route[] = [];
+    let released = false;
     await page.context().route(/\/_astro\/pdfjs-data-[^/]+\.js$/, (route) => {
+      if (released) return route.continue();
       held.push(route);
     });
     // Every worker started, by address; those started from a script the page made are tool workers.
@@ -282,8 +287,9 @@ test.describe('thumbnails are forgotten with their files', () => {
     const before = (await toolWorkers()).length;
     expect(before).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
-    // Removing it stops that drawing on a fresh worker; from here on, let the data through.
-    await page.context().unroute(/\/_astro\/pdfjs-data-[^/]+\.js$/);
+    // Removing it stops that drawing on a fresh worker; from here on, let the data through. The held request
+    // belonged to the ended worker, so it is already gone; continuing it only tidies up.
+    released = true;
     for (const route of held.splice(0)) await route.continue().catch(() => {});
     await expect(pictures(page)).toHaveCount(1, { timeout: 20000 });
     await expect(items(page).filter({ hasText: 'mixed.pdf' }).locator('img')).toHaveCount(1);
