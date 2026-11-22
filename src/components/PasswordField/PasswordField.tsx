@@ -17,6 +17,9 @@ type Props = {
 /**
  * Asks for one file's password. It sits in no form and the field has no name,
  * so the password can never be sent to an address. Enter does the same as the button.
+ * The field is uncontrolled: what is typed is kept in state for the button to read,
+ * but never passed back as `value`, which React would write into the HTML `value`
+ * attribute, putting the password in the markup.
  */
 export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef, leaveLabel = 'Leave this file out' }: Props) {
   const [value, setValue] = useState('');
@@ -33,7 +36,6 @@ export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef,
           id={`${id}-input`}
           type="password"
           autoComplete="off"
-          value={value}
           aria-invalid={error ? true : undefined}
           aria-describedby={`${id}-note`}
           onChange={(event) => setValue(event.currentTarget.value)}

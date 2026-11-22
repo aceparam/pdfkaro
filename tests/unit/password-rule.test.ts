@@ -107,7 +107,11 @@ describe("qpdf's random salts", () => {
     const number = contentRef.split(' ')[0];
     const offset = Number(new RegExp(`^${number}/0: uncompressed; offset = (\\d+)$`, 'm').exec(xref.out)?.[1]);
     const text = new TextDecoder('latin1').decode(locked);
+    // A changed --show-xref format must fail here, not compare the wrong bytes.
+    expect(Number.isFinite(offset), xref.out).toBe(true);
+    expect(text.startsWith(`${number} 0 obj`, offset), 'the object starts at its offset').toBe(true);
     const keyword = text.indexOf('stream', offset);
+    expect(keyword).toBeGreaterThan(offset);
     const start = keyword + 'stream'.length + (text[keyword + 6] === '\r' ? 2 : 1);
     return { encrypt, data: locked.slice(start, start + length), length };
   }

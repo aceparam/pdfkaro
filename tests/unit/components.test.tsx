@@ -5,7 +5,7 @@ import { FilePicker } from '../../src/components/FilePicker/FilePicker';
 import { Notice } from '../../src/components/Notice/Notice';
 import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid/PageGrid';
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
-import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, NewPasswordField, newPasswordSavingNote } from '../../src/components/NewPasswordField/NewPasswordField';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, heldValue, NewPasswordField, newPasswordSavingNote } from '../../src/components/NewPasswordField/NewPasswordField';
 import { passwordStaysSentence } from '../../src/widget/format';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
@@ -774,8 +774,13 @@ describe('NewPasswordField, a new password of a test entry', () => {
       expect(field).not.toMatch(/maxlength/i);
     }
     expect(html).not.toContain('<form');
-    expect(inputs(html)[0]).toContain('value="open"');
-    expect(inputs(html)[1]).toContain('value="op"');
+  });
+
+  it('never writes what is typed into a value attribute: both fields are uncontrolled', () => {
+    for (const markup of [html, firstWrong, againWrong]) {
+      for (const field of inputs(markup)) expect(field).not.toMatch(/\svalue=/);
+      for (const typed of ['open', 'op', 'café', 'opex']) expect(markup).not.toContain(`"${typed}"`);
+    }
   });
 
   it('puts the hint, then the shared note, under the first field and reads them with it', () => {
@@ -809,7 +814,7 @@ describe('NewPasswordField, a new password of a test entry', () => {
     expect(inputs(firstWrong)[0]).toContain('aria-invalid="true"');
     expect(inputs(firstWrong)[0]).toContain('aria-describedby="r5-pw-error r5-pw-hint"');
     expect(inputs(firstWrong)[1]).not.toContain('aria-invalid');
-    expect(firstWrong.replace(/value="[^"]*"/g, '')).not.toContain('café');
+    expect(firstWrong).not.toContain('café');
   });
 
   it('with the two different: the sentence on the second field, between its label and the field, invalid', () => {
@@ -848,8 +853,14 @@ describe('NewPasswordField, a new password of a test entry', () => {
       });
     const first = inputOf(fields[0]!);
     const again = inputOf(fields[1]!);
-    expect(first.props.ref).toBe(ref);
-    expect(again.props.ref).toBeUndefined();
+    // The focus ref is handed the first field by its callback ref; the second has its own and no focus ref.
+    const node = { value: '' } as HTMLInputElement;
+    (first.props.ref as (node: HTMLInputElement | null) => void)(node);
+    expect(ref.current).toBe(node);
+    (again.props.ref as (node: HTMLInputElement | null) => void)({ value: '' } as HTMLInputElement);
+    expect(ref.current).toBe(node);
+    for (const input of [first, again]) expect(input.props).not.toHaveProperty('value');
+    for (const input of [first, again]) expect(input.props).not.toHaveProperty('defaultValue');
     first.props.onChange({ currentTarget: { value: 'open ' } });
     again.props.onChange({ currentTarget: { value: 'op' } });
     expect(typed).toEqual([
@@ -868,5 +879,70 @@ describe('NewPasswordField, a new password of a test entry', () => {
     first.props.onBlur?.();
     expect(blurred).toBe(1);
     expect(again.props.onBlur).toBeUndefined();
+  });
+});
+
+describe('the held value of an uncontrolled password field', () => {
+  const option = {
+    kind: 'new-password' as const,
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const refsOf = (first: string, again: string) => {
+    const element = NewPasswordField({ option, id: 'r6-pw', first, again, onType: noop, onEnter: noop, onFirstBlur: noop });
+    const fields = (element.props as { children: ReactElement[] }).children;
+    return fields.map(
+      (field) =>
+        ((field.props as { children: (ReactElement | null)[] }).children.find((child) => child !== null && child.type === 'input') as ReactElement & {
+          props: { ref: (node: HTMLInputElement | null) => void };
+        }).props.ref,
+    );
+  };
+
+  it('leaves the field alone while what it shows is what is held, as when typing', () => {
+    const node = { value: 'open ses' } as HTMLInputElement;
+    let writes = 0;
+    const watched = new Proxy(node, { set: (target, key, value) => ((writes += 1), Reflect.set(target, key, value)) });
+    refsOf('open ses', '')[0]!(watched);
+    expect(writes).toBe(0);
+    expect(node.value).toBe('open ses');
+  });
+
+  it('empties both fields when the password is forgotten', () => {
+    const first = { value: 'open sesame' } as HTMLInputElement;
+    const again = { value: 'open sesame' } as HTMLInputElement;
+    const [firstRef, againRef] = refsOf('', '');
+    firstRef!(first);
+    againRef!(again);
+    expect([first.value, again.value]).toEqual(['', '']);
+  });
+
+  it('shows what is held when the field is drawn again, as after Cancel, and hands the field to an object or function ref', () => {
+    const node = { value: '' } as HTMLInputElement;
+    const object: { current: HTMLInputElement | null } = { current: null };
+    heldValue('kept', object)(node);
+    expect(node.value).toBe('kept');
+    expect(object.current).toBe(node);
+    const seen: (HTMLInputElement | null)[] = [];
+    heldValue('kept', (each) => void seen.push(each))(null);
+    expect(seen).toEqual([null]);
+  });
+});
+
+describe('PasswordField is uncontrolled', () => {
+  it('writes no value attribute, so a typed password is never in the markup', () => {
+    const html = renderToStaticMarkup(<PasswordField fileName="secret.pdf" onSubmit={noop} onLeaveOut={noop} />);
+    expect(html.match(/<input [^>]*\/>/)?.[0]).not.toMatch(/\svalue=/);
+    // It keeps what is typed in state, which no test here can fill in without a render harness, so its source is
+    // read: the input is given neither `value` nor `defaultValue`, the two props React writes into the attribute.
+    const source = readFileSync(new URL('../../src/components/PasswordField/PasswordField.tsx', import.meta.url), 'utf8');
+    const input = source.slice(source.indexOf('<input'), source.indexOf('/>', source.indexOf('<input')));
+    expect(input).toContain('type="password"');
+    expect(input).not.toMatch(/\bvalue=/);
+    expect(input).not.toMatch(/defaultValue=/);
   });
 });

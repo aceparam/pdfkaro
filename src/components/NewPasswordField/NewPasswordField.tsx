@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import type { Ref, RefCallback } from 'react';
 import type { NewPasswordOption } from '../../tools/registry';
 import { passwordStaysSentence } from '../../widget/format';
 import { pressesButton } from '../../widget/keys';
@@ -42,10 +42,25 @@ export const againPasswordId = (id: string) => `${id}-again`;
 export const againPasswordErrorId = (id: string) => `${againPasswordId(id)}-error`;
 
 /**
+ * A callback ref that writes `held` into the field's `value` property when it differs from what the field shows,
+ * so a password forgotten from outside empties it, and hands the field on to `also`. The field is uncontrolled:
+ * React writes a controlled input's `value` into the HTML `value` attribute, where the password would sit in the
+ * markup. A new callback each render, so React calls it again after every render with the held value of that render.
+ */
+export function heldValue(held: string, also?: Ref<HTMLInputElement>): RefCallback<HTMLInputElement> {
+  return (node) => {
+    if (node !== null && node.value !== held) node.value = held;
+    if (typeof also === 'function') also(node);
+    else if (also) also.current = node;
+  };
+}
+
+/**
  * A new password, typed twice in two hidden one-line fields, one under the other: each with a visible label and,
  * between the label and the field where a phone keyboard does not cover it, the sentence about what is wrong. Under
  * the first, read with it, the tool's hint and the shared note. Both are `type="password"` always, so no keyboard
- * corrects or capitalises them and form restore does not keep them; `autocomplete="new-password"` is the token for a
+ * corrects or capitalises them and form restore does not keep them. Both are uncontrolled, so the password is
+ * never written to a `value` attribute (`heldValue`); `autocomplete="new-password"` is the token for a
  * password being set, so a password manager fills in no saved one. No name and no form, so neither is ever submitted
  * to an address; no `maxlength`, so a paste is never cut without a word. No hooks, so it can be drawn and tested on its own.
  */
@@ -69,12 +84,11 @@ export function NewPasswordField({ option, id, first, again, firstError, againEr
           </p>
         ) : null}
         <input
-          ref={focusRef}
+          ref={heldValue(first, focusRef)}
           id={id}
           type="password"
           autoComplete="new-password"
           enterKeyHint="go"
-          value={first}
           aria-invalid={firstError ? true : undefined}
           aria-describedby={firstError ? `${firstPasswordErrorId(id)} ${hintId}` : hintId}
           onChange={(event) => onType('first', event.currentTarget.value)}
@@ -93,11 +107,11 @@ export function NewPasswordField({ option, id, first, again, firstError, againEr
           </p>
         ) : null}
         <input
+          ref={heldValue(again)}
           id={againId}
           type="password"
           autoComplete="new-password"
           enterKeyHint="go"
-          value={again}
           aria-invalid={againError ? true : undefined}
           aria-describedby={againError ? againPasswordErrorId(id) : undefined}
           onChange={(event) => onType('again', event.currentTarget.value)}

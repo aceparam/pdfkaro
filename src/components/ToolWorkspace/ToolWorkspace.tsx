@@ -252,18 +252,36 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     else next.delete(key);
     return next;
   };
+  // "Start again" and removing the last file forget the new passwords (useToolRun), so nothing is being typed either.
+  const startAgain = () => {
+    if (typing.size > 0) setTyping(new Set());
+    run.clear();
+  };
+  // Kept the same between renders while the files are, as run.removeFile is, so the page grid is not drawn again for it.
+  const runRemoveFile = run.removeFile;
+  const removeFile = useCallback(
+    (id: string) => {
+      if (state.files.every((file) => file.id === id)) setTyping((now) => (now.size > 0 ? new Set() : now));
+      runRemoveFile(id);
+    },
+    [state.files, runRemoveFile],
+  );
+
   // What the rules read besides the choices: the pictures chosen, the new passwords as typed, and which are being typed.
-  const heldNow = (changes: Partial<Held> = {}): Held => ({ pictures: state.pictures, newPasswords: run.newPasswords, typing, ...changes });
+  // Its own dependencies are those the hold depends on, so the memo below follows the same values as before.
+  const heldNow = useCallback(
+    (changes: Partial<Held> = {}): Held => ({ pictures: state.pictures, newPasswords: run.newPasswords, typing, ...changes }),
+    [state.pictures, run.newPasswords, typing],
+  );
 
   // A shown text that holds the main button back: empty, too long, or with characters its rule does not take.
   // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
   // A shown picture holds it too, until one is chosen and read, and while the one chosen cannot be used; and a
   // shown new password, until both its fields hold the same password its rule takes.
-  const hold = useMemo(
-    () => optionsHold(toolId, options, state.choices, { pictures: state.pictures, newPasswords: run.newPasswords, typing }),
-    [toolId, options, state.choices, state.pictures, run.newPasswords, typing],
-  );
+  const hold = useMemo(() => optionsHold(toolId, options, state.choices, heldNow()), [toolId, options, state.choices, heldNow]);
   const fieldId = (key: string) => `${optionName}-${key}`;
+  // The paragraph under the main button that says why it waits.
+  const whyNotId = `${toolId}-why-not`;
   // Too long or refused characters, a picture's problem, or a new password's field problem: the sentence is shown by
   // the field, and tied to the main button from there.
   const fieldHold = showOptions && hold && !holdsUnderButton(hold) ? hold : null;
@@ -489,14 +507,14 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const tiedFor = (each: OptionHold | null) => (tooFew ? words.tooFewFiles : (blocked ?? (showOptions && each && holdsUnderButton(each) ? each.sentence : null)));
   const tiedSentence = tiedFor(hold);
   const holdIds = {
-    tied: `${toolId}-why-not`,
+    tied: whyNotId,
     text: (key: string) => errorId(fieldId(key)),
     picture: (key: string) => pictureErrorId(fieldId(key)),
     firstPassword: (key: string) => firstPasswordErrorId(fieldId(key)),
     againPassword: (key: string) => againPasswordErrorId(fieldId(key)),
   };
   const fieldHoldId = fieldHold ? holdErrorId(fieldHold, options, holdIds) : null;
-  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHoldId, ...huge.map(hugeId), ...pictureNotices.map(({ key }) => pictureNoticeId(key))]
+  const describedBy = [tiedSentence ? whyNotId : null, fieldHoldId, ...huge.map(hugeId), ...pictureNotices.map(({ key }) => pictureNoticeId(key))]
     .filter(Boolean)
     .join(' ');
   // The main button's press, and Enter in a text's field: starts the job only when the button works. A press also
@@ -541,7 +559,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // A job that gave no new file, for a tool with words for it: its sentence and advice, Start again, no Download.
   if (state.step === 'done' && isNoNewFile(state.result) && words.noSmaller) {
     return (
-      <Result heading={words.noSmaller.heading} advice={words.noSmaller.advice} notes={[]} onStartAgain={run.clear} headingRef={resultRef} />
+      <Result heading={words.noSmaller.heading} advice={words.noSmaller.advice} notes={[]} onStartAgain={startAgain} headingRef={resultRef} />
     );
   }
 
@@ -552,7 +570,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
         heading={words.doneHeading}
         file={{ name: state.result.name, detail: resultDetail(state.result), href: result.url }}
         notes={words.resultNotes}
-        onStartAgain={run.clear}
+        onStartAgain={startAgain}
         headingRef={resultRef}
       />
     );
@@ -601,7 +619,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 type="button"
                 className={`button-secondary ${styles.small}`}
                 aria-label={`Remove ${onlyFile.name}`}
-                onClick={() => run.removeFile(onlyFile.id)}
+                onClick={() => removeFile(onlyFile.id)}
               >
                 Remove
               </button>
@@ -657,7 +675,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               onMove={onMove}
               total={pageMoves ? filePages : undefined}
               turns={turns}
-              onRemove={run.removeFile}
+              onRemove={removeFile}
               onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${number(place)} of ${number(of)}.`)}
               onVisible={run.showThumbnail}
               toggle={toggle}
@@ -721,8 +739,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     key={option.key}
                     option={option}
                     id={fieldId(option.key)}
-                    first={typedPasswords(option, run.newPasswords).first}
-                    again={typedPasswords(option, run.newPasswords).again}
+                    {...typedPasswords(option, run.newPasswords)}
                     firstError={fieldHold?.key === option.key && fieldHold.field === 'first' ? fieldHold.sentence : undefined}
                     againError={fieldHold?.key === option.key && fieldHold.field === 'again' ? fieldHold.sentence : undefined}
                     onType={(field, value) => typeNewPassword(option.key, field, value)}
@@ -760,7 +777,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               error={problem.status === 'wrong-password' ? 'That password did not open the file. Check it and try again.' : undefined}
               onSubmit={(password) => void run.submitPassword(problem.id, password)}
               onLeaveOut={() => {
-                run.removeFile(problem.id);
+                removeFile(problem.id);
                 summaryRef.current?.focus();
               }}
               inputRef={passwordRef}
@@ -776,7 +793,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                   type="button"
                   className="button-secondary"
                   onClick={() => {
-                    run.removeFile(problem.id);
+                    removeFile(problem.id);
                     summaryRef.current?.focus();
                   }}
                 >
@@ -823,7 +840,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 {words.actionLabel}
               </button>
               {tiedSentence ? (
-                <p id={`${toolId}-why-not`} className={styles.tooFew}>
+                <p id={whyNotId} className={styles.tooFew}>
                   {tiedSentence}
                 </p>
               ) : null}
