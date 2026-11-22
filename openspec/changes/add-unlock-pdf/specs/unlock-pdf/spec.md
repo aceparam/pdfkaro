@@ -8,12 +8,12 @@ What the tool at `/unlock-pdf` does: it writes one PDF again, in the visitor's b
 
 ### Requirement: The page
 
-The tool SHALL be served at `/unlock-pdf`, listed second under "Protect". Its title, heading, sentence, meta description and every other word on any page SHALL follow the owner's answer on the word "unlock"; until then the default in the scenario below applies, and no page says "unlock". (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; Banned patterns; SEO, Every tool page)
+The tool SHALL be served at `/unlock-pdf`, listed second under "Protect" as "Remove a password", with the title, heading, sentence and meta description given below. No page SHALL say "unlock", by the owner's decision of 22 Nov 2026; only the address keeps it. (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; Banned patterns; SEO, Every tool page; CLAUDE.md: Owner decisions)
 
 #### Scenario: The page is opened
 
 - **WHEN** a visitor opens `/unlock-pdf`
-- **THEN** the title tag reads "Remove a password from a PDF in your browser - PDFkaro", the heading "Remove a password from a PDF", the sentence "Remove a password you know, and print and edit restrictions, from a PDF. Your file stays on your device. This site does not upload your file or the password.", the picker reads "Choose a PDF file", and nothing else of the tool is shown
+- **THEN** the title tag reads "Remove a password from a PDF in your browser - PDFkaro", the heading "Remove a password from a PDF", the sentence "Remove print and edit restrictions from a PDF, and its password if you know it. Your file stays on your device. This site does not upload your file or the password.", the meta description "Remove print and edit restrictions from a PDF, and its password if you know it. The file and the password are not uploaded.", the picker reads "Choose a PDF file", and nothing else of the tool is shown
 
 #### Scenario: The home page lists it
 
@@ -23,7 +23,7 @@ The tool SHALL be served at `/unlock-pdf`, listed second under "Protect". Its ti
 #### Scenario: The banned word
 
 - **WHEN** the text of `/unlock-pdf`, the home page and every page linking to it is searched
-- **THEN** it does not hold "unlock", unless the owner has let the name through, in which case this change records that answer first
+- **THEN** its visible text and title do not hold "unlock"; the word appears only in the address `/unlock-pdf`
 
 ### Requirement: Choosing one file
 
@@ -103,21 +103,21 @@ Pressing the main button SHALL write one PDF that is not encrypted, so it opens 
 
 ### Requirement: A file with nothing to remove
 
-When the chosen file has no password and no restrictions, the job SHALL end with no new file, and the page SHALL say "This file has no password or restrictions." and "There was nothing to remove, so no new file was made.", with "Start again" and no Download. It MUST NOT be called damaged. (SPEC.md: Definition of done, "a clear message saying why it cannot"; What we are building, rule 4)
+When the chosen file has no password and no restrictions, the job SHALL end with no new file, and the page SHALL say "This file has no password or restrictions." and "There was nothing to remove, so no new file was made. You can use your file as it is.", with "Start again" and no Download. It MUST NOT be called damaged. (SPEC.md: Definition of done, "a clear message saying why it cannot"; What we are building, rule 4)
 
 #### Scenario: An ordinary file
 
 - **WHEN** `text.pdf` is chosen and the main button pressed
-- **THEN** the page shows the two sentences, focus moves to the first, nothing downloads, and "Start again" empties the page
+- **THEN** the page shows the heading and its advice, focus moves to the first, nothing downloads, and "Start again" empties the page
 
 ### Requirement: A file protected another way
 
-When the file is encrypted by a method other than a password, such as a certificate, the page SHALL say it "is saved in a way this tool cannot read" and that this tool removes only a password, and SHALL offer "Choose another file". It MUST NOT call the file damaged. (SPEC.md: Tool page anatomy; What we are building, rule 4, "Honest about limits")
+When the file is encrypted by a method qpdf cannot open, such as a certificate, the page SHALL say it "is saved in a way this tool cannot read", then "It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.", and SHALL offer "Choose another file". It MUST NOT call the file damaged. (SPEC.md: Tool page anatomy; What we are building, rule 4, "Honest about limits")
 
 #### Scenario: A file encrypted with a certificate
 
-- **WHEN** a visitor chooses a file whose encryption names a certificate filter
-- **THEN** the page names the file, says it is saved in a way this tool cannot read, says this tool removes only a password, and shows no main button
+- **WHEN** a visitor chooses `certified.pdf`, whose encryption names a certificate filter
+- **THEN** the page reads "certified.pdf is saved in a way this tool cannot read." and "It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.", and shows no main button
 
 ### Requirement: Nothing else changes
 
@@ -140,7 +140,7 @@ The new file SHALL keep every page and everything on it: text, links, form field
 
 ### Requirement: What the page says about the new file
 
-The result SHALL say that the file now opens with no password and can be printed, copied and changed, that anyone who has this copy can open it, that text, links, form fields, bookmarks and attached files are kept, and that earlier saved versions are not and a digital signature will no longer be valid. (SPEC.md: What we are building, rule 4; CLAUDE.md: Signed files)
+The result SHALL say that the file now opens with no password and its print, copy and edit restrictions are removed, that anyone who has this copy can open it, that text, links, form fields, bookmarks and attached files are kept, and that earlier saved versions are not and a digital signature will no longer be valid. (SPEC.md: What we are building, rule 4; CLAUDE.md: Signed files)
 
 #### Scenario: The result notes
 
@@ -163,7 +163,7 @@ While the job runs the page SHALL show progress in real units with Cancel: "Read
 
 ### Requirement: The result
 
-When the job gives a file the page SHALL show its name, size and page count, a Download button and "Start again". The name SHALL be the input's name with `-unprotected` before `.pdf`, unless the owner chooses another. Nothing SHALL download until Download is pressed. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When the job gives a file the page SHALL show its name, size and page count, a Download button and "Start again". The name SHALL be the input's name with `-unprotected` before `.pdf`, by the owner's decision of 22 Nov 2026. Nothing SHALL download until Download is pressed. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A job finishes
 
@@ -172,12 +172,17 @@ When the job gives a file the page SHALL show its name, size and page count, a D
 
 ### Requirement: The typed password is held no longer than needed
 
-The page SHALL keep the typed password only while that file is listed, and SHALL forget it when the file is replaced or left out, on "Start again" and when the page is left. No field SHALL carry it in a `value` attribute. (SPEC.md: Privacy, limits and security, Browser tools)
+The page SHALL keep the typed password while that file is listed, through Cancel and a failure, and SHALL forget it when a job ends with a file or with no new file, when the file is replaced or left out, on "Start again" and when the page is left. No field SHALL carry it in a `value` attribute. (SPEC.md: Privacy, limits and security, Browser tools)
 
-#### Scenario: Start again
+#### Scenario: After a result
 
-- **WHEN** `password.pdf` has been written and the visitor presses "Start again" and chooses `password.pdf` again
-- **THEN** the page asks for its password again
+- **WHEN** `password.pdf` has been written and the result is shown
+- **THEN** the page holds the password no longer, and after "Start again" choosing `password.pdf` again asks for its password again
+
+#### Scenario: After a failure
+
+- **WHEN** a job on `password.pdf` fails and the visitor presses "Go back to your file"
+- **THEN** the file is listed, open, and the main button works without the password being typed again
 
 #### Scenario: Leaving the page
 
@@ -238,7 +243,12 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf` whose password is "Qz7 pw#%@ Kv4", types it, writes the file and downloads it, while watching every request, page error and console message from the page and its worker
-- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password or its parts, plain or URL-encoded; storage, the title, the address and both consoles hold none of them; no page error or policy violation occurred; and the downloaded file does not hold the password
+- **THEN** after the pick only an exact list of the site's own files is requested, including the engine and no other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password or its parts, plain or URL-encoded, or the file's page text; storage, the title, the address and both consoles hold none of them; no page error or policy violation occurred; and the downloaded file does not hold the password
+
+#### Scenario: A file with restrictions only
+
+- **WHEN** `restricted.pdf` is written with no password typed, while every request and the console are watched
+- **THEN** its page text is in no request and not in the console
 
 #### Scenario: No hidden text reaches a request
 
@@ -247,9 +257,9 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft for the owner, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover uploading, a forgotten password, restrictions, a file with nothing to remove, signatures and what the new file keeps. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/`, marked as a draft for the owner, with nothing from "Banned patterns" and no question that restates the title. The questions SHALL cover what the scenario lists. (SPEC.md: Tool page anatomy, 7; SEO, Every tool page; How the words should read)
 
 #### Scenario: The text is in the served page
 
 - **WHEN** the built `/unlock-pdf` page is fetched without running scripts
-- **THEN** its heading, sentence, steps and questions are in the HTML, and they say the tool does not guess or recover a forgotten password, that a file with restrictions only needs no password, and that a digital signature stops being valid
+- **THEN** its heading, sentence, steps and questions are in the HTML, and they say the tool does not guess or recover a forgotten password, that a file with restrictions only needs no password, that restrictions should be removed only from a file the visitor is allowed to change, that a file with nothing to remove can be used as it is, that whoever sent a file protected another way can be asked for a copy without it, and that a digital signature stops being valid
