@@ -239,7 +239,8 @@ test.describe('focus', () => {
     await page.getByRole('button', { name: 'Cut after page 1', exact: true }).focus();
     const inside = await page.evaluate(() => {
       const button = document.activeElement as HTMLElement;
-      const cell = button.closest('li')!;
+      // The box inside the page's list item that holds what the page shows; its paint containment is what would clip.
+      const cell = button.closest('li > div')!;
       const b = button.getBoundingClientRect();
       const c = cell.getBoundingClientRect();
       // The ring is a 2px outline 2px outside the button.
