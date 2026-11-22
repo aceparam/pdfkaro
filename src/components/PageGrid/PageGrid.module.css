@@ -115,6 +115,8 @@
   /* Room on every side for a button's focus ring (2px outline, 2px offset), which this box's paint
      containment would otherwise clip. */
   padding: 0.25rem;
+  /* Room for the line that marks a cut after this page (.cut below), so marking a cut moves nothing. */
+  border-inline-end: 2px solid transparent;
 }
 .caption {
   /* "Page 120,000" may wrap rather than overflow a narrow cell. */
@@ -146,10 +148,7 @@
   border: 2px solid var(--text);
   font-weight: 700;
 }
-/* A cut after this page: a 2px line on the cell's trailing edge. Every cell keeps room for it, so marking a cut moves nothing. */
-.page {
-  border-inline-end: 2px solid transparent;
-}
+/* A cut after this page: a 2px line on the page box's trailing edge. */
 .cut > .page {
   border-inline-end-color: var(--text);
 }
