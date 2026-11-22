@@ -299,6 +299,15 @@ function newPasswordHold(tool: string, option: NewPasswordOption, held: Held): O
   return { key: option.key, kind: pair, sentence: passwordSentence(option, rule, { kind: pair }), field: 'again' };
 }
 
+/**
+ * Whether a new password's first field holds a password with no problem under the tool's rule for it, so Enter there
+ * moves on to the second field. False with no rule, which the registry test forbids.
+ */
+export function firstPasswordAccepted(tool: string, option: Pick<NewPasswordOption, 'key'>, held: Held = {}): boolean {
+  const rule = passwordRule(tool, option.key, held.passwordTable ?? optionPasswords);
+  return rule !== undefined && passwordProblem(typedPasswords(option, held.newPasswords).first, rule) === null;
+}
+
 /** Tied to the main button while a picture is being read. */
 export const pictureReadingSentence = 'The picture is still being read.';
 
@@ -486,15 +495,22 @@ export function focusMovesToOptions(hasOptions: boolean, keyNow: string, keyBefo
   return hasOptions && keyNow !== '' && keyNow !== keyBefore && focusIsFree;
 }
 
-/** What Enter in a text's field does: start the job, say why the main button waits, or nothing. */
-export type EnterAction = { kind: 'start' } | { kind: 'say'; sentence: string } | { kind: 'nothing' };
+/**
+ * What Enter in a text's or a new password's field does: start the job, move focus to a new password's second
+ * field, say why the main button waits, or nothing.
+ */
+export type EnterAction = { kind: 'start' } | { kind: 'next-field' } | { kind: 'say'; sentence: string } | { kind: 'nothing' };
 
 /**
  * Enter in a text's field does what the main button does when it works. When the button waits, the
  * first sentence that says why (the one tied to the button, then the field's own) is said by the status
  * region, on every press, so Enter is never silent; the page makes a repeated sentence differ, so it is said again.
+ * Enter in a new password's first field (`firstPasswordAccepted` given) moves on to its second field once the
+ * first holds a password with no problem under its rule, whether or not the button works; otherwise it gives
+ * the answers above.
  */
-export function enterAction(ready: boolean, sentences: readonly (string | null | undefined)[]): EnterAction {
+export function enterAction(ready: boolean, sentences: readonly (string | null | undefined)[], firstPasswordAccepted = false): EnterAction {
+  if (firstPasswordAccepted) return { kind: 'next-field' };
   if (ready) return { kind: 'start' };
   const sentence = sentences.find((each): each is string => typeof each === 'string' && each !== '');
   return sentence === undefined ? { kind: 'nothing' } : { kind: 'say', sentence };

@@ -1002,4 +1002,64 @@ export const tools: Tool[] = [
       ],
     },
   },
+  {
+    // The first row of "Protect": a password needed to open the file, set with qpdf at 256-bit AES.
+    id: 'protect-pdf',
+    group: 'protect',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Unlock PDF is linked once it is published.
+    related: ['unlock-pdf', 'compress-pdf', 'sign-pdf', 'watermark-pdf', 'merge-pdf', 'split-pdf'],
+    pages: [
+      {
+        slug: 'protect-pdf',
+        name: 'Protect with a password',
+        summary: 'Add a password that is needed to open a PDF.',
+        title: 'Protect a PDF with a password in your browser - PDFkaro',
+        // Neither this nor the sentence claims the password stays on the device: the browser may offer to save it.
+        description: 'Add a password to a PDF so it cannot be opened without it. The file and the password are not uploaded.',
+        heading: 'Protect a PDF with a password',
+        sentence: 'Add a password that is needed to open a PDF. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Protect and download',
+      writingLabel: 'Writing the protected file',
+      doneHeading: 'Your protected file is ready',
+      failedHeading: 'The password was not added.',
+      tooFewFiles: 'Choose a PDF file to protect.',
+      outputSuffix: 'protected',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The password's most characters and character rule are in src/widget/option-values.ts, which the engine reads.
+      // The hint and the result notes are page text, a draft for the owner's review.
+      options: [
+        {
+          kind: 'new-password',
+          key: 'newPassword',
+          label: 'New password',
+          againLabel: 'Type the new password again',
+          hint: 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+          emptySentence: 'Type a password first.',
+          againSentence: 'Type the password again to check it.',
+        },
+      ],
+      // The old password and restrictions are replaced: the agent's reading, an owner question.
+      resultNotes: [
+        'The file now opens only with the password you typed. Keep it somewhere safe: if it is forgotten, no one can open the file.',
+        'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'If the file you chose had a password or restrictions, the new password replaces them, and the file has no restrictions.',
+      ],
+    },
+  },
 ];

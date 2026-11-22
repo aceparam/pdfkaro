@@ -5,7 +5,7 @@ import { FilePicker } from '../../src/components/FilePicker/FilePicker';
 import { Notice } from '../../src/components/Notice/Notice';
 import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid/PageGrid';
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
-import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, heldValue, NewPasswordField, newPasswordSavingNote } from '../../src/components/NewPasswordField/NewPasswordField';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, heldValue, NewPasswordField, newPasswordSavingNote, passwordNoteId } from '../../src/components/NewPasswordField/NewPasswordField';
 import { passwordStaysSentence } from '../../src/widget/format';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
@@ -765,14 +765,15 @@ describe('NewPasswordField, a new password of a test entry', () => {
     expect(inputs(html)[1]).toContain('id="r5-pw-again"');
   });
 
-  it('keeps both hidden, for a password being set, with no name, no form and no length cap, and labels Enter "Go"', () => {
+  it('keeps both hidden, for a password being set, with no name, no form and no length cap, and labels Enter "Next" then "Go"', () => {
     for (const field of inputs(html)) {
       expect(field).toContain('type="password"');
       expect(field).toMatch(/\sautocomplete="new-password"/i);
-      expect(field).toMatch(/\senterkeyhint="go"/i);
       expect(field).not.toMatch(/\sname=/);
       expect(field).not.toMatch(/maxlength/i);
     }
+    expect(inputs(html)[0]).toMatch(/\senterkeyhint="next"/i);
+    expect(inputs(html)[1]).toMatch(/\senterkeyhint="go"/i);
     expect(html).not.toContain('<form');
   });
 
@@ -783,13 +784,20 @@ describe('NewPasswordField, a new password of a test entry', () => {
     }
   });
 
-  it('puts the hint, then the shared note, under the first field and reads them with it', () => {
-    expect(inputs(html)[0]).toContain('aria-describedby="r5-pw-hint"');
+  it('puts only the hint under the first field, the shared note as its own paragraph after the second, and reads both with the first', () => {
+    expect(passwordNoteId('r5-pw')).toBe('r5-pw-note');
+    expect(inputs(html)[0]).toContain('aria-describedby="r5-pw-hint r5-pw-note"');
     expect(inputs(html)[1]).not.toContain('aria-describedby');
-    const note = html.match(/<p id="r5-pw-hint" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
-    expect(note).toBe(`${option.hint} ${passwordStaysSentence} ${newPasswordSavingNote}`);
+    const hint = html.match(/<p id="r5-pw-hint" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
+    expect(hint).toBe(option.hint);
+    const note = html.match(/<p id="r5-pw-note" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
+    expect(note).toBe(`${passwordStaysSentence} ${newPasswordSavingNote}`);
+    // In order: the first field, its hint, the second field, the note; nothing else between the two fields.
     expect(html.indexOf('id="r5-pw-hint"')).toBeGreaterThan(html.indexOf('id="r5-pw"'));
     expect(html.indexOf('id="r5-pw-hint"')).toBeLessThan(html.indexOf('id="r5-pw-again"'));
+    expect(html.indexOf('id="r5-pw-note"')).toBeGreaterThan(html.indexOf('id="r5-pw-again"'));
+    expect(html).toMatch(/<p id="r5-pw-hint" class="[^"]+">[^<]*<\/p><\/div><div class="field field-short [^"]+"><label for="r5-pw-again">/);
+    expect(html).toMatch(/<input [^>]*id="r5-pw-again"[^>]*\/><\/div><p id="r5-pw-note" class="[^"]+">[^<]*<\/p><\/div>$/);
   });
 
   it("says the browser may offer to save or suggest it and copy it to the browser account, and never that it goes nowhere", () => {
@@ -812,7 +820,7 @@ describe('NewPasswordField, a new password of a test entry', () => {
     expect(firstPasswordErrorId('r5-pw')).toBe('r5-pw-error');
     expect(firstWrong).toMatch(/<label for="r5-pw">New password<\/label><p id="r5-pw-error" class="[^"]+">Some characters cannot be used\. Use only the characters listed under the box\.<\/p><input /);
     expect(inputs(firstWrong)[0]).toContain('aria-invalid="true"');
-    expect(inputs(firstWrong)[0]).toContain('aria-describedby="r5-pw-error r5-pw-hint"');
+    expect(inputs(firstWrong)[0]).toContain('aria-describedby="r5-pw-error r5-pw-hint r5-pw-note"');
     expect(inputs(firstWrong)[1]).not.toContain('aria-invalid');
     expect(firstWrong).not.toContain('café');
   });
@@ -823,7 +831,7 @@ describe('NewPasswordField, a new password of a test entry', () => {
     expect(inputs(againWrong)[1]).toContain('aria-invalid="true"');
     expect(inputs(againWrong)[1]).toContain('aria-describedby="r5-pw-again-error"');
     expect(inputs(againWrong)[0]).not.toContain('aria-invalid');
-    expect(inputs(againWrong)[0]).toContain('aria-describedby="r5-pw-hint"');
+    expect(inputs(againWrong)[0]).toContain('aria-describedby="r5-pw-hint r5-pw-note"');
   });
 
   it('passes on what is typed with its field, does what the main button does on Enter only, tells of leaving the first field, and puts the focus ref on it', () => {
@@ -882,6 +890,38 @@ describe('NewPasswordField, a new password of a test entry', () => {
   });
 });
 
+describe("NewPasswordField with Protect's entry", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { optionsHold, optionsToSend } = await import('../../src/widget/options');
+  const widget = tools.find((tool) => tool.id === 'protect-pdf')!.widget!;
+  const option = widget.options![0]!;
+  if (option.kind !== 'new-password') throw new Error('Protect lists a new password first');
+  // As the workspace draws it once the file is read: both fields empty.
+  const html = renderToStaticMarkup(<NewPasswordField option={option} id="r7-pw" first="" again="" onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const hint = 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
+
+  it('is the only option: "New password" and "Type the new password again", empty, the hint under the first and the note under the second', () => {
+    expect(widget.options).toHaveLength(1);
+    expect(option.key).toBe('newPassword');
+    expect(html).toContain('<label for="r7-pw">New password</label>');
+    expect(html).toContain('<label for="r7-pw-again">Type the new password again</label>');
+    expect(html).not.toMatch(/\svalue=/);
+    expect(html).toContain(`<p id="r7-pw-hint" class="${html.match(/<p id="r7-pw-hint" class="([^"]+)"/)?.[1]}">${hint.replaceAll('&', '&amp;')}</p>`);
+    expect(html.indexOf('id="r7-pw-note"')).toBeGreaterThan(html.indexOf('id="r7-pw-again"'));
+    expect(html).toContain(`${passwordStaysSentence} ${newPasswordSavingNote}`);
+  });
+
+  it('holds the main button with "Type a password first." while empty, then the second sentence, then works and sends the first field only', () => {
+    const held = (first: string, again: string) => ({ newPasswords: { newPassword: { first, again } } });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('', ''))).toEqual({ key: 'newPassword', kind: 'empty', sentence: 'Type a password first.', field: 'first' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', ''))?.sentence).toBe('Type the password again to check it.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toBeNull();
+    expect(optionsToSend(widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toEqual({ newPassword: 'Kv4 #%@ wq9' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('x'.repeat(128), ''))?.sentence).toBe('This password is too long. Use 127 characters or fewer.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('café', ''))?.kind).toBe('characters');
+  });
+});
+
 describe('the held value of an uncontrolled password field', () => {
   const option = {
     kind: 'new-password' as const,
@@ -894,7 +934,8 @@ describe('the held value of an uncontrolled password field', () => {
   };
   const refsOf = (first: string, again: string) => {
     const element = NewPasswordField({ option, id: 'r6-pw', first, again, onType: noop, onEnter: noop, onFirstBlur: noop });
-    const fields = (element.props as { children: ReactElement[] }).children;
+    // The two fields' boxes; the shared note after them is a paragraph.
+    const fields = (element.props as { children: ReactElement[] }).children.slice(0, 2);
     return fields.map(
       (field) =>
         ((field.props as { children: (ReactElement | null)[] }).children.find((child) => child !== null && child.type === 'input') as ReactElement & {

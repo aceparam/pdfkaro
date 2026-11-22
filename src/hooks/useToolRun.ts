@@ -3,7 +3,7 @@ import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
 import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, outputType, stem } from '../widget/format';
-import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
+import { initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
 import { jobOptions, picturesToReread, picturesToSend, rereadPicture, type NewPasswordField, type NewPasswords } from '../widget/options';
 import { pictureRule, type Drawing } from '../widget/option-values';
@@ -12,6 +12,7 @@ import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
+import { runJob } from './run-job';
 
 export type ToolRunResult = { url: string; name: string };
 
@@ -405,31 +406,36 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       // zip code on every run, whatever the file gives.
       const extension = words.outputExtension ?? 'pdf';
       const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix, extension } : undefined;
-      const { outputs, parts } = await getClient().run(
+      // Sending the job and reading its outcome is a plain function (run-job.ts), which forgets the new passwords
+      // itself once the job has finished with a file or with no new file.
+      const outcome = await runJob({
+        client: getClient(),
         inputs,
-        listed.map((entry) => passwords.current.get(entry.id)),
+        passwords: listed.map((entry) => passwords.current.get(entry.id)),
         // The page's preset, what the page's items say, then the options chosen; no preset key is an option key.
         // A new password's first field goes with it, as typed; its second never leaves the page.
-        jobOptions(preset, jobOption(), words.options, stateRef.current.choices, { newPasswords: newPasswordsRef.current }),
-        (progress) => {
+        options: jobOptions(preset, jobOption(), words.options, stateRef.current.choices, { newPasswords: newPasswordsRef.current }),
+        onProgress: (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
         },
         zip,
         // Each shown, ready picture beside the files; a hidden or unready one is not sent.
-        picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
-      );
-      const output = outputs[0];
-      const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
-      // No file is "no smaller", for a tool with words for it; for any other tool, the engine's failure.
-      const shown = finishedAs(output !== undefined, words.noSmaller !== undefined);
-      // The job has finished with a file or with no new file: a new password is held no longer than the job needs.
-      if (shown !== 'engine-failure') forgetNewPasswords();
-      if (shown === 'no-new-file') {
+        pictures: picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
+        hasNoSmallerWords: words.noSmaller !== undefined,
+        forgetNewPasswords,
+      });
+      if (outcome.kind === 'cancelled') return;
+      if (outcome.kind === 'failed') {
+        dispatch({ type: 'failed', failure: outcome.failure });
+        return;
+      }
+      if (outcome.kind === 'no-new-file') {
         dispatch({ type: 'finished', result: { none: true } });
         return;
       }
-      if (shown === 'engine-failure' || !output) throw new ToolError('engine');
+      const { output, parts } = outcome;
+      const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
       const zipped = parts !== undefined && parts > 1;
       // The download's type follows its extension: a zip, or one output of the tool's own kind.
       const named = zipped ? 'zip' : extension;
