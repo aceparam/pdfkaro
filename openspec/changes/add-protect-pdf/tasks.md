@@ -197,7 +197,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 - [x] 11.1 `LICENSES.md`: no change, as no dependency is added.
 - [x] 11.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`. Verify each passes.
-- [ ] 11.3 Add Protect's hand checks to issue #7:
+- [x] 11.3 Add Protect's hand checks to issue #7:
   - the result opened with the password and refused without it, in Chrome, Firefox, Adobe Reader and macOS Preview;
   - browsers and phones, including each browser's offer to save or suggest the password, the "Next" and "Go" keys, and whether the on-screen keyboard opens when focus moves to the field;
   - a screen reader on the two fields, checking the note is read with the first;
