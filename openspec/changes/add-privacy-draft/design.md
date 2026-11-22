@@ -28,7 +28,7 @@ The text is plain HTML inside `src/pages/privacy.astro`, as the other site pages
 
 The draft line is the first paragraph under the heading: `<p><strong>This is a draft.</strong> It was written from what the site's code does. The person who runs this site has not yet checked it.</p>`. A plain bold sentence, not `OwnerPlaceholder`: that box means "nothing here yet", and this page has content. The wording "the person who runs this site" follows the About placeholder and names no one.
 
-The sentence "This is a draft." is written once, as `draftSentence` in `src/site.ts` (which has no imports, so Node scripts can import it). The page, `scripts/check-seo.mjs`, the unit test and the end-to-end test all import it.
+The sentence "This is a draft." is written once, as `draftSentence` in `src/site.ts` (which has no imports, so Node scripts can import it). The page, `scripts/check-seo.mjs`, `tests/unit/check-seo.test.ts` and the end-to-end test import it.
 
 Links: the site test wants every link at least 44px tall, so an inline link in a paragraph would fail. The page needs none: it names tools in words, and says nothing that needs an outside source. No link is added.
 
