@@ -154,11 +154,37 @@ export type PictureOption = {
 };
 
 /**
- * An option a tool's working area shows once its file has been read, below the file and above
- * the main button, in registry order: a choice, a text, a drawing or a picture. One with a condition (`when`)
- * is shown, held and sent only while its condition holds.
+ * A password the visitor sets, typed twice in two hidden fields. It is the job's input: both start empty, and the
+ * main button waits until both hold the same password its rule takes. Its most characters and character rule are
+ * written once, in src/widget/option-values.ts (`optionPasswords`); the registry holds only its words. Its value is
+ * never held in the widget's state.
  */
-export type ToolOption = ChoiceOption | TextOption | DrawingOption | PictureOption;
+export type NewPasswordOption = {
+  kind: 'new-password';
+  /** The key the engine receives: Protect's is `newPassword`, never `password`, one letter from the worker's `passwords`. No page preset uses it. */
+  key: string;
+  /** The first field's label: "New password". */
+  label: string;
+  /** The second field's label: "Type the new password again". */
+  againLabel: string;
+  /** Under the first field, read with it, before the fixed note: what it takes. Ends with the rule's own words. */
+  hint: string;
+  /** Tied to the main button while the first field is empty: "Type a password first." */
+  emptySentence: string;
+  /** Tied to the main button while the second field is empty or part-typed: "Type the password again to check it." */
+  againSentence: string;
+  /** When the engine refuses the password. Left out: "The password could not be used. Go back to your file and type it again." */
+  refusedSentence?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
+ * An option a tool's working area shows once its file has been read, below the file and above
+ * the main button, in registry order: a choice, a text, a drawing, a picture or a new password. One with a
+ * condition (`when`) is shown, held and sent only while its condition holds.
+ */
+export type ToolOption = ChoiceOption | TextOption | DrawingOption | PictureOption | NewPasswordOption;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';

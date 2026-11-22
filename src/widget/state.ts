@@ -35,7 +35,8 @@ export type FailureKind =
   | 'text-refused'
   | 'drawing-refused'
   | 'picture-refused'
-  | 'picture-too-large';
+  | 'picture-too-large'
+  | 'password-refused';
 
 /** What a picture option's chosen picture is: being read, ready, damaged, saved in a way the tool cannot read, or turned away by the page for its type. */
 export type PictureStatus = 'reading' | 'ready' | 'damaged' | 'unsupported' | 'refused';

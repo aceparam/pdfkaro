@@ -6,19 +6,29 @@
 // the job's input too: it starts empty, and it holds the button back while
 // nothing is drawn. A picture is the job's input as well: it holds the button
 // back until one is chosen and read, and while the one chosen cannot be used.
+// A new password is the job's input too: two hidden fields, both empty at first,
+// holding the button back until both hold the same password its rule takes. Its
+// value is never in the widget's state: useToolRun holds it, and passes it in.
 
-import type { ChoiceOption, DrawingOption, PictureOption, TextOption, ToolOption } from '../tools/registry';
+import type { ChoiceOption, DrawingOption, NewPasswordOption, PictureOption, TextOption, ToolOption } from '../tools/registry';
 import { formatSize, number } from './format';
 import {
   cleanText,
   drawingRule,
+  optionPasswords,
   optionPictures,
+  passwordProblem,
+  passwordRule,
   pictureRule,
   textProblem,
   textRule,
   type CharacterRule,
   type Drawing,
   type DrawingTable,
+  type PasswordCharacterRule,
+  type PasswordProblem,
+  type PasswordRule,
+  type PasswordTable,
   type PictureRule,
   type PictureTable,
   type TextProblem,
@@ -29,6 +39,34 @@ import type { PictureEntry, State } from './state';
 
 /** What each option holds, by option key: a choice's value, a text as typed, or a drawing's lines. `{}` is every option at its start. */
 export type Choices = Readonly<Record<string, string | Drawing>>;
+
+/** Which of a new password's two fields: the password, or the same password again. */
+export type NewPasswordField = 'first' | 'again';
+
+/** What each new password's two fields hold, by option key, exactly as typed. Held by useToolRun, never in the state. */
+export type NewPasswords = Readonly<Record<string, { readonly first: string; readonly again: string }>>;
+
+/**
+ * What the rules read besides the choices, each part defaulting as before when left out: the tables (texts,
+ * drawings, pictures and new passwords; their own modules' when left out), the pictures chosen (the state's),
+ * what each new password's fields hold (useToolRun's), and the keys of the new passwords whose first field is
+ * still being typed (`typing`: focus is in it and nothing has asked for its sentence since the last key).
+ */
+export type Held = {
+  texts?: TextTable;
+  drawings?: DrawingTable;
+  pictures?: Readonly<Record<string, PictureEntry>>;
+  pictureTable?: PictureTable;
+  newPasswords?: NewPasswords;
+  passwordTable?: PasswordTable;
+  typing?: ReadonlySet<string>;
+};
+
+/** What a new password's fields hold, as typed; both '' when nothing is. Only own keys count. */
+export function typedPasswords(option: Pick<NewPasswordOption, 'key'>, newPasswords: NewPasswords | undefined): { first: string; again: string } {
+  const held = newPasswords !== undefined && Object.hasOwn(newPasswords, option.key) ? newPasswords[option.key] : undefined;
+  return { first: typeof held?.first === 'string' ? held.first : '', again: typeof held?.again === 'string' ? held.again : '' };
+}
 
 /** The value a choice shows: the one chosen when it is among the option's values, else its starting value. */
 export function chosenValue(option: ChoiceOption, choices: Choices): string {
@@ -76,16 +114,18 @@ export function shownOptions(options: readonly ToolOption[] | undefined, choices
 
 /**
  * What the engine is sent for the tool's options: a choice's value, a text cleaned (composed and
- * trimmed) and a drawing's lines as they are, by key, or `{}` for a tool with none. Only shown
- * options are sent: a hidden one sends no key at all. The main button cannot start a job while a
- * text has a problem or a drawing is empty, and the engine checks both again.
+ * trimmed), a drawing's lines as they are and a new password's first field exactly as typed, by key,
+ * or `{}` for a tool with none. Only shown options are sent: a hidden one sends no key at all. A new
+ * password's second field is never sent. The main button cannot start a job while a text or a new
+ * password has a problem or a drawing is empty, and the engine checks each again.
  */
-export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices): Record<string, string | Drawing> {
+export function optionsToSend(options: readonly ToolOption[] | undefined, choices: Choices, held: Held = {}): Record<string, string | Drawing> {
   const sent: Record<string, string | Drawing> = {};
   for (const option of shownOptions(options, choices)) {
     if (option.kind === 'choice') sent[option.key] = chosenValue(option, choices);
     else if (option.kind === 'text') sent[option.key] = cleanText(typedText(option, choices));
     else if (option.kind === 'drawing') sent[option.key] = drawnLines(option, choices);
+    else if (option.kind === 'new-password') sent[option.key] = typedPasswords(option, held.newPasswords).first;
     // A picture's bytes go beside the files (`picturesToSend`), never in the options.
   }
   return sent;
@@ -101,8 +141,9 @@ export function jobOptions(
   itemOption: Readonly<Record<string, unknown>>,
   options: readonly ToolOption[] | undefined,
   choices: Choices,
+  held: Held = {},
 ): Record<string, unknown> {
-  return { ...preset, ...itemOption, ...optionsToSend(options, choices) };
+  return { ...preset, ...itemOption, ...optionsToSend(options, choices, held) };
 }
 
 /** What each character rule takes, in words: the second sentence when characters are refused, and the end of each tool's hint. */
@@ -147,43 +188,139 @@ export function textSentence(option: TextOption, rule: TextRule, problem: TextPr
   }
 }
 
+/** What is wrong between a new password's two fields, once the first has no problem of its own. */
+export type PairProblem = 'again-empty' | 'again-partial' | 'mismatch';
+
+/**
+ * How the second field stands against the first: null when the two are the same; `again-empty` while the second is
+ * empty; `again-partial` while it is a shorter start of the first, so still being typed; else `mismatch`.
+ */
+export function pairProblem(first: string, again: string): PairProblem | null {
+  if (again === first) return null;
+  if (again === '') return 'again-empty';
+  if (again.length < first.length && first.startsWith(again)) return 'again-partial';
+  return 'mismatch';
+}
+
+/** What each password character rule takes, in words: the end of each tool's hint. A draft for the owner's review. */
+export const passwordAdvice: Readonly<Record<PasswordCharacterRule, string>> = {
+  'printable-ascii': 'Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+};
+
+/** What holds the main button back for a new password: the first field's problem, a quiet space at its end while typed, or the pair's. */
+export type PasswordHoldKind = PasswordProblem['kind'] | 'edge-space-quiet' | PairProblem;
+
+/**
+ * The one sentence for a new password's problem: fixed words only, each saying what to do next. Never a character,
+ * a number of characters typed, or the password: the status region reads these aloud, and a refused character or a
+ * length is part of the secret. Only the tool's own limit is said, for a password too long.
+ */
+export function passwordSentence(option: Pick<NewPasswordOption, 'emptySentence' | 'againSentence'>, rule: Pick<PasswordRule, 'maxLength'>, problem: { kind: PasswordHoldKind }): string {
+  switch (problem.kind) {
+    case 'empty':
+      return option.emptySentence;
+    case 'characters':
+      return 'Some characters cannot be used. Use only the characters listed under the box.';
+    case 'edge-space':
+      return 'A password cannot start or end with a space.';
+    case 'too-long':
+      return `This password is too long. Use ${number(rule.maxLength)} characters or fewer.`;
+    // The first field has text in it, so "Type a password first." would not be true: the step that comes next.
+    case 'edge-space-quiet':
+    case 'again-empty':
+    case 'again-partial':
+      return option.againSentence;
+    case 'mismatch':
+      return 'The two passwords are not the same. Type the password again in this box.';
+  }
+}
+
 /**
  * What holds the main button back. A text's problem kinds; `reading` for a picture still being read; a picture's
- * problem by its status (`refused`, `damaged`, `unsupported`). `empty` and `reading` are said under the main button.
+ * problem by its status (`refused`, `damaged`, `unsupported`); a new password's (`PasswordHoldKind`). `empty`,
+ * `reading`, `again-empty`, `again-partial` and `edge-space-quiet` are said under the main button.
  */
-export type HoldKind = TextProblem['kind'] | 'reading' | 'refused' | 'damaged' | 'unsupported';
+export type HoldKind = TextProblem['kind'] | 'reading' | 'refused' | 'damaged' | 'unsupported' | PasswordHoldKind;
 
-/** A text, a drawing or a picture holding the main button back: its key, what is wrong, and the sentence. A drawing is only ever `empty`. */
-export type OptionHold = { key: string; kind: HoldKind; sentence: string };
+/**
+ * A text, a drawing, a picture or a new password holding the main button back: its key, what is wrong, and the
+ * sentence. A drawing is only ever `empty`. A new password's says which of its fields the sentence belongs to.
+ */
+export type OptionHold = { key: string; kind: HoldKind; sentence: string; field?: NewPasswordField };
 
-/** Whether a hold's sentence goes under the main button (nothing chosen yet, or a picture still being read), not by its field. */
+/**
+ * Whether a hold's sentence goes under the main button (nothing chosen or typed yet, a picture still being read, a
+ * new password's second field empty or still being typed, or a space at the end of a first field still being typed),
+ * not by its field.
+ */
 export function holdsUnderButton(hold: Pick<OptionHold, 'kind'>): boolean {
-  return hold.kind === 'empty' || hold.kind === 'reading';
+  return hold.kind === 'empty' || hold.kind === 'reading' || hold.kind === 'again-empty' || hold.kind === 'again-partial' || hold.kind === 'edge-space-quiet';
+}
+
+/** The ids the main button's `aria-describedby` may name for a hold: the paragraph under it, and each field's sentence by key. */
+export type HoldIds = {
+  tied: string;
+  text(key: string): string;
+  picture(key: string): string;
+  firstPassword(key: string): string;
+  againPassword(key: string): string;
+};
+
+/**
+ * The id of the element that holds a hold's sentence: the paragraph under the main button for a hold said there,
+ * else its field's sentence, by the kind of option it belongs to and, for a new password, by its field.
+ */
+export function holdErrorId(hold: OptionHold, options: readonly ToolOption[], ids: HoldIds): string {
+  if (holdsUnderButton(hold)) return ids.tied;
+  const kind = options.find((option) => option.key === hold.key)?.kind;
+  if (kind === 'picture') return ids.picture(hold.key);
+  if (kind === 'new-password') return hold.field === 'again' ? ids.againPassword(hold.key) : ids.firstPassword(hold.key);
+  return ids.text(hold.key);
+}
+
+/**
+ * What holds the main button back for one shown new password, or null. The first field's problem, then the pair's.
+ * A space at the end of a first field still being typed (its key in `typing`) holds quietly, under the button, since
+ * every password with a space inside passes through one; a space at the start never does. One with no rule (which
+ * the registry test forbids) always holds, with its empty sentence, so none is sent unchecked.
+ */
+function newPasswordHold(tool: string, option: NewPasswordOption, held: Held): OptionHold | null {
+  const rule = passwordRule(tool, option.key, held.passwordTable ?? optionPasswords);
+  if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence, field: 'first' };
+  const { first, again } = typedPasswords(option, held.newPasswords);
+  const problem = passwordProblem(first, rule);
+  if (problem) {
+    const quiet = problem.kind === 'edge-space' && !first.startsWith(' ') && held.typing?.has(option.key) === true;
+    const kind: PasswordHoldKind = quiet ? 'edge-space-quiet' : problem.kind;
+    return { key: option.key, kind, sentence: passwordSentence(option, rule, { kind }), field: 'first' };
+  }
+  const pair = pairProblem(first, again);
+  if (pair === null) return null;
+  return { key: option.key, kind: pair, sentence: passwordSentence(option, rule, { kind: pair }), field: 'again' };
 }
 
 /** Tied to the main button while a picture is being read. */
 export const pictureReadingSentence = 'The picture is still being read.';
 
 /**
- * The first shown text, drawing or picture, in registry order, that holds the main button back, or null. A
- * hidden one and a choice never hold it. `empty` and `reading` are tied to the main button under it; a text's `characters` and
- * `too-long`, and a picture's problem, are shown by the field and tied to the main button from there. A drawing holds while it has
+ * The first shown text, drawing, picture or new password, in registry order, that holds the main button back, or null. A
+ * hidden one and a choice never hold it. Holds said under the main button (`holdsUnderButton`) are tied to it there; a text's `characters` and
+ * `too-long`, a picture's problem and a new password's field problems are shown by the field and tied to the main button from there. A drawing holds while it has
  * no lines. A picture holds until it is chosen and read, and while it cannot be used; a ready one never holds, however large. A text,
- * drawing or picture with no line in its table (which the registry test forbids) always holds, with its empty sentence, so none is
- * sent unchecked. `pictures` and `pictureTable` come last and may be left out, so callers that pass only texts keep working.
+ * drawing, picture or new password with no line in its table (which the registry test forbids) always holds, with its empty sentence, so none is
+ * sent unchecked. Every part of `held` may be left out.
  */
-export function optionsHold(
-  tool: string,
-  options: readonly ToolOption[] | undefined,
-  choices: Choices,
-  texts?: TextTable,
-  drawings?: DrawingTable,
-  pictures: Readonly<Record<string, PictureEntry>> = {},
-  pictureTable: PictureTable = optionPictures,
-): OptionHold | null {
+export function optionsHold(tool: string, options: readonly ToolOption[] | undefined, choices: Choices, held: Held = {}): OptionHold | null {
+  const pictures = held.pictures ?? {};
+  const pictureTable = held.pictureTable ?? optionPictures;
   for (const option of shownOptions(options, choices)) {
+    if (option.kind === 'new-password') {
+      const hold = newPasswordHold(tool, option, held);
+      if (hold) return hold;
+      continue;
+    }
     if (option.kind === 'drawing') {
-      if (drawingRule(tool, option.key, drawings) === undefined || drawnLines(option, choices).length === 0) {
+      if (drawingRule(tool, option.key, held.drawings) === undefined || drawnLines(option, choices).length === 0) {
         return { key: option.key, kind: 'empty', sentence: option.emptySentence };
       }
       continue;
@@ -196,7 +333,7 @@ export function optionsHold(
       return { key: option.key, kind: entry.status, sentence: pictureSentence(option, entry) ?? option.emptySentence };
     }
     if (option.kind !== 'text') continue;
-    const rule = textRule(tool, option.key, texts);
+    const rule = textRule(tool, option.key, held.texts);
     if (rule === undefined) return { key: option.key, kind: 'empty', sentence: option.emptySentence };
     const problem = textProblem(cleanText(typedText(option, choices)), rule);
     if (problem) return { key: option.key, kind: problem.kind, sentence: textSentence(option, rule, problem) };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawingRefusedSentence, failureSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -247,5 +247,37 @@ describe('a picture the engine refuses or finds too large', () => {
   it('says the picture is too large without a name when none is chosen', () => {
     expect(failureSentence('picture-too-large', { options: [picture] })).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
     expect(failureSentence('picture-too-large', {})).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
+  });
+});
+
+describe('a new password the engine refuses', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'lock', label: 'Lock it' }, { value: 'keep', label: 'Keep it' }], initial: 'lock' };
+  const password: ToolOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+
+  it("says the shared sentence, with its next step, or the first shown new password's own words", () => {
+    expect(passwordRefusedSentence).toBe('The password could not be used. Go back to your file and type it again.');
+    expect(failureSentence('password-refused', {})).toBe(passwordRefusedSentence);
+    expect(failureSentence('password-refused', { options: [password] })).toBe(passwordRefusedSentence);
+    const own = 'This password could not be used. Go back to your file and type it again.';
+    expect(failureSentence('password-refused', { options: [{ ...password, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...password, refusedSentence: own, when: { key: 'way', value: 'lock' } };
+    expect(failureSentence('password-refused', { options: [way, hidden] }, { way: 'keep' })).toBe(passwordRefusedSentence);
+    expect(failureSentence('password-refused', { options: [way, hidden] }, { way: 'lock' })).toBe(own);
+  });
+
+  it("is not a text's sentence, and holds nothing typed: the page has nothing of the password to say", () => {
+    const text: ToolOption = { kind: 'text', key: 'text', label: 'Name', hint: 'Your name.', emptySentence: 'Type it first.', refusedSentence: 'The name could not be used.' };
+    expect(failureSentence('password-refused', { options: [text, password] })).toBe(passwordRefusedSentence);
+    expect(failureSentence('text-refused', { options: [{ ...password, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
+    // The choices never hold a password, and even a value typed under its key is not said.
+    expect(failureSentence('password-refused', { options: [password] }, { newPassword: 'Qz7#Kw' })).not.toContain('Qz7');
   });
 });

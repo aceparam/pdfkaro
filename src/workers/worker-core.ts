@@ -53,6 +53,8 @@ export function failureKind(error: unknown): FailureKind {
   // new file's size budget (`PictureTooLarge`). Known by name, as above; the page names the picture from its own state.
   if (error instanceof Error && error.name === 'PictureRefused') return 'picture-refused';
   if (error instanceof Error && error.name === 'PictureTooLarge') return 'picture-too-large';
+  // An engine refused the new password it was sent (option-values.ts's `PasswordRefused`). Known by name, as above; its message holds nothing of it.
+  if (error instanceof Error && error.name === 'PasswordRefused') return 'password-refused';
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
   if (outOfMemory(error)) return 'memory';
   return 'engine';

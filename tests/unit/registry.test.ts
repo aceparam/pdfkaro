@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type DrawingOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import { groups, tools, type DrawingOption, type NewPasswordOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
 import {
   characterRules,
   drawingRule,
   optionDrawings,
+  optionPasswords,
   optionPictures,
   optionTexts,
   optionValues,
+  passwordCharacters,
+  passwordRule,
   pictureRule,
   textRule,
   type DrawingRule,
+  type PasswordRule,
   type PictureRule,
   type TextRule,
 } from '../../src/widget/option-values';
-import { ruleAdvice } from '../../src/widget/options';
+import { passwordAdvice, ruleAdvice } from '../../src/widget/options';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
@@ -455,6 +459,7 @@ type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>
 type Texts = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
 type Drawings = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
 type Pictures = Readonly<Record<string, Readonly<Record<string, PictureRule>>>>;
+type Passwords = Readonly<Record<string, Readonly<Record<string, PasswordRule>>>>;
 
 /** Keys the worker itself puts beside the options it hands the engine: an option never uses one. */
 const workerKeys = new Set(['passwords']);
@@ -472,6 +477,7 @@ function optionProblems(
   texts: Texts = optionTexts,
   drawings: Drawings = optionDrawings,
   pictures: Pictures = optionPictures,
+  passwords: Passwords = optionPasswords,
 ): string[] {
   const options = tool.widget?.options ?? [];
   const problems: string[] = [];
@@ -495,6 +501,8 @@ function optionProblems(
       problems.push(...drawingProblems(tool.id, option, drawings));
     } else if (option.kind === 'picture') {
       problems.push(...pictureProblems(tool.id, option, pictures));
+    } else if (option.kind === 'new-password') {
+      problems.push(...newPasswordProblems(tool.id, option, passwords));
     } else {
       problems.push(`${(option as { key: string }).key}: unknown kind`);
     }
@@ -531,6 +539,42 @@ function optionProblems(
     for (const key of Object.keys(pictures[tool.id] ?? {})) {
       if (kindOf(key) !== 'picture') problems.push(`${key}: in optionPictures but not a picture of the tool`);
     }
+  }
+  if (Object.hasOwn(passwords, tool.id)) {
+    for (const key of Object.keys(passwords[tool.id] ?? {})) {
+      if (kindOf(key) !== 'new-password') problems.push(`${key}: in optionPasswords but not a new password of the tool`);
+    }
+  }
+  return problems;
+}
+
+/** What is wrong with one new password: its words, and its line in optionPasswords. */
+function newPasswordProblems(toolId: string, option: NewPasswordOption, passwords: Passwords): string[] {
+  const problems: string[] = [];
+  const words: [string, string | undefined, boolean][] = [
+    ['label', option.label, true],
+    ['again label', option.againLabel, true],
+    ['hint', option.hint, true],
+    ['empty sentence', option.emptySentence, true],
+    ['again sentence', option.againSentence, true],
+    ['refused sentence', option.refusedSentence, false],
+  ];
+  for (const [name, said, needed] of words) {
+    if ((needed || said !== undefined) && !plain(said)) problems.push(`${option.key}: the ${name} is empty or not plain`);
+  }
+  const rule = passwordRule(toolId, option.key, passwords);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionPasswords`);
+    return problems;
+  }
+  // The format's own limit for a 256-bit key: every reader cuts a longer password to 127 bytes.
+  if (!Number.isInteger(rule.maxLength) || rule.maxLength < 1 || rule.maxLength > 127) problems.push(`${option.key}: the most characters is not a whole number from 1 to 127`);
+  if (!Object.hasOwn(passwordCharacters, rule.characters)) problems.push(`${option.key}: the character rule is not known`);
+  // The hint ends with what the rule takes, in the rule's own words, so the hint and the rule cannot drift apart.
+  else if (!option.hint.endsWith(passwordAdvice[rule.characters])) problems.push(`${option.key}: the hint does not end with what its rule takes`);
+  // "Up to 127 characters": a hint that names a number of characters names the limit.
+  for (const match of option.hint.matchAll(/(\d[\d,]*)\s+characters?\b/g)) {
+    if (Number(match[1]!.replaceAll(',', '')) !== rule.maxLength) problems.push(`${option.key}: the hint names ${match[1]} characters, not the most characters`);
   }
   return problems;
 }
@@ -1032,5 +1076,95 @@ describe('the worker keys', () => {
     const choice: ToolOption = { kind: 'choice', key: 'passwords', legend: 'Which', choices: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], initial: 'a' };
     const tool: Tool = { ...merge, id: 'test-options', widget: { ...merge.widget, options: [choice] } };
     expect(optionProblems(tool, { 'test-options': { passwords: ['a', 'b'] } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('new passwords', () => {
+  // Protect's key, `newPassword`: never `password`, one letter from the worker's `passwords`.
+  const password: NewPasswordOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: `Up to 127 characters. ${passwordAdvice['printable-ascii']}`,
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'lock', label: 'Lock it' }, { value: 'keep', label: 'Keep it' }], initial: 'lock' };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['lock', 'keep'] } };
+  const rule: PasswordRule = { maxLength: 127, characters: 'printable-ascii' };
+  const passwords: Passwords = { 'test-options': { newPassword: rule } };
+  const check = (options: ToolOption[], table: Passwords = passwords, preset?: Record<string, string>) =>
+    optionProblems(entry(options, preset), options.includes(way) ? values : {}, {}, {}, {}, table);
+
+  it('are sound for every tool, and optionPasswords names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings, optionPictures, optionPasswords), tool.id).toEqual([]);
+    for (const id of Object.keys(optionPasswords)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry keyed newPassword: first, after a choice, with a condition, or with its own refused sentence', () => {
+    expect(password.key).toBe('newPassword');
+    expect(check([password])).toEqual([]);
+    expect(check([way, { ...password, when: { key: 'way', value: 'lock' } }])).toEqual([]);
+    expect(check([{ ...password, refusedSentence: 'This password could not be used. Go back to your file and type it again.' }])).toEqual([]);
+    expect(check([{ ...password, hint: passwordAdvice['printable-ascii'] }], { 'test-options': { newPassword: { maxLength: 1, characters: 'printable-ascii' } } })).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(check([{ ...password, label: ' ' }])).toContain('newPassword: the label is empty or not plain');
+    expect(check([{ ...password, againLabel: '' }])).toContain('newPassword: the again label is empty or not plain');
+    expect(check([{ ...password, hint: '' }])).toContain('newPassword: the hint is empty or not plain');
+    expect(check([{ ...password, emptySentence: 'Type one!' }])).toContain('newPassword: the empty sentence is empty or not plain');
+    expect(check([{ ...password, againSentence: ' ' }])).toContain('newPassword: the again sentence is empty or not plain');
+    expect(check([{ ...password, refusedSentence: '' }])).toContain('newPassword: the refused sentence is empty or not plain');
+  });
+
+  it('fail with no line in optionPasswords, or a line that belongs to no new password', () => {
+    expect(check([password], {})).toContain('newPassword: no line in optionPasswords');
+    expect(check([password], { 'test-options': { other: rule } })).toContain('newPassword: no line in optionPasswords');
+    expect(check([password], { 'test-options': { newPassword: rule, size: rule } })).toContain('size: in optionPasswords but not a new password of the tool');
+    expect(check([way, password], { 'test-options': { newPassword: rule, way: rule } })).toContain('way: in optionPasswords but not a new password of the tool');
+    // A new password's key is not a text's line, and the reverse.
+    expect(optionProblems(entry([password]), {}, { 'test-options': { newPassword: { maxLength: 50, characters: 'standard-font' } } }, {}, {}, passwords)).toContain(
+      'newPassword: in optionTexts but not a text of the tool',
+    );
+    // An inherited name is never taken for a tool's or a password's line.
+    expect(check([{ ...password, key: 'toString' }])).toContain('toString: no line in optionPasswords');
+  });
+
+  it('fail when the most characters is not a whole number from 1 to 127, or the rule is not known', () => {
+    const limit = 'newPassword: the most characters is not a whole number from 1 to 127';
+    const noNumber = { ...password, hint: passwordAdvice['printable-ascii'] };
+    for (const maxLength of [0, 128, 2.5, Number.NaN]) {
+      expect(check([noNumber], { 'test-options': { newPassword: { maxLength, characters: 'printable-ascii' } } }), String(maxLength)).toContain(limit);
+    }
+    expect(check([noNumber], { 'test-options': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } })).toEqual([]);
+    for (const characters of ['any', 'standard-font', 'toString']) {
+      expect(check([password], { 'test-options': { newPassword: { maxLength: 127, characters: characters as PasswordRule['characters'] } } })).toContain(
+        'newPassword: the character rule is not known',
+      );
+    }
+  });
+
+  it('fail when the hint does not end with what its rule takes, or names another number of characters', () => {
+    const wrong = 'newPassword: the hint does not end with what its rule takes';
+    expect(check([{ ...password, hint: 'Up to 127 characters.' }])).toContain(wrong);
+    expect(check([{ ...password, hint: `${password.hint} Or anything.` }])).toContain(wrong);
+    expect(check([password])).not.toContain(wrong);
+    expect(check([password], { 'test-options': { newPassword: { maxLength: 64, characters: 'printable-ascii' } } })).toContain(
+      'newPassword: the hint names 127 characters, not the most characters',
+    );
+  });
+
+  it('fail when the key is not a plain word, is used twice, is a preset key, one the items send, or passwords', () => {
+    expect(check([{ ...password, key: 'new password' }], { 'test-options': { 'new password': rule } })).toContain('new password: the key is not a plain word');
+    expect(check([password, { ...password, label: 'Again' }])).toContain('an option key is used twice');
+    expect(check([password], passwords, { newPassword: 'x' })).toContain(`newPassword: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(check([{ ...password, key: 'pages' }], { 'test-options': { pages: rule } })).toContain("pages: the key is one the page's items send");
+    expect(check([{ ...password, key: 'passwords' }], { 'test-options': { passwords: rule } })).toContain('passwords: the key is one the worker sends');
   });
 });

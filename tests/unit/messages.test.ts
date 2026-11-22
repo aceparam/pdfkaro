@@ -74,6 +74,7 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'output-limit' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'text-refused' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'drawing-refused' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'password-refused' })).toBe(true);
     // No file: an engine that could not make the file smaller (Compress PDF).
     expect(isFromWorker({ type: 'done', requestId: 1, outputs: [] })).toBe(true);
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'working', unit: 'picture', done: 3, total: 40 } })).toBe(true);
