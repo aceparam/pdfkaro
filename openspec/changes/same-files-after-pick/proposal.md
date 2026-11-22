@@ -44,7 +44,7 @@ Phase 1, not a tool: a privacy fix to two Phase 1 tools already published (Compr
 ## Open decisions and owner questions touched
 
 - None blocks this change. The fix follows the owner's 11 Nov decision.
-- New question for the owner, raised at stage 1 and carried in CLAUDE.md: a damaged, unsupported or still-locked file fetches no thumbnail files, so it can be told apart from a readable one. Is that acceptable under the 11 Nov decision, or should every pick fetch the thumbnail files (a separate change)? "Compress PDF keeps passwords" and "Very large PNGs" are untouched.
+- New question for the owner, raised at stage 1 and carried in CLAUDE.md: a damaged, unsupported or still-locked file fetches no thumbnail files, so it can be told apart from a readable one; and even once a password is typed, the delay before the thumbnail files are fetched shows the file was protected (privacy, stage 1). Is that acceptable under the 11 Nov decision, or should every pick fetch the thumbnail files (a separate change)? "Compress PDF keeps passwords" and "Very large PNGs" are untouched.
 
 ## Where the file is processed
 

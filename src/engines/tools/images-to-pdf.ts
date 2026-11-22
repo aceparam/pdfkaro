@@ -114,10 +114,13 @@ export const run: Engine<Record<string, unknown>> = async (files, _options, onPr
 };
 
 export const inspect: Inspector = async (file, _password, tools) => {
+  // fflate is asked for first, for every picture, so a JPG, a PNG and a picture this tool refuses fetch the same files
+  // and the host never learns which was picked (owner, 11 Nov 2026: no request depends on what a file needs).
+  const fflate = await need<{ Inflate: InflateClass }>(tools, 'fflate');
   const read = readPicture(file);
   if (read.kind !== 'ok') return read;
   // A PNG whose image data would inflate past what its header says is damaged, before the main button.
-  if (read.picture.type === 'png' && !pngDataFits(file, await need<{ Inflate: InflateClass }>(tools, 'fflate'))) return { kind: 'damaged' };
+  if (read.picture.type === 'png' && !pngDataFits(file, fflate)) return { kind: 'damaged' };
   return isHuge(read.picture) ? { kind: 'ready', pages: 1, pixels: read.picture.width * read.picture.height } : { kind: 'ready', pages: 1 };
 };
 

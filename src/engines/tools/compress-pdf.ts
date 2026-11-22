@@ -357,6 +357,9 @@ function statedLength(dict: Dict, objects: ReadonlyMap<string, ObjectEntry>): nu
 export const run: Engine<Options> = async (files, options, onProgress, tools) => {
   const file = files[0];
   if (!file || files.length !== 1) throw new Error('Compress takes one file.');
+  // fflate is asked for first, on every job, whatever the file holds, so the files fetched never tell the host
+  // whether it has a lossless picture to shrink (owner, 11 Nov 2026: no request depends on what a file needs).
+  const fflate = await need<Fflate>(tools, 'fflate');
   const passwordArgs = passwordArgsFor(passwordFrom(options));
   onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 });
 
@@ -378,10 +381,8 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
     if (total > 0) {
       const byId = new Map(candidates.map((each) => [each.id, each]));
       const needsJpeg = candidates.some((each) => each.candidate.kind === 'jpeg');
-      const needsLossless = candidates.some((each) => each.candidate.kind === 'lossless');
       const decoder = needsJpeg ? await need<PictureDecoder>(tools, 'decodePicture') : undefined;
       const canvases = needsJpeg ? await need<JpegCanvasMaker>(tools, 'canvas') : undefined;
-      const fflate = needsLossless ? await need<Fflate>(tools, 'fflate') : undefined;
       const batches = rawBatches(candidates.map(({ id, dict }) => ({ id, length: statedLength(dict, dicts.objects) })));
       let done = 0;
       for await (const batch of readRawStreams(() => freshQpdf(tools, file), passwordArgs, batches)) {
@@ -394,7 +395,7 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
           let replacement: StreamReplacement | undefined;
           try {
             replacement =
-              candidate.kind === 'jpeg' ? await shrinkJpeg(raw, dict, candidate, limit, decoder!, canvases!) : shrinkLossless(raw, dict, candidate, limit, fflate!);
+              candidate.kind === 'jpeg' ? await shrinkJpeg(raw, dict, candidate, limit, decoder!, canvases!) : shrinkLossless(raw, dict, candidate, limit, fflate);
           } catch {
             // A picture the browser or our code cannot redo is left as it was.
             replacement = undefined;
