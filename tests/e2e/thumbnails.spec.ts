@@ -288,7 +288,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     expect(before).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
     // Removing it stops that drawing on a fresh worker; from here on, let the data through. The held request
-    // belonged to the ended worker, so it is already gone; continuing it only tidies up.
+    // belonged to the ended worker, so it may already be gone; continuing it only tidies up.
     released = true;
     for (const route of held.splice(0)) await route.continue().catch(() => {});
     await expect(pictures(page)).toHaveCount(1, { timeout: 20000 });
