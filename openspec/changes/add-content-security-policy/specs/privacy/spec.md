@@ -34,7 +34,7 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 #### Scenario: What the policy does not stop
 
 - **WHEN** the page navigates, opens a window, follows a link, is sent elsewhere by a meta refresh, uses WebRTC or prefetches a name, or a request goes to the site's own origin (on the preview, the whole `github.io` origin of the account), with or without a body
-- **THEN** the policy does not govern it, and the no-upload test remains the guard that no file data leaves the page
+- **THEN** the policy does not stop it, and the no-upload test remains the guard that no file data leaves the page
 
 #### Scenario: Pictures the site draws
 

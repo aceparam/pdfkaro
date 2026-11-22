@@ -221,7 +221,7 @@ Alternatives:
 These are recorded for the later Privacy page change, not written here:
 
 - The site sets a Content Security Policy on every page, and in the workers that read files. The browser blocks scripts, styles, images, fonts, frames and objects from other origins. From the page and its workers it blocks `fetch`, XHR, `sendBeacon`, WebSocket and EventSource requests to other origins.
-- It does not govern page navigation, opening a window, link clicks, a meta refresh, WebRTC, DNS prefetching, or any request to the site's own origin. On GitHub Pages that origin is the whole `aceparam.github.io`. The site's own tests check that no file data leaves the page.
+- It does not govern page navigation, opening a window, link clicks, a meta refresh, WebRTC or DNS prefetching. It allows scripts, styles, images, `fetch`, XHR, beacons and worker loads from the site's own origin, with or without a body, so it does not stop data going to that origin. On GitHub Pages that origin is the whole `aceparam.github.io`. The site's own tests check that no file data leaves the page.
 - On GitHub Pages the policy is a meta tag. That cannot stop another site from showing a PDFkaro page in a frame (`frame-ancestors`), and it cannot report violations.
 
 ## Threats considered
