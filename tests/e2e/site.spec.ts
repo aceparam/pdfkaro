@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { allPages, bannedWords, sitePages, staticPages, toolPages } from './pages';
+import { allPages, bannedWords, hubPages, hubs, placeholderPages, sitePages, staticPages, toolPages } from './pages';
 
 test.describe('every page', () => {
   for (const path of allPages) {
@@ -20,8 +20,9 @@ test.describe('every page', () => {
       expect(await page.evaluate(() => getComputedStyle(document.querySelector('header')!).position)).toBe('static');
       await expect(page.locator('footer a')).toHaveCount(5);
 
-      // The real site, at the root of its address, does not ask search engines to stay away.
-      await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+      // The real site, at the root of its address, asks search engines to stay away only from a page
+      // that still shows an owner placeholder.
+      await expect(page.locator('meta[name="robots"]')).toHaveCount(placeholderPages.includes(path) ? 1 : 0);
 
       // Nothing scrolls sideways.
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -30,6 +31,8 @@ test.describe('every page', () => {
       for (const request of requests) {
         expect(new URL(request.url).origin, request.url).toBe(new URL(baseURL!).origin);
         expect(['font', 'image'], request.url).not.toContain(request.type);
+        // The social image, the sitemap and robots.txt are for crawlers and link previews only.
+        expect(new URL(request.url).pathname, request.url).not.toMatch(/\/(social\.png|sitemap\.xml|robots\.txt)$/);
       }
     });
   }
@@ -74,8 +77,10 @@ test.describe('pages with nothing to interact with', () => {
 });
 
 test.describe('the lists of pages', () => {
-  test('cover every tool in the registry and every footer link', async ({ page }) => {
+  test('cover every tool in the registry, every hub page and every footer link', async ({ page }) => {
     expect(toolPages.length).toBeGreaterThan(0);
+    expect(hubPages.length).toBeGreaterThan(0);
+    for (const path of hubPages) expect((await page.request.get(path)).status(), path).toBe(200);
     await page.goto('/');
     const footer = await page.locator('footer a').evaluateAll((links) => links.map((link) => link.getAttribute('href')));
     expect(footer).toEqual(sitePages);
@@ -92,21 +97,99 @@ test.describe('tool page', () => {
     expect(html).toContain('Combine several PDFs into one. Files stay on your device.');
   });
 
+  // The related list only: the link to the group's hub page follows it in the same section.
   test('links only to related tools that are published', async ({ page }) => {
     await page.goto('/merge-pdf');
     await expect(page.getByRole('heading', { name: 'Related tools' })).toHaveCount(1);
-    const related = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('link');
+    const related = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');
     // Compress PDF is published since its own change; JPG to PDF since Image to PDF.
     await expect(related).toHaveText(['Split PDF', 'Reorder pages', 'Rotate PDF', 'Compress PDF', 'JPG to PDF']);
     // Compress PDF names PDF to JPG, published since its own change. Every related tool named in the registry is
     // now published, so leaving out an unpublished one is checked in tests/unit/queries.test.ts.
     await page.goto('/compress-pdf');
-    const own = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('link');
+    const own = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');
     await expect(own).toHaveText(['Merge PDF', 'Split PDF', 'Delete pages', 'JPG to PDF', 'PDF to JPG']);
     // A tool of several pages links each page to the others, never to itself.
     await page.goto('/pdf-to-jpg');
-    const sibling = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('link');
+    const sibling = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');
     await expect(sibling).toHaveText(['PDF to PNG', 'JPG to PDF', 'Extract pages', 'Compress PDF', 'Split PDF']);
+  });
+});
+
+test.describe('canonical tags', () => {
+  test('equal the address the browser shows on the home page, a hub page and a tool page; the 404 page has none', async ({ page }) => {
+    for (const path of ['/', '/organise-pages', '/merge-pdf']) {
+      await page.goto(path);
+      await expect(page.locator('link[rel="canonical"]')).toHaveCount(1);
+      expect(await page.locator('link[rel="canonical"]').getAttribute('href'), path).toBe(page.url());
+    }
+    await page.goto('/no-such-page');
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    await expect(page.locator('meta[property^="og:"]')).toHaveCount(0);
+  });
+});
+
+test.describe('hub pages', () => {
+  test('list their tools as a list, and Tab reaches every tool link in order', async ({ page }) => {
+    for (const hub of hubs) {
+      await page.goto(`/${hub.slug}`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(hub.name);
+      await expect(page.locator('main p.lede')).toHaveText(hub.sentence);
+      const list = page.locator('main ul');
+      await expect(list).toHaveCount(1);
+      await expect(list).toHaveAttribute('role', 'list');
+      await expect(list.getByRole('listitem')).toHaveCount(hub.items.length);
+      await expect(page.locator('main a')).toHaveText(hub.items.map((item) => item.name));
+    }
+
+    // Tab from the last link of the header into the list, through every tool in order.
+    const organise = hubs.find((hub) => hub.slug === 'organise-pages')!;
+    await page.goto('/organise-pages');
+    await page.locator('header a').last().focus();
+    for (const item of organise.items) {
+      await page.keyboard.press('Tab');
+      const focused = page.locator(':focus');
+      await expect(focused).toHaveAttribute('href', item.href);
+      expect(await focused.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('solid');
+    }
+  });
+});
+
+test.describe('the link from a tool page to its hub page', () => {
+  test('follows the related tools, is at least 44px tall and opens the hub page', async ({ page }) => {
+    await page.goto('/merge-pdf');
+    const below = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) });
+    const links = await below.getByRole('link').allTextContents();
+    expect(links.at(-1)).toBe('All tools in Organise pages');
+    expect(links.slice(0, -1)).toEqual(['Split PDF', 'Reorder pages', 'Rotate PDF', 'Compress PDF', 'JPG to PDF']);
+    const hub = page.getByRole('link', { name: 'All tools in Organise pages' });
+    await expect(hub).toHaveCount(1);
+    expect((await hub.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+    // It takes focus straight after the last related tool.
+    await below.getByRole('link', { name: 'JPG to PDF' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(hub).toBeFocused();
+
+    await hub.click();
+    await expect(page).toHaveURL('/organise-pages');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Organise pages');
+  });
+
+  test('every tool page links to its own hub page', async ({ request }) => {
+    for (const hub of hubs) {
+      for (const item of hub.items) {
+        const html = await (await request.get(item.href)).text();
+        expect(html, item.href).toContain(`<a class="tap" href="/${hub.slug}">All tools in ${hub.name}</a>`);
+      }
+    }
+  });
+});
+
+test.describe('home page group headings', () => {
+  test('hold no link, as before', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('h2 a')).toHaveCount(0);
   });
 });
 
