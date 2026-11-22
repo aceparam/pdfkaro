@@ -243,6 +243,7 @@ All but `developer` are read-only.
 - `npm run weigh` adds up the compressed size of each built page and fails over 100 KB. Run it after a build.
 - `npm run check:worker` checks the built site: each engine is its own file, loaded late by the worker. Run it after a build.
 - `npm run check:base` builds the site as a preview under a sub-path and fails if any link, stylesheet or script would break there. Never write a link as a bare `/path`; pass it through `withBase`.
+- `npm run check:csp` checks every built page's Content Security Policy tag: one tag, straight after the character set tag, the site's exact policy, a hash for every inline script and style on that page, and no style attribute, inline handler or `javascript:` address. Run it after a build; `check:base` runs it on its sub-path build too.
 - `npm run e2e` runs the end-to-end tests (Playwright) against the built site, at 360px and 1280px. Run it after a build, and add `-- --trace off` unless a trace is wanted.
 - Astro sends anonymous usage figures to its makers unless `ASTRO_TELEMETRY_DISABLED=1` is set. CI and agent sessions set it. On your own machine, run `npx astro telemetry disable` once.
 - `npm run spec` runs `openspec validate --all --strict`. `npx openspec list` shows changes in progress and `npx openspec show <name>` prints a change or a spec.

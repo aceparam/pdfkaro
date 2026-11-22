@@ -28,7 +28,7 @@ This change adds no tool, so the usual tool order does not apply: there is no re
 
   Also add a page with an unhashed JSON-LD block, which passes. Verify: `npm test` passes and `npm run check:csp` passes on the real build.
 - [x] 1.4 Make `scripts/check-base.mjs` run the CSP check on its sub-path build, keeping its `noindex` check. Verify: `npm run check:base` passes. Then remove a page's tag by hand in its output and confirm it fails; put the tag back.
-- [ ] 1.5 Add a "Content Security Policy" step (`npm run check:csp`) to `.github/workflows/ci.yml` after "Links work under a sub-path". Add `npm run check:csp` to the Commands list in CLAUDE.md. Verify: the workflow parses as YAML, and the step order is build, weigh, check:worker, check:base, check:csp.
+- [x] 1.5 Add a "Content Security Policy" step (`npm run check:csp`) to `.github/workflows/ci.yml` after "Links work under a sub-path". Add `npm run check:csp` to the Commands list in CLAUDE.md. Verify: the workflow parses as YAML, and the step order is build, weigh, check:worker, check:base, check:csp.
   - Build note: the CI step is in. The CLAUDE.md Commands line is not: the developer agent does not edit CLAUDE.md, so it is left to the coordinator with the post-merge CLAUDE.md edits.
 
 ## 2. Workers run under the policy
