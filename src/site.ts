@@ -57,11 +57,19 @@ export type SiteLink = {
 
 export type FooterLink = SiteLink & {
   /**
-   * False while the page still shows an owner placeholder. Such a page carries `noindex`
-   * and is left out of the sitemap. Set it to true in the change that writes the page.
+   * False while the page still shows an owner placeholder, or an agent's draft waiting for the
+   * owner's review. Such a page carries `noindex` and is left out of the sitemap. Set it to true
+   * in the change that writes the page, or that marks the owner's approval of a draft.
    */
   written: boolean;
 };
+
+/**
+ * The first words of the line under the heading of a site page that is an agent's draft not yet
+ * checked by the owner (the Privacy page). Written once here: the page shows it, and
+ * scripts/check-seo.mjs accepts it in place of a placeholder sentence on a page not yet written.
+ */
+export const draftSentence = 'This is a draft.';
 
 export const headerLinks: SiteLink[] = [{ label: 'All tools', href: '/' }];
 

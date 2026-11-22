@@ -162,6 +162,44 @@ test.describe('merging', () => {
     await expect(page.getByRole('link', { name: 'Download' })).toHaveCount(0);
     expect(await picker(page).evaluate((input: HTMLInputElement) => input.files?.length ?? 0)).toBe(0);
   });
+
+  // The Privacy page says the new file and the page pictures are let go on "Start again". The policy's
+  // connect-src 'self' refuses fetch() of any blob: address, revoked or not, so under the policy this test
+  // would fail on the violation or pass for the wrong reason. It runs in its own context with the policy
+  // bypassed, the one test that does; every other test keeps the policy watch from ./fixtures.
+  test('Start again stops the download and page picture addresses working', async ({ browser, baseURL }, testInfo) => {
+    const context = await browser.newContext({ bypassCSP: true, baseURL, viewport: testInfo.project.use.viewport ?? null });
+    try {
+      const page = await context.newPage();
+      const works = (url: string) =>
+        page.evaluate(async (address) => {
+          try {
+            return (await (await fetch(address)).arrayBuffer()).byteLength > 0;
+          } catch {
+            return false;
+          }
+        }, url);
+      await open(page);
+      await pick(page, ['text.pdf', 'scanned.pdf']);
+      const thumbnail = page.locator('astro-island ol img').first();
+      await expect(thumbnail).toHaveAttribute('src', /^blob:/, { timeout: 20000 });
+      const picture = (await thumbnail.getAttribute('src'))!;
+      await mainButton(page).click();
+      const link = page.getByRole('link', { name: 'Download' });
+      await expect(link).toBeVisible();
+      const download = (await link.getAttribute('href'))!;
+      expect(download).toMatch(/^blob:/);
+      // The positive control: both addresses work before Start again.
+      expect(await works(download)).toBe(true);
+      expect(await works(picture)).toBe(true);
+      await page.getByRole('button', { name: 'Start again' }).click();
+      await expect(page.locator('label', { hasText: 'Choose PDF files' })).toBeVisible();
+      expect(await works(download)).toBe(false);
+      expect(await works(picture)).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 test.describe('problems', () => {
