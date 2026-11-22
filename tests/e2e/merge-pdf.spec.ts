@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type FileChooser, type Page } from '@playwright/test';
+import { type FileChooser, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { builtFiles, headersRead, violations, watch } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));

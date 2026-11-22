@@ -891,12 +891,12 @@ When a tool's engine refuses the picture it was sent, the page SHALL say "The pi
 
 ### Requirement: A new password a tool needs
 
-A new password SHALL be two hidden one-line fields, one under the other, each with a visible label: the password, then the same password again. The tool's hint, then a shared note on where the password goes, SHALL be shown under the first field and read with it. Both fields SHALL start empty, and the main button SHALL wait until both hold the same password the tool's rule takes. (SPEC.md: Tool page anatomy, 4 and 5; States every tool handles, Password needed; Definition of done)
+A new password SHALL be two hidden labelled fields, one under the other: the password, then the same again. The tool's hint SHALL sit under the first and a shared note on where the password goes under the second; both SHALL be read with the first. Both SHALL start empty, and the main button SHALL wait until both hold the same password the tool's rule takes. (SPEC.md: Tool page anatomy, 4 and 5; States every tool handles, Password needed; Definition of done)
 
 #### Scenario: A file is read in a tool with a new password
 
 - **WHEN** a file has been read in a tool whose first option is a new password
-- **THEN** both empty fields are shown below the file with their labels, the hint and the shared note under the first, focus moves to the first field, and the main button waits with the tool's first sentence ("Type a password first.") shown under it and read with it
+- **THEN** both empty fields are shown below the file with their labels, the hint under the first and the shared note under the second, focus moves to the first field, and the main button waits with the tool's first sentence ("Type a password first.") shown under it and read with it
 
 #### Scenario: The password is typed in the first field only
 
@@ -946,27 +946,27 @@ A new password SHALL be two hidden one-line fields, one under the other, each wi
 #### Scenario: A phone keyboard is open
 
 - **WHEN** the visitor types on a phone at 360px and the on-screen keyboard covers the lower half of the screen
-- **THEN** a sentence about either field is shown above that field, where the keyboard does not cover it, the keyboard's Enter key is labelled as "Go", and the fields stay hidden, so the keyboard offers no corrections, suggestions or capitals
+- **THEN** a sentence about either field is shown above that field, where the keyboard does not cover it, the keyboard's Enter key is labelled as "Next" in the first field and "Go" in the second, the second field's label starts close under the first field (within about 200px at 360px wide), and the fields stay hidden, so the keyboard offers no corrections, suggestions or capitals
 
 #### Scenario: A keyboard user uses the fields
 
 - **WHEN** a keyboard user is in the first field and presses Tab, or presses Enter in either field
-- **THEN** Tab moves to the second field, then to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works, and while the button waits the status region says why on every press, in the words of the sentence that holds it; the Enter that confirms a word in an input method does not press it
+- **THEN** Tab moves to the second field, then to the next option, then the rest of the working area in page order and the main button; Enter in the first field moves focus to the second field once the first holds a password the rule takes, and otherwise shows the first field's sentence or has the status region say the sentence that holds the main button, on every press; Enter in the second field does what pressing the main button does, so it starts the job only when the main button works, and while the button waits the status region says why on every press, in the words of the sentence that holds it; the Enter that confirms a word in an input method does neither
 
 #### Scenario: A screen reader user reaches the fields
 
 - **WHEN** focus moves into the first field, then the second, with a screen reader running
-- **THEN** the first is read with its label, as a password field, then the hint and the shared note, and, when something is wrong with it, that it is invalid and the sentence; the second with its label, as a password field, and, when the two differ, that it is invalid and its sentence; a sentence is said once by the status region when it first appears or changes kind, never holds the password, and nothing is announced twice
+- **THEN** the first is read with its label, as a password field, then the hint and the shared note (the note, though shown under the second field, is part of the first field's description), and, when something is wrong with it, that it is invalid and the sentence; the second with its label, as a password field, and, when the two differ, that it is invalid and its sentence; a sentence is said once by the status region when it first appears or changes kind, never holds the password, and nothing is announced twice
 
 #### Scenario: How the fields look
 
 - **WHEN** the fields are shown at 360px, at 1280px, in dark mode or with text at 200%
-- **THEN** each has the site's field style, a label that looks like the other field labels and a height of at least 2.75rem, a sentence sits between its field's label and the field, bold in the text colour as a wrong password's is, the hint and note sit under the first field, and nothing overflows sideways
+- **THEN** each has the site's field style, a label that looks like the other field labels and a height of at least 2.75rem, a sentence sits between its field's label and the field, bold in the text colour as a wrong password's is, the hint sits under the first field and the note under the second, and nothing overflows sideways
 
 #### Scenario: The note under the first field
 
 - **WHEN** a new password's fields are drawn
-- **THEN** the note under the first field reads, in draft words for the owner, "The password stays in your browser. This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account."; it never claims the password goes nowhere at all
+- **THEN** the note is no longer under the first field but its own paragraph under the second, still read with the first field, and it reads, in draft words for the owner, "The password stays in your browser. This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account."; it never claims the password goes nowhere at all
 
 #### Scenario: Cancel, a failure and another file
 

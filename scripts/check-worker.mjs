@@ -151,7 +151,53 @@ for (const [what, pattern, markers] of [
   }
 }
 
+// Every worker starts from a blob: address that imports the real file, so it runs under the page's
+// Content Security Policy (src/workers/start-worker.ts); one started straight from a file would run
+// with none, and the policy's worker-src 'self' cannot stop that. So each `new Worker(` in the built
+// files must be the start helper's own: just before it, in the same function, the blob holding only
+// `import ${JSON.stringify(address)};` as text/javascript, and the worker started from that blob's
+// address. The one named exception is PDF.js's display file, whose own worker starts are never reached:
+// the site sets GlobalWorkerOptions.workerPort and never workerSrc or rendererSrc (a unit test checks).
+// No SharedWorker is started anywhere.
+// `new Worker(`, `new self.Worker(`, and a computed `new globalThis["Worker"](`, '…' or `…` form.
+const workerStart = /new\s+(?:[\w$]+(?:\.|\[\s*["'`](?=(?:Shared)?Worker["'`])))*(Shared)?Worker(?:["'`]\s*\])?\s*\(/g;
+const blobText = 'new Blob([`import ${JSON.stringify(';
+let helperStarts = 0;
+const helperFiles = [];
+for (const name of files.filter((each) => /\.m?js$/.test(each))) {
+  const source = readFileSync(join(assets, name), 'utf8');
+  for (const match of source.matchAll(workerStart)) {
+    if (match[1]) {
+      problems.push(`${name} starts a SharedWorker; the site starts none.`);
+      continue;
+    }
+    if (pdfjsDisplay.includes(name)) continue;
+    const before = source.slice(Math.max(0, match.index - 400), match.index);
+    const blobAt = before.lastIndexOf(blobText);
+    const between = blobAt === -1 ? '' : before.slice(blobAt);
+    const object = /([\w$]+)=URL\.createObjectURL\([\w$]+\)/.exec(between);
+    const started = /^new\s+Worker\s*\(\s*([\w$]+)\s*,/.exec(source.slice(match.index, match.index + 60));
+    const isHelper =
+      blobAt !== -1 &&
+      between.includes('{type:`text/javascript`}') &&
+      !/function|=>/.test(between) &&
+      object !== null &&
+      started !== null &&
+      started[1] === object[1];
+    if (isHelper) {
+      helperStarts += 1;
+      helperFiles.push(name);
+    }
+    else problems.push(`${name} starts a worker outside the blob: start helper (src/workers/start-worker.ts), so it would run with no policy.`);
+  }
+}
+// The page starts the tool worker and the tool worker starts PDF.js's: the helper starts a worker in the page's
+// workspace chunk and in the tool worker file, once each.
+const helperIn = (pattern) => helperFiles.filter((name) => pattern.test(name)).length;
+if (helperIn(/^ToolWorkspace\.[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the page's ToolWorkspace chunk, found ${helperIn(/^ToolWorkspace\./)}.`);
+if (helperIn(/^tool\.worker-[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the tool worker file, found ${helperIn(/^tool\.worker-/)}.`);
+
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address.`,
 );

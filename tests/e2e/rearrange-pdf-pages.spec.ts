@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { type Download, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));

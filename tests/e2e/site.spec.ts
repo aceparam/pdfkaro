@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { allPages, bannedWords, sitePages, staticPages, toolPages } from './pages';
 
 test.describe('every page', () => {

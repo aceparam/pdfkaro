@@ -6,6 +6,7 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FromWorker } from './messages';
 import { createPdfjsLoader, type NestedWorker } from './pdfjs-loader';
+import { workerFromBlob } from './start-worker';
 import { createHandler } from './worker-core';
 
 // Lazy: each engine stays its own file and is fetched only when its tool runs.
@@ -13,8 +14,15 @@ const engines = import.meta.glob<EngineModule>('../engines/tools/*.ts');
 
 // Note: the bundler may put a helper that the qpdf script imports into this
 // file, so that script imports this file back. A module worker keeps one copy
-// of each module per address, so nothing runs twice. That holds only while the
-// worker is started at its plain address: never add a query string to it.
+// of each module per address, so nothing runs twice. That holds only while this
+// file is loaded at its plain address: the page starts the worker from a blob:
+// script that imports this file by that address (src/workers/start-worker.ts),
+// so this file is never the blob itself. Never add a query string to it.
+//
+// Started that way, the worker's own address is the blob:, which has no path,
+// so a root-relative address cannot be resolved against it. Every address this
+// file hands on is made absolute against this file's own address instead.
+const absolute = (address: string) => new URL(address, import.meta.url).href;
 
 // The libraries engines ask for. Each is fetched only when first asked for;
 // qpdf is made afresh for each call, so one file's crash or memory never
@@ -22,7 +30,7 @@ const engines = import.meta.glob<EngineModule>('../engines/tools/*.ts');
 const tools: EngineTools = {
   qpdf: async () => {
     const { createQpdf } = await import('../engines/qpdf');
-    return createQpdf(() => import('@neslinesli93/qpdf-wasm'), qpdfWasm);
+    return createQpdf(() => import('@neslinesli93/qpdf-wasm'), absolute(qpdfWasm));
   },
   pdfjs: () => pdfjsLoader.load(),
   // Races every drawing, and opening and closing a document, against PDF.js's own worker stopping, so
@@ -78,7 +86,8 @@ const tools: EngineTools = {
 // one being drawn, gives no picture at once, and a job drawing pages fails.
 const pdfjsLoader = createPdfjsLoader(
   () => import('pdfjs-dist'),
-  () => new Worker(pdfjsWorkerUrl, { type: 'module' }) as unknown as NestedWorker,
+  // Started the same blob: way, so PDF.js's worker runs under the page's policy too. It ends with this worker.
+  () => workerFromBlob(pdfjsWorkerUrl, import.meta.url) as unknown as NestedWorker,
 );
 
 type WorkerScope = {

@@ -38,8 +38,10 @@ jobs:
         run: npm run check:worker
       - name: Links work under a sub-path
         run: npm run check:base
-      - name: Install the test browser
-        run: npx playwright install --with-deps chromium
+      - name: Content Security Policy
+        run: npm run check:csp
+      - name: Install the test browsers
+        run: npx playwright install --with-deps chromium firefox
       - name: End-to-end tests
         run: npm run e2e
       - name: OpenSpec changes and specs
