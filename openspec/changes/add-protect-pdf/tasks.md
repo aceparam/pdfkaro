@@ -203,7 +203,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - a screen reader on the two fields, checking the note is read with the first;
   - the owner's review of the page text;
   - the multilingual test file, which must exist and be run before Protect is called done.
-- [ ] 11.4 When the pull request opens:
+- [x] 11.4 When the pull request opens:
   - add the two questions from the proposal to "Questions waiting for the owner" in `CLAUDE.md`;
   - add Protect, with its three shared changes, as another instance under "Shared pieces in tool pull requests" in `CLAUDE.md`;
   - in the pull request, name the shared changes (the `NewPasswordField` layout and Enter, `OutputLimit` and `cappedWrite` in `qpdf.ts`, `runJob`) and the new `option-values-*.js` file with the three allowlists it changes;
@@ -211,7 +211,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - list the Privacy page facts of the design's section 9 for the Phase 1 site-work change;
   - say that the branch also carries the `add-password-option` archive commit (64271b5);
   - say that Protect cannot be called done until the multilingual test file exists.
-- [ ] 11.5 Run the review panel (see the review-panel skill) and resolve its findings. The pull request names:
+- [x] 11.5 Run the review panel (see the review-panel skill) and resolve its findings. The pull request names:
   - the agent's choices: the same password for opening and permissions; every permission allowed; object streams generated; old restrictions dropped; the check before giving the file back, with its progress steps; the output cap; the hint's and the result's words; `-protected`;
   - the finding on what stays readable;
   - the PR #28 owner questions, now on a live page;
