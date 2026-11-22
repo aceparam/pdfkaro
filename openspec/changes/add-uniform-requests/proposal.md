@@ -1,5 +1,7 @@
 # Proposal: add-uniform-requests
 
+**Requested by the owner on 22 Nov 2026 ("we need transparency").**
+
 ## Why
 
 The owner asked for this on 22 Nov 2026 ("we need transparency"). The site's host, GitHub Pages, records every request a browser makes for the site's own files. Today, which of those files a tool page fetches, and when, depends in places on what is in the visitor's file. So the host's logs can learn something about a file that never left the device.
@@ -66,10 +68,9 @@ Files are processed where they are today, in the browser. No new kind of request
 - **PDF.js's helper data is one fixed set (11 Nov 2026):** extended, not changed. The fixed set is now fetched at the pick for every PDF tool, not only when a thumbnail is drawn.
 - **Pages for previews only, or for launch too?** Touched. The cache lifetime the test models (10 minutes) is GitHub Pages'. Another host's headers would change only what design.md says about requests made again later, not which files are fetched.
 - **The Privacy page draft** (issue #7): two draft sentences are added for the owner's review.
-- New questions, each with the default this change builds (design.md, Open questions):
-  1. Fetch PDF.js's set (about 1.3 MB) after every pick on a PDF page, including damaged, protected and wrong-kind files? Default: yes.
-  2. For a pick of the wrong kind, load the set first and then say the file cannot be used, a few seconds later on a slow connection? Default: yes.
-  3. Say on the Privacy page that the browser may ask for the programs again later, "for example after a job or when a page of your file takes long to draw"? Default: yes.
+- **Answered by the owner on 22 Nov 2026:** PDF.js's set (about 1.3 MB) is fetched after every pick on a PDF page, including damaged, protected and wrong-kind files; and for a pick of the wrong kind the set is loaded first and only then is the file said to be unusable (the wait held to 60 s).
+- New question, with the default this change builds (design.md, Open questions):
+  1. Say on the Privacy page that the browser may ask for the programs again later, "for example after a job or when a page of your file takes long to draw"? Default: yes.
 
 ## Capabilities
 
