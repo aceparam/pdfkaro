@@ -614,8 +614,7 @@ describe('the files fetched do not depend on the file', () => {
         fflate: async () => (asked.push('fflate'), { Inflate: CountingInflate, Deflate }),
         qpdf: async () => (asked.push('qpdf'), makeQpdf()),
       };
-      // A file the engine cannot read may still throw; what matters is what it asked for first.
-      await run([fixture(name)], { passwords: [] }, () => {}, counted).catch(() => {});
+      await run([fixture(name)], { passwords: [] }, () => {}, counted);
       expect(asked.filter((each) => each === 'fflate'), name).toEqual(['fflate']);
       expect(asked[0], name).toBe('fflate');
     }

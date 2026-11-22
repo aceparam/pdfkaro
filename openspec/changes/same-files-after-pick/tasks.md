@@ -27,4 +27,4 @@ No registry entry, page, page text or dependency changes: this is a privacy fix 
 ## 5. Record and review
 
 - [x] 5.1 Add the owner question on files not read as ready (proposal) under "Questions waiting for the owner" in `CLAUDE.md`. Add an entry for this change under "Where the project stands" in `CLAUDE.md`, with "Left for later": a site-wide test that every tool's requests after a pick are the same for every file (other tools were checked by reading only).
-- [ ] 5.2 Run the review panel, stage 2 (see the review-panel skill), and resolve its findings.
+- [x] 5.2 Run the review panel, stage 2 (see the review-panel skill), and resolve its findings.
