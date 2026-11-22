@@ -91,17 +91,32 @@
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
+/* A page of the grid: a plain grid item, filled by .page, which holds what the page shows and draws its
+   box. */
 .cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.page {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.375rem;
   /* A change inside one page (a caption, a turned picture) lays out that page only, not the whole grid,
      and pages far off screen are not laid out or painted until they come near. The browser keeps each
-     page's last size, so the grid does not move as they do. */
+     page's last size, so the grid does not move as they do.
+     This sits on a box inside the grid item, not on the item itself. In Chromium, once a script has read
+     the style of what a skipped grid item holds (a test's role query reads every element's), every later
+     layout of the grid is three to five times slower with 1,000 pages drawn; and focus moving to or from a
+     page (it has tabindex -1) started and stopped the skipping, so it laid out the whole grid. */
   contain: layout style;
   content-visibility: auto;
   contain-intrinsic-size: auto 5rem auto 10rem;
+  /* Room on every side for a button's focus ring (2px outline, 2px offset), which this box's paint
+     containment would otherwise clip. */
+  padding: 0.25rem;
+  /* Room for the line that marks a cut after this page (.cut below), so marking a cut moves nothing. */
+  border-inline-end: 2px solid transparent;
 }
 .caption {
   /* "Page 120,000" may wrap rather than overflow a narrow cell. */
@@ -133,14 +148,8 @@
   border: 2px solid var(--text);
   font-weight: 700;
 }
-/* A cut after this page: a 2px line on the cell's trailing edge. Every cell keeps room for it, so marking a cut moves nothing. */
-.cell {
-  /* Room on every side for a button's focus ring (2px outline, 2px offset), which the cell's paint
-     containment would otherwise clip. */
-  padding: 0.25rem;
-  border-inline-end: 2px solid transparent;
-}
-.cut {
+/* A cut after this page: a 2px line on the page box's trailing edge. */
+.cut > .page {
   border-inline-end-color: var(--text);
 }
 

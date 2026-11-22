@@ -101,19 +101,8 @@ type ItemProps = GridItem & {
 const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, last, controls, grid, actions, toggleLabel, toggleName, pressed, drawsCut, turn, turnCaption }: ItemProps) {
   const item = { id, title, detail, thumbnail };
   const rowRef = useCallback((element: HTMLLIElement | null) => actions.setRow(id, element), [actions, id]);
-  return (
-    <li
-      ref={rowRef}
-      data-id={item.id}
-      // A page can take focus from code, when more pages are shown and it has no control of its own.
-      tabIndex={grid && !toggleLabel ? -1 : undefined}
-      className={`${grid ? styles.cell : styles.item}${pressed && drawsCut ? ` ${styles.cut}` : ''}`}
-      draggable={controls && !(first && last)}
-      onDragStart={controls ? (event) => actions.dragStart(item.id, item.title, event) : undefined}
-      onDragOver={controls ? actions.dragOver : undefined}
-      onDrop={controls ? (event) => actions.drop(item.id, event) : undefined}
-      onDragEnd={controls ? actions.dragEnd : undefined}
-    >
+  const content = (
+    <>
       {/* A picture of the page, decorative: the name beside it says what it is. Until it is drawn, blank paper. */}
       <div className={styles.slot} aria-hidden="true">
         <div className={styles.picture}>
@@ -221,6 +210,24 @@ const PageItem = memo(function PageItem({ id, title, detail, thumbnail, first, l
           </button>
         </div>
       )}
+    </>
+  );
+  return (
+    <li
+      ref={rowRef}
+      data-id={item.id}
+      // A page can take focus from code, when more pages are shown and it has no control of its own.
+      tabIndex={grid && !toggleLabel ? -1 : undefined}
+      className={`${grid ? styles.cell : styles.item}${pressed && drawsCut ? ` ${styles.cut}` : ''}`}
+      draggable={controls && !(first && last)}
+      onDragStart={controls ? (event) => actions.dragStart(item.id, item.title, event) : undefined}
+      onDragOver={controls ? actions.dragOver : undefined}
+      onDrop={controls ? (event) => actions.drop(item.id, event) : undefined}
+      onDragEnd={controls ? actions.dragEnd : undefined}
+    >
+      {/* A page in a grid holds its content in a box of its own, which is skipped while far off screen
+          (see .page in the stylesheet); the page itself stays a plain grid item. */}
+      {grid ? <div className={styles.page}>{content}</div> : content}
     </li>
   );
 });
