@@ -198,6 +198,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - the multilingual test file, which must exist and be run before Protect is called done.
 - [ ] 11.4 When the pull request opens:
   - add the two questions from the proposal to "Questions waiting for the owner" in `CLAUDE.md`;
+  - add Protect, with its three shared changes, as another instance under "Shared pieces in tool pull requests" in `CLAUDE.md`;
   - in the pull request, name the shared changes (the `NewPasswordField` layout and Enter, `OutputLimit` and `cappedWrite` in `qpdf.ts`, `runJob`) and the new `option-values-*.js` file with the three allowlists it changes;
   - name the program manager's CSP decision: the CSP change comes straight after Protect, before Unlock PDF, as a `<meta>` tag with no `frame-ancestors` on GitHub Pages, and it blocks launch and the Phase 1 gate;
   - list the Privacy page facts of the design's section 9 for the Phase 1 site-work change;

@@ -14,7 +14,7 @@ Protect with a password (`/protect-pdf`) is the next Phase 1 tool in catalogue o
   - The visitor picks one PDF. It is listed as one row (thumbnail of the first page, name, pages, size), as the other one-file tools list theirs.
 - **The new password is the job's input.** It uses `add-password-option`'s two hidden fields under the key `newPassword`: "New password" and "Type the new password again". Both start empty, and focus goes to the first once the file is read.
   - Its line in `optionPasswords` is 127 characters at most, printable ASCII.
-  - The hint under the first field reads: "If you forget this password, the file cannot be opened, and no one can get it back. A short password can be guessed by anyone who has the file. Up to 127 characters." It ends with the rule's own words.
+  - The hint under the first field reads: "If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters." It ends with the rule's own words.
   - The main button, "Protect and download", waits until both fields hold the same password the rule takes, with the shared sentences.
 - **What the button does,** in the tool worker with qpdf: one call that opens the file and writes it again encrypted with 256-bit AES.
   - The file is opened with its old password, if it has one, through the existing password flow.

@@ -104,7 +104,7 @@ The hint next to the first field SHALL say first that if the password is forgott
 #### Scenario: The hint is read
 
 - **WHEN** the file has been read and the fields are shown
-- **THEN** the hint under "New password" begins "If you forget this password, the file cannot be opened, and no one can get it back. A short password can be guessed by anyone who has the file." and is part of the field's description
+- **THEN** the hint under "New password" begins "If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file." and is part of the field's description
 
 ### Requirement: Writing the protected file
 

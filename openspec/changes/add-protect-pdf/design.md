@@ -55,7 +55,7 @@
             minFiles: 1, multiple: false, resultPages: 'input', items: 'files', itemControls: false, outputs: 'one',
             memoryAdvice: 'Try on a computer.',
             options: [{ kind: 'new-password', key: 'newPassword', label: 'New password', againLabel: 'Type the new password again',
-                        hint: 'If you forget this password, the file cannot be opened, and no one can get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+                        hint: 'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
                         emptySentence: 'Type a password first.', againSentence: 'Type the password again to check it.' }],
             resultNotes: ['The file now opens only with the password you typed. Keep it somewhere safe: if it is forgotten, no one can open the file.',
                           'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
