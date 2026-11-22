@@ -24,7 +24,7 @@
 **Goals:**
 - A file that opens with no password and no restrictions in every reader `SPEC.md` names, with nothing else in it changed.
 - The password used only in qpdf's in-memory argument list in the named form, never in a file, an error, a message or the result, and held by the page no longer than the job needs.
-- No dependency. Two small shared changes only: input passwords forgotten after a result, and `readPdf` (decisions 3 and 5).
+- No dependency. Three small shared changes only: input passwords forgotten after a result, `readPdf` (decisions 3 and 5), and only the latest read of a file shown (section 5b).
 
 **Non-Goals:**
 - Guessing or trying passwords, certificate encryption, a certified file's own restrictions (`--remove-restrictions`), saying "nothing to remove" before the main button, next steps after the result, the Privacy page draft.

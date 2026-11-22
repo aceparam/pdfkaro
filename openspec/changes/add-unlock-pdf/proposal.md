@@ -43,7 +43,7 @@ Three small shared changes, each named in the pull request:
 
 ### Scope
 
-- **One tool,** with the two shared changes above. It reuses `FilePicker`, `PageGrid` (one file row), `Result`, the widget, `PasswordField`, qpdf, `cappedWrite`, the no-new-file outcome and the `unsupported` outcome. No shared component and no dependency are added.
+- **One tool,** with the three shared changes above. It reuses `FilePicker`, `PageGrid` (one file row), `Result`, the widget, `PasswordField`, qpdf, `cappedWrite`, the no-new-file outcome and the `unsupported` outcome. No shared component and no dependency are added.
 - **Out of scope:**
   - guessing, trying or recovering a password (`SPEC.md` "Scope notes");
   - files protected with a certificate (they are named, not opened);
@@ -88,7 +88,7 @@ After a pick, the page fetches only the site's own files: the worker and the wor
 - **The multilingual test file** is still missing. Unlock leaves text as it is, but **Unlock cannot be called done until the file exists and Unlock has been run on it.**
 - **Pages for previews only, or for launch too?** Unchanged; the CSP limits on GitHub Pages apply to this page as to every page.
 
-The agent's own choices, named in the pull request: no password asked for a file with restrictions only; the certificate case named rather than called damaged; the check before giving the file back; object streams kept as they are; the output cap; the button, result and notice words; the two shared changes.
+The agent's own choices, named in the pull request: no password asked for a file with restrictions only; the certificate case named rather than called damaged; the check before giving the file back; object streams kept as they are; the output cap; the button, result and notice words; the three shared changes.
 
 No new owner question. No open decision needs more than its assumed default.
 
