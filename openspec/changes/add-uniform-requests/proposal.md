@@ -24,7 +24,7 @@ This change extends the owner's decision of 11 Nov 2026 ("PDF.js's helper data i
 
 ## What Changes
 
-- **One fixed set at the pick.** On every tool page, the files fetched after a pick are the same whatever was picked: a PDF that reads, a damaged one, one with a password, one of the wrong kind, a JPG or a PNG, one file or several. The set is made of three parts:
+- **One fixed set at the pick.** On every tool page, the files fetched after a pick are the same whatever was picked, while the browser's copies are fresh and apart from the named exceptions: a PDF that reads, a damaged one, one with a password, one of the wrong kind, a JPG or a PNG, one file or several. The set is made of three parts:
   - The engine and the libraries its reading uses are loaded before any file is read.
   - The thumbnail code (PDF.js and its worker, data and drawing step, or the picture thumbnail step) is started at the same point, before the file is read. It is not waited for.
   - A pick that takes no file (every file of the wrong kind) still loads the set. The owner chose this on 22 Nov 2026. Meanwhile the file's line shows "Getting ready" with its Remove button, held to 60 seconds. The page then says the file cannot be used, as it does today.
