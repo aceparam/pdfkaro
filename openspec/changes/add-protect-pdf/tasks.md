@@ -70,7 +70,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - no error holding either marked password.
 
   Verify the tests pass. Then record each fixture's outcome in `tests/fixtures/README.md` under a new "Protect with a password" table, with what stays readable and a note that the multilingual file is still missing.
-- [ ] 5.2 Measure time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s 100 MB file, in Node and in Chromium. Record separately how long the check of decision 4 takes on each. Verify:
+- [x] 5.2 Measure time, output size and peak memory on `pages-500.pdf`, the 120,000-page file of `make-many-pages.mjs` and `make-large.mjs`'s 100 MB file, in Node and in Chromium. Record separately how long the check of decision 4 takes on each. Verify:
   - the numbers are in the fixtures README;
   - no genuine file comes near the cap;
   - the peak on the 100 MB file shows the input let go before the output is read.
@@ -82,7 +82,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 - [x] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it: it returns the outcome with no finish callback, and `start` does the dispatches and the object URL, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
   - the new password holder is `{}` after a run that gives a file and after one that gives no new file, before anything else clears it;
   - it still holds the password after an engine failure, a run that throws and a cancel.
-- [ ] 6.2 Accept the new shared file:
+- [x] 6.2 Accept the new shared file:
   - add an `option-values` line to `loadedLater` in `scripts/page-weight.mjs`, and change the `stamp` line's description so it no longer claims the option values;
   - update the exact allowlists in `tests/e2e/add-page-numbers.spec.ts`, `watermark-pdf.spec.ts` and `sign-pdf.spec.ts` to include `option-values-*.js`, and any other allowlist the build changes, with their other checks unchanged;
   - confirm `check-worker.mjs` finds the engine, and that the engine loads late and stays out of the worker file, by a sentence from its source; adjust the script's shared-step sentences if `cappedWrite`'s move changes which file holds them.
@@ -91,13 +91,13 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 7. Page and page text
 
-- [ ] 7.1 Check the page renders with its heading, sentence, title and description. Once the file is read, check that:
+- [x] 7.1 Check the page renders with its heading, sentence, title and description. Once the file is read, check that:
   - the two empty fields show, the four-sentence hint under the first and the note under the second;
   - focus is in the first field;
   - the main button waits with "Type a password first.".
 
   Verify with the built page and a component test with this entry.
-- [ ] 7.2 Write `src/content/tools/protect-pdf.md`, 250 to 500 words, marked as a draft, covering the design's section 10:
+- [x] 7.2 Write `src/content/tools/protect-pdf.md`, 250 to 500 words, marked as a draft, covering the design's section 10:
   - "A short password can be guessed by anyone who has the file." word for word;
   - the browser's offer to save or suggest the password, and that a saved one may be copied to the browser account;
   - one question on what changes and what stays;
@@ -163,7 +163,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 9. No-upload test
 
-- [ ] 9.1 Write the tool's no-upload test:
+- [x] 9.1 Write the tool's no-upload test:
   - **The allowlist** is exact, read from the build: the engine, `plain`, `inspect`, `option-values`, qpdf, the worker and workspace, and PDF.js for the thumbnail. No `stamp`, no pdf-lib, no `fflate`, no other tool's engine.
   - **Positive checks:** the engine was fetched, and a download happened.
   - **Secrets:** `qz7report.pdf` (a copy of `password.pdf`), its stem, `open-sesame`, and the new password `Qz7 pw#%@ Kv4` with its parts `Qz7`, `pw#%@` and `Kv4`, plain and URL-encoded. They must not appear in requests, headers, the title, storage or the address.
@@ -176,7 +176,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 10. Screenshots
 
-- [ ] 10.1 Take screenshots of `/protect-pdf` at 360px and 1280px, light and dark, of these states:
+- [x] 10.1 Take screenshots of `/protect-pdf` at 360px and 1280px, light and dark, of these states:
   - empty and getting ready;
   - listed with empty fields and the waiting button;
   - typed once, different, refused characters, both matching;
@@ -188,7 +188,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 11. Checks and review
 
-- [ ] 11.1 `LICENSES.md`: no change, as no dependency is added.
+- [x] 11.1 `LICENSES.md`: no change, as no dependency is added.
 - [ ] 11.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, end-to-end tests, `npm audit` and `npm run spec`. Verify each passes.
 - [ ] 11.3 Add Protect's hand checks to issue #7:
   - the result opened with the password and refused without it, in Chrome, Firefox, Adobe Reader and macOS Preview;

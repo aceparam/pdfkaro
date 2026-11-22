@@ -890,6 +890,38 @@ describe('NewPasswordField, a new password of a test entry', () => {
   });
 });
 
+describe("NewPasswordField with Protect's entry", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { optionsHold, optionsToSend } = await import('../../src/widget/options');
+  const widget = tools.find((tool) => tool.id === 'protect-pdf')!.widget!;
+  const option = widget.options![0]!;
+  if (option.kind !== 'new-password') throw new Error('Protect lists a new password first');
+  // As the workspace draws it once the file is read: both fields empty.
+  const html = renderToStaticMarkup(<NewPasswordField option={option} id="r7-pw" first="" again="" onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const hint = 'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
+
+  it('is the only option: "New password" and "Type the new password again", empty, the hint under the first and the note under the second', () => {
+    expect(widget.options).toHaveLength(1);
+    expect(option.key).toBe('newPassword');
+    expect(html).toContain('<label for="r7-pw">New password</label>');
+    expect(html).toContain('<label for="r7-pw-again">Type the new password again</label>');
+    expect(html).not.toMatch(/\svalue=/);
+    expect(html).toContain(`<p id="r7-pw-hint" class="${html.match(/<p id="r7-pw-hint" class="([^"]+)"/)?.[1]}">${hint.replaceAll('&', '&amp;')}</p>`);
+    expect(html.indexOf('id="r7-pw-note"')).toBeGreaterThan(html.indexOf('id="r7-pw-again"'));
+    expect(html).toContain(`${passwordStaysSentence} ${newPasswordSavingNote}`);
+  });
+
+  it('holds the main button with "Type a password first." while empty, then the second sentence, then works and sends the first field only', () => {
+    const held = (first: string, again: string) => ({ newPasswords: { newPassword: { first, again } } });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('', ''))).toEqual({ key: 'newPassword', kind: 'empty', sentence: 'Type a password first.', field: 'first' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', ''))?.sentence).toBe('Type the password again to check it.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toBeNull();
+    expect(optionsToSend(widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toEqual({ newPassword: 'Kv4 #%@ wq9' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('x'.repeat(128), ''))?.sentence).toBe('This password is too long. Use 127 characters or fewer.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('café', ''))?.kind).toBe('characters');
+  });
+});
+
 describe('the held value of an uncontrolled password field', () => {
   const option = {
     kind: 'new-password' as const,

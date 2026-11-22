@@ -667,6 +667,18 @@ Files and inputs made in the test (`tests/unit/protect-pdf.test.ts`):
 | No new password, an empty one, 128 characters, "café", a space first or last, a line break, a number, `null`, one under `__proto__` or under `password` | Refused with `PasswordRefused` (`password-refused`) before qpdf is asked for; no error holds what was sent |
 | Every failure above, with both marked passwords | No error's message or stack holds either password or its parts |
 
+Measured on 22 Nov 2026 in Node, each case in a process of its own under the test runner, with qpdf loaded first on `text.pdf`; peak is the process's highest resident memory, including the runner's own (about 0.1 GB before a small job, 0.28 GB once the 100 MB file is read). The time is split at the end of qpdf's write (the write, then the check of the result). In Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, the check timed from the bar reaching 90%, with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press.
+
+| File | In | Out | Node: time (write, check) | Node: peak | Chromium: time (check) | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | 198,025 bytes | 112,521 bytes | 0.23 s (0.10, 0.13) | 0.09 GB | 0.4 s (0.2) | 0.02 GB |
+| 120,000 pages (`make-many-pages.mjs`) | 16.6 MB | 1.16 MB | 8.4 s (3.6, 4.8) | 0.32 GB | 5.3 s (3.1) | 0.28 GB |
+| `make-large.mjs`'s file | 110.1 MB | 110,124,943 bytes, 371 more | 4.6 s (2.1, 2.5) | 0.83 GB | 4.9 s (2.7) | 0.93 GB |
+
+The check of the result (decision 4 of the change) takes a little longer than the write itself, so it more than doubles the time on the largest files: 2.2 times on the 100 MB file and 2.3 times on the 120,000-page file in Node. The change says to raise this in the pull request; the check is kept until the reviewers agree otherwise. No genuine file comes near the cap of twice the file and 16 MB: the largest growth is the 100 MB file's 371 bytes.
+
+The input is let go before the output is read: in Node, with the 100 MB file written by `cappedWrite`, which removes `/in.pdf` once the write has passed, the memory held right after the output is read (after a garbage collection) is 318 MB, against 423 MB when the same call keeps `/in.pdf`, each from 210 MB held at the start (the file and qpdf's copy of it). The peak itself comes during the write, when the file, qpdf's copy and the growing output all exist.
+
 What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; and names in the catalog, such as old-style destination names. What is hidden: its pages and their sizes, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
 
 The multilingual file is still missing. Protect leaves text as it is, but the test set needs the file, so Protect is not done until it exists and Protect has been run on it.
