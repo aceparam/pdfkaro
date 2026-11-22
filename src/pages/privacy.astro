@@ -31,7 +31,7 @@ import { draftSentence, footerPage, siteName } from '../site';
   </p>
   <p>After you choose a file, the page fetches the programs that read and write PDFs. They come from this site. These requests carry nothing from your file: not its contents, not its name and not a password.</p>
   {/* Draft words for the owner (add-uniform-requests): tied to its claim table and to tests/e2e/uniform-requests.spec.ts. */}
-  <p>Which programs it fetches does not depend on what your file holds. This is so for a damaged file, a protected file or a file of the wrong kind too.</p>
+  <p>Which programs the page fetches does not depend on what your file holds. This is true for a damaged file, a protected file or a file of the wrong kind too.</p>
   <p>Your file’s name is shown on the page and used to name the new file.</p>
   <p>
     A new PDF can carry the old file’s title, author and other details, its accessibility tags and its attached files. The tags can bring along what was typed in form fields on pages you left out. In
@@ -122,7 +122,8 @@ import { draftSentence, footerPage, siteName } from '../site';
   </p>
   {/* Draft words for the owner (add-uniform-requests). The last two sentences are its open question 1; the cases they cover are named in its design. */}
   <p>
-    From your browser’s requests, GitHub can tell which tool page you opened and when you first chose a file, and may be able to tell when you started a job. Your browser may ask for a program more
-    than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that.
+    From your browser’s requests, GitHub can tell which tool page you opened and when you chose a file: in practice your first file, and later ones once your browser’s copies of
+    the programs are about 10 minutes old, or if your browser keeps no copies. It may be able to tell when you started a job. GitHub does not receive your file, its name or a password. Your
+    browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, asking again can tell GitHub that.
   </p>
 </Base>
