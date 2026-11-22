@@ -203,6 +203,8 @@ All but `developer` are read-only.
 - **Shortest password.** One character, as built, or a minimum such as 8?
 - **The browser's password manager and the note.** Keep `autocomplete="new-password"`? The note under a new password: the long draft ("…Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account.") or the shorter "The password stays in your browser. Your browser may offer to save it."? Should the file-password field's "It is not sent anywhere." be reworded the same way?
 - **Typed twice.** Two hidden fields, as built, or one field with a "Show password" button? Also: "the characters listed under the box" or "named"?
+- **Protect drops old restrictions.** Protect with a password allows every permission under the new password and drops a file's earlier print and edit restrictions; the page says so (`add-protect-pdf`). Keep that, or keep the old restrictions under the new password?
+- **Where the short-password warning goes.** Protect's hint says "A short password is easy to guess."; the text below the tool says "A short password can be guessed by anyone who has the file."; the result says neither. Keep it so, or also put it in the result?
 - **Image to PDF page size and margin.** Pages are A4 with no margin and no options (PR #14). Offer a page size (A4, Letter, the picture's own size) and a margin?
 
 - **Picture details.** Image to PDF copies no picture details (camera, date, place) into the PDF. Keep it that way, or keep some?
@@ -215,7 +217,7 @@ All but `developer` are read-only.
 
 - **Grey scans as colour JPGs.** Compress PDF saves a grey scan without a colour profile as an RGB JPG that still looks grey. Fine, or should grey stay grey even if the file is a little larger?
 
-- **Shared pieces in tool pull requests.** Shared widget changes have ridden along with the tool that needed them (Reorder, Rotate, Compress), though `SPEC.md` "Build phases" 3 prefers their own pull request first. Keep doing this, or split them out?
+- **Shared pieces in tool pull requests.** Shared widget changes have ridden along with the tool that needed them (Reorder, Rotate, Compress, and Protect with a password: the `NewPasswordField` layout and Enter, `OutputLimit` and `cappedWrite` moved into `qpdf.ts`, and `runJob` taken out of `useToolRun`), though `SPEC.md` "Build phases" 3 prefers their own pull request first. Keep doing this, or split them out?
 
 - **Character maps for PDF to JPG and PNG.** PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data (11 Nov 2026) holds no character maps. So Chinese, Japanese or Korean text in many PDFs is missing from thumbnails, and will be missing from the pictures PDF to JPG and PDF to PNG give (`add-pdf-to-images`). The owner was told only about fonts a PDF does not embed. Ship character maps for these tools (about 1 MB more after a pick, on these pages only), or keep the fixed set and say so on the page, as planned?
 
