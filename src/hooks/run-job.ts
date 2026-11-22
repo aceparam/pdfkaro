@@ -30,12 +30,18 @@ export type Job = {
   onProgress(progress: Progress): void;
   /** Forgets every new password the page holds. Called here, as soon as the job has finished with a file or with no new file. */
   forgetNewPasswords(): void;
+  /**
+   * Forgets every input file's own password the page holds, at the same moment: no result screen can use them
+   * (none goes back to the files), and "Start again" would forget them anyway.
+   */
+  forgetInputPasswords(): void;
 };
 
 /**
  * Runs one job and gives its outcome. A job that finished with a file, or with no new file for a tool with words
- * for that, forgets the new passwords before it returns: a new password is held no longer than the job needs. A
- * failure, a run that throws and Cancel keep them, so the visitor need not type them again.
+ * for that, forgets the new passwords and the input files' own passwords before it returns: a password is held no
+ * longer than the job needs. A failure, a run that throws and Cancel keep them, so the visitor need not type them
+ * again ("Go back to your file").
  */
 export async function runJob(job: Job): Promise<JobOutcome> {
   try {
@@ -43,8 +49,11 @@ export async function runJob(job: Job): Promise<JobOutcome> {
     const output = outputs[0];
     // No file is "no smaller", for a tool with words for it; for any other tool, the engine's failure.
     const shown = finishedAs(output !== undefined, job.hasNoSmallerWords);
-    // The job has finished with a file or with no new file: a new password is held no longer than the job needs.
-    if (shown !== 'engine-failure') job.forgetNewPasswords();
+    // The job has finished with a file or with no new file: a password is held no longer than the job needs.
+    if (shown !== 'engine-failure') {
+      job.forgetNewPasswords();
+      job.forgetInputPasswords();
+    }
     if (shown === 'no-new-file') return { kind: 'no-new-file' };
     if (shown === 'engine-failure' || !output) return { kind: 'failed', failure: 'engine' };
     return { kind: 'file', output, parts };

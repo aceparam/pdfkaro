@@ -1009,7 +1009,6 @@ export const tools: Tool[] = [
     runsIn: 'browser',
     phase: 1,
     accepts: ['application/pdf'],
-    // Unlock PDF is linked once it is published.
     related: ['unlock-pdf', 'compress-pdf', 'sign-pdf', 'watermark-pdf', 'merge-pdf', 'split-pdf'],
     pages: [
       {
@@ -1059,6 +1058,58 @@ export const tools: Tool[] = [
         'The file now opens only with the password you typed. Keep it somewhere safe: if it is forgotten, no one can open the file.',
         'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'If the file you chose had a password or restrictions, the new password replaces them, and the file has no restrictions.',
+      ],
+    },
+  },
+  {
+    // The second row of "Protect": the catalogue's Unlock PDF. By the owner's decision of 22 Nov 2026 the address and
+    // id keep the word, and no page says it: the tool is named "Remove a password". qpdf writes the file decrypted,
+    // with only a password the visitor typed; restrictions need none. Page text, a draft for the owner's review.
+    id: 'unlock-pdf',
+    group: 'protect',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['protect-pdf', 'compress-pdf', 'merge-pdf', 'split-pdf', 'extract-pdf-pages'],
+    pages: [
+      {
+        slug: 'unlock-pdf',
+        name: 'Remove a password',
+        summary: 'Remove print and edit restrictions from a PDF, and its password if you know it.',
+        title: 'Remove a password from a PDF in your browser - PDFkaro',
+        description: 'Remove print and edit restrictions from a PDF, and its password if you know it. The file and the password are not uploaded.',
+        heading: 'Remove a password from a PDF',
+        sentence: 'Remove print and edit restrictions from a PDF, and its password if you know it. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Remove protection and download',
+      writingLabel: 'Writing the unprotected file',
+      doneHeading: 'Your unprotected file is ready',
+      failedHeading: 'The protection was not removed.',
+      tooFewFiles: 'Choose a PDF file.',
+      outputSuffix: 'unprotected',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // A file encrypted in a way qpdf cannot open, such as with a certificate (the engine's inspector).
+      unsupportedAdvice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      // A file with no password and no restrictions gives no new file (owner, 22 Nov 2026).
+      noSmaller: {
+        heading: 'This file has no password or restrictions.',
+        advice: 'There was nothing to remove, so no new file was made. You can use your file as it is.',
+      },
+      resultNotes: [
+        'The file now opens without a password, and its print, copy and edit restrictions are removed. Anyone who has this copy can open it.',
+        'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
       ],
     },
   },

@@ -615,7 +615,10 @@ test.describe('the words below the tool', () => {
     // What can still be seen is a plain list, and page sizes are not claimed as hidden.
     expect(html.match(/<ul>[\s\S]*?<\/ul>/)?.[0].match(/<li>/g)).toHaveLength(7);
     expect(html).not.toContain('pages and their sizes');
-    expect(html.toLowerCase()).not.toContain('unlock');
+    // The word "unlock" is never said: since Remove a password is published, it is only in the address of
+    // Protect's related link to it (owner, 22 Nov 2026), which is taken out before the page is searched.
+    expect(html).toContain('href="/unlock-pdf"');
+    expect(html.replaceAll('/unlock-pdf', '').toLowerCase()).not.toContain('unlock');
   });
 });
 

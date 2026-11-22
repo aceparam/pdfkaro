@@ -407,7 +407,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       const extension = words.outputExtension ?? 'pdf';
       const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix, extension } : undefined;
       // Sending the job and reading its outcome is a plain function (run-job.ts), which forgets the new passwords
-      // itself once the job has finished with a file or with no new file.
+      // and the input files' own passwords itself once the job has finished with a file or with no new file.
       const outcome = await runJob({
         client: getClient(),
         inputs,
@@ -424,6 +424,9 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
         pictures: picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
         hasNoSmallerWords: words.noSmaller !== undefined,
         forgetNewPasswords,
+        // The listed files keep their status; the worker that held them opened was ended with the job, and no
+        // result screen reads this map (no way back to the files from a result, no thumbnails there).
+        forgetInputPasswords: () => passwords.current.clear(),
       });
       if (outcome.kind === 'cancelled') return;
       if (outcome.kind === 'failed') {
