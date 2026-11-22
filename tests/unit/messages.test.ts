@@ -188,3 +188,26 @@ describe('a picture read, from the worker', () => {
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'picture-too-large' })).toBe(true);
   });
 });
+
+describe('preparing a worker, and dropping a waiting thumbnail', () => {
+  it('accepts a well-formed prepare and drop, which carry only a request id and the tool', () => {
+    expect(isToWorker({ type: 'prepare', requestId: 1, toolId: 'merge-pdf' })).toBe(true);
+    expect(isToWorker({ type: 'drop-thumbnail', requestId: 4, toolId: 'merge-pdf' })).toBe(true);
+  });
+
+  it('refuses a prepare or drop that carries a file, a password or anything else', () => {
+    for (const type of ['prepare', 'drop-thumbnail']) {
+      for (const extra of [{ file }, { password: 'x' }, { files: [file] }, { passwords: ['x'] }, { name: 'report.pdf' }]) {
+        expect(isToWorker({ type, requestId: 1, toolId: 'merge-pdf', ...extra }), `${type} ${JSON.stringify(Object.keys(extra))}`).toBe(false);
+      }
+      expect(isToWorker({ type, requestId: 1, toolId: '../x' })).toBe(false);
+      expect(isToWorker({ type, requestId: '1', toolId: 'merge-pdf' })).toBe(false);
+    }
+  });
+
+  it('accepts a prepared reply with nothing in it, and refuses one that carries more', () => {
+    expect(isFromWorker({ type: 'prepared', requestId: 0 })).toBe(true);
+    expect(isFromWorker({ type: 'prepared', requestId: 0, outcome: { kind: 'ready', pages: 1 } })).toBe(false);
+    expect(isFromWorker({ type: 'prepared' })).toBe(false);
+  });
+});

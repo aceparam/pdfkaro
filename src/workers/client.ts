@@ -1,6 +1,12 @@
 // The page's side of the tool worker. It starts the worker on first use,
 // turns messages into promises, and ends the worker after every job, on
 // Cancel and when the visitor starts again or leaves.
+//
+// A reading worker loads one fixed set first (worker-core's `ready`) and says
+// `prepared` once it has settled. Until then it is ended only for the visitor's
+// own actions (`end()`): never for a thumbnail's time limit, a drop, a replaced
+// picture or a reading failure, so how often the site's files are asked for
+// never follows the file.
 
 import type { InspectOutcome, PictureOutcome, Progress } from '../engines/types';
 import type { FailureKind } from '../widget/state';
@@ -24,6 +30,12 @@ export class ToolError extends Error {
   }
 }
 
+/** How a wait for a worker's set ended: it settled, the worker was ended, or the hold passed. */
+export type SettleOutcome = 'settled' | 'ended' | 'timeout';
+
+/** The longest the page waits for a worker's set to settle before it treats the network as stalled. */
+export const settleHoldMs = 60_000;
+
 type Pending = {
   resolve(value: unknown): void;
   reject(error: ToolError): void;
@@ -34,13 +46,82 @@ export class ToolClient {
   private worker: WorkerLike | null = null;
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
+  // The current worker's set: whether it has settled, and who is waiting for it.
+  private settledNow = false;
+  private readonly settleWaiters = new Set<(outcome: 'settled' | 'ended') => void>();
+  // The one thumbnail asked for, and a drop of it waiting for its answer.
+  private thumbnailRequest: number | null = null;
+  private dropWatch: { requestId: number; resolve(outcome: 'dropped' | 'too-late'): void } | null = null;
 
   constructor(
     private readonly toolId: string,
     private readonly createWorker: () => WorkerLike,
-    /** How long a thumbnail may take before its worker is ended. Tests make it short. */
+    /** How long a thumbnail may take, once the set has settled, before its worker is ended. Tests make it short. */
     private readonly thumbnailLimitMs = 10_000,
+    /** How long the page waits for a worker's set to settle. Tests make it short. */
+    private readonly holdMs = settleHoldMs,
   ) {}
+
+  /** Whether the current worker's set has settled. False with no worker. */
+  get settled(): boolean {
+    return this.worker !== null && this.settledNow;
+  }
+
+  /**
+   * Starts a worker if none runs and has it load the tool's pick set, with no file. Resolves when the set has
+   * settled, or with `'ended'` when the worker is ended or fails first.
+   */
+  prepare(): Promise<'settled' | 'ended'> {
+    const worker = this.ensureWorker();
+    worker.postMessage({ type: 'prepare', requestId: this.nextId++, toolId: this.toolId });
+    // With no limit, the wait ends only when the set settles or the worker ends.
+    return this.whenSettled() as Promise<'settled' | 'ended'>;
+  }
+
+  /** Waits for the current worker's set to settle, at most `limitMs` when given. */
+  private whenSettled(limitMs?: number): Promise<SettleOutcome> {
+    if (!this.worker) return Promise.resolve('ended');
+    if (this.settledNow) return Promise.resolve('settled');
+    return new Promise<SettleOutcome>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const done = (outcome: SettleOutcome) => {
+        clearTimeout(timer);
+        this.settleWaiters.delete(waiter);
+        resolve(outcome);
+      };
+      const waiter = (outcome: 'settled' | 'ended') => done(outcome);
+      this.settleWaiters.add(waiter);
+      if (limitMs !== undefined) timer = setTimeout(() => done('timeout'), limitMs);
+    });
+  }
+
+  /**
+   * Ends the current worker once its set has settled, or once the hold has passed. The visitor's own `end()`
+   * ends it at once, and this then returns.
+   */
+  async endWhenSettled(): Promise<void> {
+    const worker = this.worker;
+    if (!worker) return;
+    await this.whenSettled(this.holdMs);
+    if (this.worker === worker) this.end();
+  }
+
+  /**
+   * Drops the thumbnail being waited for, before the set has settled, keeping the worker. Resolves `'dropped'`
+   * when the worker answered it with no picture, or `'too-late'` when the set settled first (the page may then end
+   * the worker), or `'none'` when no thumbnail is waiting. Once the set has settled it is always `'too-late'`.
+   */
+  dropThumbnail(): Promise<'dropped' | 'too-late' | 'none'> {
+    const requestId = this.thumbnailRequest;
+    const worker = this.worker;
+    if (requestId === null || !worker || !this.pending.has(requestId)) return Promise.resolve('none');
+    if (this.settledNow) return Promise.resolve('too-late');
+    return new Promise((resolve) => {
+      this.dropWatch?.resolve('dropped');
+      this.dropWatch = { requestId, resolve };
+      worker.postMessage({ type: 'drop-thumbnail', requestId, toolId: this.toolId });
+    });
+  }
 
   /** Reads one file, with a password if one was typed. */
   inspect(file: Blob, password?: string): Promise<InspectOutcome> {
@@ -54,26 +135,36 @@ export class ToolClient {
 
   /**
    * Draws one page of a file to fit inside `box`, as PNG bytes. Gives null
-   * when the page cannot be drawn, and never fails the tool. If drawing takes
-   * longer than the limit, the worker is ended, which stops PDF.js too; the
-   * page asks for thumbnails only when nothing else is waiting on the worker.
+   * when the page cannot be drawn, and never fails the tool. The time limit
+   * starts only once the worker's set has settled; if drawing then takes longer
+   * than the limit, the worker is ended, which stops PDF.js too. Before then, a
+   * thumbnail waits for the set at most the hold, after which the network is
+   * taken as stalled and the worker is ended. The page asks for thumbnails only
+   * when nothing else is waiting on the worker.
    */
   async thumbnail(file: Blob, password: string | undefined, page: number, box: ThumbnailBox, documentKey: string): Promise<Uint8Array | null> {
+    const worker = this.ensureWorker();
     const reply = this.send<Uint8Array | null>({ type: 'thumbnail', requestId: 0, toolId: this.toolId, file, password, page, box, documentKey });
     reply.catch(() => {});
+    const requestId = this.nextId - 1;
+    this.thumbnailRequest = requestId;
+    let finished = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const limit = new Promise<null>((resolve) => {
-      timer = setTimeout(() => {
-        this.end();
-        resolve(null);
-      }, this.thumbnailLimitMs);
-    });
+    const limit = (async (): Promise<null> => {
+      const waited = await this.whenSettled(this.holdMs);
+      if (finished || waited === 'ended') return null;
+      if (waited === 'settled') await new Promise<void>((resolve) => (timer = setTimeout(resolve, this.thumbnailLimitMs)));
+      if (!finished && this.worker === worker) this.end();
+      return null;
+    })();
     try {
       return await Promise.race([reply, limit]);
     } catch {
       return null;
     } finally {
+      finished = true;
       clearTimeout(timer);
+      if (this.thumbnailRequest === requestId) this.thumbnailRequest = null;
     }
   }
 
@@ -107,11 +198,22 @@ export class ToolClient {
 
   /** Stops whatever is running. A WebAssembly call cannot be interrupted, so the worker is ended. */
   end(): void {
+    this.endWorker('cancelled');
+  }
+
+  /** Ends the worker, answering everything waiting on it: requests with `kind`, waits for its set with `'ended'`. */
+  private endWorker(kind: FailureKind | 'cancelled'): void {
     this.worker?.terminate();
     this.worker = null;
+    this.settledNow = false;
+    this.thumbnailRequest = null;
+    const watch = this.dropWatch;
+    this.dropWatch = null;
+    watch?.resolve('dropped');
+    for (const waiter of [...this.settleWaiters]) waiter('ended');
     const waiting = [...this.pending.values()];
     this.pending.clear();
-    for (const request of waiting) request.reject(new ToolError('cancelled'));
+    for (const request of waiting) request.reject(new ToolError(kind));
   }
 
   /** Whether a worker is running now. */
@@ -130,6 +232,7 @@ export class ToolClient {
 
   private ensureWorker(): WorkerLike {
     if (this.worker) return this.worker;
+    this.settledNow = false;
     const worker = this.createWorker();
     worker.onmessage = (event) => this.receive(event.data);
     worker.onerror = () => this.failAll('engine-load');
@@ -139,6 +242,17 @@ export class ToolClient {
 
   private receive(data: unknown): void {
     if (!isFromWorker(data)) return;
+    if (data.type === 'prepared') {
+      this.settledNow = true;
+      // A drop the worker met only after its set settled came too late: the thumbnail is still being drawn.
+      const watch = this.dropWatch;
+      if (watch && this.pending.has(watch.requestId)) {
+        this.dropWatch = null;
+        watch.resolve('too-late');
+      }
+      for (const waiter of [...this.settleWaiters]) waiter('settled');
+      return;
+    }
     const request = this.pending.get(data.requestId);
     if (!request) return;
     switch (data.type) {
@@ -156,6 +270,10 @@ export class ToolClient {
         return;
       case 'thumbnail':
         this.pending.delete(data.requestId);
+        if (this.dropWatch?.requestId === data.requestId) {
+          this.dropWatch.resolve('dropped');
+          this.dropWatch = null;
+        }
         request.resolve(data.image);
         return;
       case 'failed':
@@ -170,10 +288,6 @@ export class ToolClient {
   }
 
   private failAll(kind: FailureKind): void {
-    this.worker?.terminate();
-    this.worker = null;
-    const waiting = [...this.pending.values()];
-    this.pending.clear();
-    for (const request of waiting) request.reject(new ToolError(kind));
+    this.endWorker(kind);
   }
 }

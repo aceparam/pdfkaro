@@ -11,7 +11,7 @@ import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
-import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
+import { settleHoldMs, ToolClient, ToolError, type WorkerLike } from '../workers/client';
 import { runJob } from './run-job';
 
 export type ToolRunResult = { url: string; name: string };
@@ -25,9 +25,18 @@ export type ToolRun = {
   showThumbnail(id: string): void;
   /**
    * Adds files. Gives back how many were added, the names of any turned away for being of the wrong
-   * type, and, for a tool that takes one file, the names of the others left out.
+   * type, and, for a tool that takes one file, the names of the others left out. When nothing was listed and
+   * every file is of the wrong kind, it first waits for the worker's set (`waiting`), and `ended` says the
+   * wait was ended by Remove or by the page being cleared, so nothing is to be said.
    */
-  addFiles(files: File[]): Promise<{ added: number; refused: string[]; leftOut: string[] }>;
+  addFiles(files: File[]): Promise<{ added: number; refused: string[]; leftOut: string[]; ended?: 'removed' | 'cleared' }>;
+  /**
+   * The files of a pick that took none, while the worker's set loads: shown as "Getting ready" with Remove, so a
+   * pick of the wrong kind loads the same files as any other. Null when no such wait is under way.
+   */
+  waiting: readonly { name: string; size: number }[] | null;
+  /** Ends a wrong-kind wait, and its worker, as Remove does. */
+  removeWaiting(): void;
   submitPassword(id: string, password: string): Promise<void>;
   removeFile(id: string): void;
   moveFile(id: string, to: number): void;
@@ -159,18 +168,30 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   // The file whose document the worker keeps open for drawing its pages, if any.
   const keptFile = useRef<string | null>(null);
 
-  // The job and reading come first: a thumbnail being drawn is stopped by
-  // ending the worker, and is asked for again later. Every file has been read
-  // before the job can start, and a file about to be read has not started, so
-  // nothing else is lost; and no read is ever pending when a thumbnail's time
-  // limit ends a worker.
-  const stopThumbnail = useCallback(() => {
-    if (!drawing.current) return;
+  // Forgets the thumbnail being drawn, which is asked for again later. Says whether there was one.
+  const forgetDrawing = useCallback((): boolean => {
+    if (!drawing.current) return false;
     drawing.current.stopped = true;
     drawing.current = null;
     queue.current = stop(queue.current);
-    client.current?.end();
+    return true;
   }, []);
+
+  // The job and reading come first: a thumbnail being drawn is stopped, and is
+  // asked for again later. Before the worker's set has settled, no drawing can
+  // be under way, so a thumbnail waiting for the set is dropped by message and
+  // the worker is kept: ending it then would cut its files short, and the next
+  // worker would ask for them again, for some files only. Once the set has
+  // settled, or when the drop came too late, the drawing is stopped by ending
+  // the worker, as before. The next read is sent only after this, so no read
+  // ever waits behind a document being opened, and no read is ever pending when
+  // a thumbnail's time limit ends a worker.
+  const stopThumbnail = useCallback(async () => {
+    if (!forgetDrawing()) return;
+    const current = client.current;
+    if (!current) return;
+    if ((await current.dropThumbnail()) === 'too-late' && client.current === current) current.end();
+  }, [forgetDrawing]);
 
   const pump = useCallback(() => {
     // Only the pages shown are made, so a file of very many pages costs the page no more than one batch.
@@ -235,7 +256,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       const ticket = (inspectTickets.current.get(id) ?? 0) + 1;
       inspectTickets.current.set(id, ticket);
       const latest = () => files.current.has(id) && inspectTickets.current.get(id) === ticket;
-      stopThumbnail();
+      await stopThumbnail();
       try {
         const outcome = await getClient().inspect(file, password);
         const shown = outcome.kind === 'needs-password' && password !== undefined ? { kind: 'wrong-password' as const } : outcome;
@@ -251,7 +272,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const removeFile = useCallback(
     (id: string) => {
       // A file removed while its picture is drawn: stop that drawing, so no two are ever drawn at once.
-      if (drawing.current?.fileId === id) stopThumbnail();
+      if (drawing.current?.fileId === id) void stopThumbnail();
       // The worker lets go of the copy it kept open to draw this file's pages.
       if (keptFile.current === id) {
         client.current?.closeDocument();
@@ -271,8 +292,16 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     [forgetNewPasswords, forgetThumbnails, stopThumbnail],
   );
 
+  // A pick that took no file waits for the worker's set (decision 9): its files, and how the wait is ended early.
+  const [waiting, setWaiting] = useState<readonly { name: string; size: number }[] | null>(null);
+  const endWait = useRef<((how: 'removed' | 'cleared') => void) | null>(null);
+  const removeWaiting = useCallback(() => endWait.current?.('removed'), []);
+
   const addFiles = useCallback(
-    async (picked: File[]) => {
+    async (picked: File[]): Promise<{ added: number; refused: string[]; leftOut: string[]; ended?: 'removed' | 'cleared' }> => {
+      // Every pick loads the tool's pick set first, before the files are looked at, so a pick that takes no file
+      // fetches the same files as any other. A worker already running answers at once.
+      const preparing = getClient().prepare();
       const looked: File[] = [];
       const refused: string[] = [];
       for (const file of picked) {
@@ -281,6 +310,26 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
         else refused.push(file.name);
       }
       const listed = stateRef.current.files.map((entry) => entry.id);
+      if (looked.length === 0 && listed.length === 0 && refused.length > 0) {
+        // Nothing to list: the files' line says "Getting ready" until the set has loaded or failed, held to a limit,
+        // then the worker, never sent a file, is ended and the picker says why. Remove ends the wait at once.
+        setWaiting(picked.map((file) => ({ name: file.name, size: file.size })));
+        const ended = await new Promise<'removed' | 'cleared' | undefined>((resolve) => {
+          const finish = (how?: 'removed' | 'cleared') => {
+            clearTimeout(timer);
+            if (endWait.current === finish) endWait.current = null;
+            resolve(how);
+          };
+          const timer = setTimeout(() => finish(), settleHoldMs);
+          endWait.current = finish;
+          void preparing.then(() => finish());
+        });
+        if (ended !== 'cleared') {
+          setWaiting(null);
+          client.current?.end();
+        }
+        return { added: 0, refused: ended ? [] : refused, leftOut: [], ...(ended ? { ended } : {}) };
+      }
       const { take, leftOut, replace } = chooseFiles(looked, listed, words.multiple);
       const accepted = take.map((file) => {
         const id = `f${nextId.current++}`;
@@ -294,7 +343,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       for (const { id } of accepted) await inspect(id);
       return { added: accepted.length, refused, leftOut: leftOut.map((file) => file.name) };
     },
-    [accepts, inspect, removeFile, words.multiple],
+    [accepts, getClient, inspect, removeFile, words.multiple],
   );
 
   const submitPassword = useCallback(
@@ -314,7 +363,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const readChosenPicture = useCallback(
     async (key: string, file: File): Promise<void> => {
       for (let tries = 0; ; tries += 1) {
-        stopThumbnail();
+        await stopThumbnail();
         const attempt = { file };
         picturesInFlight.current.set(key, attempt);
         try {
@@ -344,15 +393,17 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
 
   // A read still in flight for a key that was just picked again is for a file no longer held. Reading a hostile PNG
   // can take minutes, and the next read would wait behind it, so the worker is ended and the new read starts on a
-  // fresh one. The old read's answer is "cancelled" for a file not held, so it is not read again; the new pick
-  // counts its own tries from 0. No file is being read then: the field is shown only once every file has been read.
+  // fresh one. It is ended only once its set has settled (held to a limit), so its files are never cut short for a
+  // picture's sake; the new read waits for that. The old read's answer is "cancelled" for a file not held, so it is
+  // not read again; the new pick counts its own tries from 0. No file is being read then: the field is shown only
+  // once every file has been read.
   const endReplacedRead = useCallback(
-    (key: string) => {
+    async (key: string) => {
       const inFlight = picturesInFlight.current.get(key);
       if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
       picturesInFlight.current.delete(key);
-      stopThumbnail();
-      client.current?.end();
+      await stopThumbnail();
+      await client.current?.endWhenSettled();
     },
     [stopThumbnail],
   );
@@ -370,12 +421,14 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
         // A wrong pick leaves no picture chosen, even if one was ready before: the field holds the last pick.
         pictures.current.delete(key);
         dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'refused' });
-        endReplacedRead(key);
+        await endReplacedRead(key);
         return;
       }
       pictures.current.set(key, file);
       dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'reading' });
-      endReplacedRead(key);
+      await endReplacedRead(key);
+      // "Start again", leaving or a later pick while the old read was ended: this pick is dropped.
+      if (stateRef.current.step !== 'listing' || pictureTickets.current.get(key) !== ticket || pictures.current.get(key) !== file) return;
       await readChosenPicture(key, file);
     },
     [endReplacedRead, readChosenPicture, toolId],
@@ -404,7 +457,10 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     const listed = stateRef.current.files;
     const inputs = listed.map((entry) => files.current.get(entry.id)).filter((file): file is File => file !== undefined);
     if (inputs.length !== listed.length || inputs.length === 0) return;
-    stopThumbnail();
+    // Every job runs in a fresh worker, which loads the tool's whole job set before the engine sees a file: the
+    // reading worker, any thumbnail it draws and the document it keeps open are ended here, at the visitor's press.
+    forgetDrawing();
+    client.current?.end();
     releaseResult();
     dispatch({ type: 'started' });
     try {
@@ -467,7 +523,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, forgetNewPasswords, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, forgetDrawing, forgetNewPasswords, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
@@ -511,6 +567,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   }, [inspect, rereadPictures]);
 
   const clear = useCallback(() => {
+    endWait.current?.('cleared');
+    setWaiting(null);
     if (drawing.current) drawing.current.stopped = true;
     drawing.current = null;
     keptFile.current = null;
@@ -539,5 +597,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, newPasswords, setNewPassword, pickPicture, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, waiting, removeWaiting, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, newPasswords, setNewPassword, pickPicture, start, cancel, backToFiles, clear };
 }

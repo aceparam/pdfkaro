@@ -1,11 +1,14 @@
 // The one worker for every tool. It loads a tool's engine only when that tool
-// first asks for it, from src/engines/tools/<tool id>.ts.
+// first asks for it, from src/engines/tools/<tool id>.ts, with the libraries the
+// engine declares for the step (worker-core's `ready`).
 
 import qpdfWasm from '@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { EngineModule, EngineTools } from '../engines/types';
+import type { EngineModule, LibraryName } from '../engines/types';
+import type { ToolKey } from './libraries';
 import type { FromWorker } from './messages';
 import { createPdfjsLoader, type NestedWorker } from './pdfjs-loader';
+import { createSpareQpdf } from './spare-qpdf';
 import { workerFromBlob } from './start-worker';
 import { createHandler } from './worker-core';
 
@@ -24,14 +27,27 @@ const engines = import.meta.glob<EngineModule>('../engines/tools/*.ts');
 // file hands on is made absolute against this file's own address instead.
 const absolute = (address: string) => new URL(address, import.meta.url).href;
 
-// The libraries engines ask for. Each is fetched only when first asked for;
-// qpdf is made afresh for each call, so one file's crash or memory never
-// carries over to the next.
-const tools: EngineTools = {
-  qpdf: async () => {
-    const { createQpdf } = await import('../engines/qpdf');
-    return createQpdf(() => import('@neslinesli93/qpdf-wasm'), absolute(qpdfWasm));
-  },
+// fflate's three parts the site uses, picked by name so the rest of fflate (its own workers among it) is left out
+// of the build. Imported straight from the package: a module of our own re-exporting them would be a built file,
+// and a request, of its own.
+const loadFflate = async () => {
+  const { Inflate, Deflate, zipSync } = await import('fflate');
+  return { Inflate, Deflate, zipSync };
+};
+
+// qpdf is made afresh for each call, so one file's crash or memory never carries over to the next. The first
+// instance is made while the step's libraries load (the spare), so its WebAssembly is asked for before any
+// file is read, and handed unused to the first call.
+const spareQpdf = createSpareQpdf(async () => {
+  const { createQpdf } = await import('../engines/qpdf');
+  return createQpdf(() => import('@neslinesli93/qpdf-wasm'), absolute(qpdfWasm));
+});
+
+// The libraries engines ask for, by the keys of `toolLibrary` in libraries.ts: every key has a row there, and
+// worker-core hands each step's engine only the keys its declared set allows. Each library's files are loaded
+// by `libraries` below, before any file is read; these give an engine what was loaded.
+const tools = {
+  qpdf: () => spareQpdf.take(),
   pdfjs: () => pdfjsLoader.load(),
   // Races every drawing, and opening and closing a document, against PDF.js's own worker stopping, so
   // a job or a thumbnail fails at once instead of waiting on a worker that will never answer.
@@ -57,13 +73,11 @@ const tools: EngineTools = {
   }),
   // PDF.js's fonts and decoders: one fixed set, loaded late, never statically.
   pdfjsData: async () => (await import('./pdfjs-data')).pdfjsData,
-  // pdf-lib, for an engine that writes a PDF from nothing or draws on pages; its own chunk, fetched at the main button.
+  // pdf-lib, for an engine that writes a PDF from nothing or draws on pages; its own chunk.
   pdflib: () => import('./pdflib'),
-  // fflate, from the same chunk pdf-lib and the zip use: its streaming Inflate and Deflate, never inflateSync.
-  fflate: async () => {
-    const { Inflate, Deflate } = await import('fflate');
-    return { Inflate, Deflate };
-  },
+  // fflate, from the same chunk pdf-lib uses, as one library: its streaming Inflate and Deflate, never
+  // inflateSync, and zipSync, which worker-core takes for a job that zips several files.
+  fflate: () => loadFflate(),
   // The browser's own image decoder. For pictures' thumbnails (Image to PDF), the picture is turned as
   // its camera recorded, and scaled down while it is decoded where the browser can. With
   // `colours: 'none'` (Compress PDF), its colours are left as they are and it is scaled with care; the
@@ -79,6 +93,17 @@ const tools: EngineTools = {
       return { image: bitmap, close: () => bitmap.close() };
     },
   }),
+} satisfies Record<ToolKey, () => Promise<unknown>>;
+
+// Each library's files, by name, loaded for a step before any file is read (worker-core's `ready`): the same
+// files, in the same order, whatever the file.
+const libraries: Record<LibraryName, () => Promise<unknown>> = {
+  qpdf: () => spareQpdf.load(),
+  fflate: () => loadFflate(),
+  pdflib: () => import('./pdflib'),
+  // PDF.js and its own worker, its data and the thumbnail step, started together.
+  pdfjs: () => Promise.all([pdfjsLoader.load(), tools.pdfjsData(), import('../engines/thumbnail')]),
+  pictureThumbnail: () => import('../engines/picture-thumbnail'),
 };
 
 // PDF.js runs its own worker, started from this one, once. If it fails, PDF.js
@@ -101,6 +126,7 @@ const handle = createHandler({
     const load = engines[`../engines/tools/${toolId}.ts`];
     return load ? await load() : undefined;
   },
+  libraries,
   tools,
   post: (message, transfer) => scope.postMessage(message, { transfer: transfer ?? [] }),
   openDocument: async (file, password, given, kind) => {
@@ -114,7 +140,6 @@ const handle = createHandler({
     const doc = await openDocument(file, password, given);
     return { render: (page, box) => doc.render(page, box), close: () => doc.close() };
   },
-  loadZip: async () => (await import('fflate')).zipSync,
 });
 
 scope.onmessage = (event) => {

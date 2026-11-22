@@ -10,8 +10,11 @@
 // which Delete pages uses too.
 
 import { chosenPages, keepPages, passwordFrom, plainCopy } from '../plain';
-import type { Engine, Inspector } from '../types';
+import type { Engine, EngineModule, Inspector } from '../types';
 import { inspectPdf } from '../inspect';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf'] };
 
 type Options = { passwords?: unknown; pages?: unknown };
 

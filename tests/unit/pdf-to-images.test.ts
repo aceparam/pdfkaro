@@ -422,7 +422,7 @@ describe('a PDF.js worker that stops', () => {
         destroy: () => never,
       }),
     };
-    const port: NestedWorker = { onerror: null };
+    const port: NestedWorker = { onerror: null, terminate: () => {} };
     const loader = createPdfjsLoader(async () => stalled, () => port);
     const given: EngineTools = { ...tools, pdfjs: () => loader.load(), pdfjsGuard: async () => loader.guard };
     const progress: Progress[] = [];

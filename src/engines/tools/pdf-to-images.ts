@@ -15,8 +15,11 @@
 
 import { inspectPdf } from '../inspect';
 import { maxImagePixels, openDocument } from '../thumbnail';
-import type { Engine, Inspector } from '../types';
+import type { Engine, EngineModule, Inspector } from '../types';
 import { maxOutputBytes, outputTally, zipMaxBytes } from '../../widget/zip-limits';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['fflate', 'pdfjs'] };
 
 type Options = { passwords?: unknown; format?: unknown };
 

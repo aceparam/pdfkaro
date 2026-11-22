@@ -3,7 +3,7 @@
 // from the worker's globals so that it can be tested in Node.
 
 /** The parts of a nested Worker this uses. */
-export type NestedWorker = { onerror: ((event: { preventDefault(): void }) => void) | null };
+export type NestedWorker = { onerror: ((event: { preventDefault(): void }) => void) | null; terminate(): void };
 
 export type PdfjsLoader = {
   /** PDF.js, ready to open documents. Rejects at once after PDF.js has failed. */
@@ -27,17 +27,36 @@ export function createPdfjsLoader(
   return {
     load() {
       if (failed) return Promise.reject(new Error('PDF.js is unavailable in this worker.'));
-      loading ??= (async () => {
-        const pdfjs = await importPdfjs();
-        const port = startWorker();
+      // PDF.js's own worker starts in the same step as the PDF.js import, not after it resolves: its request
+      // must not wait on this worker's event loop, which a long qpdf call holds, so its timing never follows a
+      // file. It is guarded from its first moment, ended if the import fails, and handed over once PDF.js is here.
+      loading ??= (() => {
+        const imported = importPdfjs();
+        let port: NestedWorker;
+        try {
+          port = startWorker();
+        } catch (error) {
+          imported.catch(() => {});
+          failed = true;
+          return Promise.reject(error instanceof Error ? error : new Error('PDF.js could not start.'));
+        }
         port.onerror = (event) => {
           // Keep PDF.js's errors inside the tool worker; the page sees only a missing picture.
           event.preventDefault();
           failed = true;
           stop(new Error('PDF.js stopped.'));
         };
-        pdfjs.GlobalWorkerOptions.workerPort = port;
-        return pdfjs;
+        return imported.then(
+          (pdfjs) => {
+            if (failed) throw new Error('PDF.js is unavailable in this worker.');
+            pdfjs.GlobalWorkerOptions.workerPort = port;
+            return pdfjs;
+          },
+          (error: unknown) => {
+            port.terminate();
+            throw error;
+          },
+        );
       })();
       return loading;
     },

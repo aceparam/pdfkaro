@@ -59,9 +59,25 @@ export type Inspector = (file: Uint8Array, password: string | undefined, tools: 
  */
 export type PictureOutcome = { kind: 'ready'; pixels: number } | { kind: 'damaged' } | { kind: 'unsupported' };
 
+/**
+ * A library the worker can load for an engine, by name. Each covers one or more keys of `tools`
+ * (`toolLibrary` in src/workers/libraries.ts): `'pdfjs'` is PDF.js, its worker, its helper data and the
+ * thumbnail step; `'pictureThumbnail'` is the picture thumbnail step. Defined here, beside the engines,
+ * because engines must not import worker code.
+ */
+export type LibraryName = 'qpdf' | 'fflate' | 'pdflib' | 'pdfjs' | 'pictureThumbnail';
+
 /** What a file in src/engines/tools/ exports. Its name is the tool's id. */
 export type EngineModule = {
   run: Engine<Record<string, unknown>>;
+  /**
+   * The libraries this engine's reading (`inspect` and `inspectPicture`) and its job (`run`) may use.
+   * Chosen by tool, never by a file: the worker loads the whole set for a step before it reads any file,
+   * whatever the file holds or how the step ends, so which of the site's files a page fetches says nothing
+   * about the file. A step that asks for a library outside its set fails as `engine-load`. The thumbnail
+   * code is not listed: it follows from `thumbnails` (`drawSet` in src/workers/libraries.ts).
+   */
+  loads: { read: readonly LibraryName[]; job: readonly LibraryName[] };
   inspect?: Inspector;
   /**
    * How the worker draws this tool's thumbnails. Left out, a file is a PDF drawn by PDF.js;

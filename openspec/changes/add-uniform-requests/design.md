@@ -226,7 +226,7 @@ What remains is the order in which requests started together reach the wire. Tha
 
 ### 5. The zip step is loaded inside `ready('job')` (R5)
 
-The separate `loadZip` dependency goes. The `fflate` library loads one module, which gives the inflater, the deflater and `zipSync`. Its import moves into `src/workers/fflate.ts`, which re-exports `Inflate`, `Deflate` and `zipSync`. `worker-core` takes `zipSync` from the loaded `fflate` library for a run whose message asks for a zip. A zip run without `fflate` in the job set is a programming mistake: the unit test of decision 10 catches it, and at run time it fails as `engine-load`.
+The separate `loadZip` dependency goes. The `fflate` library loads one module, which gives the inflater, the deflater and `zipSync`: the worker imports the `fflate` package itself, for both `tools.fflate` and the library. (Built: a module of our own re-exporting it, `src/workers/fflate.ts`, as first planned, became a 73-byte built file and a request of its own, against "no new built file", so it was dropped.) `worker-core` takes `zipSync` from the loaded `fflate` library for a run whose message asks for a zip. A zip run without `fflate` in the job set is a programming mistake: the unit test of decision 10 catches it, and at run time it fails as `engine-load`.
 
 ### 6. The first qpdf is made at the fixed point and handed on unused (R15)
 

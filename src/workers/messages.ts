@@ -23,7 +23,18 @@ export type ToWorker =
     }
   | { type: 'thumbnail'; requestId: number; toolId: string; file: Blob; password?: string; page: number; box: ThumbnailBox; documentKey: string }
   /** Closes the document kept open for thumbnails, such as when its file is removed. */
-  | { type: 'close'; requestId: number; toolId: string };
+  | { type: 'close'; requestId: number; toolId: string }
+  /**
+   * Loads the tool's pick set (its engine, its reading libraries, then its thumbnail code) and nothing else.
+   * Sent on every pick, before the page looks at the files, so a pick that takes no file loads the same set.
+   * Carries no file and no password.
+   */
+  | { type: 'prepare'; requestId: number; toolId: string }
+  /**
+   * Drops the thumbnail with this request id if it is still waiting for the set: it is answered with no picture
+   * and never opens its document. Carries no file and no password.
+   */
+  | { type: 'drop-thumbnail'; requestId: number; toolId: string };
 
 /**
  * The cleaned base of the input's name, the word for each file inside a zip, and
@@ -48,9 +59,15 @@ export type FromWorker =
   | { type: 'done'; requestId: number; outputs: Uint8Array[]; parts?: number }
   | { type: 'failed'; requestId: number; kind: FailureKind }
   /** A thumbnail: PNG bytes, or null when the page could not be drawn. Never a failure of the tool. */
-  | { type: 'thumbnail'; requestId: number; image: Uint8Array | null };
+  | { type: 'thumbnail'; requestId: number; image: Uint8Array | null }
+  /**
+   * The worker's pick set has settled: its thumbnail code has loaded or failed (or its reading set failed).
+   * Posted once per worker, with request id 0. Until then the page ends the worker only for the visitor's own actions.
+   */
+  | { type: 'prepared'; requestId: number };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const hasOnly = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).every((key) => keys.includes(key));
 const isBlob = (value: unknown): value is Blob => typeof Blob !== 'undefined' && value instanceof Blob;
 const isOptionalString = (value: unknown) => value === undefined || typeof value === 'string';
 const isSide = (value: unknown) => Number.isInteger(value) && (value as number) >= boxLimits.min && (value as number) <= boxLimits.max;
@@ -90,6 +107,8 @@ export function isToWorker(value: unknown): value is ToWorker {
   if (!isRecord(value) || typeof value.requestId !== 'number' || typeof value.toolId !== 'string') return false;
   if (!idPattern.test(value.toolId)) return false;
   if (value.type === 'close') return true;
+  // Nothing but the type, the request id and the tool: never a file or a password.
+  if (value.type === 'prepare' || value.type === 'drop-thumbnail') return hasOnly(value, ['type', 'requestId', 'toolId']);
   if (value.type === 'inspect') return isBlob(value.file) && isOptionalString(value.password);
   if (value.type === 'inspect-picture') return isKey(value.key) && isBlob(value.file);
   if (value.type === 'run') {
@@ -181,6 +200,8 @@ export function isFromWorker(value: unknown): value is FromWorker {
       return failureKinds.includes(value.kind as FailureKind);
     case 'thumbnail':
       return value.image === null || value.image instanceof Uint8Array;
+    case 'prepared':
+      return hasOnly(value, ['type', 'requestId']);
     default:
       return false;
   }

@@ -137,7 +137,11 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
   const add = useCallback(
     (files: File[]) => {
-      void run.addFiles(files).then(({ added, refused, leftOut }) => {
+      void run.addFiles(files).then(({ added, refused, leftOut, ended }) => {
+        // A wrong-kind wait ended by Remove goes back to the picker as removing the last file does; one ended by the
+        // page being cleared says nothing.
+        if (ended === 'removed') onEmpty();
+        if (ended) return;
         setLeftOut(leftOut);
         const said = [refused.length > 0 ? refusedText(refused) : '', leftOutText(leftOut)].filter(Boolean).join(' ');
         if (!said) return;
@@ -162,6 +166,12 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     if (state.step !== 'empty') hadFiles.current = true;
     else if (hadFiles.current) onEmpty();
   }, [state.step, onEmpty]);
+
+  // A pick that took no file: focus goes to its "Getting ready" line, as it goes to the summary after any pick.
+  const waitingNow = run.waiting !== null;
+  useEffect(() => {
+    if (waitingNow) summaryRef.current?.focus();
+  }, [waitingNow]);
 
   // Focus follows the step: the summary, Cancel, the result, the failure, or back to the main button.
   const previousStep = useRef(state.step);
@@ -582,6 +592,31 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
       <p role="status" className="visually-hidden">
         {announcement}
       </p>
+
+      {run.waiting && state.step === 'empty' ? (
+        // The files of a pick that took none, while the tool's files load; then the picker says why.
+        <div className={styles.fileLine}>
+          {run.waiting.length === 1 ? (
+            <p ref={summaryRef} tabIndex={-1} className={styles.fileName}>
+              <span className={styles.name}>{run.waiting[0]!.name}</span>
+              <span className="muted">, Getting ready</span>
+            </p>
+          ) : (
+            <p ref={summaryRef} tabIndex={-1} className={styles.fileName}>
+              {fileCount(run.waiting.length)}
+              <span className="muted">, Getting ready</span>
+            </p>
+          )}
+          <button
+            type="button"
+            className={`button-secondary ${styles.small}`}
+            aria-label={run.waiting.length === 1 ? `Remove ${run.waiting[0]!.name}` : `Remove ${fileCount(run.waiting.length)}`}
+            onClick={run.removeWaiting}
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>

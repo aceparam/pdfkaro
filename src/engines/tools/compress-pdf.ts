@@ -27,7 +27,10 @@ import { freshQpdf, passwordFrom } from '../plain';
 import { isDict, isRef, passwordArgsFor, rawBatches, readDictionaries, readRawStreams, writeUpdate, type Dict, type ObjectEntry, type StreamReplacement } from '../qpdf-json';
 import { fittedSize, scaleDown, unpredict } from '../resample';
 import type { JpegCanvasMaker } from '../thumbnail';
-import type { Engine, EngineTools, Inspector } from '../types';
+import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf', 'fflate'] };
 
 type Options = { passwords?: unknown };
 

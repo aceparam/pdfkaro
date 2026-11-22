@@ -19,8 +19,11 @@ import { carriesAttachment, outlineUpdate, pageRange, readStructure } from '../o
 import { updateJson } from '../qpdf-json';
 import { freshQpdf, passwordFrom, plainCopy } from '../plain';
 import { finished } from '../qpdf';
-import type { Engine, Inspector } from '../types';
+import type { Engine, EngineModule, Inspector } from '../types';
 import { outputTally, zipMaxBytes } from '../../widget/zip-limits';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf', 'fflate'] };
 
 type Options = { passwords?: unknown; cuts?: unknown };
 type Part = { first: number; last: number };

@@ -26,10 +26,10 @@
 
   Verify the existing `pdfjs-loader` unit tests pass, plus new ones for each of: the worker starts before the import resolves; an early nested error leaves PDF.js failed; a rejected import terminates the nested worker.
 - [ ] 3.2 Write `src/workers/spare-qpdf.ts` (design.md, decision 6), a plain function tested in Node. Loading `'qpdf'` makes one instance and keeps it. The next `tools.qpdf()` takes it, unused, and clears it. Later calls make new instances. Verify with a unit test with a made-up factory: first call gets the spare, second gets a new instance, and a spare is never handed out twice.
-- [ ] 3.3 Write `src/workers/fflate.ts`, which re-exports `Inflate`, `Deflate` and `zipSync` as one library (design.md, decision 5). Remove `loadZip` from `WorkerDeps` and take `zipSync` from the loaded `fflate` library. Verify the existing zip tests in `worker-core.test.ts` pass with the new dependency.
+- [ ] 3.3 Load `fflate` as one library giving `Inflate`, `Deflate` and `zipSync` (design.md, decision 5), imported from the package in `tool.worker.ts` (a re-exporting `src/workers/fflate.ts` made a built file of its own, so it is not used). Remove `loadZip` from `WorkerDeps` and take `zipSync` from the loaded `fflate` library. Verify the existing zip tests in `worker-core.test.ts` pass with the new dependency.
 - [ ] 3.4 In `src/workers/tool.worker.ts`, give the worker core its libraries by name:
   - `qpdf`: the spare from 3.2.
-  - `fflate`: from 3.3.
+  - `fflate`: the package, from 3.3.
   - `pdflib`.
   - `pdfjs`: `pdfjsLoader.load()`, `pdfjsData` and `import('../engines/thumbnail')`.
   - `pictureThumbnail`: `import('../engines/picture-thumbnail')`.
