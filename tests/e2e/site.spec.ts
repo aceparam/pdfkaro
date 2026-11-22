@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { allPages, bannedWords, hubPages, hubs, placeholderPages, sitePages, staticPages, toolPages } from './pages';
+import { allPages, bannedWords, hubPages, hubs, sitePages, unwrittenPages, staticPages, toolPages } from './pages';
 
 test.describe('every page', () => {
   for (const path of allPages) {
@@ -21,8 +21,8 @@ test.describe('every page', () => {
       await expect(page.locator('footer a')).toHaveCount(5);
 
       // The real site, at the root of its address, asks search engines to stay away only from a page
-      // that still shows an owner placeholder.
-      await expect(page.locator('meta[name="robots"]')).toHaveCount(placeholderPages.includes(path) ? 1 : 0);
+      // that still shows an owner placeholder or an agent's draft.
+      await expect(page.locator('meta[name="robots"]')).toHaveCount(unwrittenPages.includes(path) ? 1 : 0);
 
       // Nothing scrolls sideways.
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -16,7 +16,8 @@
 //  7. sitemap.xml listing exactly the home page, the hub pages, the tool pages and the
 //     footer pages marked written, each a built page, and robots.txt naming it;
 //  8. noindex on exactly the footer pages not yet written at the root, each still
-//     showing its placeholder, and on every page under a sub-path.
+//     showing its placeholder or draft line, a written page showing neither, and
+//     noindex on every page under a sub-path.
 //
 // It reads the registry and src/site.ts for data and the setting checks only, and
 // works out every expected value with its own code, never src/tools/seo.ts, so a
@@ -25,7 +26,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultOrigin, footerLinks, isSiteBase, isSiteOrigin, siteName, tagline } from '../src/site.ts';
+import { defaultOrigin, draftSentence, footerLinks, isSiteBase, isSiteOrigin, siteName, tagline } from '../src/site.ts';
 import { groups, tools } from '../src/tools/registry.ts';
 
 /** The sentences a footer page shows while it is still a placeholder. */
@@ -346,10 +347,16 @@ export function checkNoindex(pages, { footer, base }) {
     }
     const link = footer.find((each) => each.href === path);
     const unwritten = Boolean(link && !link.written);
-    if (unwritten && !noindex) problems.push(`${path}: a placeholder page must carry noindex`);
-    if (!unwritten && robots.length > 0) problems.push(`${path}: carries noindex, but only a placeholder page may`);
-    if (unwritten && !placeholderSentences.some((sentence) => html.includes(sentence))) {
-      problems.push(`${path}: is marked not written, but shows no placeholder sentence; mark it written in src/site.ts`);
+    if (unwritten && !noindex) problems.push(`${path}: a placeholder or draft page must carry noindex`);
+    if (!unwritten && robots.length > 0) problems.push(`${path}: carries noindex, but only a placeholder or draft page may`);
+    if (!link) continue;
+    const placeholder = placeholderSentences.some((sentence) => html.includes(sentence));
+    const draft = html.includes(draftSentence);
+    if (unwritten && !placeholder && !draft) {
+      problems.push(`${path}: is marked not written, but shows no placeholder sentence or draft line; set written: true for it in src/site.ts`);
+    }
+    if (!unwritten && (placeholder || draft)) {
+      problems.push(`${path}: is marked written, but still shows a placeholder sentence or draft line; remove it, or set written: false for it in src/site.ts`);
     }
   }
   return problems;

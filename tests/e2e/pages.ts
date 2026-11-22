@@ -14,8 +14,8 @@ export const registryDescriptions = registryPages(tools).map(({ page }) => page.
 /** The site pages linked from the footer. */
 export const sitePages = footerLinks.map((link) => link.href);
 
-/** The footer pages that still show an owner placeholder, and so carry noindex. */
-export const placeholderPages = footerLinks.filter((link) => !link.written).map((link) => link.href);
+/** The footer pages that still show an owner placeholder or an agent's draft, and so carry noindex. */
+export const unwrittenPages = footerLinks.filter((link) => !link.written).map((link) => link.href);
 
 /** Each group's hub page, for the groups with a published tool, with what it lists. */
 export const hubs = registryHubs(groups, tools, '/');

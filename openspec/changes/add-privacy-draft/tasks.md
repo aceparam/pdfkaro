@@ -4,8 +4,8 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 
 ## 1. Draft flag and build check
 
-- [ ] 1.1 In `src/site.ts`, keep `/privacy` at `written: false`, reword the comment on `FooterLink.written` (false while the page shows an owner placeholder or an agent's draft waiting for the owner's review), and export `draftSentence = 'This is a draft.'` (design.md decisions 1 and 3). Verify: `tests/unit/site.test.ts` "none is written yet" still passes unchanged, and a new assertion checks `draftSentence`.
-- [ ] 1.2 In `scripts/check-seo.mjs`, import `draftSentence` from `src/site.ts`. Rule 8: an unwritten footer page must show a placeholder sentence or `draftSentence`; a written footer page must show neither. Messages and the header comment say "placeholder or draft", name the page and the flag to change in `src/site.ts`. In `tests/e2e/pages.ts`, rename `placeholderPages` to `unwrittenPages` with the comment in decision 3, and update `site.spec.ts`. Extend `tests/unit/check-seo.test.ts` with the four cases in decision 3. Verify: `npm test` and `npm run check` pass, and each new case fails if the rule is reverted (checked, not committed).
+- [x] 1.1 In `src/site.ts`, keep `/privacy` at `written: false`, reword the comment on `FooterLink.written` (false while the page shows an owner placeholder or an agent's draft waiting for the owner's review), and export `draftSentence = 'This is a draft.'` (design.md decisions 1 and 3). Verify: `tests/unit/site.test.ts` "none is written yet" still passes unchanged, and a new assertion checks `draftSentence`.
+- [x] 1.2 In `scripts/check-seo.mjs`, import `draftSentence` from `src/site.ts`. Rule 8: an unwritten footer page must show a placeholder sentence or `draftSentence`; a written footer page must show neither. Messages and the header comment say "placeholder or draft", name the page and the flag to change in `src/site.ts`. In `tests/e2e/pages.ts`, rename `placeholderPages` to `unwrittenPages` with the comment in decision 3, and update `site.spec.ts`. Extend `tests/unit/check-seo.test.ts` with the four cases in decision 3. Verify: `npm test` and `npm run check` pass, and each new case fails if the rule is reverted (checked, not committed).
 
 ## 2. The page and its words
 
@@ -24,7 +24,7 @@ This change adds no tool, so the usual order is followed in spirit: settings and
 ## 4. Whole checks and screenshots
 
 - [ ] 4.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass; paste the real output in the pull request.
-- [ ] 4.2 Take screenshots of `/privacy` at 360px and 1280px wide, in light and dark mode, into `openspec/changes/add-privacy-draft/screenshots/`. Verify: four files, nothing scrolls sideways, and the page passes the look-and-feel screenshot test in `SPEC.md`.
+- [ ] 4.2 Take screenshots of `/privacy` at 360px and 1280px wide, in light and dark mode, into `.github/pr-screenshots/privacy/`. Verify: four files, nothing scrolls sideways, and the page passes the look-and-feel screenshot test in `SPEC.md`.
 
 ## 5. Review
 
