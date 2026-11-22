@@ -104,6 +104,13 @@ describe('failureKind', () => {
     expect(failureKind(new Error(new TextRefused().message))).toBe('engine');
   });
 
+  it('knows a refused new password by its name, and its message holds nothing of a password', async () => {
+    const { PasswordRefused } = await import('../../src/widget/option-values');
+    expect(failureKind(new PasswordRefused())).toBe('password-refused');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'PasswordRefused' }))).toBe('password-refused');
+    expect(failureKind(new Error(new PasswordRefused().message))).toBe('engine');
+  });
+
   it('knows a refused drawing by its name, and its message is not taken for anything else', async () => {
     const { DrawingRefused } = await import('../../src/widget/option-values');
     expect(failureKind(new DrawingRefused())).toBe('drawing-refused');

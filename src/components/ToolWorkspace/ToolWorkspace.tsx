@@ -12,6 +12,7 @@ import {
   drawnLines,
   enterAction,
   focusMovesToOptions,
+  holdErrorId,
   holdsUnderButton,
   optionsHold,
   optionsShown,
@@ -21,7 +22,11 @@ import {
   pictureSentence,
   readyKey,
   shownOptions,
+  typedPasswords,
   typedText,
+  type Held,
+  type NewPasswordField as PasswordFieldName,
+  type OptionHold,
 } from '../../widget/options';
 import { drawingRule, pictureRule, type Drawing } from '../../widget/option-values';
 import { orderSummary } from '../../widget/order';
@@ -32,6 +37,7 @@ import type { WorkerLike } from '../../workers/client';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
+import { againPasswordErrorId, firstPasswordErrorId, NewPasswordField } from '../NewPasswordField/NewPasswordField';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
 import { PasswordField } from '../PasswordField/PasswordField';
@@ -234,21 +240,62 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     if (focusMovesToOptions(showOptions, filesRead, before, free)) optionRef.current?.focus();
   }, [filesRead, showOptions]);
 
+  // The keys of the new passwords whose first field is still being typed: focus is in it and nothing has asked for
+  // its sentence since the last key. A space at the end of such a field holds the main button quietly, so typing
+  // "open sesame" never flashes a sentence through "open ". Added on each key in the first field; removed when focus
+  // leaves it, on Enter in either field and on a press of the main button.
+  const [typing, setTyping] = useState<ReadonlySet<string>>(() => new Set());
+  const withTyping = (key: string, on: boolean): ReadonlySet<string> => {
+    if (typing.has(key) === on) return typing;
+    const next = new Set(typing);
+    if (on) next.add(key);
+    else next.delete(key);
+    return next;
+  };
+  // What the rules read besides the choices: the pictures chosen, the new passwords as typed, and which are being typed.
+  const heldNow = (changes: Partial<Held> = {}): Held => ({ pictures: state.pictures, newPasswords: run.newPasswords, typing, ...changes });
+
   // A shown text that holds the main button back: empty, too long, or with characters its rule does not take.
   // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
-  // A shown picture holds it too, until one is chosen and read, and while the one chosen cannot be used.
-  const hold = useMemo(() => optionsHold(toolId, options, state.choices, undefined, undefined, state.pictures), [toolId, options, state.choices, state.pictures]);
+  // A shown picture holds it too, until one is chosen and read, and while the one chosen cannot be used; and a
+  // shown new password, until both its fields hold the same password its rule takes.
+  const hold = useMemo(
+    () => optionsHold(toolId, options, state.choices, { pictures: state.pictures, newPasswords: run.newPasswords, typing }),
+    [toolId, options, state.choices, state.pictures, run.newPasswords, typing],
+  );
   const fieldId = (key: string) => `${optionName}-${key}`;
-  // Too long or refused characters, or a picture's problem: the sentence is shown by the field, and tied to the main button from there.
+  // Too long or refused characters, a picture's problem, or a new password's field problem: the sentence is shown by
+  // the field, and tied to the main button from there.
   const fieldHold = showOptions && hold && !holdsUnderButton(hold) ? hold : null;
-  const fieldHoldKey = fieldHold ? `${fieldHold.key}:${fieldHold.kind}` : '';
+  const holdKey = (each: OptionHold) => `${each.key}:${each.field ?? ''}:${each.kind}`;
+  const fieldHoldKey = fieldHold ? holdKey(fieldHold) : '';
+  // Says a field's sentence once, when it first appears or changes field or kind, for the option `key` just used.
+  const sayNewFieldHold = (key: string, next: OptionHold | null) => {
+    if (next && !holdsUnderButton(next) && next.key === key && holdKey(next) !== fieldHoldKey) setAnnouncement(next.sentence);
+  };
   // Typing in a text's field. The sentence by the field is said once by the status line when it first appears
   // or changes kind; not again for each character typed past the limit, and nothing when it goes, or for an
   // empty text, which is tied to the main button from the start. Focus never moves for it.
   const typeText = (key: string, value: string) => {
     run.setOption(key, value);
-    const next = optionsHold(toolId, options, { ...state.choices, [key]: value }, undefined, undefined, state.pictures);
-    if (next && !holdsUnderButton(next) && next.key === key && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
+    sayNewFieldHold(key, optionsHold(toolId, options, { ...state.choices, [key]: value }, heldNow()));
+  };
+  // Typing in a new password's field: as for a text. A key in the first field marks it as being typed again. The
+  // password itself is never said: every sentence is fixed words.
+  const typeNewPassword = (key: string, field: PasswordFieldName, value: string) => {
+    run.setNewPassword(key, field, value);
+    const nextTyping = field === 'first' ? withTyping(key, true) : typing;
+    if (nextTyping !== typing) setTyping(nextTyping);
+    const now = typedPasswords({ key }, run.newPasswords);
+    const newPasswords = { ...run.newPasswords, [key]: { ...now, [field]: value } };
+    sayNewFieldHold(key, optionsHold(toolId, options, state.choices, heldNow({ newPasswords, typing: nextTyping })));
+  };
+  // Focus left a new password's first field: a space at its end is now shown by the field, and said once.
+  const leaveFirstPassword = (key: string) => {
+    const nextTyping = withTyping(key, false);
+    if (nextTyping === typing) return;
+    setTyping(nextTyping);
+    sayNewFieldHold(key, optionsHold(toolId, options, state.choices, heldNow({ typing: nextTyping })));
   };
 
   // A picture: the line naming it is said once when it is ready ("signature.png, 120 KB."), and each problem's
@@ -438,20 +485,42 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
   const ready = canRun(state, words.minFiles, blocked === null) && hold === null;
   // An empty text's sentence goes under the main button once its field is shown, after too few files and the toggles' sentence.
-  // A picture still being read says so there too.
-  const tiedSentence = tooFew ? words.tooFewFiles : (blocked ?? (showOptions && hold && holdsUnderButton(hold) ? hold.sentence : null));
-  const fieldHoldId = fieldHold ? (options.find((option) => option.key === fieldHold.key)?.kind === 'picture' ? pictureErrorId : errorId)(fieldId(fieldHold.key)) : null;
+  // A picture still being read says so there too, as does a new password not yet typed twice.
+  const tiedFor = (each: OptionHold | null) => (tooFew ? words.tooFewFiles : (blocked ?? (showOptions && each && holdsUnderButton(each) ? each.sentence : null)));
+  const tiedSentence = tiedFor(hold);
+  const holdIds = {
+    tied: `${toolId}-why-not`,
+    text: (key: string) => errorId(fieldId(key)),
+    picture: (key: string) => pictureErrorId(fieldId(key)),
+    firstPassword: (key: string) => firstPasswordErrorId(fieldId(key)),
+    againPassword: (key: string) => againPasswordErrorId(fieldId(key)),
+  };
+  const fieldHoldId = fieldHold ? holdErrorId(fieldHold, options, holdIds) : null;
   const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHoldId, ...huge.map(hugeId), ...pictureNotices.map(({ key }) => pictureNoticeId(key))]
     .filter(Boolean)
     .join(' ');
-  // The main button's press, and Enter in a text's field: starts the job only when the button works.
+  // The main button's press, and Enter in a text's field: starts the job only when the button works. A press also
+  // ends the typing of any new password, so a space at the end of one is shown by its field.
   const pressMain = () => {
+    if (typing.size > 0) setTyping(new Set());
     if (ready) void run.start();
   };
   // Enter in a text's field: as the main button when it works; else the reason it waits is said, on every press.
   const enterInField = () => {
     const action = enterAction(ready, [tiedSentence, fieldHold?.sentence]);
     if (action.kind === 'start') pressMain();
+    else if (action.kind === 'say') setAnnouncement(action.sentence);
+  };
+  // Enter in a new password's field: the same, once its first field is no longer counted as being typed, so a
+  // space at its end is shown and is the reason said.
+  const enterInPassword = (key: string) => {
+    const nextTyping = withTyping(key, false);
+    if (nextTyping !== typing) setTyping(nextTyping);
+    const next = optionsHold(toolId, options, state.choices, heldNow({ typing: nextTyping }));
+    const nextReady = canRun(state, words.minFiles, blocked === null) && next === null;
+    const nextField = showOptions && next && !holdsUnderButton(next) ? next : null;
+    const action = enterAction(nextReady, [tiedFor(next), nextField?.sentence]);
+    if (action.kind === 'start') void run.start();
     else if (action.kind === 'say') setAnnouncement(action.sentence);
   };
 
@@ -643,6 +712,22 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                       return entry ? pictureSentence(option, entry) : null;
                     })()}
                     onPick={(file) => void run.pickPicture(option.key, file)}
+                    focusRef={index === 0 ? optionRef : undefined}
+                  />
+                ) : option.kind === 'new-password' ? (
+                  // Its rule comes from its line in optionPasswords; with none (which the registry test forbids) it always
+                  // holds the main button back, so nothing unchecked is sent.
+                  <NewPasswordField
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    first={typedPasswords(option, run.newPasswords).first}
+                    again={typedPasswords(option, run.newPasswords).again}
+                    firstError={fieldHold?.key === option.key && fieldHold.field === 'first' ? fieldHold.sentence : undefined}
+                    againError={fieldHold?.key === option.key && fieldHold.field === 'again' ? fieldHold.sentence : undefined}
+                    onType={(field, value) => typeNewPassword(option.key, field, value)}
+                    onEnter={() => enterInPassword(option.key)}
+                    onFirstBlur={() => leaveFirstPassword(option.key)}
                     focusRef={index === 0 ? optionRef : undefined}
                   />
                 ) : (

@@ -1,4 +1,5 @@
 import { useId, useState, type Ref } from 'react';
+import { passwordStaysSentence } from '../../widget/format';
 import { pressesButton } from '../../widget/keys';
 import styles from './PasswordField.module.css';
 
@@ -45,7 +46,7 @@ export function PasswordField({ fileName, error, onSubmit, onLeaveOut, inputRef,
         />
         <p id={`${id}-note`} className={styles.note}>
           {error && <strong className={styles.error}>{error} </strong>}
-          The password stays in your browser. It is not sent anywhere.
+          {`${passwordStaysSentence} It is not sent anywhere.`}
         </p>
       </div>
       <div className="actions">

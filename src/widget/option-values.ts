@@ -244,3 +244,78 @@ export class PictureTooLarge extends Error {
     super('The picture is too large to place.');
   }
 }
+
+// ---------------------------------------------------------------------------
+// New passwords. What a password the visitor sets may hold, written once: each
+// tool's most characters and character rule, by tool id and key. The registry
+// holds only its words. The widget checks what is typed here, and the tool's
+// engine checks what it is sent with `acceptedPassword`. A password is never
+// changed: not trimmed, not composed, not cut.
+
+/** The rules for which characters a new password takes. One for now. */
+export type PasswordCharacterRule = 'printable-ascii';
+
+/** What one new password takes: the most characters (1 to 127, the format's own limit for a 256-bit key) and its character rule. */
+export type PasswordRule = { maxLength: number; characters: PasswordCharacterRule };
+
+export type PasswordTable = Readonly<Record<string, Readonly<Record<string, PasswordRule>>>>;
+
+/** Each tool's new passwords, by tool id and key. Empty for now; Protect's change adds `'protect-pdf': { newPassword: {...} }`. */
+export const optionPasswords: PasswordTable = {};
+
+/**
+ * The characters each rule takes, as one inclusive range of code points. Printable ASCII, U+0020 to U+007E: the
+ * only set every PDF reader turns into the same bytes for a 256-bit key (Adobe applies SASLprep first, PDF.js and
+ * qpdf do not, and inside this range SASLprep changes nothing). Checked as a range everywhere, never as a set.
+ */
+export const passwordCharacters: Readonly<Record<PasswordCharacterRule, { from: number; to: number }>> = {
+  'printable-ascii': { from: 0x20, to: 0x7e },
+};
+
+/** What is wrong with a new password. It holds nothing of the password: no character and no length. */
+export type PasswordProblem = { kind: 'empty' } | { kind: 'characters' } | { kind: 'edge-space' } | { kind: 'too-long' };
+
+/**
+ * What is wrong with one password as typed, or null. Empty first, then characters the rule does not take, then a
+ * space first or last, then length, so a visitor who pasted a long line in another script first learns its
+ * characters cannot be used. Counted by UTF-16 length, which equals bytes for the characters the rule takes.
+ * Never changes the password: no trimming, composing or cutting.
+ */
+export function passwordProblem(password: string, rule: PasswordRule): PasswordProblem | null {
+  if (password === '') return { kind: 'empty' };
+  const range = Object.hasOwn(passwordCharacters, rule.characters) ? passwordCharacters[rule.characters] : undefined;
+  for (let index = 0; index < password.length; index += 1) {
+    const unit = password.charCodeAt(index);
+    if (range === undefined || unit < range.from || unit > range.to) return { kind: 'characters' };
+  }
+  if (password.startsWith(' ') || password.endsWith(' ')) return { kind: 'edge-space' };
+  if (password.length > rule.maxLength) return { kind: 'too-long' };
+  return null;
+}
+
+/** A tool's own rule for one of its new passwords, or `undefined`. Only own keys count, as in `acceptedValue`. */
+export function passwordRule(tool: string, key: string, table: PasswordTable = optionPasswords): PasswordRule | undefined {
+  if (!Object.hasOwn(table, tool)) return undefined;
+  const byKey = table[tool];
+  if (byKey === undefined || !Object.hasOwn(byKey, key)) return undefined;
+  return byKey[key];
+}
+
+/**
+ * For an engine: `value` itself, the very string it was sent, when it is a string with no problem under the tool's
+ * own rule for `key`; else `undefined`, and the engine throws `PasswordRefused` before it reads the file.
+ */
+export function acceptedPassword(tool: string, key: string, value: unknown, table: PasswordTable = optionPasswords): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const rule = passwordRule(tool, key, table);
+  if (rule === undefined) return undefined;
+  return passwordProblem(value, rule) === null ? value : undefined;
+}
+
+/** Thrown by an engine that refuses its new password, before it reads the file. Known to the worker by its name. Its message never holds the password. */
+export class PasswordRefused extends Error {
+  override name = 'PasswordRefused';
+  constructor() {
+    super('The password was refused.');
+  }
+}

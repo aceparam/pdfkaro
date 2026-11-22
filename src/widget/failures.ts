@@ -2,7 +2,7 @@
 // runs. Plain functions over the registry's words, tested in Node.
 
 import type { Progress } from '../engines/types';
-import type { DrawingOption, PictureOption, TextOption, ToolWidgetWords } from '../tools/registry';
+import type { DrawingOption, NewPasswordOption, PictureOption, TextOption, ToolWidgetWords } from '../tools/registry';
 import { fileCount, formatSize, number, progressLine } from './format';
 import { chosenPicture, shownOptions, type Choices } from './options';
 import type { FailureKind, PictureEntry } from './state';
@@ -25,6 +25,9 @@ export const drawingRefusedSentence = 'The drawing could not be used. Clear it a
 
 /** What the page says when the engine refuses a picture, for a tool with no words of its own for it. */
 export const pictureRefusedSentence = 'The picture could not be used. Choose another picture.';
+
+/** What the page says when the engine refuses a new password, for a tool with no words of its own for it. It never holds the password. */
+export const passwordRefusedSentence = 'The password could not be used. Go back to your file and type it again.';
 
 /** The step after "… is too large to place on these pages.", for a tool with no words of its own for it. */
 export const pictureTooLargeAdvice = 'Choose a smaller picture.';
@@ -61,6 +64,11 @@ export function failureSentence(
   if (kind === 'picture-refused') {
     const picture = shownOptions(words.options, choices).find((option): option is PictureOption => option.kind === 'picture');
     return picture?.refusedSentence ?? pictureRefusedSentence;
+  }
+  // The same for a new password: the first shown new password's own words, else the shared ones. Never the password itself.
+  if (kind === 'password-refused') {
+    const password = shownOptions(words.options, choices).find((option): option is NewPasswordOption => option.kind === 'new-password');
+    return password?.refusedSentence ?? passwordRefusedSentence;
   }
   // The picture alone would pass the new file's size budget: named with its size from the page's own state.
   if (kind === 'picture-too-large') {

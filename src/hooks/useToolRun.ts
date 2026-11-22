@@ -5,7 +5,7 @@ import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, outputType, stem } from '../widget/format';
 import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
-import { jobOptions, picturesToReread, picturesToSend, rereadPicture } from '../widget/options';
+import { jobOptions, picturesToReread, picturesToSend, rereadPicture, type NewPasswordField, type NewPasswords } from '../widget/options';
 import { pictureRule, type Drawing } from '../widget/option-values';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
@@ -44,6 +44,10 @@ export type ToolRun = {
   setOption(key: string, value: string): void;
   /** Sets a drawing's lines, once per finished line or on Clear. */
   setDrawing(key: string, drawing: Drawing): void;
+  /** What each new password's two fields hold, exactly as typed. Held here, never in the state. */
+  newPasswords: NewPasswords;
+  /** Sets what one of a new password's two fields holds. */
+  setNewPassword(key: string, field: NewPasswordField, value: string): void;
   /**
    * Chooses a picture for the picture option `key`, replacing any chosen before. One of the wrong type, by its
    * first bytes, leaves no picture chosen; any other is held in memory beside the files and read in the worker.
@@ -52,7 +56,7 @@ export type ToolRun = {
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
-  /** Forgets every file, password and result, and ends the worker. */
+  /** Forgets every file, password (an input file's and a new one) and result, and ends the worker. */
   clear(): void;
 };
 
@@ -70,9 +74,10 @@ type Options = {
 };
 
 /**
- * Joins the reducer to the tool worker. The files, any passwords and any pictures
- * chosen for options live here, in memory only. They never go into the reducer,
- * storage or the address, and no address is made for a picture.
+ * Joins the reducer to the tool worker. The files, any passwords (an input file's, and
+ * a new password typed for an option) and any pictures chosen for options live here, in
+ * memory only. They never go into the reducer, storage or the address, and no address
+ * is made for a picture. Only a new password's first field goes to the worker, with the job.
  */
 export function useToolRun({ toolId, accepts, words, preset, createWorker, onProgress }: Options): ToolRun {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -86,6 +91,24 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   // Each attempt has its own token, so an attempt that ends never clears the mark of a newer read of the same file.
   const picturesInFlight = useRef(new Map<string, { file: File }>());
   const pictureTickets = useRef(new Map<string, number>());
+  // Each new password's two fields, by option key: in a state of its own, so the fields redraw as typed, never in
+  // the reducer; the ref is kept in step by the one setter, so `start` reads what is typed now. Kept through Cancel,
+  // a failure and "Choose another file"; forgotten when a job finishes, by "Start again", when the last file is
+  // removed and on leaving the page, each in the handler that causes it.
+  const [newPasswords, setNewPasswords] = useState<NewPasswords>({});
+  const newPasswordsRef = useRef<NewPasswords>({});
+  const setNewPassword = useCallback((key: string, field: NewPasswordField, value: string) => {
+    const now = newPasswordsRef.current;
+    const entry = Object.hasOwn(now, key) ? now[key] : undefined;
+    const next: NewPasswords = { ...now, [key]: { first: entry?.first ?? '', again: entry?.again ?? '', [field]: value } };
+    newPasswordsRef.current = next;
+    setNewPasswords(next);
+  }, []);
+  const forgetNewPasswords = useCallback(() => {
+    if (Object.keys(newPasswordsRef.current).length === 0) return;
+    newPasswordsRef.current = {};
+    setNewPasswords({});
+  }, []);
   const nextId = useRef(1);
   const client = useRef<ToolClient | null>(null);
   const stateRef = useRef(state);
@@ -229,12 +252,15 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       }
       files.current.delete(id);
       passwords.current.delete(id);
-      // Removing the last file ends the working area and resets the state, so the pictures go with it.
-      if (files.current.size === 0) pictures.current.clear();
+      // Removing the last file ends the working area and resets the state, so the pictures and new passwords go with it.
+      if (files.current.size === 0) {
+        pictures.current.clear();
+        forgetNewPasswords();
+      }
       forgetThumbnails(id);
       dispatch({ type: 'removed', id });
     },
-    [forgetThumbnails, stopThumbnail],
+    [forgetNewPasswords, forgetThumbnails, stopThumbnail],
   );
 
   const addFiles = useCallback(
@@ -383,7 +409,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
         inputs,
         listed.map((entry) => passwords.current.get(entry.id)),
         // The page's preset, what the page's items say, then the options chosen; no preset key is an option key.
-        jobOptions(preset, jobOption(), words.options, stateRef.current.choices),
+        // A new password's first field goes with it, as typed; its second never leaves the page.
+        jobOptions(preset, jobOption(), words.options, stateRef.current.choices, { newPasswords: newPasswordsRef.current }),
         (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
@@ -396,6 +423,8 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
       // No file is "no smaller", for a tool with words for it; for any other tool, the engine's failure.
       const shown = finishedAs(output !== undefined, words.noSmaller !== undefined);
+      // The job has finished with a file or with no new file: a new password is held no longer than the job needs.
+      if (shown !== 'engine-failure') forgetNewPasswords();
       if (shown === 'no-new-file') {
         dispatch({ type: 'finished', result: { none: true } });
         return;
@@ -422,7 +451,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, forgetNewPasswords, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
@@ -475,13 +504,14 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     passwords.current.clear();
     pictures.current.clear();
     picturesInFlight.current.clear();
+    forgetNewPasswords();
     for (const url of thumbnailUrls.current.values()) URL.revokeObjectURL(url);
     thumbnailUrls.current.clear();
     queue.current = emptyQueue;
     publishThumbnails();
     releaseResult();
     dispatch({ type: 'reset' });
-  }, [publishThumbnails, releaseResult]);
+  }, [forgetNewPasswords, publishThumbnails, releaseResult]);
 
   // Leaving the page, including into the back-forward cache, drops everything.
   useEffect(() => {
@@ -492,5 +522,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, pickPicture, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, newPasswords, setNewPassword, pickPicture, start, cancel, backToFiles, clear };
 }

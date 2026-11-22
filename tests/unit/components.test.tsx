@@ -5,6 +5,8 @@ import { FilePicker } from '../../src/components/FilePicker/FilePicker';
 import { Notice } from '../../src/components/Notice/Notice';
 import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid/PageGrid';
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, NewPasswordField, newPasswordSavingNote } from '../../src/components/NewPasswordField/NewPasswordField';
+import { passwordStaysSentence } from '../../src/widget/format';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
 import { ChoiceGroup } from '../../src/components/ChoiceGroup/ChoiceGroup';
@@ -222,6 +224,12 @@ describe('PasswordField', () => {
   it('sits in no form and has no name, so it can never be sent to an address', () => {
     expect(html).not.toContain('<form');
     expect(html).not.toContain('name=');
+  });
+
+  it("starts its note with the shared sentence, so both password fields say it in the same words", () => {
+    expect(passwordStaysSentence).toBe('The password stays in your browser.');
+    expect(html).toContain(`>${passwordStaysSentence} It is not sent anywhere.</p>`);
+    expect(html).toMatch(/autocomplete="off"/i);
   });
 
   it('ties a wrong-password message to the field', () => {
@@ -706,7 +714,7 @@ describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and Pict
     const all = { name: 'Jane Doe', drawing: [[1, 2, 3, 4]] };
     expect(optionsHold('sign-pdf', options, all)).toBeNull();
     expect(optionsHold('sign-pdf', options, { ...all, source: 'draw' })).toBeNull();
-    expect(optionsHold('sign-pdf', options, { ...all, source: 'picture' }, undefined, undefined, ready)).toBeNull();
+    expect(optionsHold('sign-pdf', options, { ...all, source: 'picture' }, { pictures: ready })).toBeNull();
     expect(optionsToSend(options, all)).toEqual({ source: 'type', name: 'Jane Doe', page: 'last', position: 'bottom-right' });
     expect(optionsToSend(options, { ...all, source: 'draw' })).toEqual({ source: 'draw', drawing: [[1, 2, 3, 4]], page: 'last', position: 'bottom-right' });
     expect(optionsToSend(options, { ...all, source: 'picture' })).toEqual({ source: 'picture', page: 'last', position: 'bottom-right' });
@@ -728,5 +736,137 @@ describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and Pict
     expect(field).toContain('accept="image/jpeg,image/png"');
     expect(field).toContain('>A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.</p>');
     expect(field).not.toContain('<img');
+  });
+});
+
+describe('NewPasswordField, a new password of a test entry', () => {
+  const option = {
+    kind: 'new-password' as const,
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const html = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="open" again="op" onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const inputs = (markup: string) => markup.match(/<input [^>]*\/>/g) ?? [];
+  const characters = 'Some characters cannot be used. Use only the characters listed under the box.';
+  const mismatch = 'The two passwords are not the same. Type the password again in this box.';
+  const firstWrong = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="café" again="" firstError={characters} onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const againWrong = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="open" again="opex" againError={mismatch} onType={noop} onEnter={noop} onFirstBlur={noop} />);
+
+  it('is two labelled fields, one under the other, in the site field style', () => {
+    expect(html).toMatch(/<div class="field field-short"><label for="r5-pw">New password<\/label><input /);
+    expect(html).toMatch(/<div class="field field-short [^"]+"><label for="r5-pw-again">Type the new password again<\/label><input /);
+    expect(againPasswordId('r5-pw')).toBe('r5-pw-again');
+    expect(inputs(html)).toHaveLength(2);
+    expect(inputs(html)[0]).toContain('id="r5-pw"');
+    expect(inputs(html)[1]).toContain('id="r5-pw-again"');
+  });
+
+  it('keeps both hidden, for a password being set, with no name, no form and no length cap, and labels Enter "Go"', () => {
+    for (const field of inputs(html)) {
+      expect(field).toContain('type="password"');
+      expect(field).toMatch(/\sautocomplete="new-password"/i);
+      expect(field).toMatch(/\senterkeyhint="go"/i);
+      expect(field).not.toMatch(/\sname=/);
+      expect(field).not.toMatch(/maxlength/i);
+    }
+    expect(html).not.toContain('<form');
+    expect(inputs(html)[0]).toContain('value="open"');
+    expect(inputs(html)[1]).toContain('value="op"');
+  });
+
+  it('puts the hint, then the shared note, under the first field and reads them with it', () => {
+    expect(inputs(html)[0]).toContain('aria-describedby="r5-pw-hint"');
+    expect(inputs(html)[1]).not.toContain('aria-describedby');
+    const note = html.match(/<p id="r5-pw-hint" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
+    expect(note).toBe(`${option.hint} ${passwordStaysSentence} ${newPasswordSavingNote}`);
+    expect(html.indexOf('id="r5-pw-hint"')).toBeGreaterThan(html.indexOf('id="r5-pw"'));
+    expect(html.indexOf('id="r5-pw-hint"')).toBeLessThan(html.indexOf('id="r5-pw-again"'));
+  });
+
+  it("says the browser may offer to save or suggest it and copy it to the browser account, and never that it goes nowhere", () => {
+    expect(newPasswordSavingNote).toBe(
+      'This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account.',
+    );
+    expect(html).toContain(passwordStaysSentence);
+    expect(html).toContain('offer to save it or to suggest one');
+    expect(html).toContain('browser account');
+    expect(html).not.toContain('It is not sent anywhere');
+  });
+
+  it('with nothing wrong: no sentence and neither field invalid', () => {
+    expect(html).not.toContain('aria-invalid');
+    expect(html).not.toContain(firstPasswordErrorId('r5-pw'));
+    expect(html).not.toContain(againPasswordErrorId('r5-pw'));
+  });
+
+  it("with the first field wrong: its sentence between its label and the field, invalid, read before the hint, and nothing typed in it", () => {
+    expect(firstPasswordErrorId('r5-pw')).toBe('r5-pw-error');
+    expect(firstWrong).toMatch(/<label for="r5-pw">New password<\/label><p id="r5-pw-error" class="[^"]+">Some characters cannot be used\. Use only the characters listed under the box\.<\/p><input /);
+    expect(inputs(firstWrong)[0]).toContain('aria-invalid="true"');
+    expect(inputs(firstWrong)[0]).toContain('aria-describedby="r5-pw-error r5-pw-hint"');
+    expect(inputs(firstWrong)[1]).not.toContain('aria-invalid');
+    expect(firstWrong.replace(/value="[^"]*"/g, '')).not.toContain('café');
+  });
+
+  it('with the two different: the sentence on the second field, between its label and the field, invalid', () => {
+    expect(againPasswordErrorId('r5-pw')).toBe('r5-pw-again-error');
+    expect(againWrong).toMatch(/<label for="r5-pw-again">Type the new password again<\/label><p id="r5-pw-again-error" class="[^"]+">The two passwords are not the same\. Type the password again in this box\.<\/p><input /);
+    expect(inputs(againWrong)[1]).toContain('aria-invalid="true"');
+    expect(inputs(againWrong)[1]).toContain('aria-describedby="r5-pw-again-error"');
+    expect(inputs(againWrong)[0]).not.toContain('aria-invalid');
+    expect(inputs(againWrong)[0]).toContain('aria-describedby="r5-pw-hint"');
+  });
+
+  it('passes on what is typed with its field, does what the main button does on Enter only, tells of leaving the first field, and puts the focus ref on it', () => {
+    const typed: [string, string][] = [];
+    const entered: string[] = [];
+    let blurred = 0;
+    const ref = { current: null };
+    const element = NewPasswordField({
+      option,
+      id: 'r5-pw',
+      first: '',
+      again: '',
+      onType: (field, value) => typed.push([field, value]),
+      onEnter: (field) => entered.push(field),
+      onFirstBlur: () => (blurred += 1),
+      focusRef: ref,
+    });
+    const fields = (element.props as { children: ReactElement[] }).children;
+    const inputOf = (field: ReactElement) =>
+      ((field.props as { children: (ReactElement | null)[] }).children.find((child) => child !== null && child.type === 'input') as ReactElement & {
+        props: {
+          ref?: unknown;
+          onChange(event: { currentTarget: { value: string } }): void;
+          onKeyDown(event: { key: string; keyCode?: number; nativeEvent: { isComposing: boolean }; preventDefault(): void }): void;
+          onBlur?(): void;
+        };
+      });
+    const first = inputOf(fields[0]!);
+    const again = inputOf(fields[1]!);
+    expect(first.props.ref).toBe(ref);
+    expect(again.props.ref).toBeUndefined();
+    first.props.onChange({ currentTarget: { value: 'open ' } });
+    again.props.onChange({ currentTarget: { value: 'op' } });
+    expect(typed).toEqual([
+      ['first', 'open '],
+      ['again', 'op'],
+    ]);
+    let prevented = 0;
+    const prevent = () => (prevented += 1);
+    first.props.onKeyDown({ key: 'a', nativeEvent: { isComposing: false }, preventDefault: prevent });
+    first.props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true }, preventDefault: prevent });
+    again.props.onKeyDown({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    expect([entered, prevented]).toEqual([[], 0]);
+    first.props.onKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    again.props.onKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    expect([entered, prevented]).toEqual([['first', 'again'], 2]);
+    first.props.onBlur?.();
+    expect(blurred).toBe(1);
+    expect(again.props.onBlur).toBeUndefined();
   });
 });
