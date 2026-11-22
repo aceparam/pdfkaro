@@ -104,6 +104,20 @@ describe('failureKind', () => {
     expect(failureKind(new Error(new TextRefused().message))).toBe('engine');
   });
 
+  it('knows a refused new password by its name, and its message holds nothing of a password', async () => {
+    const { PasswordRefused } = await import('../../src/widget/option-values');
+    expect(failureKind(new PasswordRefused())).toBe('password-refused');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'PasswordRefused' }))).toBe('password-refused');
+    expect(failureKind(new Error(new PasswordRefused().message))).toBe('engine');
+  });
+
+  it('knows a refused drawing by its name, and its message is not taken for anything else', async () => {
+    const { DrawingRefused } = await import('../../src/widget/option-values');
+    expect(failureKind(new DrawingRefused())).toBe('drawing-refused');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'DrawingRefused' }))).toBe('drawing-refused');
+    expect(failureKind(new Error(new DrawingRefused().message))).toBe('engine');
+  });
+
   it('tells running out of memory from other failures', () => {
     expect(failureKind(new RangeError('Array buffer allocation failed'))).toBe('memory');
     expect(failureKind(new Error('Aborted(OOM)'))).toBe('memory');
@@ -346,5 +360,97 @@ describe('a job that runs out of memory', () => {
     await expect(cancelled).rejects.toMatchObject({ kind: 'cancelled' });
     expect(ended).toBe(before + 1);
     expect(client.running).toBe(false);
+  });
+});
+
+describe('a picture chosen for an option, in the worker', () => {
+  const picture = new Blob(['PIC']);
+
+  it("reads it with the engine's picture reader, by its key, and answers with its outcome", async () => {
+    const seen: [string, string][] = [];
+    const { handle, posted } = setup({
+      ...joiner,
+      inspectPicture: async (key, bytes) => {
+        seen.push([key, new TextDecoder().decode(bytes)]);
+        return { kind: 'ready', pixels: 42 };
+      },
+    });
+    await handle({ type: 'inspect-picture', requestId: 3, toolId: 'test-picture', key: 'picture', file: picture });
+    expect(seen).toEqual([['picture', 'PIC']]);
+    expect(posted.map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 3, outcome: { kind: 'ready', pixels: 42 } }]);
+    expect(isFromWorker(posted[0]?.message)).toBe(true);
+  });
+
+  it('calls a picture damaged for an engine with no picture reader, so nothing unread is ever ready', async () => {
+    const { handle, posted } = setup(joiner);
+    await handle({ type: 'inspect-picture', requestId: 4, toolId: 'merge-pdf', key: 'picture', file: picture });
+    expect(posted.map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 4, outcome: { kind: 'damaged' } }]);
+  });
+
+  it("says the engine could not be loaded when reading a picture, as for a file", async () => {
+    const { handle, posted } = setup(undefined);
+    await handle({ type: 'inspect-picture', requestId: 5, toolId: 'test-picture', key: 'picture', file: picture });
+    expect(posted.map(({ message }) => message)).toEqual([{ type: 'failed', requestId: 5, kind: 'engine-load' }]);
+  });
+
+  it("hands each picture's bytes to the engine under its key, beside the page's options, with the passwords last", async () => {
+    let given: Record<string, unknown> = {};
+    const { handle, posted } = setup({
+      run: async (_files, options) => {
+        given = options;
+        return [new Uint8Array([1])];
+      },
+    });
+    await handle({
+      type: 'run',
+      requestId: 6,
+      toolId: 'test-picture',
+      files: [blob('a')],
+      passwords: ['pw'],
+      options: { way: 'picture', passwords: 'not this' },
+      pictures: { picture },
+    });
+    expect(posted.at(-1)?.message.type).toBe('done');
+    expect(Object.keys(given).sort()).toEqual(['passwords', 'picture', 'way']);
+    expect(given.way).toBe('picture');
+    expect(given.picture).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(given.picture as Uint8Array)).toBe('PIC');
+    expect(given.passwords).toEqual(['pw']);
+  });
+
+  it('hands no picture key to the engine for a run without pictures', async () => {
+    let given: Record<string, unknown> = {};
+    const { handle } = setup({
+      run: async (_files, options) => {
+        given = options;
+        return [new Uint8Array([1])];
+      },
+    });
+    await handle({ type: 'run', requestId: 7, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(Object.keys(given)).toEqual(['passwords']);
+  });
+
+  it('maps a refused picture and a picture too large by their names, carrying nothing of the picture', async () => {
+    const { PictureRefused, PictureTooLarge } = await import('../../src/widget/option-values');
+    expect(failureKind(new PictureRefused())).toBe('picture-refused');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'PictureRefused' }))).toBe('picture-refused');
+    expect(failureKind(new Error(new PictureRefused().message))).toBe('engine');
+    expect(failureKind(new PictureTooLarge())).toBe('picture-too-large');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'PictureTooLarge' }))).toBe('picture-too-large');
+    expect(failureKind(new Error(new PictureTooLarge().message))).toBe('engine');
+    const { handle, posted } = setup({
+      run: async () => {
+        throw new PictureTooLarge();
+      },
+    });
+    await handle({ type: 'run', requestId: 8, toolId: 'test-picture', files: [blob('a')], passwords: [undefined], options: {}, pictures: { picture: new File(['x'], 'secret-photo.jpg') } });
+    expect(posted.map(({ message }) => message)).toEqual([{ type: 'failed', requestId: 8, kind: 'picture-too-large' }]);
+    expect(JSON.stringify(posted)).not.toContain('secret-photo');
+  });
+
+  it('ignores a run whose pictures are of the wrong shape', async () => {
+    const { handle, posted } = setup(joiner);
+    await handle({ type: 'run', requestId: 9, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {}, pictures: { picture: 'bytes' } });
+    expect(posted).toEqual([]);
   });
 });

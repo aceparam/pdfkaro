@@ -1,11 +1,22 @@
 // Reads a JPG or a PNG from its bytes, without decoding a pixel: its size, its
 // camera turn, whether it can be converted, and the parts of it that may go
-// into a PDF. Shared by the Image to PDF engine and its thumbnails. A pure
-// module with no library: fflate's streaming inflater comes in as an argument.
+// into a PDF. Shared by the Image to PDF engine and its thumbnails, and by
+// Sign PDF, which reads its signature picture with it (`readPicture`,
+// `pictureOutcome`, `acceptedPicture`, `jpegForPdf`, `pngForPdf`) and draws
+// it upright at its `shownSize` with `orientedMatrix`, the camera-turn table
+// Image to PDF's pages use too. A pure module with no library: fflate's
+// streaming inflater comes in as an argument.
 //
 // Every read is bounds-checked and every loop capped. Anything that does not
 // add up is `damaged`; a JPG coded in a way many PDF readers cannot draw is
 // `unsupported`.
+
+// Types only from option-values.ts: a value imported from it would put that module in this file's chunk graph,
+// so Image to PDF's engine and thumbnails, which share this file, would fetch one more file than before.
+import type { PictureMime, PictureRule, PictureTable } from '../widget/option-values';
+import type { PictureOutcome } from './types';
+
+export type { PictureOutcome } from './types';
 
 export type PictureType = 'jpeg' | 'png';
 
@@ -48,6 +59,28 @@ const startsWith = (bytes: Uint8Array, at: number, mark: string) => at + mark.le
 /** The size the picture is shown at, after its camera turn: turns 5 to 8 swap width and height. */
 export function shownSize(picture: Pick<Picture, 'width' | 'height' | 'orientation'>): { width: number; height: number } {
   return picture.orientation >= 5 ? { width: picture.height, height: picture.width } : { width: picture.width, height: picture.height };
+}
+
+/** A `cm` matrix: a b c d e f. */
+export type Matrix = [number, number, number, number, number, number];
+
+/**
+ * The `cm` matrix that maps the stored picture's unit square (its top-left at (0, 1)) onto a box as shown,
+ * turned and mirrored by the camera turn. Shared by Image to PDF's pages and Sign PDF's signature.
+ */
+export function orientedMatrix(orientation: Orientation, box: { x: number; y: number; width: number; height: number }): Matrix {
+  const { x, y, width: w, height: h } = box;
+  const matrices: Record<Orientation, Matrix> = {
+    1: [w, 0, 0, h, x, y],
+    2: [-w, 0, 0, h, x + w, y],
+    3: [-w, 0, 0, -h, x + w, y + h],
+    4: [w, 0, 0, -h, x, y + h],
+    5: [0, -h, -w, 0, x + w, y + h],
+    6: [0, -h, w, 0, x, y + h],
+    7: [0, h, w, 0, x, y],
+    8: [0, h, -w, 0, x + w, y],
+  };
+  return matrices[orientation];
 }
 
 /** Whether the page warns about this picture and draws no thumbnail of it. */
@@ -578,4 +611,40 @@ export function readPicture(bytes: Uint8Array): PictureRead {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return readJpeg(bytes);
   if (bytes.length >= 8 && pngSignature.every((byte, index) => bytes[index] === byte)) return readPng(bytes);
   return { kind: 'damaged' };
+}
+
+// ---------------------------------------------------------------------------
+// A picture chosen for an option (src/widget/option-values.ts's `optionPictures`).
+
+const mimeFor: Record<PictureType, PictureMime> = { jpeg: 'image/jpeg', png: 'image/png' };
+
+/**
+ * Whether a picture's bytes may be used under a rule, read without decoding a pixel, every read
+ * bounds-checked: `readPicture` damaged or unsupported is that; a type the rule does not take is
+ * damaged (the page sniffed it first, so only a file whose header lies reaches here); a PNG whose
+ * data inflates past its header (`pngDataFits`) or a JPG `jpegForPdf` cannot rebuild is damaged; else
+ * ready, with its width × height as stored. Size never refuses: a large picture gets a notice on the page.
+ * It always takes fflate, JPG or PNG, so the files fetched are the same whatever the picture's type.
+ */
+export function pictureOutcome(bytes: Uint8Array, rule: PictureRule, fflate: { Inflate: InflateClass }): PictureOutcome {
+  const read = readPicture(bytes);
+  if (read.kind !== 'ok') return read;
+  const { picture } = read;
+  if (!rule.types.includes(mimeFor[picture.type])) return { kind: 'damaged' };
+  if (picture.type === 'png' ? !pngDataFits(bytes, fflate) : jpegForPdf(bytes) === undefined) return { kind: 'damaged' };
+  return { kind: 'ready', pixels: picture.width * picture.height };
+}
+
+/**
+ * For an engine: the bytes when `value` is bytes whose outcome under the tool's own rule for `key` is
+ * ready; else `undefined`, and the engine throws `PictureRefused` before it reads the PDF. Only own keys
+ * count, so `__proto__` or `toString` is never taken for a tool or a picture. A large picture is taken.
+ * The engine passes `optionPictures` as `table` itself (see the note on the imports above).
+ */
+export function acceptedPicture(tool: string, key: string, value: unknown, fflate: { Inflate: InflateClass }, table: PictureTable): Uint8Array | undefined {
+  if (!(value instanceof Uint8Array) || !Object.hasOwn(table, tool)) return undefined;
+  const byKey = table[tool];
+  const rule = byKey !== undefined && Object.hasOwn(byKey, key) ? byKey[key] : undefined;
+  if (rule === undefined) return undefined;
+  return pictureOutcome(value, rule, fflate).kind === 'ready' ? value : undefined;
 }

@@ -4,6 +4,7 @@
 import type { EngineModule, EngineTools } from '../engines/types';
 import type { FailureKind } from '../widget/state';
 import { partName } from '../widget/format';
+import { outOfMemory } from '../widget/memory';
 import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
 import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
 
@@ -46,11 +47,16 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'OutputLimit') return 'output-limit';
   // An engine refused the text it was sent (option-values.ts's `TextRefused`). Known by name, as above.
   if (error instanceof Error && error.name === 'TextRefused') return 'text-refused';
-  const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  // An engine refused the drawing it was sent (option-values.ts's `DrawingRefused`). Known by name, as above.
+  if (error instanceof Error && error.name === 'DrawingRefused') return 'drawing-refused';
+  // An engine refused the picture it was sent (option-values.ts's `PictureRefused`), or found it alone would pass the
+  // new file's size budget (`PictureTooLarge`). Known by name, as above; the page names the picture from its own state.
+  if (error instanceof Error && error.name === 'PictureRefused') return 'picture-refused';
+  if (error instanceof Error && error.name === 'PictureTooLarge') return 'picture-too-large';
+  // An engine refused the new password it was sent (option-values.ts's `PasswordRefused`). Known by name, as above; its message holds nothing of it.
+  if (error instanceof Error && error.name === 'PasswordRefused') return 'password-refused';
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
-  if (/out of memory|\boom\b|cannot enlarge memory|could not allocate memory|allocation failed|invalid array buffer length|invalid typed array length/i.test(text)) {
-    return 'memory';
-  }
+  if (outOfMemory(error)) return 'memory';
   return 'engine';
 }
 
@@ -165,6 +171,12 @@ export function createHandler(deps: WorkerDeps) {
       // so the request is the same whatever the file gives.
       const zipSync = data.type === 'run' && data.zip ? await zipFor() : undefined;
       const engine = await engineFor(data.toolId);
+      if (data.type === 'inspect-picture') {
+        // A tool with no picture reader calls every picture damaged, so nothing unread is ever called ready.
+        const outcome = engine.inspectPicture ? await engine.inspectPicture(data.key, await bytesOf(data.file), deps.tools) : { kind: 'damaged' as const };
+        deps.post({ type: 'picture-inspected', requestId, outcome });
+        return;
+      }
       if (data.type === 'inspect') {
         if (!engine.inspect) {
           deps.post({ type: 'inspected', requestId, outcome: { kind: 'ready', pages: 0 } });
@@ -176,9 +188,12 @@ export function createHandler(deps: WorkerDeps) {
       }
       const files: Uint8Array[] = [];
       for (const file of data.files) files.push(await bytesOf(file));
+      // Each picture's bytes, under its option's key, beside the page's options; the passwords last, so no key replaces them.
+      const pictureBytes: Record<string, Uint8Array> = {};
+      for (const [key, picture] of Object.entries(data.pictures ?? {})) pictureBytes[key] = await bytesOf(picture);
       const outputs = await engine.run(
         files,
-        { ...data.options, passwords: data.passwords },
+        { ...data.options, ...pictureBytes, passwords: data.passwords },
         (progress) => deps.post({ type: 'progress', requestId, progress }),
         deps.tools,
       );

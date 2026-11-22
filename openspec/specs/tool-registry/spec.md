@@ -22,12 +22,17 @@ The site SHALL declare each tool exactly once, in `src/tools/registry.ts`. Each 
 
 ### Requirement: Pages are generated from the registry
 
-The site SHALL generate one page for each URL the registry serves, from `src/pages/[slug].astro`, and SHALL generate the home page list, the navigation, the group hub pages, `sitemap.xml` and `robots.txt` from the registry at build time. (SPEC.md: Rules for the code, 1; SEO, Site-wide)
+The site SHALL generate one page for each URL the registry serves, from `src/pages/[slug].astro`, and SHALL generate the home page list, the navigation, the group hub pages, `sitemap.xml` and `robots.txt` from the registry at build time. The sitemap SHALL list the home page, every hub page, every tool page and every site page the owner has written, and no placeholder page and no 404 page. (SPEC.md: Rules for the code, 1; SEO, Site-wide; Definition of done, The site)
 
 #### Scenario: The sitemap matches the registry
 
 - **WHEN** the site is built
-- **THEN** `sitemap.xml` lists every tool page, every group hub page and every published site page except the 404 page, and nothing else
+- **THEN** `sitemap.xml` lists every tool page, every group hub page and every published site page except the 404 page and pages still showing an owner placeholder, and nothing else
+
+#### Scenario: The owner writes a placeholder page
+
+- **WHEN** the owner's About page replaces its placeholder and the page is marked as written
+- **THEN** the next build lists `/about` in the sitemap and drops its `noindex`
 
 ### Requirement: Registry entries match the catalogue
 
@@ -45,7 +50,7 @@ Each registry entry SHALL use the name, URL, group, "runs in" value and phase gi
 
 ### Requirement: Seven groups
 
-The registry SHALL place every tool in exactly one of seven groups: Organise pages, Make smaller and fix, Convert to PDF, Convert from PDF, Edit and sign, Protect, Read and check. Each group SHALL have a hub page that lists its tools, at a URL that does not collide with any tool slug. (SPEC.md: Tool catalogue; SEO, Site-wide)
+The registry SHALL place every tool in exactly one of seven groups: Organise pages, Make smaller and fix, Convert to PDF, Convert from PDF, Edit and sign, Protect, Read and check. Each group SHALL declare its hub page's address, title, description, sentence and whether its words claim the device, and SHALL have a hub page once it has a published tool, at an address that is no tool slug or site page. (SPEC.md: Tool catalogue; SEO, Site-wide)
 
 #### Scenario: A hub page is opened
 
@@ -56,6 +61,41 @@ The registry SHALL place every tool in exactly one of seven groups: Organise pag
 
 - **WHEN** a hub page URL would equal a tool slug
 - **THEN** the build is not accepted until one of them is changed
+
+#### Scenario: The hub page's parts
+
+- **WHEN** the "Organise pages" hub page is built
+- **THEN** it has one `h1` "Organise pages", the group's sentence, and its six published tools' pages in registry order, each a link with its summary, in the served HTML, with no script, and nothing else between the header and the footer
+
+#### Scenario: A group with no published tool
+
+- **WHEN** the site is built while "Read and check" has no published tool
+- **THEN** it has no hub page, no home heading and no sitemap entry, and its first tool's change adds them with no hand-written list
+
+#### Scenario: The hub rules rest on open owner questions
+
+- **WHEN** hub pages are built while owner questions 1 and 3 of `add-search-basics` (hub addresses, no hub page for an empty group) are open
+- **THEN** the addresses and the empty-group rule are the agent's defaults, the pull request says so, and the "Definition of done, The site" hub item is reported as not passed until the owner answers
+
+#### Scenario: The registry test checks the groups
+
+- **WHEN** the registry test runs
+- **THEN** it fails unless every hub address is lowercase with hyphens, unique, and equal to no catalogue slug, footer page path, `/404`, `/sitemap.xml` or `/robots.txt`, and every hub title is under 60 characters and ends with the brand, every hub description is under 155 characters, and the titles and descriptions of tool pages and hub pages all differ from each other
+
+#### Scenario: A hub's words claim the device
+
+- **WHEN** a group's title, sentence or description matches `/device|browser|upload|never leaves|not sent/i`
+- **THEN** the registry test fails unless that group declares that its words claim the device, and fails if a group that declares so has any published tool that does not run in the browser
+
+#### Scenario: A server tool joins a group that claims the device
+
+- **WHEN** a test entry adds a server tool to a group whose words claim the device
+- **THEN** the registry test fails and names the group
+
+#### Scenario: Keyboard and screen reader
+
+- **WHEN** a hub page is used with a keyboard and a screen reader
+- **THEN** Tab reaches every tool link in order with a visible focus outline, the heading is announced as level 1, and the list is announced as a list with its count
 
 ### Requirement: Tool URLs are search phrases and never change
 
@@ -164,3 +204,83 @@ A tool's options SHALL be declared in its registry entry: for a choice, a key, a
 
 - **WHEN** the unit tests check the standard fonts' character rule
 - **THEN** every character it takes is drawn by pdf-lib's standard Helvetica, Helvetica Bold, Times and Courier as itself and not as a question mark, and a sample of characters it refuses (Devanagari, Telugu, Arabic, Chinese, Polish, an emoji, a tab, a soft hyphen) is refused
+
+### Requirement: An option's condition is declared in the registry
+
+An option MAY name, in its registry entry, a condition: an earlier choice of the same tool and one of that choice's values. The first option SHALL have no condition, and an option named by a condition SHALL itself have none. (SPEC.md: Rules for the code, 1; Tool page anatomy, 4)
+
+#### Scenario: The registry test checks a condition
+
+- **WHEN** the registry test checks a tool whose options name conditions
+- **THEN** it fails unless each condition names a choice listed earlier in the same tool, one of that choice's values, and a choice with no condition of its own, and unless the tool's first option has no condition
+
+#### Scenario: A condition that cannot hold
+
+- **WHEN** a test entry names a condition on a key that is not an earlier choice, on a value the choice does not have, or on its own first option
+- **THEN** the registry test fails for each
+
+### Requirement: Drawings are declared in the registry
+
+A drawing SHALL be declared in its tool's registry entry by its words only: a key, a label, a hint, the Clear button's words and its sentences. The pad's units and each tool's most lines and points SHALL be written once, in the plain module its engine reads. The engine SHALL refuse, before it reads the file, anything that is not a drawing within them. (SPEC.md: Rules for the code, 1 and 2; Tool page anatomy, 4)
+
+#### Scenario: The registry test checks a drawing
+
+- **WHEN** the registry test checks a tool with a drawing
+- **THEN** it fails unless the words are plain and not empty, the module has a line for that tool and key with most lines and most points within their bounds, every drawing line in the module belongs to a drawing the registry shows, and the tool's first option is not a drawing
+
+#### Scenario: The engine is sent something that is not a drawing
+
+- **WHEN** an engine is sent, for a drawing, something that is not a list of lines, no lines, a line with an odd count or no points, a value that is not a whole number (such as NaN, Infinity, text or null) or lies outside the pad, a line that is not a plain list, or more lines or points than its limits
+- **THEN** it refuses before it reads the file with the refused-drawing error, and writes nothing
+
+### Requirement: Pictures are declared in the registry
+
+A picture SHALL be declared in its tool's registry entry by its words only: a key, a label, the button's words, a hint, the words for what it takes and its sentences. Each tool's types and notice sizes in bytes and pixels SHALL be written once, in the plain module the page and its engine read. (SPEC.md: Rules for the code, 1 and 2; Tool page anatomy, 4)
+
+#### Scenario: The registry test checks a picture
+
+- **WHEN** the registry test checks a tool with a picture
+- **THEN** it fails unless the words are plain and not empty, the module has a line for that tool and key with JPG, PNG or both as types and notice sizes within their bounds, every picture line in the module belongs to a picture the registry shows, a hint that names a size names that notice size, and the tool's engine can read a picture before the job
+
+#### Scenario: The engine is sent something that is not an accepted picture
+
+- **WHEN** an engine is sent, for a picture, something that is not bytes, a picture of another type, damaged, or saved in a way it cannot read
+- **THEN** it refuses before it reads the PDF with the refused-picture error, and writes nothing
+
+### Requirement: New passwords are declared in the registry
+
+A new password SHALL be declared in its tool's registry entry by its words only. Each tool's most characters, from 1 to 127, and its character rule SHALL be written once, in the plain module its engine reads. The one rule for now SHALL be printable ASCII (U+0020 to U+007E) with no space first or last. The engine SHALL refuse anything else before it reads the file, and use an accepted password exactly as sent. (SPEC.md: Rules for the code, 1 and 2; Tool page anatomy, 4)
+
+#### Scenario: The registry test checks a new password
+
+- **WHEN** the registry test checks a tool with a new password
+- **THEN** it fails unless the key is a plain word not used by another option, a preset, the page's items or the worker (`passwords`), the words are plain and not empty with no exclamation mark, the module has a line for that tool and key with a most characters from 1 to 127 and a known character rule, every password line in the module belongs to a new password the registry shows, a hint that names a number of characters names that most characters, and the hint ends with what its character rule takes, in the rule's own words
+
+#### Scenario: A test entry breaks a check
+
+- **WHEN** a test entry has a new password whose key is `passwords`, whose words are empty, whose line is missing or whose limit is 0 or 128, or the module has a line no registry entry shows
+- **THEN** the registry test fails for each
+
+#### Scenario: The engine is sent a password it does not accept
+
+- **WHEN** an engine is sent, for a new password, something that is not a string, is empty, starts or ends with a space, is longer than its limit, or has a character its rule does not take
+- **THEN** it refuses before it reads the file with the refused-password error, writes nothing, and its error does not hold the password
+
+#### Scenario: The rule matches the readers
+
+- **WHEN** the unit tests encrypt a small PDF with this repo's qpdf at 256-bit AES, using a password made of every character the rule takes (spaces inside only), and also passwords that start with "--" or "@"
+- **THEN** each file opens with its password, and with no other, in qpdf and in PDF.js
+
+### Requirement: Unlock PDF is named "Remove a password"
+
+The catalogue's Unlock PDF SHALL be the registry entry `unlock-pdf`, at `/unlock-pdf`, in the "Protect" group, run in the browser, phase 1, as the catalogue gives it, and SHALL take the name "Remove a password" in place of the catalogue's name, by the owner's decision of 22 Nov 2026, because "unlock" is a banned word. No page SHALL show "unlock". (CLAUDE.md: Owner decisions; SPEC.md: Tool catalogue; Banned patterns)
+
+#### Scenario: The home page lists it
+
+- **WHEN** the home page is built
+- **THEN** "Remove a password" is listed second under "Protect", linking to `/unlock-pdf`
+
+#### Scenario: The entry is checked against the catalogue
+
+- **WHEN** the registry test checks catalogue order and each entry's slug, group, runs-in value and phase
+- **THEN** `unlock-pdf` counts at the catalogue place of Unlock PDF, after Protect with a password, and its name is "Remove a password"

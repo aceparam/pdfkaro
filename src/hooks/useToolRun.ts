@@ -3,14 +3,16 @@ import type { Progress } from '../engines/types';
 import type { ToolWidgetWords } from '../tools/registry';
 import { chooseFiles, looksAccepted, sniffLength } from '../widget/accept';
 import { outputName, outputType, stem } from '../widget/format';
-import { finishedAs, initialState, reducer, totals, type State } from '../widget/state';
+import { initialState, reducer, totals, type State } from '../widget/state';
 import { shownItems } from '../widget/items';
-import { jobOptions } from '../widget/options';
+import { jobOptions, picturesToReread, picturesToSend, rereadPicture, type NewPasswordField, type NewPasswords } from '../widget/options';
+import { pictureRule, type Drawing } from '../widget/option-values';
 import { orderToSend } from '../widget/order';
 import { turnRules } from '../widget/turns';
 import { toggleRules } from '../widget/toggles';
 import { emptyQueue, finished, forget, next, started, stop, want } from '../widget/thumbnails';
 import { ToolClient, ToolError, type WorkerLike } from '../workers/client';
+import { runJob } from './run-job';
 
 export type ToolRunResult = { url: string; name: string };
 
@@ -41,10 +43,21 @@ export type ToolRun = {
   showMore(): void;
   /** Sets what one of the tool's options shows. */
   setOption(key: string, value: string): void;
+  /** Sets a drawing's lines, once per finished line or on Clear. */
+  setDrawing(key: string, drawing: Drawing): void;
+  /** What each new password's two fields hold, exactly as typed. Held here, never in the state. */
+  newPasswords: NewPasswords;
+  /** Sets what one of a new password's two fields holds. */
+  setNewPassword(key: string, field: NewPasswordField, value: string): void;
+  /**
+   * Chooses a picture for the picture option `key`, replacing any chosen before. One of the wrong type, by its
+   * first bytes, leaves no picture chosen; any other is held in memory beside the files and read in the worker.
+   */
+  pickPicture(key: string, file: File): Promise<void>;
   start(): Promise<void>;
   cancel(): void;
   backToFiles(): void;
-  /** Forgets every file, password and result, and ends the worker. */
+  /** Forgets every file, password (an input file's and a new one) and result, and ends the worker. */
   clear(): void;
 };
 
@@ -62,14 +75,41 @@ type Options = {
 };
 
 /**
- * Joins the reducer to the tool worker. The files and any passwords live here,
- * in memory only. They never go into the reducer, storage or the address.
+ * Joins the reducer to the tool worker. The files, any passwords (an input file's, and
+ * a new password typed for an option) and any pictures chosen for options live here, in
+ * memory only. They never go into the reducer, storage or the address, and no address
+ * is made for a picture. Only a new password's first field goes to the worker, with the job.
  */
 export function useToolRun({ toolId, accepts, words, preset, createWorker, onProgress }: Options): ToolRun {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [result, setResult] = useState<ToolRunResult | null>(null);
   const files = useRef(new Map<string, File>());
   const passwords = useRef(new Map<string, string>());
+  // Each picture option's chosen picture, by key: the one place its bytes are held on the page.
+  const pictures = useRef(new Map<string, File>());
+  // The file each key's read in the worker is for, while one is in flight; and a count of picks per key, so a pick
+  // whose first bytes come back after a later pick's is dropped.
+  // Each attempt has its own token, so an attempt that ends never clears the mark of a newer read of the same file.
+  const picturesInFlight = useRef(new Map<string, { file: File }>());
+  const pictureTickets = useRef(new Map<string, number>());
+  // Each new password's two fields, by option key: in a state of its own, so the fields redraw as typed, never in
+  // the reducer; the ref is kept in step by the one setter, so `start` reads what is typed now. Kept through Cancel,
+  // a failure and "Choose another file"; forgotten when a job finishes, by "Start again", when the last file is
+  // removed and on leaving the page, each in the handler that causes it.
+  const [newPasswords, setNewPasswords] = useState<NewPasswords>({});
+  const newPasswordsRef = useRef<NewPasswords>({});
+  const setNewPassword = useCallback((key: string, field: NewPasswordField, value: string) => {
+    const now = newPasswordsRef.current;
+    const entry = Object.hasOwn(now, key) ? now[key] : undefined;
+    const next: NewPasswords = { ...now, [key]: { first: entry?.first ?? '', again: entry?.again ?? '', [field]: value } };
+    newPasswordsRef.current = next;
+    setNewPasswords(next);
+  }, []);
+  const forgetNewPasswords = useCallback(() => {
+    if (Object.keys(newPasswordsRef.current).length === 0) return;
+    newPasswordsRef.current = {};
+    setNewPasswords({});
+  }, []);
   const nextId = useRef(1);
   const client = useRef<ToolClient | null>(null);
   const stateRef = useRef(state);
@@ -184,19 +224,25 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     [],
   );
 
+  // Each file's latest read: a password can be tried again before the last try is answered, and the worker reads
+  // both at once, so their answers can come back in either order. Only the latest read's answer is shown.
+  const inspectTickets = useRef(new Map<string, number>());
   const inspect = useCallback(
     async (id: string) => {
       const file = files.current.get(id);
       if (!file) return;
       const password = passwords.current.get(id);
+      const ticket = (inspectTickets.current.get(id) ?? 0) + 1;
+      inspectTickets.current.set(id, ticket);
+      const latest = () => files.current.has(id) && inspectTickets.current.get(id) === ticket;
       stopThumbnail();
       try {
         const outcome = await getClient().inspect(file, password);
         const shown = outcome.kind === 'needs-password' && password !== undefined ? { kind: 'wrong-password' as const } : outcome;
-        if (files.current.has(id)) dispatch({ type: 'inspected', id, outcome: shown });
+        if (latest()) dispatch({ type: 'inspected', id, outcome: shown });
       } catch (error) {
         if (error instanceof ToolError && error.kind === 'cancelled') return;
-        if (files.current.has(id)) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
+        if (latest()) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
       }
     },
     [getClient, stopThumbnail],
@@ -213,10 +259,16 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       }
       files.current.delete(id);
       passwords.current.delete(id);
+      inspectTickets.current.delete(id);
+      // Removing the last file ends the working area and resets the state, so the pictures and new passwords go with it.
+      if (files.current.size === 0) {
+        pictures.current.clear();
+        forgetNewPasswords();
+      }
       forgetThumbnails(id);
       dispatch({ type: 'removed', id });
     },
-    [forgetThumbnails, stopThumbnail],
+    [forgetNewPasswords, forgetThumbnails, stopThumbnail],
   );
 
   const addFiles = useCallback(
@@ -256,6 +308,79 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
 
   const moveFile = useCallback((id: string, to: number) => dispatch({ type: 'moved', id, to }), []);
 
+  // Reads a held picture in the worker, and records the answer only if the same file is still held for its key.
+  // A read cut short by the worker being ended (a thumbnail's time limit, or `stopThumbnail`) is read again while
+  // the picture is still chosen and still being read, at most twice, then called damaged (`rereadPicture`).
+  const readChosenPicture = useCallback(
+    async (key: string, file: File): Promise<void> => {
+      for (let tries = 0; ; tries += 1) {
+        stopThumbnail();
+        const attempt = { file };
+        picturesInFlight.current.set(key, attempt);
+        try {
+          const outcome = await getClient().inspectPicture(file, key);
+          if (pictures.current.get(key) === file) dispatch({ type: 'picture-read', key, outcome });
+          return;
+        } catch (error) {
+          const held = pictures.current.get(key) === file;
+          if (error instanceof ToolError && error.kind === 'cancelled') {
+            const entry = Object.hasOwn(stateRef.current.pictures, key) ? stateRef.current.pictures[key] : undefined;
+            // Only while listing: the job's own end cancels a read too, and a read again then would start a worker.
+            const step = rereadPicture(entry, held, tries, stateRef.current.step === 'listing');
+            if (step === 'read-again') continue;
+            if (step === 'damaged') dispatch({ type: 'picture-read', key, outcome: { kind: 'damaged' } });
+            return;
+          }
+          // The engine could not be loaded, or the worker ran out of memory: the tool's failure, as for a file.
+          if (held) dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
+          return;
+        } finally {
+          if (picturesInFlight.current.get(key) === attempt) picturesInFlight.current.delete(key);
+        }
+      }
+    },
+    [getClient, stopThumbnail],
+  );
+
+  // A read still in flight for a key that was just picked again is for a file no longer held. Reading a hostile PNG
+  // can take minutes, and the next read would wait behind it, so the worker is ended and the new read starts on a
+  // fresh one. The old read's answer is "cancelled" for a file not held, so it is not read again; the new pick
+  // counts its own tries from 0. No file is being read then: the field is shown only once every file has been read.
+  const endReplacedRead = useCallback(
+    (key: string) => {
+      const inFlight = picturesInFlight.current.get(key);
+      if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
+      picturesInFlight.current.delete(key);
+      stopThumbnail();
+      client.current?.end();
+    },
+    [stopThumbnail],
+  );
+
+  const pickPicture = useCallback(
+    async (key: string, file: File) => {
+      if (stateRef.current.step !== 'listing') return;
+      const ticket = (pictureTickets.current.get(key) ?? 0) + 1;
+      pictureTickets.current.set(key, ticket);
+      const head = new Uint8Array(await file.slice(0, sniffLength).arrayBuffer());
+      // "Start again", leaving or a later pick while the first bytes were read: this pick is dropped.
+      if (stateRef.current.step !== 'listing' || pictureTickets.current.get(key) !== ticket) return;
+      const types = pictureRule(toolId, key)?.types ?? [];
+      if (!looksAccepted(head, [...types])) {
+        // A wrong pick leaves no picture chosen, even if one was ready before: the field holds the last pick.
+        pictures.current.delete(key);
+        dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'refused' });
+        endReplacedRead(key);
+        return;
+      }
+      pictures.current.set(key, file);
+      dispatch({ type: 'picture-chosen', key, name: file.name, size: file.size, status: 'reading' });
+      endReplacedRead(key);
+      await readChosenPicture(key, file);
+    },
+    [endReplacedRead, readChosenPicture, toolId],
+  );
+
   // How many pages the one result has: from the toggle kind when it knows (Extract: the pages chosen);
   // else 'sum' adds the inputs up and 'input' is the one input as it was, both the listed total.
   const resultPageCount = useCallback((): number | undefined => {
@@ -288,26 +413,39 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       // zip code on every run, whatever the file gives.
       const extension = words.outputExtension ?? 'pdf';
       const zip = words.outputs === 'several' ? { stem: stem(inputs[0]!.name), partSuffix: words.partSuffix, extension } : undefined;
-      const { outputs, parts } = await getClient().run(
+      // Sending the job and reading its outcome is a plain function (run-job.ts), which forgets the new passwords
+      // and the input files' own passwords itself once the job has finished with a file or with no new file.
+      const outcome = await runJob({
+        client: getClient(),
         inputs,
-        listed.map((entry) => passwords.current.get(entry.id)),
+        passwords: listed.map((entry) => passwords.current.get(entry.id)),
         // The page's preset, what the page's items say, then the options chosen; no preset key is an option key.
-        jobOptions(preset, jobOption(), words.options, stateRef.current.choices),
-        (progress) => {
+        // A new password's first field goes with it, as typed; its second never leaves the page.
+        options: jobOptions(preset, jobOption(), words.options, stateRef.current.choices, { newPasswords: newPasswordsRef.current }),
+        onProgress: (progress) => {
           dispatch({ type: 'progressed', progress });
           onProgress?.(progress);
         },
         zip,
-      );
-      const output = outputs[0];
-      const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
-      // No file is "no smaller", for a tool with words for it; for any other tool, the engine's failure.
-      const shown = finishedAs(output !== undefined, words.noSmaller !== undefined);
-      if (shown === 'no-new-file') {
+        // Each shown, ready picture beside the files; a hidden or unready one is not sent.
+        pictures: picturesToSend(words.options, stateRef.current.choices, stateRef.current.pictures, pictures.current),
+        hasNoSmallerWords: words.noSmaller !== undefined,
+        forgetNewPasswords,
+        // The listed files keep their status; the worker that held them opened was ended with the job, and no
+        // result screen reads this map (no way back to the files from a result, no thumbnails there).
+        forgetInputPasswords: () => passwords.current.clear(),
+      });
+      if (outcome.kind === 'cancelled') return;
+      if (outcome.kind === 'failed') {
+        dispatch({ type: 'failed', failure: outcome.failure });
+        return;
+      }
+      if (outcome.kind === 'no-new-file') {
         dispatch({ type: 'finished', result: { none: true } });
         return;
       }
-      if (shown === 'engine-failure' || !output) throw new ToolError('engine');
+      const { output, parts } = outcome;
+      const inputSize = inputs.reduce((sum, file) => sum + file.size, 0);
       const zipped = parts !== undefined && parts > 1;
       // The download's type follows its extension: a zip, or one output of the tool's own kind.
       const named = zipped ? 'zip' : extension;
@@ -329,7 +467,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (error instanceof ToolError && error.kind === 'cancelled') return;
       dispatch({ type: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' });
     }
-  }, [getClient, onProgress, releaseResult, stopThumbnail, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
+  }, [getClient, onProgress, releaseResult, stopThumbnail, forgetNewPasswords, words.outputSuffix, words.outputs, words.partSuffix, words.outputExtension, words.noSmaller, words.resultWas, words.options, preset, jobOption, resultPageCount]);
 
   const toggleMark = useCallback((page: number) => dispatch({ type: 'toggled', page }), []);
   const movePage = useCallback((page: number, to: number) => dispatch({ type: 'page-moved', page, to }), []);
@@ -337,21 +475,40 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
   const turnAll = useCallback((by: 1 | -1) => dispatch({ type: 'all-turned', by }), []);
   const showMore = useCallback(() => dispatch({ type: 'shown-more' }), []);
   const setOption = useCallback((key: string, value: string) => dispatch({ type: 'option-set', key, value }), []);
+  const setDrawing = useCallback((key: string, drawing: Drawing) => dispatch({ type: 'drawing-set', key, drawing }), []);
 
+  // Reads again, in turn, each picture still held among `keys`: those a failure or Cancel left being read.
+  const rereadPictures = useCallback(
+    async (keys: readonly string[]) => {
+      for (const key of keys) {
+        const file = pictures.current.get(key);
+        if (file) await readChosenPicture(key, file);
+      }
+    },
+    [readChosenPicture],
+  );
+
+  // Cancel ends the worker, which cancels a hidden picture's read still running; that read's own answer comes
+  // before the page is listing again, so it is not read again there (`rereadPicture`). Cancel reads it again
+  // here, as "Go back to your file" does, so it never stays "Getting ready" and thumbnails are not held back.
   const cancel = useCallback(() => {
+    const unreadPictures = picturesToReread(stateRef.current);
     client.current?.end();
     dispatch({ type: 'back-to-files' });
-  }, []);
+    void rereadPictures(unreadPictures);
+  }, [rereadPictures]);
 
-  // Going back after a failure reads again any file the failure left unread,
-  // such as when the engine could not be fetched while files were being read.
+  // Going back after a failure reads again any file or picture the failure left unread,
+  // such as when the engine could not be fetched while they were being read.
   const backToFiles = useCallback(() => {
     const unread = stateRef.current.files.filter((file) => file.status === 'reading' || file.checking).map((file) => file.id);
+    const unreadPictures = picturesToReread(stateRef.current);
     dispatch({ type: 'back-to-files' });
     void (async () => {
       for (const id of unread) await inspect(id);
+      await rereadPictures(unreadPictures);
     })();
-  }, [inspect]);
+  }, [inspect, rereadPictures]);
 
   const clear = useCallback(() => {
     if (drawing.current) drawing.current.stopped = true;
@@ -361,13 +518,17 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     client.current = null;
     files.current.clear();
     passwords.current.clear();
+    inspectTickets.current.clear();
+    pictures.current.clear();
+    picturesInFlight.current.clear();
+    forgetNewPasswords();
     for (const url of thumbnailUrls.current.values()) URL.revokeObjectURL(url);
     thumbnailUrls.current.clear();
     queue.current = emptyQueue;
     publishThumbnails();
     releaseResult();
     dispatch({ type: 'reset' });
-  }, [publishThumbnails, releaseResult]);
+  }, [forgetNewPasswords, publishThumbnails, releaseResult]);
 
   // Leaving the page, including into the back-forward cache, drops everything.
   useEffect(() => {
@@ -378,5 +539,5 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     };
   }, [clear]);
 
-  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, start, cancel, backToFiles, clear };
+  return { state, result, thumbnails, showThumbnail, addFiles, submitPassword, removeFile, moveFile, toggleMark, movePage, turnPage, turnAll, showMore, setOption, setDrawing, newPasswords, setNewPassword, pickPicture, start, cancel, backToFiles, clear };
 }

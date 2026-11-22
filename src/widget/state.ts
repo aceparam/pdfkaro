@@ -2,8 +2,9 @@
 // shows: names, sizes, counts and statuses. It never holds a file's bytes or a
 // password; those stay in memory inside useToolRun.
 
-import type { InspectOutcome, Progress } from '../engines/types';
+import type { InspectOutcome, PictureOutcome, Progress } from '../engines/types';
 import { progressFraction } from './format';
+import type { Drawing } from './option-values';
 import { toggledMarks } from './toggles';
 import { turnedAll, turnedPage, type Turns } from './turns';
 
@@ -23,7 +24,25 @@ export type FileEntry = {
 
 export type Step = 'empty' | 'listing' | 'working' | 'done' | 'failed';
 
-export type FailureKind = 'engine-load' | 'engine' | 'memory' | 'too-many-files' | 'zip-too-large' | 'too-many-pictures' | 'output-limit' | 'text-refused';
+export type FailureKind =
+  | 'engine-load'
+  | 'engine'
+  | 'memory'
+  | 'too-many-files'
+  | 'zip-too-large'
+  | 'too-many-pictures'
+  | 'output-limit'
+  | 'text-refused'
+  | 'drawing-refused'
+  | 'picture-refused'
+  | 'picture-too-large'
+  | 'password-refused';
+
+/** What a picture option's chosen picture is: being read, ready, damaged, saved in a way the tool cannot read, or turned away by the page for its type. */
+export type PictureStatus = 'reading' | 'ready' | 'damaged' | 'unsupported' | 'refused';
+
+/** A picture chosen for an option: what the screen shows, never its bytes. `pixels` once it is ready. */
+export type PictureEntry = { name: string; size: number; pixels?: number; status: PictureStatus };
 
 /**
  * The finished result. `parts` is set when it is a zip holding that many files;
@@ -73,15 +92,21 @@ export type State = {
   turns: Turns | null;
   /**
    * What each of the tool's options shows, by key (`options` in its registry words): a choice's value,
-   * or a text's raw value exactly as typed, so its field shows what the visitor typed (it is cleaned
-   * only when it is checked and sent). `{}` is every option at its start, a text empty, so a tool with
-   * no options holds nothing. No cap on a text's length: a long paste is held, refused and never sent. Kept through Cancel, a failure and
+   * a text's raw value exactly as typed, so its field shows what the visitor typed (it is cleaned
+   * only when it is checked and sent), or a drawing's finished lines, as numbers in the pad's units
+   * (set once per finished line, never while a line is drawn). `{}` is every option at its start, a
+   * text and a drawing empty, so a tool with no options holds nothing. No cap on a text's length: a long paste is held, refused and never sent. Kept through Cancel, a failure and
    * a file replaced through "Choose another file" while listing (the new file is listed before the
    * old one is removed). Not kept when the last file is removed, which ends the working area,
    * including a damaged or password file replaced from its notice; "Start again" clears it too.
    * Never written to storage or the address.
    */
-  choices: Readonly<Record<string, string>>;
+  choices: Readonly<Record<string, string | Drawing>>;
+  /**
+   * Each picture option's chosen picture, by key: its name, size, pixels and status, never its bytes,
+   * which useToolRun holds beside the files. Kept and cleared as `choices` are. Never written to storage or the address.
+   */
+  pictures: Readonly<Record<string, PictureEntry>>;
 };
 
 /** How many pages a page list shows at first, and adds each time. */
@@ -105,6 +130,10 @@ export type Action =
   | { type: 'page-turned'; page: number; by: 1 | -1 }
   | { type: 'all-turned'; by: 1 | -1 }
   | { type: 'option-set'; key: string; value: string }
+  | { type: 'drawing-set'; key: string; drawing: Drawing }
+  /** A picture was picked for an option: `reading` while the worker reads it, or `refused` when the page turned it away for its type. */
+  | { type: 'picture-chosen'; key: string; name: string; size: number; status: 'reading' | 'refused' }
+  | { type: 'picture-read'; key: string; outcome: PictureOutcome }
   | { type: 'reset' };
 
 export const initialState: State = {
@@ -120,6 +149,7 @@ export const initialState: State = {
   order: null,
   turns: null,
   choices: {},
+  pictures: {},
 };
 
 const statusFor: Record<InspectOutcome['kind'], FileStatus> = {
@@ -135,8 +165,8 @@ export function reducer(state: State, action: Action): State {
     case 'added': {
       if (action.files.length === 0) return state;
       const added = action.files.map((file): FileEntry => ({ ...file, status: 'reading' }));
-      // A new file starts its page marks, order and turns afresh, but keeps what the options show.
-      return { ...initialState, step: 'listing', files: [...state.files, ...added], refused: [], choices: state.choices };
+      // A new file starts its page marks, order and turns afresh, but keeps what the options show and the pictures chosen.
+      return { ...initialState, step: 'listing', files: [...state.files, ...added], refused: [], choices: state.choices, pictures: state.pictures };
     }
     case 'refused':
       return { ...state, refused: action.names };
@@ -223,9 +253,33 @@ export function reducer(state: State, action: Action): State {
       // A computed key is always the object's own, even "__proto__".
       return { ...state, choices: { ...state.choices, [action.key]: action.value } };
     }
+    case 'drawing-set': {
+      // A light check that it is lines of numbers: the pad keeps to the tool's rule, and the engine checks it fully.
+      if (state.step !== 'listing' || typeof action.key !== 'string' || !looksLikeDrawing(action.drawing)) return state;
+      return { ...state, choices: { ...state.choices, [action.key]: action.drawing } };
+    }
+    case 'picture-chosen': {
+      if (state.step !== 'listing' || typeof action.key !== 'string' || (action.status !== 'reading' && action.status !== 'refused')) return state;
+      const entry: PictureEntry = { name: action.name, size: action.size, status: action.status };
+      return { ...state, pictures: { ...state.pictures, [action.key]: entry } };
+    }
+    case 'picture-read': {
+      // Only an entry still being read takes an answer, so a late answer never replaces a newer pick's.
+      if (state.step !== 'listing' || !Object.hasOwn(state.pictures, action.key)) return state;
+      const entry = state.pictures[action.key];
+      if (entry === undefined || entry.status !== 'reading') return state;
+      const read: PictureEntry =
+        action.outcome.kind === 'ready' ? { ...entry, status: 'ready', pixels: action.outcome.pixels } : { name: entry.name, size: entry.size, status: action.outcome.kind };
+      return { ...state, pictures: { ...state.pictures, [action.key]: read } };
+    }
     case 'reset':
       return initialState;
   }
+}
+
+/** Whether a value is an array of arrays of numbers: the shape of a drawing, not yet checked against a rule. */
+function looksLikeDrawing(value: unknown): value is Drawing {
+  return Array.isArray(value) && value.every((line) => Array.isArray(line) && line.every((point) => typeof point === 'number'));
 }
 
 /** The first file in list order that needs the visitor, or none. Problems are shown one at a time. */

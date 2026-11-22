@@ -1,12 +1,14 @@
 // The messages between the page and the tool worker. Both sides use these
 // types, and the worker checks every message it receives against them.
 
-import type { InspectOutcome, Progress } from '../engines/types';
+import type { InspectOutcome, PictureOutcome, Progress } from '../engines/types';
 import { outputExtensions, type OutputExtension } from '../widget/format';
 import type { FailureKind } from '../widget/state';
 
 export type ToWorker =
   | { type: 'inspect'; requestId: number; toolId: string; file: Blob; password?: string }
+  /** Reads a picture chosen for the tool's picture option `key`, before the job. */
+  | { type: 'inspect-picture'; requestId: number; toolId: string; key: string; file: Blob }
   | {
       type: 'run';
       requestId: number;
@@ -14,6 +16,8 @@ export type ToWorker =
       files: Blob[];
       passwords: (string | undefined)[];
       options: Record<string, unknown>;
+      /** Each shown, ready picture chosen for an option, by its key, sent beside the files. */
+      pictures?: Record<string, Blob>;
       /** For a tool that can give several files: how to name them inside the one zip. */
       zip?: ZipNaming;
     }
@@ -38,6 +42,7 @@ export const boxLimits = { min: 16, max: 400 } as const;
 
 export type FromWorker =
   | { type: 'inspected'; requestId: number; outcome: InspectOutcome }
+  | { type: 'picture-inspected'; requestId: number; outcome: PictureOutcome }
   | { type: 'progress'; requestId: number; progress: Progress }
   /** `parts` says how many files the one output, a zip, holds. */
   | { type: 'done'; requestId: number; outputs: Uint8Array[]; parts?: number }
@@ -65,12 +70,28 @@ const isZipNaming = (value: unknown) =>
   idPattern.test(value.partSuffix) &&
   (value.extension === undefined || (zipExtensions as readonly unknown[]).includes(value.extension));
 
+/** The most pictures one run may carry. */
+export const maxPictures = 4;
+
+/** A picture option's key: a plain word, as the registry test asks of every option key; never `__proto__` or a word with a space. */
+const keyPattern = /^[a-z][a-zA-Z0-9]*$/;
+const isKey = (value: unknown) => typeof value === 'string' && value.length <= 64 && keyPattern.test(value);
+
+/** A run's pictures: left out, or a plain object of at most `maxPictures` own plain keys, each a Blob. */
+function isPictures(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  const keys = Object.keys(value);
+  return keys.length <= maxPictures && keys.every((key) => isKey(key) && isBlob(value[key]));
+}
+
 /** True when a message the worker received has the shape of a `ToWorker` message. Anything else is ignored. */
 export function isToWorker(value: unknown): value is ToWorker {
   if (!isRecord(value) || typeof value.requestId !== 'number' || typeof value.toolId !== 'string') return false;
   if (!idPattern.test(value.toolId)) return false;
   if (value.type === 'close') return true;
   if (value.type === 'inspect') return isBlob(value.file) && isOptionalString(value.password);
+  if (value.type === 'inspect-picture') return isKey(value.key) && isBlob(value.file);
   if (value.type === 'run') {
     return (
       Array.isArray(value.files) &&
@@ -79,6 +100,7 @@ export function isToWorker(value: unknown): value is ToWorker {
       value.passwords.length === value.files.length &&
       value.passwords.every(isOptionalString) &&
       isRecord(value.options) &&
+      isPictures(value.pictures) &&
       (value.zip === undefined || isZipNaming(value.zip))
     );
   }
@@ -117,7 +139,27 @@ function isOutcome(value: unknown): boolean {
   }
 }
 
-const failureKinds: FailureKind[] = ['engine-load', 'engine', 'memory', 'too-many-files', 'zip-too-large', 'too-many-pictures', 'output-limit', 'text-refused'];
+/** A picture's outcome, of a known kind, with whole pixels above 0 when ready. */
+function isPictureOutcome(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'ready') return isWhole(value.pixels, 1);
+  return value.kind === 'damaged' || value.kind === 'unsupported';
+}
+
+const failureKinds: FailureKind[] = [
+  'engine-load',
+  'engine',
+  'memory',
+  'too-many-files',
+  'zip-too-large',
+  'too-many-pictures',
+  'output-limit',
+  'text-refused',
+  'drawing-refused',
+  'picture-refused',
+  'picture-too-large',
+  'password-refused',
+];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
 export function isFromWorker(value: unknown): value is FromWorker {
@@ -125,6 +167,8 @@ export function isFromWorker(value: unknown): value is FromWorker {
   switch (value.type) {
     case 'inspected':
       return isOutcome(value.outcome);
+    case 'picture-inspected':
+      return isPictureOutcome(value.outcome);
     case 'progress':
       return isRecord(value.progress) && typeof value.progress.stage === 'string';
     case 'done':

@@ -32,6 +32,17 @@ describe('the thumbnail queue', () => {
     expect(nextOf(queue, listing(file('a', 'needs-password', true), file('c')))).toBeUndefined();
   });
 
+  it('draws nothing while a picture chosen for an option is being read, so a time limit never ends its read', () => {
+    const queue = want(emptyQueue, 'a');
+    const state = listing(file('a'));
+    const items = gridItems({ ...state, order: null }, 'files');
+    const picture = (status: 'reading' | 'ready' | 'damaged') => ({ picture: { name: 'signature.png', size: 1, status } });
+    expect(next(queue, { ...state, pictures: picture('reading') }, items)).toBeUndefined();
+    expect(next(queue, { ...state, pictures: picture('ready') }, items)).toBe('a');
+    expect(next(queue, { ...state, pictures: picture('damaged') }, items)).toBe('a');
+    expect(next(queue, { ...state, pictures: {} }, items)).toBe('a');
+  });
+
   it('draws nothing outside the list of files', () => {
     const queue = want(emptyQueue, 'a');
     for (const step of ['empty', 'working', 'done', 'failed'] as const) {

@@ -2,7 +2,7 @@
 // turns messages into promises, and ends the worker after every job, on
 // Cancel and when the visitor starts again or leaves.
 
-import type { InspectOutcome, Progress } from '../engines/types';
+import type { InspectOutcome, PictureOutcome, Progress } from '../engines/types';
 import type { FailureKind } from '../widget/state';
 import { isFromWorker, type ThumbnailBox, type ToWorker, type ZipNaming } from './messages';
 
@@ -47,6 +47,11 @@ export class ToolClient {
     return this.send<InspectOutcome>({ type: 'inspect', requestId: 0, toolId: this.toolId, file, password });
   }
 
+  /** Reads a picture chosen for the tool's picture option `key`, before the job. */
+  inspectPicture(file: Blob, key: string): Promise<PictureOutcome> {
+    return this.send<PictureOutcome>({ type: 'inspect-picture', requestId: 0, toolId: this.toolId, key, file });
+  }
+
   /**
    * Draws one page of a file to fit inside `box`, as PNG bytes. Gives null
    * when the page cannot be drawn, and never fails the tool. If drawing takes
@@ -77,17 +82,22 @@ export class ToolClient {
     this.worker?.postMessage({ type: 'close', requestId: this.nextId++, toolId: this.toolId });
   }
 
-  /** Runs the tool on the files in order. The worker is ended when the job ends, whatever the outcome. */
+  /**
+   * Runs the tool on the files in order, with any pictures chosen for its options beside them. The worker is
+   * ended when the job ends, whatever the outcome.
+   */
   async run(
     files: Blob[],
     passwords: (string | undefined)[],
     options: Record<string, unknown>,
     onProgress: (progress: Progress) => void,
     zip?: ZipNaming,
+    pictures?: Record<string, Blob>,
   ): Promise<RunResult> {
+    const withPictures = pictures !== undefined && Object.keys(pictures).length > 0 ? { pictures } : {};
     try {
       return await this.send<RunResult>(
-        { type: 'run', requestId: 0, toolId: this.toolId, files, passwords, options, ...(zip ? { zip } : {}) },
+        { type: 'run', requestId: 0, toolId: this.toolId, files, passwords, options, ...(zip ? { zip } : {}), ...withPictures },
         onProgress,
       );
     } finally {
@@ -136,6 +146,7 @@ export class ToolClient {
         request.onProgress?.(data.progress);
         return;
       case 'inspected':
+      case 'picture-inspected':
         this.pending.delete(data.requestId);
         request.resolve(data.outcome);
         return;

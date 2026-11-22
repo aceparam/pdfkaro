@@ -65,6 +65,68 @@ export type Qpdf = {
 export const finished = (code: number) => code === 0 || code === 3;
 
 /**
+ * The new file, and the update that makes it, would pass their size budget.
+ * Known to the worker by its name, so the page can say so in its own sentence.
+ * Moved unchanged from stamp.ts, which re-exports it.
+ */
+export class OutputLimit extends Error {
+  override name = 'OutputLimit';
+  /**
+   * `'shared'` when the chosen pages alone fit the budget and what they share (`sharedBytes`, such as Sign PDF's
+   * picture) is what would pass it, found before anything is drawn, so the tool can say so in its own sentence.
+   */
+  readonly reason: 'shared' | undefined;
+  constructor(reason?: 'shared') {
+    super('The new file would pass its size limit.');
+    this.reason = reason;
+  }
+}
+
+const writeProgress = /write progress:\s*(\d+(?:\.\d+)?)%/;
+
+/** qpdf's "write progress: N%" line, as a percentage of at most 100, or undefined for any other line. */
+export function writePercent(line: string): number | undefined {
+  const match = writeProgress.exec(line);
+  return match ? Math.min(100, Number(match[1])) : undefined;
+}
+
+/**
+ * Runs `call` (one qpdf write to /out.pdf, with `--progress`) with /out.pdf capped at `limit`, reporting qpdf's
+ * write progress (never backwards, never repeated). Throws `OutputLimit` when the capped file refused a write,
+ * when qpdf said no space was left, or when the finished file is past the limit. When the call finished, removes
+ * /in.pdf before returning, so the caller can read /out.pdf without holding the input twice. Gives the call's
+ * result; the caller decides what an unfinished exit means. What qpdf printed is never passed on.
+ */
+export function cappedWrite(
+  qpdf: Qpdf,
+  limit: number,
+  call: (qpdf: Qpdf) => ReturnType<Qpdf['call']>,
+  onWriting?: (percent: number) => void,
+): ReturnType<Qpdf['call']> {
+  const capped = qpdf.capFile('/out.pdf', limit);
+  let last = -1;
+  qpdf.onLine = (line) => {
+    const percent = writePercent(line);
+    if (percent === undefined || percent <= last) return;
+    last = percent;
+    onWriting?.(percent);
+  };
+  let written: ReturnType<Qpdf['call']>;
+  try {
+    written = call(qpdf);
+  } finally {
+    qpdf.onLine = null;
+  }
+  // qpdf can finish with exit 0 and a cut-off file when a write is refused while it writes object streams,
+  // so the capped file's own record is asked first.
+  if (qpdf.refused('/out.pdf') || (capped && /no space left/i.test(written.printed))) throw new OutputLimit();
+  if (!finished(written.code)) return written;
+  if (qpdf.size('/out.pdf') > limit) throw new OutputLimit();
+  qpdf.remove('/in.pdf');
+  return written;
+}
+
+/**
  * Makes a fresh qpdf. `load` brings in the Emscripten factory (late, so the
  * script is fetched only when needed); `wasm` is the address or path of
  * `qpdf.wasm`.

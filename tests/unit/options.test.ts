@@ -1,32 +1,73 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import type { TextOption, ToolOption } from '../../src/tools/registry';
+import { tools, type DrawingOption, type NewPasswordOption, type PictureOption, type TextOption, type ToolOption } from '../../src/tools/registry';
 import {
+  acceptedDrawing,
+  acceptedPassword,
   acceptedText,
   acceptedValue,
   characterRules,
   cleanText,
+  DrawingRefused,
+  drawingRule,
+  optionDrawings,
+  optionPasswords,
   optionTexts,
   optionValues,
+  passwordCharacters,
+  passwordProblem,
+  PasswordRefused,
+  passwordRule,
   TextRefused,
   textProblem,
   textRule,
+  type Drawing,
+  type DrawingTable,
+  type PasswordRule,
+  type PasswordTable,
+  type PictureTable,
   type TextRule,
 } from '../../src/widget/option-values';
 import {
+  chosenPicture,
   chosenValue,
+  drawnLines,
   enterAction,
+  firstPasswordAccepted,
   focusMovesToOptions,
+  holdErrorId,
+  holdsUnderButton,
   jobOptions,
+  largePictureAdvice,
   optionsHold,
+  pictureLine,
+  pictureNotice,
+  picturePicked,
+  pictureReadingSentence,
+  pictureRereads,
+  pictureSentence,
+  picturesToReread,
+  picturesToSend,
+  rereadPicture,
   optionsShown,
+  optionShown,
   optionsToSend,
+  pairProblem,
+  passwordAdvice,
+  passwordSentence,
   readyKey,
+  shownOptions,
   ruleAdvice,
   textSentence,
+  typedPasswords,
   typedText,
+  type HoldIds,
+  type NewPasswords,
+  type OptionHold,
 } from '../../src/widget/options';
-import { initialState, reducer, type Action, type State } from '../../src/widget/state';
+import { initialState, reducer, type Action, type PictureEntry, type State } from '../../src/widget/state';
 import { ToolClient, type WorkerLike } from '../../src/workers/client';
 import type { ToWorker } from '../../src/workers/messages';
 
@@ -114,8 +155,14 @@ describe('a test entry with a choice', () => {
 describe('the accepted values of an option', () => {
   const values = { 'test-options': { position: ['bottom-centre', 'bottom-right', 'top-right'] } };
 
-  it("lists Add page numbers' six places, and no other tool", () => {
-    expect(optionValues).toEqual({ 'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] } });
+  it("lists Add page numbers' six places and Sign PDF's three choices, and no other tool", () => {
+    const six = ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'];
+    expect(optionValues).toEqual({
+      'add-page-numbers': { position: six },
+      'sign-pdf': { source: ['type', 'draw', 'picture'], page: ['last', 'first', 'every'], position: six },
+    });
+    expect(acceptedValue('sign-pdf', 'source', 'draw')).toBe('draw');
+    expect(acceptedValue('sign-pdf', 'source', 'Draw it')).toBeUndefined();
     expect(acceptedValue('add-page-numbers', 'position', 'top-left')).toBe('top-left');
     expect(acceptedValue('add-page-numbers', 'position', 'Top left')).toBeUndefined();
     expect(acceptedValue('test-options', 'position', 'top-right')).toBeUndefined();
@@ -295,8 +342,10 @@ describe('what is wrong with a text', () => {
 });
 
 describe('a tool\'s own rule for a text, and what its engine takes', () => {
-  it('lists Watermark only, 50 characters of the standard fonts', () => {
-    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } } });
+  it("lists Watermark's text and Sign PDF's name, each 50 characters of the standard fonts", () => {
+    expect(optionTexts).toEqual({ 'watermark-pdf': { text: { maxLength: 50, characters: 'standard-font' } }, 'sign-pdf': { name: { maxLength: 50, characters: 'standard-font' } } });
+    expect(acceptedText('sign-pdf', 'name', ' Łukasz ')).toBeUndefined();
+    expect(acceptedText('sign-pdf', 'name', ' Zoë Ångström-Núñez ')).toBe('Zoë Ångström-Núñez');
     expect(textRule('watermark-pdf', 'text')).toEqual({ maxLength: 50, characters: 'standard-font' });
     expect(acceptedText('watermark-pdf', 'text', '  Draft ')).toBe('Draft');
     expect(textRule('test-text', 'text')).toBeUndefined();
@@ -390,18 +439,36 @@ describe('a text in the widget', () => {
     expect(textSentence(watermark, rule, { kind: 'empty' })).toBe('Type the watermark text first.');
   });
 
+  it("says the tool's charactersAdvice after every refused-characters sentence, named or not, and never after another problem", () => {
+    const name = tools.find((tool) => tool.id === 'sign-pdf')!.widget!.options!.find((option): option is TextOption => option.kind === 'text')!;
+    const advice = 'To use other letters, choose “Draw it” or “Use a picture of it” above.';
+    expect(name.charactersAdvice).toBe(advice);
+    expect(textSentence(name, rule, { kind: 'characters', refused: ['स', 'ी', 'त', 'ा'] })).toBe(`Some characters cannot be used. ${advice}`);
+    expect(textSentence(name, rule, { kind: 'characters', refused: ['Ł'] })).toBe(`Ł cannot be used. ${advice}`);
+    const problem = textProblem('Łukasz', rule)!;
+    expect(textSentence(name, rule, problem)).toBe(`Ł cannot be used. ${advice}`);
+    expect(textSentence(name, rule, textProblem('सीता', rule)!)).toBe(`Some characters cannot be used. ${advice}`);
+    expect(textSentence(name, rule, { kind: 'too-long', length: 63 })).toBe('This text has 63 characters. Use 50 or fewer.');
+    expect(textSentence(name, rule, { kind: 'empty' })).toBe('Type your name first.');
+    // Watermark gives none, so its sentences are unchanged.
+    const published = tools.find((tool) => tool.id === 'watermark-pdf')!.widget!.options![0] as TextOption;
+    expect(published.charactersAdvice).toBeUndefined();
+    expect(textSentence(published, rule, { kind: 'characters', refused: ['Ł'] })).toBe('Ł cannot be used.');
+    expect(textSentence(published, rule, textProblem('मसौदा', rule)!)).toBe('Some characters cannot be used.');
+  });
+
   it('holds the main button while the first text has a problem, and never for a choice', () => {
-    expect(optionsHold('test-text', [position], {}, table)).toBeNull();
-    expect(optionsHold('test-text', undefined, {}, table)).toBeNull();
-    expect(optionsHold('test-text', [position, watermark], {}, table)).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
-    expect(optionsHold('test-text', [watermark], { text: '   ' }, table)?.kind).toBe('empty');
-    expect(optionsHold('test-text', [watermark], { text: 'Łódź' }, table)).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used.` });
-    expect(optionsHold('test-text', [watermark], { text: 'x'.repeat(63) }, table)).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
-    expect(optionsHold('test-text', [watermark], { text: ' Draft copy ' }, table)).toBeNull();
+    expect(optionsHold('test-text', [position], {}, { texts: table })).toBeNull();
+    expect(optionsHold('test-text', undefined, {}, { texts: table })).toBeNull();
+    expect(optionsHold('test-text', [position, watermark], {}, { texts: table })).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+    expect(optionsHold('test-text', [watermark], { text: '   ' }, { texts: table })?.kind).toBe('empty');
+    expect(optionsHold('test-text', [watermark], { text: 'Łódź' }, { texts: table })).toEqual({ key: 'text', kind: 'characters', sentence: `Ł and ź cannot be used.` });
+    expect(optionsHold('test-text', [watermark], { text: 'x'.repeat(63) }, { texts: table })).toEqual({ key: 'text', kind: 'too-long', sentence: 'This text has 63 characters. Use 50 or fewer.' });
+    expect(optionsHold('test-text', [watermark], { text: ' Draft copy ' }, { texts: table })).toBeNull();
   });
 
   it('holds with the empty sentence for a text with no rule, so a text is never sent unchecked', () => {
-    expect(optionsHold('test-text', [watermark], { text: 'Draft' }, {})).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+    expect(optionsHold('test-text', [watermark], { text: 'Draft' }, { texts: {} })).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
     expect(optionsHold('test-text', [watermark], { text: 'Draft' })).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
   });
 
@@ -427,7 +494,7 @@ describe('a text in the widget', () => {
       { type: 'option-set', key: 'text', value: '  Cafe\u0301 copy ' },
     ].reduce((now, action) => reducer(now, action as Action), initialState);
     expect(state.choices).toEqual({ text: '  Cafe\u0301 copy ' });
-    expect(optionsHold('test-text', [watermark], state.choices, table)).toBeNull();
+    expect(optionsHold('test-text', [watermark], state.choices, { texts: table })).toBeNull();
     const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, [watermark], state.choices), () => {});
     const sent = workers[0]?.sent[0];
     expect(sent?.type).toBe('run');
@@ -450,5 +517,885 @@ describe('Enter in a text field', () => {
 
   it('does nothing when the button waits with no sentence', () => {
     expect(enterAction(false, [null, undefined, ''])).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe("Enter in a new password's first field", () => {
+  const option: NewPasswordOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const table: PasswordTable = { 'test-tool': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } };
+  const accepted = (first: string, again = '') => firstPasswordAccepted('test-tool', option, { passwordTable: table, newPasswords: { newPassword: { first, again } } });
+
+  it('moves on to the second field once the first holds a password its rule takes, even when the button works', () => {
+    expect(accepted('Kv4 #%@ wq9')).toBe(true);
+    expect(accepted('Kv4 #%@ wq9', 'Kv4 #%@ wq9')).toBe(true);
+    expect(enterAction(false, ['Type the password again to check it.'], true)).toEqual({ kind: 'next-field' });
+    expect(enterAction(true, [], true)).toEqual({ kind: 'next-field' });
+  });
+
+  it('gives the answers of a text field otherwise: empty, refused characters, a space at an end, too long, no rule', () => {
+    for (const first of ['', 'café', 'open ', ' open', 'x'.repeat(128)]) expect(accepted(first), first).toBe(false);
+    expect(firstPasswordAccepted('no-such-tool', option, { passwordTable: table, newPasswords: { newPassword: { first: 'open', again: '' } } })).toBe(false);
+    expect(firstPasswordAccepted('test-tool', option, { passwordTable: table })).toBe(false);
+    expect(enterAction(false, ['Type a password first.'], false)).toEqual({ kind: 'say', sentence: 'Type a password first.' });
+    expect(enterAction(false, [null, 'A password cannot start or end with a space.'])).toEqual({ kind: 'say', sentence: 'A password cannot start or end with a space.' });
+  });
+});
+
+describe('options shown for one choice', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'a', label: 'Way a' }, { value: 'b', label: 'Way b' }], initial: 'a' };
+  const forA: TextOption = { ...watermark, key: 'textA', label: 'Text for a', emptySentence: 'Type the text for a first.', when: { key: 'way', value: 'a' } };
+  const forB: TextOption = { ...watermark, key: 'textB', label: 'Text for b', emptySentence: 'Type the text for b first.', when: { key: 'way', value: 'b' } };
+  const size: ToolOption = { kind: 'choice', key: 'size', legend: 'Size', choices: [{ value: 'small', label: 'Small' }, { value: 'large', label: 'Large' }], initial: 'small' };
+  const options: ToolOption[] = [way, forA, forB, size];
+  const texts = { 'test-when': { textA: rule, textB: rule } };
+  const keys = (shown: readonly ToolOption[]) => shown.map((option) => option.key);
+
+  it('shows the choice, the text for its start and the option with no condition, at the start', () => {
+    expect(keys(shownOptions(options, {}))).toEqual(['way', 'textA', 'size']);
+    expect(optionShown(forB, options, {})).toBe(false);
+    expect(optionShown(way, options, {})).toBe(true);
+  });
+
+  it('shows the text for "b" in place of the text for "a" once "b" is chosen, in registry order', () => {
+    expect(keys(shownOptions(options, { way: 'b' }))).toEqual(['way', 'textB', 'size']);
+    expect(keys(shownOptions(options, { way: 'b', textA: 'Kept' }))).toEqual(['way', 'textB', 'size']);
+  });
+
+  it('reads an unknown stored value as the choice\'s start', () => {
+    expect(keys(shownOptions(options, { way: 'c' }))).toEqual(['way', 'textA', 'size']);
+  });
+
+  it('hides an option whose condition names no choice, or names a text', () => {
+    const lost: TextOption = { ...forA, when: { key: 'nothing', value: 'a' } };
+    expect(optionShown(lost, [way, lost], {})).toBe(false);
+    const onText: TextOption = { ...forB, when: { key: 'textA', value: 'a' } };
+    expect(optionShown(onText, [way, forA, onText], { textA: 'a' })).toBe(false);
+    expect(shownOptions(undefined, {})).toEqual([]);
+  });
+
+  it('sends the choice, the text shown and the option with no condition, and no key for the hidden text', () => {
+    expect(optionsToSend(options, { textA: ' Signed ', textB: 'Initials' })).toEqual({ way: 'a', textA: 'Signed', size: 'small' });
+    const sent = optionsToSend(options, { way: 'b', textA: 'Signed', textB: ' Initials ' });
+    expect(sent).toEqual({ way: 'b', textB: 'Initials', size: 'small' });
+    expect(Object.hasOwn(sent, 'textA')).toBe(false);
+  });
+
+  it('is held only by the text shown: never by a hidden empty text', () => {
+    expect(optionsHold('test-when', options, {}, { texts })).toEqual({ key: 'textA', kind: 'empty', sentence: 'Type the text for a first.' });
+    expect(optionsHold('test-when', options, { textA: 'Signed' }, { texts })).toBeNull();
+    expect(optionsHold('test-when', options, { way: 'b', textA: 'Signed' }, { texts })).toEqual({ key: 'textB', kind: 'empty', sentence: 'Type the text for b first.' });
+    expect(optionsHold('test-when', options, { way: 'b', textB: 'Initials' }, { texts })).toBeNull();
+    expect(optionsHold('test-when', options, { way: 'b', textA: 'Łódź', textB: 'Initials' }, { texts })).toBeNull();
+  });
+
+  it('changes nothing for a tool with no conditions: Add page numbers and Watermark', () => {
+    for (const id of ['add-page-numbers', 'watermark-pdf']) {
+      const tool = tools.find((each) => each.id === id);
+      const own = tool?.widget?.options;
+      expect(own, id).toBeDefined();
+      if (own === undefined) continue;
+      expect(own.some((option) => option.when !== undefined), id).toBe(false);
+      expect(shownOptions(own, {}), id).toEqual(own);
+      expect(shownOptions(own, { position: 'top-right', text: 'Draft' }), id).toEqual(own);
+    }
+    expect(optionsToSend([position, watermark], { text: ' Draft ', position: 'top-right' })).toEqual({ position: 'top-right', text: 'Draft' });
+    expect(optionsHold('test-text', [position, watermark], {}, { texts: table })).toEqual({ key: 'text', kind: 'empty', sentence: 'Type the watermark text first.' });
+  });
+
+  it("reaches the real ToolClient's run message with the hidden text's key absent, set through the reducer, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-when', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'option-set', key: 'textA', value: 'Signed' },
+      { type: 'option-set', key: 'way', value: 'b' },
+      { type: 'option-set', key: 'textB', value: ' Initials ' },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    expect(state.choices).toEqual({ textA: 'Signed', way: 'b', textB: ' Initials ' });
+    expect(optionsHold('test-when', options, state.choices, { texts })).toBeNull();
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions({ format: 'pdf' }, {}, options, state.choices), () => {});
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type).toBe('run');
+    const sentOptions = sent?.type === 'run' ? sent.options : undefined;
+    expect(sentOptions).toEqual({ format: 'pdf', way: 'b', textB: 'Initials', size: 'small' });
+    expect(sentOptions !== undefined && Object.hasOwn(sentOptions, 'textA')).toBe(false);
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+});
+
+describe('a drawing: what its engine takes', () => {
+  const table: DrawingTable = { 'test-drawing': { drawing: { maxLines: 3, maxPoints: 6 } } };
+  const take = (value: unknown) => acceptedDrawing('test-drawing', 'drawing', value, table);
+  const good: Drawing = [
+    [0, 0, 1000, 400],
+    [500, 200],
+  ];
+
+  it("has Sign PDF's drawing only, and reads a rule by own keys only", () => {
+    expect(optionDrawings).toEqual({ 'sign-pdf': { drawing: { maxLines: 200, maxPoints: 20000 } } });
+    expect(drawingRule('test-drawing', 'drawing', table)).toEqual({ maxLines: 3, maxPoints: 6 });
+    expect(drawingRule('test-drawing', 'other', table)).toBeUndefined();
+    expect(drawingRule('test-drawing', 'drawing')).toBeUndefined();
+    for (const key of ['__proto__', 'toString', 'constructor']) {
+      expect(drawingRule('test-drawing', key, table)).toBeUndefined();
+      expect(drawingRule(key, 'drawing', table)).toBeUndefined();
+      expect(acceptedDrawing(key, 'drawing', good, table)).toBeUndefined();
+      expect(acceptedDrawing('test-drawing', key, good, table)).toBeUndefined();
+    }
+  });
+
+  it('takes a drawing within the box and the limits, as it was sent', () => {
+    expect(take(good)).toBe(good);
+    expect(take([[0, 0]])).toEqual([[0, 0]]);
+    expect(take([[1000, 400, 0, 0], [1, 1, 2, 2], [3, 3, 4, 4]])).toBeTruthy();
+  });
+
+  it('refuses what is not a list of lines, or no lines', () => {
+    for (const value of [undefined, null, 5, 'lines', {}, { length: 1, 0: [0, 0] }, [], new Set([[0, 0]])]) expect(take(value), String(value)).toBeUndefined();
+  });
+
+  it('refuses a line with an odd count or no points, or a line that is not a plain list', () => {
+    expect(take([[0, 0, 5]])).toBeUndefined();
+    expect(take([[]])).toBeUndefined();
+    expect(take([[0, 0], 7])).toBeUndefined();
+    expect(take([[0, 0], null])).toBeUndefined();
+    expect(take([new Int32Array([0, 0])])).toBeUndefined();
+    expect(take([new Float64Array([0, 0, 1, 1])])).toBeUndefined();
+    expect(take([{ length: 2, 0: 0, 1: 0 }])).toBeUndefined();
+  });
+
+  it('refuses a hole, and any value that is not a whole number: 1.5, NaN, Infinity, "5", null', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    expect(take([[0, , 1, 1]])).toBeUndefined();
+    for (const value of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '5', null, undefined, true, 5n, {}, [5]]) {
+      expect(take([[0, 0, value, 10]]), String(value)).toBeUndefined();
+      expect(take([[0, 0, 10, value]]), String(value)).toBeUndefined();
+    }
+  });
+
+  it('refuses a point outside the box: -1, 1,001 across, 401 down', () => {
+    expect(take([[-1, 0]])).toBeUndefined();
+    expect(take([[0, -1]])).toBeUndefined();
+    expect(take([[1001, 0]])).toBeUndefined();
+    expect(take([[0, 401]])).toBeUndefined();
+    // 401 is fine across, 1,000 is not down.
+    expect(take([[401, 400]])).toBeTruthy();
+    expect(take([[0, 1000]])).toBeUndefined();
+  });
+
+  it('refuses one line too many, or one point too many in all', () => {
+    expect(take([[0, 0], [1, 1], [2, 2], [3, 3]])).toBeUndefined();
+    expect(take([[0, 0, 1, 1, 2, 2, 3, 3], [4, 4, 5, 5, 6, 6]])).toBeUndefined();
+    expect(take([[0, 0, 1, 1, 2, 2, 3, 3], [4, 4, 5, 5]])).toBeTruthy();
+  });
+
+  it('refuses too many lines or points before it reads any point', () => {
+    let read = 0;
+    const counted = (length: number) =>
+      new Proxy(Array.from({ length }, () => 0), {
+        get(target, key, receiver) {
+          if (typeof key === 'string' && /^\d+$/.test(key)) read += 1;
+          return Reflect.get(target, key, receiver);
+        },
+      });
+    expect(take([counted(2), counted(2), counted(2), counted(2)])).toBeUndefined();
+    expect(take([counted(8), counted(6)])).toBeUndefined();
+    expect(read).toBe(0);
+    // A huge line is refused on its length alone.
+    expect(take([counted(1_000_000)])).toBeUndefined();
+    expect(read).toBe(0);
+  });
+
+  it('is refused with DrawingRefused, whose message never holds the drawing', () => {
+    const refused = new DrawingRefused();
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused.name).toBe('DrawingRefused');
+    expect(refused.message).toBe('The drawing was refused.');
+    expect(String(refused)).toBe('DrawingRefused: The drawing was refused.');
+  });
+});
+
+describe('a drawing in the widget', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'type', label: 'Type it' }], initial: 'draw' };
+  const drawing: DrawingOption = {
+    kind: 'drawing',
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+    when: { key: 'way', value: 'draw' },
+  };
+  const table: DrawingTable = { 'test-drawing': { drawing: { maxLines: 50, maxPoints: 5000 } } };
+  const lines: Drawing = [[10, 20, 30, 40], [500, 200]];
+
+  it('shows its lines, or none; a string under its key is never taken for a drawing', () => {
+    expect(drawnLines(drawing, {})).toEqual([]);
+    expect(drawnLines(drawing, { drawing: lines })).toBe(lines);
+    expect(drawnLines(drawing, { drawing: 'lines' })).toEqual([]);
+    expect(drawnLines({ ...drawing, key: 'toString' }, {})).toEqual([]);
+    // Nor is a drawing taken for a choice's value or a text.
+    expect(chosenValue(way as Extract<ToolOption, { kind: 'choice' }>, { way: lines })).toBe('draw');
+    expect(typedText(watermark, { text: lines })).toBe('');
+  });
+
+  it('is sent as its lines while shown, and not at all while hidden', () => {
+    expect(optionsToSend([way, drawing], { drawing: lines })).toEqual({ way: 'draw', drawing: lines });
+    expect(optionsToSend([way, drawing], {})).toEqual({ way: 'draw', drawing: [] });
+    expect(optionsToSend([way, drawing], { way: 'type', drawing: lines })).toEqual({ way: 'type' });
+    expect(jobOptions({ format: 'jpg' }, {}, [way, drawing], { drawing: lines })).toEqual({ format: 'jpg', way: 'draw', drawing: lines });
+  });
+
+  it('holds the main button while shown and empty, with its sentence; not while hidden or drawn', () => {
+    const empty = { key: 'drawing', kind: 'empty', sentence: 'Draw your signature first.' };
+    expect(optionsHold('test-drawing', [way, drawing], {}, { texts: {}, drawings: table })).toEqual(empty);
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: [] }, { texts: {}, drawings: table })).toEqual(empty);
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines }, { texts: {}, drawings: table })).toBeNull();
+    expect(optionsHold('test-drawing', [way, drawing], { way: 'type' }, { texts: {}, drawings: table })).toBeNull();
+  });
+
+  it('holds with the empty sentence for a drawing with no rule, so a drawing is never sent unchecked', () => {
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines }, { texts: {}, drawings: {} })?.sentence).toBe('Draw your signature first.');
+    expect(optionsHold('test-drawing', [way, drawing], { drawing: lines })?.sentence).toBe('Draw your signature first.');
+  });
+
+  it('holds for the first in registry order, a text before a drawing or a drawing before a text', () => {
+    const texts = { 'test-drawing': { text: rule } };
+    expect(optionsHold('test-drawing', [way, watermark, drawing], {}, { texts, drawings: table })?.key).toBe('text');
+    expect(optionsHold('test-drawing', [way, drawing, watermark], {}, { texts, drawings: table })?.key).toBe('drawing');
+    expect(optionsHold('test-drawing', [way, drawing, watermark], { drawing: lines }, { texts, drawings: table })?.key).toBe('text');
+  });
+
+  it("reaches the real ToolClient's run message unchanged, set through the reducer, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-drawing', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'drawing-set', key: 'drawing', drawing: lines },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    expect(state.choices).toEqual({ drawing: lines });
+    expect(optionsHold('test-drawing', [way, drawing], state.choices, { texts: {}, drawings: table })).toBeNull();
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, [way, drawing], state.choices), () => {});
+    const sent = workers[0]?.sent[0];
+    expect(sent?.type).toBe('run');
+    expect(sent?.type === 'run' && sent.options).toEqual({ way: 'draw', drawing: [[10, 20, 30, 40], [500, 200]] });
+    // What the engine reads from it is the same drawing.
+    expect(sent?.type === 'run' && acceptedDrawing('test-drawing', 'drawing', sent.options.drawing, table)).toEqual(lines);
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+});
+
+describe('a picture in the widget', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const picture: PictureOption = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const shownByWay: PictureOption = { ...picture, when: { key: 'way', value: 'picture' } };
+  const table: PictureTable = { 'test-picture': { picture: { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 } } };
+  const rule = table['test-picture']?.picture;
+  const entry = (status: PictureEntry['status'], more: Partial<PictureEntry> = {}): PictureEntry => ({ name: 'signature.png', size: 120 * 1024, status, ...more });
+  const ready = entry('ready', { pixels: 300_000 });
+  const hold = (pictures: Record<string, PictureEntry>, options: ToolOption[] = [picture], choices = {}) =>
+    optionsHold('test-picture', options, choices, { pictures, pictureTable: table });
+
+  it('names each problem in one sentence, saying no picture is chosen when one was turned away', () => {
+    expect(pictureSentence(picture, entry('refused', { name: 'notes.png' }))).toBe('notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.');
+    expect(pictureSentence(picture, entry('damaged', { name: 'broken.png' }))).toBe('broken.png is damaged and cannot be read. Choose another picture.');
+    expect(pictureSentence(picture, entry('unsupported', { name: 'arithmetic.jpg' }))).toBe(
+      'arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.',
+    );
+    expect(pictureSentence(picture, entry('reading'))).toBeNull();
+    expect(pictureSentence(picture, ready)).toBeNull();
+  });
+
+  it('names a chosen picture with its size once read, says it is getting ready while read, and has no line for a problem', () => {
+    expect(pictureLine(ready)).toBe('signature.png, 120 KB.');
+    expect(pictureLine(entry('reading'))).toBe('signature.png, Getting ready.');
+    for (const status of ['refused', 'damaged', 'unsupported'] as const) expect(pictureLine(entry(status))).toBeNull();
+    expect(pictureLine(undefined)).toBeNull();
+  });
+
+  it('words the button for a second pick once a picture is chosen or tried, but not after a wrong pick, which leaves none', () => {
+    expect(picturePicked(undefined)).toBe(false);
+    expect(picturePicked(entry('refused'))).toBe(false);
+    for (const status of ['reading', 'ready', 'damaged', 'unsupported'] as const) expect(picturePicked(entry(status)), status).toBe(true);
+  });
+
+  it('gives a notice only for a ready picture over either notice size, naming its size and pixels', () => {
+    expect(pictureNotice(picture, ready, rule)).toBeNull();
+    expect(pictureNotice(picture, entry('ready', { size: 8 * 1_048_576, pixels: 16_000_000 }), rule)).toBeNull();
+    const photo = entry('ready', { name: 'photo.jpg', size: Math.round(12.4 * 1_048_576), pixels: 24_000_000 });
+    expect(pictureNotice(picture, photo, rule)).toEqual({
+      heading: 'photo.jpg is 12.4 MB, with 24 million pixels.',
+      advice: 'A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.',
+    });
+    expect(largePictureAdvice).toContain('You can still go ahead.');
+    // Over the bytes alone, or the pixels alone.
+    expect(pictureNotice(picture, entry('ready', { name: 'big.png', size: 9 * 1_048_576, pixels: 400_000 }), rule)?.heading).toBe('big.png is 9.0 MB, with 400,000 pixels.');
+    expect(pictureNotice(picture, entry('ready', { name: 'wide.png', size: 2 * 1_048_576, pixels: 16_500_000 }), rule)?.heading).toBe('wide.png is 2.0 MB, with 16.5 million pixels.');
+    // The tool's own words.
+    expect(pictureNotice({ largeAdvice: 'Save a smaller copy. You can still go ahead.' }, photo, rule)?.advice).toBe('Save a smaller copy. You can still go ahead.');
+    // Not while read, for a problem, or with no rule.
+    expect(pictureNotice(picture, entry('reading', { size: 50 * 1_048_576 }), rule)).toBeNull();
+    expect(pictureNotice(picture, entry('damaged', { size: 50 * 1_048_576 }), rule)).toBeNull();
+    expect(pictureNotice(picture, photo, undefined)).toBeNull();
+  });
+
+  it('holds the main button until a picture is chosen and read, under the button, and by the field for a problem', () => {
+    expect(hold({})).toEqual({ key: 'picture', kind: 'empty', sentence: 'Choose a picture of your signature first.' });
+    expect(hold({ picture: entry('reading') })).toEqual({ key: 'picture', kind: 'reading', sentence: pictureReadingSentence });
+    expect(hold({ picture: entry('refused', { name: 'notes.png' }) })).toEqual({
+      key: 'picture',
+      kind: 'refused',
+      sentence: 'notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.',
+    });
+    expect(hold({ picture: entry('damaged') })?.kind).toBe('damaged');
+    expect(hold({ picture: entry('unsupported') })?.kind).toBe('unsupported');
+    expect(hold({ picture: ready })).toBeNull();
+    // A ready picture never holds, however large.
+    expect(hold({ picture: entry('ready', { size: 40 * 1_048_576, pixels: 256_000_000 }) })).toBeNull();
+    expect(holdsUnderButton({ kind: 'empty' })).toBe(true);
+    expect(holdsUnderButton({ kind: 'reading' })).toBe(true);
+    for (const kind of ['refused', 'damaged', 'unsupported', 'characters', 'too-long'] as const) expect(holdsUnderButton({ kind })).toBe(false);
+  });
+
+  it('holds nothing while hidden, and holds with the empty sentence with no rule', () => {
+    expect(hold({}, [way, shownByWay])).toBeNull();
+    expect(hold({}, [way, shownByWay], { way: 'picture' })?.kind).toBe('empty');
+    expect(optionsHold('test-picture', [picture], {}, { pictures: { picture: ready }, pictureTable: {} })).toEqual({ key: 'picture', kind: 'empty', sentence: picture.emptySentence });
+    // The real table has no picture yet.
+    expect(optionsHold('test-picture', [picture], {}, { pictures: { picture: ready } })?.kind).toBe('empty');
+  });
+
+  it('keeps working for callers that pass no pictures: a tool with none holds as before', () => {
+    expect(optionsHold('test-picture', [way], {})).toBeNull();
+    expect(optionsHold('test-picture', [picture], {})?.kind).toBe('empty');
+  });
+
+  it('sends no picture in the options', () => {
+    expect(optionsToSend([way, picture], { way: 'picture' })).toEqual({ way: 'picture' });
+    expect(jobOptions(undefined, {}, [picture], {})).toEqual({});
+  });
+
+  it('sends beside the files only each shown, ready picture held for its key', () => {
+    const file = new Blob(['x']);
+    const held = new Map([['picture', file]]);
+    expect(picturesToSend([picture], {}, { picture: ready }, held)).toEqual({ picture: file });
+    expect(picturesToSend([picture], {}, { picture: entry('reading') }, held)).toEqual({});
+    expect(picturesToSend([picture], {}, { picture: entry('damaged') }, held)).toEqual({});
+    expect(picturesToSend([picture], {}, {}, held)).toEqual({});
+    expect(picturesToSend([picture], {}, { picture: ready }, new Map())).toEqual({});
+    expect(picturesToSend([way, shownByWay], {}, { picture: ready }, held)).toEqual({});
+    expect(picturesToSend([way, shownByWay], { way: 'picture' }, { picture: ready }, held)).toEqual({ picture: file });
+    expect(picturesToSend(undefined, {}, { picture: ready }, held)).toEqual({});
+  });
+
+  it('reads a cut-short picture again while it is still held and being read, up to twice, then calls it damaged', () => {
+    expect(pictureRereads).toBe(2);
+    expect(rereadPicture(entry('reading'), true, 0, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 1, true)).toBe('read-again');
+    expect(rereadPicture(entry('reading'), true, 2, true)).toBe('damaged');
+    expect(rereadPicture(entry('reading'), false, 0, true)).toBe('nothing');
+    expect(rereadPicture(ready, true, 0, true)).toBe('nothing');
+    expect(rereadPicture(undefined, true, 0, true)).toBe('nothing');
+  });
+
+  it('never reads a picture again once the files are no longer listed: the job, its result or a failure', () => {
+    // The job's own end cancels a read of a hidden picture still being read; reading it again would start a worker.
+    for (const tries of [0, 1, 2]) expect(rereadPicture(entry('reading'), true, tries, false)).toBe('nothing');
+  });
+
+  it('never reads a replaced file again, and the newer pick counts its own tries from 0', () => {
+    // The old read is cancelled when the worker is ended for the new pick: the old file is no longer held.
+    const newer = entry('reading', { name: 'second.png' });
+    expect(rereadPicture(newer, false, 0, true)).toBe('nothing');
+    expect(rereadPicture(newer, true, 0, true)).toBe('read-again');
+  });
+
+  it('lists every picture still being read, for "Go back to your file"', () => {
+    expect(picturesToReread({ pictures: { a: entry('reading'), b: ready, c: entry('reading'), d: entry('damaged') } })).toEqual(['a', 'c']);
+    expect(picturesToReread({ pictures: {} })).toEqual([]);
+  });
+
+  it('never takes an inherited name for a chosen picture', () => {
+    expect(chosenPicture({ key: 'toString' }, {})).toBeUndefined();
+    expect(chosenPicture({ key: '__proto__' }, {})).toBeUndefined();
+  });
+
+  it("reaches the real ToolClient's run message when ready and shown, and not when hidden, with a fake worker", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const options: ToolOption[] = [way, shownByWay];
+    const file = new File(['\x89PNG'], 'signature.png');
+    const held = new Map([['picture', file]]);
+    const play = (...actions: Action[]) => actions.reduce(reducer, initialState);
+    const listed = play(
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+      { type: 'option-set', key: 'way', value: 'picture' },
+      { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5, status: 'reading' },
+      { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 100 } },
+    );
+    for (const [choices, wanted] of [
+      [listed.choices, { picture: file }],
+      [{ way: 'type' }, undefined],
+    ] as const) {
+      const workers: FakeWorker[] = [];
+      const client = new ToolClient('test-picture', () => {
+        const worker = new FakeWorker();
+        workers.push(worker);
+        return worker;
+      });
+      const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, options, choices), () => {}, undefined, picturesToSend(options, choices, listed.pictures, held));
+      const sent = workers[0]?.sent[0];
+      expect(sent?.type).toBe('run');
+      expect(sent?.type === 'run' && sent.pictures).toEqual(wanted);
+      expect(sent?.type === 'run' && sent.options).not.toHaveProperty('picture');
+      client.end();
+      await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
+    }
+  });
+});
+
+describe('the picture field and the picking code, by their source', () => {
+  const source = (path: string) => readFileSync(join(__dirname, '../..', path), 'utf8');
+  const hook = source('src/hooks/useToolRun.ts');
+  const from = hook.indexOf('const readChosenPicture = useCallback(');
+  const to = hook.indexOf('[endReplacedRead, readChosenPicture, toolId],');
+  const picking = hook.slice(from, to);
+  const field = source('src/components/PictureField/PictureField.tsx');
+
+  it('finds the picking code', () => {
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    expect(picking).toContain('const pickPicture = useCallback(');
+    expect(picking).toContain('const endReplacedRead = useCallback(');
+  });
+
+  it('never makes an address for a picture or writes one to storage', () => {
+    for (const [name, code] of [['PictureField', field], ['picking code', picking]] as const) {
+      for (const banned of ['createObjectURL', 'localStorage', 'sessionStorage', 'indexedDB', 'document.cookie', 'history.', 'location.', 'console.', '<img', 'FileReader']) {
+        expect(code.includes(banned), `${name}: ${banned}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('Cancel with a hidden picture still being read', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const play = (...actions: Action[]) => actions.reduce(reducer, initialState);
+  const working = play(
+    { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+    { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+    { type: 'option-set', key: 'way', value: 'picture' },
+    { type: 'picture-chosen', key: 'picture', name: 'signature.png', size: 5, status: 'reading' },
+    // The picture is hidden by the choice while it is read, so the main button works, and the job starts.
+    { type: 'option-set', key: 'way', value: 'type' },
+    { type: 'started' },
+  );
+
+  it("is listed for reading again when Cancel is pressed, since its own cancelled read comes while the job's step still holds", () => {
+    expect(way.key).toBe('way');
+    expect(working.step).toBe('working');
+    // Its read is cancelled by Cancel ending the worker before the page lists the file again, so it is not read again there.
+    expect(rereadPicture(working.pictures.picture, true, 0, working.step === 'listing')).toBe('nothing');
+    // So Cancel takes the pictures still being read before it ends the worker, and reads each again.
+    expect(picturesToReread(working)).toEqual(['picture']);
+    const cancelled = reducer(working, { type: 'back-to-files' });
+    expect(cancelled.step).toBe('listing');
+    expect(cancelled.pictures.picture?.status).toBe('reading');
+    // Read again, its answer is taken.
+    expect(reducer(cancelled, { type: 'picture-read', key: 'picture', outcome: { kind: 'ready', pixels: 9 } }).pictures.picture?.status).toBe('ready');
+  });
+
+  it('is read again by cancel, as by "Go back to your file", in the hook source', () => {
+    const hook = readFileSync(join(__dirname, '../../src/hooks/useToolRun.ts'), 'utf8');
+    const cancel = hook.slice(hook.indexOf('const cancel = useCallback('), hook.indexOf('[rereadPictures]);'));
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeGreaterThan(-1);
+    expect(cancel.indexOf('picturesToReread(stateRef.current)')).toBeLessThan(cancel.indexOf('client.current?.end()'));
+    expect(cancel).toContain('void rereadPictures(unreadPictures);');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New passwords: typed twice, held by useToolRun, never in the state.
+
+const printable = Array.from({ length: 95 }, (_, index) => String.fromCharCode(0x20 + index)).join('');
+
+describe('what a new password takes', () => {
+  const rule: PasswordRule = { maxLength: 127, characters: 'printable-ascii' };
+
+  it('is one range of code points, printable ASCII, written once', () => {
+    expect(passwordCharacters['printable-ascii']).toEqual({ from: 0x20, to: 0x7e });
+    // Protect is the one tool with a new password.
+    expect(optionPasswords).toEqual({ 'protect-pdf': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } });
+  });
+
+  it('takes a password of one character up to the limit, and every printable ASCII character with spaces inside', () => {
+    expect(passwordProblem('a', rule)).toBeNull();
+    expect(passwordProblem('x'.repeat(127), rule)).toBeNull();
+    // Every printable character, the space moved inside.
+    const every = `${printable.slice(1)} ${printable.slice(1, 10)}`;
+    expect(passwordProblem(every.slice(0, 127), rule)).toBeNull();
+    expect(passwordProblem('open  Sesame-9', rule)).toBeNull();
+    expect(passwordProblem('--help', rule)).toBeNull();
+    expect(passwordProblem('@in.pdf', rule)).toBeNull();
+  });
+
+  it('refuses an empty password, a space first or last, and one over the limit', () => {
+    expect(passwordProblem('', rule)).toEqual({ kind: 'empty' });
+    expect(passwordProblem(' a', rule)).toEqual({ kind: 'edge-space' });
+    expect(passwordProblem('a ', rule)).toEqual({ kind: 'edge-space' });
+    expect(passwordProblem(' ', rule)).toEqual({ kind: 'edge-space' });
+    expect(passwordProblem('x'.repeat(128), rule)).toEqual({ kind: 'too-long' });
+    expect(passwordProblem('x'.repeat(8), { ...rule, maxLength: 7 })).toEqual({ kind: 'too-long' });
+  });
+
+  it('refuses characters outside printable ASCII, whatever script or kind', () => {
+    const refused = ['café', 'पासवर्ड', 'مرور', '密码', '£', '€', 'pass🙂', 'a\tb', 'a\nb', 'a b', 'a‮b', 'a­b', '\u007f', '\u0000'];
+    for (const password of refused) expect(passwordProblem(password, rule), JSON.stringify(password)).toEqual({ kind: 'characters' });
+  });
+
+  it('reports characters before a space at an end, and before length', () => {
+    expect(passwordProblem(` café `, rule)).toEqual({ kind: 'characters' });
+    expect(passwordProblem('é'.repeat(200), rule)).toEqual({ kind: 'characters' });
+    expect(passwordProblem(` ${'x'.repeat(200)}`, rule)).toEqual({ kind: 'edge-space' });
+  });
+
+  it('never trims, composes or cuts: an "e" with a separate accent is refused, not composed', () => {
+    expect(passwordProblem('café', rule)).toEqual({ kind: 'characters' });
+    expect(passwordProblem('café'.normalize('NFD'), rule)).toEqual({ kind: 'characters' });
+  });
+
+  it('refuses everything under a rule it does not know', () => {
+    expect(passwordProblem('abc', { maxLength: 10, characters: 'toString' as PasswordRule['characters'] })).toEqual({ kind: 'characters' });
+  });
+});
+
+describe("an engine's check of a new password", () => {
+  const table: PasswordTable = { 'test-password': { newPassword: { maxLength: 20, characters: 'printable-ascii' } } };
+
+  it('reads only own keys', () => {
+    expect(passwordRule('test-password', 'newPassword', table)).toEqual({ maxLength: 20, characters: 'printable-ascii' });
+    expect(passwordRule('test-password', 'toString', table)).toBeUndefined();
+    expect(passwordRule('__proto__', 'newPassword', table)).toBeUndefined();
+    expect(passwordRule('test-password', 'newPassword')).toBeUndefined();
+  });
+
+  it('gives back the very string it was sent when the rule takes it', () => {
+    const sent = 'open  Sesame-9';
+    expect(acceptedPassword('test-password', 'newPassword', sent, table)).toBe(sent);
+  });
+
+  it('refuses anything else, before any file is read', () => {
+    const refused: unknown[] = [undefined, null, 7, ['a'], { toString: () => 'a' }, '', ' open', 'open ', 'x'.repeat(21), 'café', 'a\tb'];
+    for (const value of refused) expect(acceptedPassword('test-password', 'newPassword', value, table), String(value)).toBeUndefined();
+    expect(acceptedPassword('test-password', '__proto__', 'open', table)).toBeUndefined();
+    expect(acceptedPassword('test-password', 'toString', 'open', table)).toBeUndefined();
+    expect(acceptedPassword('toString', 'newPassword', 'open', table)).toBeUndefined();
+    // The real table has no tool yet.
+    expect(acceptedPassword('test-password', 'newPassword', 'open')).toBeUndefined();
+  });
+
+  it('throws an error known by its name, whose message holds nothing of the password', () => {
+    const refused = new PasswordRefused();
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused.name).toBe('PasswordRefused');
+    expect(refused.message).toBe('The password was refused.');
+    expect(String(refused)).toBe('PasswordRefused: The password was refused.');
+  });
+});
+
+describe('the two fields of a new password', () => {
+  it('compare the second with the first', () => {
+    expect(pairProblem('open', 'open')).toBeNull();
+    expect(pairProblem('open', '')).toBe('again-empty');
+    expect(pairProblem('open', 'op')).toBe('again-partial');
+    expect(pairProblem('open', 'opex')).toBe('mismatch');
+    expect(pairProblem('open', 'xp')).toBe('mismatch');
+    expect(pairProblem('open', 'opens')).toBe('mismatch');
+    expect(pairProblem('open', 'Open')).toBe('mismatch');
+  });
+
+  it('read what useToolRun holds by own key only, both empty when nothing is', () => {
+    expect(typedPasswords({ key: 'newPassword' }, { newPassword: { first: 'a', again: 'b' } })).toEqual({ first: 'a', again: 'b' });
+    expect(typedPasswords({ key: 'newPassword' }, {})).toEqual({ first: '', again: '' });
+    expect(typedPasswords({ key: 'newPassword' }, undefined)).toEqual({ first: '', again: '' });
+    expect(typedPasswords({ key: 'toString' }, {})).toEqual({ first: '', again: '' });
+  });
+});
+
+describe('a test entry with a new password', () => {
+  const password: NewPasswordOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: `Up to 127 characters. ${passwordAdvice['printable-ascii']}`,
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'lock', label: 'Lock it' }, { value: 'keep', label: 'Keep it' }], initial: 'lock' };
+  const shownByWay: NewPasswordOption = { ...password, when: { key: 'way', value: 'lock' } };
+  const passwordTable: PasswordTable = { 'test-password': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } };
+  const typed = (first: string, again = ''): NewPasswords => ({ newPassword: { first, again } });
+  const hold = (first: string, again = '', more: { typing?: ReadonlySet<string>; options?: ToolOption[]; choices?: Record<string, string> } = {}) =>
+    optionsHold('test-password', more.options ?? [password], more.choices ?? {}, { newPasswords: typed(first, again), passwordTable, typing: more.typing });
+  const typing = new Set(['newPassword']);
+  const sentences = {
+    characters: 'Some characters cannot be used. Use only the characters listed under the box.',
+    edge: 'A password cannot start or end with a space.',
+    long: 'This password is too long. Use 127 characters or fewer.',
+    mismatch: 'The two passwords are not the same. Type the password again in this box.',
+  };
+
+  it('holds the main button until both fields hold the same password', () => {
+    expect(hold('')).toEqual({ key: 'newPassword', kind: 'empty', sentence: 'Type a password first.', field: 'first' });
+    expect(hold('open  Sesame-9')).toEqual({ key: 'newPassword', kind: 'again-empty', sentence: 'Type the password again to check it.', field: 'again' });
+    expect(hold('open  Sesame-9', 'open  Ses')).toEqual({ key: 'newPassword', kind: 'again-partial', sentence: 'Type the password again to check it.', field: 'again' });
+    expect(hold('open  Sesame-9', 'open  Sesame-8')).toEqual({ key: 'newPassword', kind: 'mismatch', sentence: sentences.mismatch, field: 'again' });
+    expect(hold('open  Sesame-9', 'open  Sesame-99')?.kind).toBe('mismatch');
+    expect(hold('open  Sesame-9', 'open  Sesame-9')).toBeNull();
+  });
+
+  it("says the first field's problem before any problem of the pair", () => {
+    expect(hold('café', 'something else')).toEqual({ key: 'newPassword', kind: 'characters', sentence: sentences.characters, field: 'first' });
+    expect(hold(' open', 'x')).toEqual({ key: 'newPassword', kind: 'edge-space', sentence: sentences.edge, field: 'first' });
+    expect(hold('x'.repeat(130), 'x'.repeat(130))).toEqual({ key: 'newPassword', kind: 'too-long', sentence: sentences.long, field: 'first' });
+    expect(hold('', 'open')?.kind).toBe('empty');
+  });
+
+  it('holds quietly, under the main button, for a space at the end of a first field still being typed', () => {
+    expect(hold('open ', '', { typing })).toEqual({ key: 'newPassword', kind: 'edge-space-quiet', sentence: 'Type the password again to check it.', field: 'first' });
+    expect(hold('open ', 'open ', { typing })?.kind).toBe('edge-space-quiet');
+    // Out of `typing`: shown by the field.
+    expect(hold('open ')).toEqual({ key: 'newPassword', kind: 'edge-space', sentence: sentences.edge, field: 'first' });
+    // A space at the start is shown at once, typed or not.
+    expect(hold(' open', '', { typing })?.kind).toBe('edge-space');
+    expect(hold(' open ', '', { typing })?.kind).toBe('edge-space');
+    // Another key being typed does not quiet this one.
+    expect(hold('open ', '', { typing: new Set(['other']) })?.kind).toBe('edge-space');
+  });
+
+  it('never shows a field sentence while "open sesame" is typed one key at a time', () => {
+    const target = 'open sesame';
+    for (let length = 1; length <= target.length; length += 1) {
+      const now = hold(target.slice(0, length), '', { typing });
+      expect(now, target.slice(0, length)).not.toBeNull();
+      expect(holdsUnderButton(now!), target.slice(0, length)).toBe(true);
+    }
+    // Then the second field, one key at a time.
+    for (let length = 1; length < target.length; length += 1) {
+      const now = hold(target, target.slice(0, length), { typing });
+      expect(now?.kind).toBe('again-partial');
+      expect(holdsUnderButton(now!)).toBe(true);
+    }
+    expect(hold(target, target, { typing })).toBeNull();
+  });
+
+  it('is never held or sent while hidden, and keeps what it holds for when it is shown again', () => {
+    const options = [way, shownByWay];
+    expect(hold('', '', { options, choices: { way: 'keep' } })).toBeNull();
+    expect(hold('open', 'open', { options, choices: { way: 'keep' } })).toBeNull();
+    expect(hold('', '', { options })?.kind).toBe('empty');
+    expect(optionsToSend(options, { way: 'keep' }, { newPasswords: typed('open', 'open') })).toEqual({ way: 'keep' });
+    expect(optionsToSend(options, { way: 'lock' }, { newPasswords: typed('open', 'open') })).toEqual({ way: 'lock', newPassword: 'open' });
+  });
+
+  it('always holds, with its empty sentence, with no line in the table', () => {
+    expect(optionsHold('test-password', [password], {}, { newPasswords: typed('open', 'open'), passwordTable: {} })).toEqual({
+      key: 'newPassword',
+      kind: 'empty',
+      sentence: 'Type a password first.',
+      field: 'first',
+    });
+    // The real table has no tool yet.
+    expect(optionsHold('test-password', [password], {}, { newPasswords: typed('open', 'open') })?.kind).toBe('empty');
+  });
+
+  it('holds for the first option in registry order', () => {
+    const texts = { 'test-password': { text: { maxLength: 50, characters: 'standard-font' as const } } };
+    const watermark: TextOption = { kind: 'text', key: 'text', label: 'Text', hint: 'Up to 50 characters.', emptySentence: 'Type the text first.' };
+    expect(optionsHold('test-password', [password, watermark], {}, { texts, passwordTable, newPasswords: typed('open', 'open') })?.key).toBe('text');
+    expect(optionsHold('test-password', [password, watermark], {}, { texts, passwordTable })?.key).toBe('newPassword');
+    expect(optionsHold('test-password', [watermark, password], { text: 'Draft' }, { texts, passwordTable })?.key).toBe('newPassword');
+  });
+
+  it('sends the first field exactly as typed, under its key, and never the second', () => {
+    const sent = optionsToSend([password], {}, { newPasswords: typed('Open  Sesame-9', 'Open  Sesame-9') });
+    expect(sent).toEqual({ newPassword: 'Open  Sesame-9' });
+    expect(JSON.stringify(optionsToSend([password], {}, { newPasswords: typed('first one', 'second one') }))).not.toContain('second one');
+    expect(jobOptions({ format: 'pdf' }, { order: [1] }, [way, password], { way: 'lock' }, { newPasswords: typed('a b', 'a b') })).toEqual({
+      format: 'pdf',
+      order: [1],
+      way: 'lock',
+      newPassword: 'a b',
+    });
+    // Nothing typed: an empty string, which the main button never sends.
+    expect(optionsToSend([password], {})).toEqual({ newPassword: '' });
+  });
+
+  it('puts the sentences under the main button only while nothing is wrong yet', () => {
+    for (const kind of ['empty', 'reading', 'again-empty', 'again-partial', 'edge-space-quiet'] as const) expect(holdsUnderButton({ kind }), kind).toBe(true);
+    for (const kind of ['characters', 'edge-space', 'too-long', 'mismatch'] as const) expect(holdsUnderButton({ kind }), kind).toBe(false);
+  });
+
+  it('names the element holding each sentence', () => {
+    const ids: HoldIds = {
+      tied: 'why-not',
+      text: (key) => `text-${key}`,
+      picture: (key) => `picture-${key}`,
+      firstPassword: (key) => `first-${key}`,
+      againPassword: (key) => `again-${key}`,
+    };
+    const picture: PictureOption = {
+      kind: 'picture',
+      key: 'picture',
+      label: 'Picture',
+      pickLabel: 'Choose a picture',
+      againLabel: 'Choose another picture',
+      hint: 'A JPG or PNG picture.',
+      acceptsName: 'a JPG or PNG picture',
+      emptySentence: 'Choose a picture first.',
+    };
+    const watermark: TextOption = { kind: 'text', key: 'text', label: 'Text', hint: 'Up to 50 characters.', emptySentence: 'Type the text first.' };
+    const options: ToolOption[] = [password, picture, watermark];
+    const at = (hold: OptionHold) => holdErrorId(hold, options, ids);
+    expect(at({ key: 'newPassword', kind: 'empty', sentence: 'x', field: 'first' })).toBe('why-not');
+    expect(at({ key: 'newPassword', kind: 'again-partial', sentence: 'x', field: 'again' })).toBe('why-not');
+    expect(at({ key: 'newPassword', kind: 'edge-space-quiet', sentence: 'x', field: 'first' })).toBe('why-not');
+    expect(at({ key: 'newPassword', kind: 'characters', sentence: 'x', field: 'first' })).toBe('first-newPassword');
+    expect(at({ key: 'newPassword', kind: 'edge-space', sentence: 'x', field: 'first' })).toBe('first-newPassword');
+    expect(at({ key: 'newPassword', kind: 'too-long', sentence: 'x', field: 'first' })).toBe('first-newPassword');
+    expect(at({ key: 'newPassword', kind: 'mismatch', sentence: 'x', field: 'again' })).toBe('again-newPassword');
+    expect(at({ key: 'picture', kind: 'damaged', sentence: 'x' })).toBe('picture-picture');
+    expect(at({ key: 'picture', kind: 'reading', sentence: 'x' })).toBe('why-not');
+    expect(at({ key: 'text', kind: 'too-long', sentence: 'x' })).toBe('text-text');
+    expect(at({ key: 'text', kind: 'empty', sentence: 'x' })).toBe('why-not');
+  });
+
+  it('says what each rule takes in plain words, with no exclamation mark', () => {
+    expect(passwordAdvice['printable-ascii']).toBe('Use English letters without accents, numbers, spaces and marks such as @, # and -.');
+    expect(Object.values(passwordAdvice).every((words) => !words.includes('!'))).toBe(true);
+  });
+
+  it('never says the password, a piece of it, a refused character or a length, in any sentence', () => {
+    const marked = 'Qz7#Kw';
+    const rule = { maxLength: 127 };
+    const cases: [string, string][] = [
+      ['', ''],
+      [marked, ''],
+      [marked, marked.slice(0, 3)],
+      [marked, `${marked}x`],
+      [`${marked}é`, ''],
+      [`${marked}£${marked}`, marked],
+      [`${marked}‮`, ''],
+      [`${marked}🙂`, ''],
+      [` ${marked}`, ''],
+      [`${marked} `, ''],
+      [marked.repeat(30), marked.repeat(30)],
+      [`${marked}${'9'.repeat(130)}`, ''],
+    ];
+    const said: string[] = [];
+    for (const [first, again] of cases) {
+      for (const quiet of [true, false]) {
+        const now = hold(first, again, { typing: quiet ? typing : undefined });
+        if (now) said.push(now.sentence);
+      }
+    }
+    for (const kind of ['empty', 'characters', 'edge-space', 'too-long', 'edge-space-quiet', 'again-empty', 'again-partial', 'mismatch'] as const) {
+      said.push(passwordSentence(password, rule, { kind }));
+    }
+    expect(said.length).toBeGreaterThan(20);
+    for (const sentence of said) {
+      expect(sentence).not.toContain(marked);
+      for (const piece of ['Qz7', '7#K', '#Kw', 'é', '£', '‮', '🙂']) expect(sentence, sentence).not.toContain(piece);
+      // No number but the tool's own limit.
+      for (const digits of sentence.match(/\d+/g) ?? []) expect(digits).toBe('127');
+    }
+  });
+
+  it("reaches the worker's run message once, under its key, from what useToolRun holds, never from the state", async () => {
+    class FakeWorker implements WorkerLike {
+      sent: ToWorker[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      postMessage(message: ToWorker) {
+        this.sent.push(message);
+      }
+      terminate() {}
+    }
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient('test-password', () => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const state = [
+      { type: 'added', files: [{ id: 'a', name: 'a.pdf', size: 10 }] },
+      { type: 'inspected', id: 'a', outcome: { kind: 'ready', pages: 2 } },
+    ].reduce((now, action) => reducer(now, action as Action), initialState);
+    const held = typed('Open  Sesame-9', 'Open  Sesame-9');
+    expect(optionsHold('test-password', [password], state.choices, { newPasswords: held, passwordTable })).toBeNull();
+    expect(JSON.stringify(state)).not.toContain('Sesame');
+    const job = client.run([new File(['%PDF-1.7'], 'a.pdf')], [undefined], jobOptions(undefined, {}, [password], state.choices, { newPasswords: held }), () => {});
+    const sent = workers[0]!.sent[0]!;
+    expect(sent.type).toBe('run');
+    expect(sent.type === 'run' && sent.options).toEqual({ newPassword: 'Open  Sesame-9' });
+    expect(JSON.stringify(sent).split('Open  Sesame-9').length - 1).toBe(1);
+    client.end();
+    await expect(job).rejects.toMatchObject({ kind: 'cancelled' });
   });
 });

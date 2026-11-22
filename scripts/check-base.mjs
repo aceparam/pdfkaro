@@ -3,7 +3,9 @@
 // stylesheets, and every built asset address inside a script, sits under that
 // sub-path.
 // A link written as "/about" in a page, and not passed through withBase, would
-// work at the root and break on the preview. This catches it.
+// work at the root and break on the preview. This catches it. It also runs
+// the Content Security Policy check and the search check over the sub-path build,
+// built with SITE_ORIGIN set to https://example.org, a domain kept for examples.
 //
 // It reads what is in the built files. It cannot see a link that a script adds
 // after the visitor does something; a lint rule covers those in components.
@@ -11,13 +13,16 @@
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkDirectory } from './check-csp.mjs';
+import { checkDirectory as checkSearch } from './check-seo.mjs';
 
 const base = '/base-check';
+const origin = 'https://example.org';
 const outDir = 'dist-base';
 
 rmSync(outDir, { recursive: true, force: true });
 const build = spawnSync('npx', ['--no-install', 'astro', 'build', '--outDir', outDir], {
-  env: { ...process.env, SITE_BASE: base, ASTRO_TELEMETRY_DISABLED: '1' },
+  env: { ...process.env, SITE_BASE: base, SITE_ORIGIN: origin, ASTRO_TELEMETRY_DISABLED: '1' },
   stdio: ['ignore', 'ignore', 'inherit'],
   shell: process.platform === 'win32',
 });
@@ -82,6 +87,14 @@ if (walk(outDir).some((name) => name.endsWith('.wasm')) && inScripts === 0) {
   problems.push('A WebAssembly file is built, but no script names its address; this check may have missed it.');
 }
 
+// Every page under the sub-path carries the same Content Security Policy (scripts/check-csp.mjs).
+const csp = checkDirectory(outDir);
+for (const problem of csp.problems) problems.push(`${outDir}/${problem}`);
+
+// Canonical and social tags, the JSON-LD, hub pages, the sitemap and noindex agree with the registry under the sub-path (scripts/check-seo.mjs).
+const search = checkSearch(outDir, { origin, base });
+for (const problem of search.problems) problems.push(`${outDir}: ${problem}`);
+
 rmSync(outDir, { recursive: true, force: true });
 
 if (problems.length > 0) {
@@ -89,4 +102,4 @@ if (problems.length > 0) {
   for (const problem of problems) console.error(`  ${problem}`);
   process.exit(1);
 }
-console.log(`${pages.length} pages and ${checked} addresses in them all sit under the sub-path.`);
+console.log(`${pages.length} pages and ${checked} addresses in them all sit under the sub-path, every page carries the policy, and the search check passes.`);

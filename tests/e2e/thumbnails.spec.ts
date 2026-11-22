@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { type Page, type Route } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -212,9 +213,26 @@ test.describe('thumbnails are pictures only', () => {
 test.describe('thumbnails are forgotten with their files', () => {
   /** The thumbnail addresses on the page now. */
   const addresses = (page: Page) => pictures(page).evaluateAll((all) => all.map((image) => (image as HTMLImageElement).src));
-  /** Whether each address can still be opened. A revoked blob: address cannot. */
+  /**
+   * Whether each picture address can still be opened. A revoked blob: address cannot. It is opened as a
+   * picture: the Content Security Policy allows blob: pictures but refuses a fetch of a blob: address.
+   */
   const stillOpen = (page: Page, urls: string[]) =>
-    page.evaluate(async (list) => Promise.all(list.map((url) => fetch(url).then(() => true, () => false))), urls);
+    page.evaluate(
+      async (list) =>
+        Promise.all(
+          list.map(
+            (url) =>
+              new Promise<boolean>((done) => {
+                const image = new Image();
+                image.onload = () => done(true);
+                image.onerror = () => done(false);
+                image.src = url;
+              }),
+          ),
+        ),
+      urls,
+    );
 
   test('removing a file revokes its picture', async ({ page }) => {
     await open(page);
@@ -224,36 +242,54 @@ test.describe('thumbnails are forgotten with their files', () => {
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
     await expect(pictures(page)).toHaveCount(1);
     expect(await stillOpen(page, [removed!])).toEqual([false]);
+    // The kept file's picture still opens, so the check above can tell the two apart.
+    expect(await stillOpen(page, await addresses(page))).toEqual([true]);
   });
 
   test('a picture that arrives after its file was removed is thrown away before any address is made', async ({ page }) => {
     // Count every picture address the page makes.
     await page.addInitScript(() => {
       const made: string[] = [];
-      (window as unknown as { made: string[] }).made = made;
+      const workerScripts: string[] = [];
+      (window as unknown as { made: string[]; workerScripts: string[] }).made = made;
+      (window as unknown as { made: string[]; workerScripts: string[] }).workerScripts = workerScripts;
       const create = URL.createObjectURL.bind(URL);
       URL.createObjectURL = (object: Blob | MediaSource) => {
         const url = create(object);
         if (object instanceof Blob && object.type === 'image/png') made.push(url);
+        // The tool worker starts from a blob: script the page makes; PDF.js's worker starts from one the tool worker makes.
+        if (object instanceof Blob && object.type === 'text/javascript') workerScripts.push(url);
         return url;
       };
     });
-    // Hold PDF.js's data back, so the first thumbnail is still being drawn when its file is removed.
+    // Hold PDF.js's data back, so the first thumbnail is still being drawn when its file is removed. The route
+    // stays in place for the whole test and lets requests through once `released` is set: removing it with
+    // unroute() while the fresh worker makes its first request can leave that request paused for good in
+    // Chromium, since the worker now starts from a blob: script and imports its file from inside the worker.
     const held: Route[] = [];
+    let released = false;
     await page.context().route(/\/_astro\/pdfjs-data-[^/]+\.js$/, (route) => {
+      if (released) return route.continue();
       held.push(route);
     });
-    const toolWorkers: string[] = [];
+    // Every worker started, by address; those started from a script the page made are tool workers.
+    const workers: string[] = [];
     page.on('worker', (worker) => {
-      if (worker.url().includes('tool.worker')) toolWorkers.push(worker.url());
+      workers.push(worker.url());
     });
+    const toolWorkers = async () => {
+      const scripts = await page.evaluate(() => (window as unknown as { workerScripts: string[] }).workerScripts);
+      return workers.filter((url) => scripts.includes(url));
+    };
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf']);
     await expect.poll(() => held.length).toBeGreaterThan(0);
-    const before = toolWorkers.length;
+    const before = (await toolWorkers()).length;
+    expect(before).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
-    // Removing it stops that drawing on a fresh worker; from here on, let the data through.
-    await page.context().unroute(/\/_astro\/pdfjs-data-[^/]+\.js$/);
+    // Removing it stops that drawing on a fresh worker; from here on, let the data through. The held request
+    // belonged to the ended worker, so it may already be gone; continuing it only tidies up.
+    released = true;
     for (const route of held.splice(0)) await route.continue().catch(() => {});
     await expect(pictures(page)).toHaveCount(1, { timeout: 20000 });
     await expect(items(page).filter({ hasText: 'mixed.pdf' }).locator('img')).toHaveCount(1);
@@ -261,7 +297,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     expect(await page.evaluate(() => (window as unknown as { made: string[] }).made.length)).toBe(1);
     // Removing the file being drawn ended that worker, so the next picture was drawn on a fresh one and
     // two were never drawn at once.
-    expect(toolWorkers.length).toBe(before + 1);
+    expect((await toolWorkers()).length).toBe(before + 1);
   });
 
   test('Start again and leaving the page revoke every picture', async ({ page }) => {
@@ -269,6 +305,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     await pick(page, ['text.pdf', 'mixed.pdf']);
     await expect(pictures(page)).toHaveCount(2, { timeout: 20000 });
     let urls = await addresses(page);
+    expect(await stillOpen(page, urls)).toEqual([true, true]);
     await mainButton(page).click();
     await page.getByRole('button', { name: 'Start again' }).click();
     await expect(page.locator('astro-island img')).toHaveCount(0);
@@ -277,6 +314,7 @@ test.describe('thumbnails are forgotten with their files', () => {
     await pick(page, ['text.pdf', 'scanned.pdf']);
     await expect(pictures(page)).toHaveCount(2, { timeout: 20000 });
     urls = await addresses(page);
+    expect(await stillOpen(page, urls)).toEqual([true, true]);
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
     await expect(page.locator('astro-island img')).toHaveCount(0);
     expect(await stillOpen(page, urls)).toEqual([false, false]);

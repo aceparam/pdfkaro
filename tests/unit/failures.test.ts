@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { failureSentence, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
+import type { ToolOption } from '../../src/tools/registry';
 
 describe('the failure sentence', () => {
   it('gives the shared sentences, or the tool own advice after running out of memory', () => {
@@ -166,7 +167,117 @@ describe('the sentence for a text the engine refused', () => {
     expect(failureSentence('text-refused', { options: [{ ...text, refusedSentence: own }, { ...text, key: 'other', refusedSentence: 'Not this.' }] })).toBe(own);
   });
 
+  it('uses the words of the text that is shown, never a hidden one', () => {
+    const forA = { ...text, key: 'textA', refusedSentence: 'A could not be used.', when: { key: 'position', value: 'a' } };
+    const forB = { ...text, key: 'textB', refusedSentence: 'B could not be used.', when: { key: 'position', value: 'b' } };
+    const options = [position, forA, forB];
+    expect(failureSentence('text-refused', { options })).toBe('A could not be used.');
+    expect(failureSentence('text-refused', { options }, { position: 'a' })).toBe('A could not be used.');
+    expect(failureSentence('text-refused', { options }, { position: 'b' })).toBe('B could not be used.');
+  });
+
   it('leaves the other failures as they were for a tool with a text', () => {
     expect(failureSentence('engine', { options: [text] })).toBe('Something went wrong. Try again.');
+  });
+});
+
+describe('the sentence for a drawing the engine refused', () => {
+  const drawing = {
+    kind: 'drawing' as const,
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const way = { kind: 'choice' as const, key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw' }, { value: 'type', label: 'Type' }], initial: 'draw' };
+
+  it("says what happened and what to try, in the shared words or the first shown drawing's own", () => {
+    expect(drawingRefusedSentence).toBe('The drawing could not be used. Clear it and draw again.');
+    expect(failureSentence('drawing-refused', {})).toBe(drawingRefusedSentence);
+    expect(failureSentence('drawing-refused', { options: [way, drawing] })).toBe(drawingRefusedSentence);
+    const own = 'This signature could not be used. Clear it and draw again.';
+    expect(failureSentence('drawing-refused', { options: [way, { ...drawing, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...drawing, refusedSentence: own, when: { key: 'way', value: 'draw' } };
+    expect(failureSentence('drawing-refused', { options: [way, hidden] }, { way: 'type' })).toBe(drawingRefusedSentence);
+    expect(failureSentence('drawing-refused', { options: [way, hidden] }, { way: 'draw', drawing: [[1, 1]] })).toBe(own);
+  });
+
+  it("is not a text's sentence, and a text's is not a drawing's", () => {
+    const text = { kind: 'text' as const, key: 'text', label: 'Name', hint: 'Your name.', emptySentence: 'Type it first.', refusedSentence: 'The name could not be used.' };
+    expect(failureSentence('drawing-refused', { options: [way, text, drawing] })).toBe(drawingRefusedSentence);
+    expect(failureSentence('text-refused', { options: [way, { ...drawing, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
+  });
+});
+
+describe('a picture the engine refuses or finds too large', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'type', label: 'Type it' }, { value: 'picture', label: 'Use a picture' }], initial: 'type' };
+  const picture = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  } as const;
+  const photo = { picture: { name: 'photo.jpg', size: Math.round(24.6 * 1_048_576), pixels: 40_000_000, status: 'ready' as const } };
+
+  it('says the shared sentence, or the first shown picture own words, when refused', () => {
+    expect(pictureRefusedSentence).toBe('The picture could not be used. Choose another picture.');
+    expect(failureSentence('picture-refused', {})).toBe(pictureRefusedSentence);
+    expect(failureSentence('picture-refused', { options: [picture] })).toBe(pictureRefusedSentence);
+    const own = 'This signature picture could not be used. Choose another picture.';
+    expect(failureSentence('picture-refused', { options: [{ ...picture, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...picture, refusedSentence: own, when: { key: 'way', value: 'picture' } };
+    expect(failureSentence('picture-refused', { options: [way, hidden] })).toBe(pictureRefusedSentence);
+    expect(failureSentence('picture-refused', { options: [way, hidden] }, { way: 'picture' })).toBe(own);
+  });
+
+  it('names the chosen picture and its size from the page own state, with the tool step', () => {
+    expect(failureSentence('picture-too-large', { options: [picture] }, {}, photo)).toBe('photo.jpg (24.6 MB) is too large to place on these pages. Choose a smaller picture.');
+    expect(pictureTooLargeAdvice).toBe('Choose a smaller picture.');
+    const tooLargeAdvice = 'Crop it to the signature, or save a smaller copy.';
+    expect(failureSentence('picture-too-large', { options: [{ ...picture, tooLargeAdvice }] }, {}, photo)).toBe(
+      'photo.jpg (24.6 MB) is too large to place on these pages. Crop it to the signature, or save a smaller copy.',
+    );
+  });
+
+  it('says the picture is too large without a name when none is chosen', () => {
+    expect(failureSentence('picture-too-large', { options: [picture] })).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
+    expect(failureSentence('picture-too-large', {})).toBe('The picture is too large to place on these pages. Choose a smaller picture.');
+  });
+});
+
+describe('a new password the engine refuses', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'lock', label: 'Lock it' }, { value: 'keep', label: 'Keep it' }], initial: 'lock' };
+  const password: ToolOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+
+  it("says the shared sentence, with its next step, or the first shown new password's own words", () => {
+    expect(passwordRefusedSentence).toBe('The password could not be used. Go back to your file and type it again.');
+    expect(failureSentence('password-refused', {})).toBe(passwordRefusedSentence);
+    expect(failureSentence('password-refused', { options: [password] })).toBe(passwordRefusedSentence);
+    const own = 'This password could not be used. Go back to your file and type it again.';
+    expect(failureSentence('password-refused', { options: [{ ...password, refusedSentence: own }] })).toBe(own);
+    const hidden = { ...password, refusedSentence: own, when: { key: 'way', value: 'lock' } };
+    expect(failureSentence('password-refused', { options: [way, hidden] }, { way: 'keep' })).toBe(passwordRefusedSentence);
+    expect(failureSentence('password-refused', { options: [way, hidden] }, { way: 'lock' })).toBe(own);
+  });
+
+  it("is not a text's sentence, and holds nothing typed: the page has nothing of the password to say", () => {
+    const text: ToolOption = { kind: 'text', key: 'text', label: 'Name', hint: 'Your name.', emptySentence: 'Type it first.', refusedSentence: 'The name could not be used.' };
+    expect(failureSentence('password-refused', { options: [text, password] })).toBe(passwordRefusedSentence);
+    expect(failureSentence('text-refused', { options: [{ ...password, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
+    // The choices never hold a password, and even a value typed under its key is not said.
+    expect(failureSentence('password-refused', { options: [password] }, { newPassword: 'Qz7#Kw' })).not.toContain('Qz7');
   });
 });

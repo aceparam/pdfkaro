@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { type Download, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,7 +24,7 @@ const cells = (page: Page) => page.locator('astro-island ol > li');
 const left = (page: Page, n: number) => page.getByRole('button', { name: `Turn page ${n} left`, exact: true });
 const right = (page: Page, n: number) => page.getByRole('button', { name: `Turn page ${n} right`, exact: true });
 const everyRight = (page: Page) => page.getByRole('button', { name: 'Turn every page right' });
-const captions = (page: Page) => page.locator('astro-island ol > li > div:nth-child(2)').allTextContents();
+const captions = (page: Page) => page.locator('astro-island ol > li > div > div:nth-child(2)').allTextContents();
 const status = (page: Page) => page.locator('[role=status]').first();
 const how = 'Press “Turn left” or “Turn right” under a page to turn it, or turn every page at once.';
 const blockedSentence = 'Turn a page to make a new file.';
@@ -186,7 +187,8 @@ test.describe('focus', () => {
     await left(page, 1).focus();
     const inside = await page.evaluate(() => {
       const button = document.activeElement as HTMLElement;
-      const cell = button.closest('li')!;
+      // The box inside the page's list item that holds what the page shows; its paint containment is what would clip.
+      const cell = button.closest('li > div')!;
       const b = button.getBoundingClientRect();
       const c = cell.getBoundingClientRect();
       // The ring is a 2px outline 2px outside the button.

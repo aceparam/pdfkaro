@@ -1,7 +1,25 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { groups, tools, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
-import { characterRules, optionTexts, optionValues, textRule, type TextRule } from '../../src/widget/option-values';
-import { ruleAdvice } from '../../src/widget/options';
+import { footerLinks } from '../../src/site';
+import { groups, tools, type Group, type HubSlug, type DrawingOption, type NewPasswordOption, type PictureOption, type TextOption, type Tool, type ToolOption } from '../../src/tools/registry';
+import {
+  characterRules,
+  drawingRule,
+  optionDrawings,
+  optionPasswords,
+  optionPictures,
+  optionTexts,
+  optionValues,
+  passwordCharacters,
+  passwordRule,
+  pictureRule,
+  textRule,
+  type DrawingRule,
+  type PasswordRule,
+  type PictureRule,
+  type TextRule,
+} from '../../src/widget/option-values';
+import { passwordAdvice, ruleAdvice } from '../../src/widget/options';
 import { toggleRules } from '../../src/widget/toggles';
 import { turnRules } from '../../src/widget/turns';
 import { allPages, pageWords, relatedItems } from '../../src/tools/queries';
@@ -279,7 +297,8 @@ describe('Images to PDF', () => {
       if (each.id === 'images-to-pdf') continue;
       expect(each.widget?.refusedAdvice).toBeUndefined();
       expect(each.widget?.listPages).toBeUndefined();
-      expect(each.widget?.unsupportedAdvice).toBeUndefined();
+      // Remove a password (Unlock PDF) also names a file it cannot read: one protected with a certificate.
+      if (each.id !== 'unlock-pdf') expect(each.widget?.unsupportedAdvice).toBeUndefined();
       expect(each.widget?.damagedAdvice).toBeUndefined();
     }
   });
@@ -343,8 +362,74 @@ describe('Compress PDF', () => {
     for (const each of tools) {
       if (each.id === 'compress-pdf') continue;
       expect(each.widget?.resultWas).toBeUndefined();
-      expect(each.widget?.noSmaller).toBeUndefined();
+      // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
+      if (each.id !== 'unlock-pdf') expect(each.widget?.noSmaller).toBeUndefined();
     }
+  });
+});
+
+describe('Remove a password (Unlock PDF)', () => {
+  const tool = tools.find((each) => each.id === 'unlock-pdf')!;
+
+  it('is the second row of "Protect", right after Protect with a password, taking one PDF, at the catalogue\'s address', () => {
+    expect(tool).toMatchObject({ group: 'protect', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['protect-pdf', 'compress-pdf', 'merge-pdf', 'split-pdf', 'extract-pdf-pages']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('unlock-pdf')).toBe(ids.indexOf('protect-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'unlock-pdf',
+        name: 'Remove a password',
+        summary: 'Remove print and edit restrictions from a PDF, and its password if you know it.',
+        title: 'Remove a password from a PDF in your browser - PDFkaro',
+        description: 'Remove print and edit restrictions from a PDF, and its password if you know it. The file and the password are not uploaded.',
+        heading: 'Remove a password from a PDF',
+        sentence: 'Remove print and edit restrictions from a PDF, and its password if you know it. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ]);
+    expect(tool.widget?.options).toBeUndefined();
+    expect(tool.pages[0]!.preset).toBeUndefined();
+  });
+
+  it('has the widget words of the design, with the words for no new file and for a file it cannot read', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      tooFewFiles: 'Choose a PDF file.',
+      actionLabel: 'Remove protection and download',
+      writingLabel: 'Writing the unprotected file',
+      doneHeading: 'Your unprotected file is ready',
+      failedHeading: 'The protection was not removed.',
+      outputSuffix: 'unprotected',
+      outputs: 'one',
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      unsupportedAdvice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      noSmaller: {
+        heading: 'This file has no password or restrictions.',
+        advice: 'There was nothing to remove, so no new file was made. You can use your file as it is.',
+      },
+    });
+    expect(tool.widget!.resultNotes).toEqual([
+      'The file now opens without a password, and its print, copy and edit restrictions are removed. Anyone who has this copy can open it.',
+      'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+    ]);
+  });
+
+  it('says "unlock" nowhere but its id and address, by the owner\'s decision of 22 Nov 2026', () => {
+    const { id, pages, ...rest } = tool;
+    const { slug, ...pageWords } = pages[0]!;
+    expect(id).toBe('unlock-pdf');
+    expect(slug).toBe('unlock-pdf');
+    expect(JSON.stringify({ rest, pageWords })).not.toMatch(/unlock/i);
+    expect(tool.pages[0]!.title.length).toBeLessThan(60);
+    expect(tool.pages[0]!.description.length).toBeLessThan(155);
   });
 });
 
@@ -441,6 +526,12 @@ const itemKeys = new Set([
 
 type Values = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
 type Texts = Readonly<Record<string, Readonly<Record<string, TextRule>>>>;
+type Drawings = Readonly<Record<string, Readonly<Record<string, DrawingRule>>>>;
+type Pictures = Readonly<Record<string, Readonly<Record<string, PictureRule>>>>;
+type Passwords = Readonly<Record<string, Readonly<Record<string, PasswordRule>>>>;
+
+/** Keys the worker itself puts beside the options it hands the engine: an option never uses one. */
+const workerKeys = new Set(['passwords']);
 
 /** A word the widget shows: not empty, and plain (no exclamation mark). */
 const plain = (words: string | undefined) => words !== undefined && words.trim() !== '' && !words.includes('!');
@@ -449,7 +540,14 @@ const plain = (words: string | undefined) => words !== undefined && words.trim()
  * What is wrong with a tool's options, as plain sentences; none for a tool whose options are sound.
  * Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
  */
-function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Values, texts: Texts = optionTexts): string[] {
+function optionProblems(
+  tool: Pick<Tool, 'id' | 'pages' | 'widget'>,
+  values: Values,
+  texts: Texts = optionTexts,
+  drawings: Drawings = optionDrawings,
+  pictures: Pictures = optionPictures,
+  passwords: Passwords = optionPasswords,
+): string[] {
   const options = tool.widget?.options ?? [];
   const problems: string[] = [];
   const keys = options.map((option) => option.key);
@@ -468,16 +566,28 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       }
     } else if (option.kind === 'text') {
       problems.push(...textProblems(tool.id, option, texts));
+    } else if (option.kind === 'drawing') {
+      problems.push(...drawingProblems(tool.id, option, drawings));
+    } else if (option.kind === 'picture') {
+      problems.push(...pictureProblems(tool.id, option, pictures));
+    } else if (option.kind === 'new-password') {
+      problems.push(...newPasswordProblems(tool.id, option, passwords));
     } else {
       problems.push(`${(option as { key: string }).key}: unknown kind`);
     }
     if (!/^[a-z][a-zA-Z0-9]*$/.test(option.key)) problems.push(`${option.key}: the key is not a plain word`);
     if (itemKeys.has(option.key)) problems.push(`${option.key}: the key is one the page's items send`);
+    if (workerKeys.has(option.key)) problems.push(`${option.key}: the key is one the worker sends`);
     for (const page of tool.pages) {
       if (page.preset && Object.hasOwn(page.preset, option.key)) problems.push(`${option.key}: the preset of ${page.slug} uses the key`);
     }
   }
-  // Every accepted-values line belongs to a choice the registry shows, and every text line to a text.
+  problems.push(...conditionProblems(options));
+  // A drawing needs a pointer, so it is never first: focus moves to the first option once the file is read,
+  // and a keyboard user meets the tool's other ways before it.
+  const first = options[0];
+  if (first !== undefined && first.kind === 'drawing') problems.push(`${first.key}: the first option is a drawing`);
+  // Every accepted-values line belongs to a choice the registry shows, every text line to a text, and every drawing line to a drawing.
   const kindOf = (key: string) => options.find((option) => option.key === key)?.kind;
   if (Object.hasOwn(values, tool.id)) {
     for (const key of Object.keys(values[tool.id]!)) {
@@ -489,6 +599,133 @@ function optionProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>, values: Val
       if (kindOf(key) !== 'text') problems.push(`${key}: in optionTexts but not a text of the tool`);
     }
   }
+  if (Object.hasOwn(drawings, tool.id)) {
+    for (const key of Object.keys(drawings[tool.id] ?? {})) {
+      if (kindOf(key) !== 'drawing') problems.push(`${key}: in optionDrawings but not a drawing of the tool`);
+    }
+  }
+  if (Object.hasOwn(pictures, tool.id)) {
+    for (const key of Object.keys(pictures[tool.id] ?? {})) {
+      if (kindOf(key) !== 'picture') problems.push(`${key}: in optionPictures but not a picture of the tool`);
+    }
+  }
+  if (Object.hasOwn(passwords, tool.id)) {
+    for (const key of Object.keys(passwords[tool.id] ?? {})) {
+      if (kindOf(key) !== 'new-password') problems.push(`${key}: in optionPasswords but not a new password of the tool`);
+    }
+  }
+  return problems;
+}
+
+/** What is wrong with one new password: its words, and its line in optionPasswords. */
+function newPasswordProblems(toolId: string, option: NewPasswordOption, passwords: Passwords): string[] {
+  const problems: string[] = [];
+  const words: [string, string | undefined, boolean][] = [
+    ['label', option.label, true],
+    ['again label', option.againLabel, true],
+    ['hint', option.hint, true],
+    ['empty sentence', option.emptySentence, true],
+    ['again sentence', option.againSentence, true],
+    ['refused sentence', option.refusedSentence, false],
+  ];
+  for (const [name, said, needed] of words) {
+    if ((needed || said !== undefined) && !plain(said)) problems.push(`${option.key}: the ${name} is empty or not plain`);
+  }
+  const rule = passwordRule(toolId, option.key, passwords);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionPasswords`);
+    return problems;
+  }
+  // The format's own limit for a 256-bit key: every reader cuts a longer password to 127 bytes.
+  if (!Number.isInteger(rule.maxLength) || rule.maxLength < 1 || rule.maxLength > 127) problems.push(`${option.key}: the most characters is not a whole number from 1 to 127`);
+  if (!Object.hasOwn(passwordCharacters, rule.characters)) problems.push(`${option.key}: the character rule is not known`);
+  // The hint ends with what the rule takes, in the rule's own words, so the hint and the rule cannot drift apart.
+  else if (!option.hint.endsWith(passwordAdvice[rule.characters])) problems.push(`${option.key}: the hint does not end with what its rule takes`);
+  // "Up to 127 characters": a hint that names a number of characters names the limit.
+  for (const match of option.hint.matchAll(/(\d[\d,]*)\s+characters?\b/g)) {
+    if (Number(match[1]!.replaceAll(',', '')) !== rule.maxLength) problems.push(`${option.key}: the hint names ${match[1]} characters, not the most characters`);
+  }
+  return problems;
+}
+
+const megabyte = 1_048_576;
+const pictureTypes = new Set(['image/jpeg', 'image/png']);
+
+/** What is wrong with one picture: its words, and its line in optionPictures. */
+function pictureProblems(toolId: string, option: PictureOption, pictures: Pictures): string[] {
+  const problems: string[] = [];
+  const words: [string, string | undefined, boolean][] = [
+    ['label', option.label, true],
+    ['pick label', option.pickLabel, true],
+    ['again label', option.againLabel, true],
+    ['hint', option.hint, true],
+    ['accepts name', option.acceptsName, true],
+    ['empty sentence', option.emptySentence, true],
+    ['refused sentence', option.refusedSentence, false],
+    ['large advice', option.largeAdvice, false],
+    ['too-large advice', option.tooLargeAdvice, false],
+  ];
+  for (const [name, said, needed] of words) {
+    if ((needed || said !== undefined) && !plain(said)) problems.push(`${option.key}: the ${name} is empty or not plain`);
+  }
+  const rule = pictureRule(toolId, option.key, pictures);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionPictures`);
+    return problems;
+  }
+  const types: readonly string[] = rule.types;
+  if (types.length < 1 || types.length > 2 || new Set(types).size !== types.length || !types.every((type) => pictureTypes.has(type))) {
+    problems.push(`${option.key}: the types are not JPG, PNG or both, once each`);
+  }
+  const megabytes = rule.noticeBytes / megabyte;
+  if (!Number.isInteger(megabytes) || megabytes < 1 || megabytes > 50) problems.push(`${option.key}: the notice size is not a whole number of MB from 1 to 50`);
+  const millions = rule.noticePixels / 1_000_000;
+  if (!Number.isInteger(millions) || millions < 1 || millions > 100) problems.push(`${option.key}: the notice pixels are not a whole number of millions from 1 to 100`);
+  // "One over 8 MB": a hint that names a size in MB names the notice size, so the two cannot drift apart.
+  for (const match of option.hint.matchAll(/(\d[\d,.]*)\s*MB\b/g)) {
+    const named = match[1] ?? '';
+    if (Number(named.replaceAll(',', '')) !== megabytes) problems.push(`${option.key}: the hint names ${named} MB, not the notice size`);
+  }
+  return problems;
+}
+
+/** What is wrong with one drawing: its words, and its line in optionDrawings. */
+function drawingProblems(toolId: string, option: DrawingOption, drawings: Drawings): string[] {
+  const problems: string[] = [];
+  if (!plain(option.label)) problems.push(`${option.key}: the label is empty or not plain`);
+  if (!plain(option.hint)) problems.push(`${option.key}: the hint is empty or not plain`);
+  if (!plain(option.clearLabel)) problems.push(`${option.key}: the clear label is empty or not plain`);
+  if (!plain(option.emptySentence)) problems.push(`${option.key}: the empty sentence is empty or not plain`);
+  if (option.refusedSentence !== undefined && !plain(option.refusedSentence)) problems.push(`${option.key}: the refused sentence is empty or not plain`);
+  const rule = drawingRule(toolId, option.key, drawings);
+  if (rule === undefined) {
+    problems.push(`${option.key}: no line in optionDrawings`);
+    return problems;
+  }
+  if (!Number.isInteger(rule.maxLines) || rule.maxLines < 1 || rule.maxLines > 1000) problems.push(`${option.key}: the most lines is not a whole number from 1 to 1,000`);
+  if (!Number.isInteger(rule.maxPoints) || rule.maxPoints < 1 || rule.maxPoints > 100_000) problems.push(`${option.key}: the most points is not a whole number from 1 to 100,000`);
+  return problems;
+}
+
+/**
+ * What is wrong with the tool's conditions: each names a choice listed earlier, with no condition of
+ * its own, and one of its values; and the first option has none, so focus after reading has a place.
+ */
+function conditionProblems(options: readonly ToolOption[]): string[] {
+  const problems: string[] = [];
+  const first = options[0];
+  if (first !== undefined && first.when !== undefined) problems.push(`${first.key}: the first option has a condition`);
+  options.forEach((option, index) => {
+    const when = option.when;
+    if (when === undefined) return;
+    const named = options.slice(0, index).find((earlier) => earlier.key === when.key);
+    if (named === undefined || named.kind !== 'choice') {
+      problems.push(`${option.key}: the condition names no earlier choice`);
+      return;
+    }
+    if (named.when !== undefined) problems.push(`${option.key}: the condition names a choice that has a condition`);
+    if (!named.choices.some((choice) => choice.value === when.value)) problems.push(`${option.key}: the condition names a value the choice does not have`);
+  });
   return problems;
 }
 
@@ -499,6 +736,7 @@ function textProblems(toolId: string, option: TextOption, texts: Texts): string[
   if (!plain(option.hint)) problems.push(`${option.key}: the hint is empty or not plain`);
   if (!plain(option.emptySentence)) problems.push(`${option.key}: the empty sentence is empty or not plain`);
   if (option.refusedSentence !== undefined && !plain(option.refusedSentence)) problems.push(`${option.key}: the refused sentence is empty or not plain`);
+  if (option.charactersAdvice !== undefined && !plain(option.charactersAdvice)) problems.push(`${option.key}: the characters advice is empty or not plain`);
   const rule = textRule(toolId, option.key, texts);
   if (rule === undefined) {
     problems.push(`${option.key}: no line in optionTexts`);
@@ -621,6 +859,9 @@ describe('texts', () => {
     expect(optionProblems(entry([{ ...words, hint: '' }]), {}, texts)).toContain('text: the hint is empty or not plain');
     expect(optionProblems(entry([{ ...words, emptySentence: 'Type it first!' }]), {}, texts)).toContain('text: the empty sentence is empty or not plain');
     expect(optionProblems(entry([{ ...words, refusedSentence: ' ' }]), {}, texts)).toContain('text: the refused sentence is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: ' ' }]), {}, texts)).toContain('text: the characters advice is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: 'Draw it instead!' }]), {}, texts)).toContain('text: the characters advice is empty or not plain');
+    expect(optionProblems(entry([{ ...words, charactersAdvice: 'To sign in another script, draw it.' }]), {}, texts)).toEqual([]);
   });
 
   it('fail when the key is not a plain word, is used twice, is a preset key or one the items send', () => {
@@ -675,6 +916,431 @@ describe('texts', () => {
     const long = { ...words, hint: 'Up to 1,200 characters. Use letters from English and other Western European languages, numbers and common marks.' };
     expect(optionProblems(entry([long]), {}, { 'test-options': { text: { maxLength: 200, characters: 'standard-font' } } })).toContain(
       'text: the hint names 1,200 characters, not the most characters',
+    );
+  });
+});
+
+describe('conditions', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'a', label: 'Way a' }, { value: 'b', label: 'Way b' }], initial: 'a' };
+  const hint = 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.';
+  const forA: ToolOption = { kind: 'text', key: 'textA', label: 'Text for a', hint, emptySentence: 'Type the text for a first.', when: { key: 'way', value: 'a' } };
+  const forB: ToolOption = { kind: 'text', key: 'textB', label: 'Text for b', hint, emptySentence: 'Type the text for b first.', when: { key: 'way', value: 'b' } };
+  const size: ToolOption = { kind: 'choice', key: 'size', legend: 'Size', choices: [{ value: 'small', label: 'Small' }, { value: 'large', label: 'Large' }], initial: 'small' };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[]): Tool => ({ ...merge, id: 'test-options', widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['a', 'b'], size: ['small', 'large'] } };
+  const rule: TextRule = { maxLength: 50, characters: 'standard-font' };
+  const texts: Texts = { 'test-options': { textA: rule, textB: rule } };
+
+  it('pass for every tool, and for an entry whose texts are shown by an earlier choice', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts), tool.id).toEqual([]);
+    expect(optionProblems(entry([way, forA, forB, size]), values, texts)).toEqual([]);
+    expect(optionProblems(entry([way, size, forB, { ...forA, when: { key: 'way', value: 'a' } }]), values, texts)).toEqual([]);
+    const sizeForB: ToolOption = { ...size, when: { key: 'way', value: 'b' } };
+    expect(optionProblems(entry([way, forA, sizeForB]), values, { 'test-options': { textA: rule } })).toEqual([]);
+  });
+
+  it('fail when a condition names no earlier choice: a later one, a text, a missing key or the option itself', () => {
+    const wrong = (key: string) => `${key}: the condition names no earlier choice`;
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'size', value: 'small' } }, size]), values, { 'test-options': { textA: rule } })).toContain(wrong('textA'));
+    expect(optionProblems(entry([way, forA, { ...forB, when: { key: 'textA', value: 'a' } }]), values, texts)).toContain(wrong('textB'));
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'nothing', value: 'a' } }]), values, { 'test-options': { textA: rule } })).toContain(wrong('textA'));
+    expect(optionProblems(entry([way, { ...size, when: { key: 'size', value: 'small' } }]), values)).toContain(wrong('size'));
+  });
+
+  it('fail when a condition names a value the choice does not have', () => {
+    expect(optionProblems(entry([way, { ...forA, when: { key: 'way', value: 'c' } }]), values, { 'test-options': { textA: rule } })).toContain(
+      'textA: the condition names a value the choice does not have',
+    );
+  });
+
+  it('fail when a condition names a choice that has a condition of its own', () => {
+    const sizeForB: ToolOption = { ...size, when: { key: 'way', value: 'b' } };
+    expect(optionProblems(entry([way, sizeForB, { ...forA, when: { key: 'size', value: 'small' } }]), values, { 'test-options': { textA: rule } })).toContain(
+      'textA: the condition names a choice that has a condition',
+    );
+  });
+
+  it('fail when the first option has a condition', () => {
+    const problems = optionProblems(entry([{ ...forA, when: { key: 'way', value: 'a' } }, way]), values, { 'test-options': { textA: rule } });
+    expect(problems).toContain('textA: the first option has a condition');
+  });
+});
+
+describe('drawings', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'type', label: 'Type it' }], initial: 'draw' };
+  const drawing: DrawingOption = {
+    kind: 'drawing',
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['draw', 'type'] } };
+  const rule: DrawingRule = { maxLines: 50, maxPoints: 5000 };
+  const drawings: Drawings = { 'test-options': { drawing: rule } };
+
+  it('are sound for every tool, and optionDrawings names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings), tool.id).toEqual([]);
+    for (const id of Object.keys(optionDrawings)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry after a choice, with its own refused sentence, or shown by that choice', () => {
+    expect(optionProblems(entry([way, drawing]), values, {}, drawings)).toEqual([]);
+    expect(optionProblems(entry([way, { ...drawing, refusedSentence: 'This signature could not be used. Clear it and draw again.' }]), values, {}, drawings)).toEqual([]);
+    expect(optionProblems(entry([way, { ...drawing, when: { key: 'way', value: 'draw' } }]), values, {}, drawings)).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(optionProblems(entry([way, { ...drawing, label: ' ' }]), values, {}, drawings)).toContain('drawing: the label is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, hint: '' }]), values, {}, drawings)).toContain('drawing: the hint is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, clearLabel: 'Clear!' }]), values, {}, drawings)).toContain('drawing: the clear label is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, emptySentence: 'Draw it first!' }]), values, {}, drawings)).toContain('drawing: the empty sentence is empty or not plain');
+    expect(optionProblems(entry([way, { ...drawing, refusedSentence: ' ' }]), values, {}, drawings)).toContain('drawing: the refused sentence is empty or not plain');
+  });
+
+  it('fail with no line in optionDrawings, or a line that belongs to no drawing', () => {
+    expect(optionProblems(entry([way, drawing]), values, {}, {})).toContain('drawing: no line in optionDrawings');
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { other: rule } })).toContain('drawing: no line in optionDrawings');
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: rule, size: rule } })).toContain('size: in optionDrawings but not a drawing of the tool');
+    // A choice's key is not a drawing's line, a drawing's key not a text's line.
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: rule, way: rule } })).toContain('way: in optionDrawings but not a drawing of the tool');
+    expect(optionProblems(entry([way, drawing]), values, { 'test-options': { drawing: { maxLength: 50, characters: 'standard-font' } } }, drawings)).toContain(
+      'drawing: in optionTexts but not a text of the tool',
+    );
+    // An inherited name is never taken for a tool's or a drawing's line.
+    expect(optionProblems(entry([way, { ...drawing, key: 'toString' }]), values, {}, drawings)).toContain('toString: no line in optionDrawings');
+  });
+
+  it('fail when the most lines or points is not a whole number within its bounds', () => {
+    const lines = 'drawing: the most lines is not a whole number from 1 to 1,000';
+    const points = 'drawing: the most points is not a whole number from 1 to 100,000';
+    for (const maxLines of [0, 1001, 2.5, Number.NaN]) {
+      expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { ...rule, maxLines } } })).toContain(lines);
+    }
+    for (const maxPoints of [0, 100_001, 2.5, Number.POSITIVE_INFINITY]) {
+      expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { ...rule, maxPoints } } })).toContain(points);
+    }
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { maxLines: 1, maxPoints: 1 } } })).toEqual([]);
+    expect(optionProblems(entry([way, drawing]), values, {}, { 'test-options': { drawing: { maxLines: 1000, maxPoints: 100_000 } } })).toEqual([]);
+  });
+
+  it('fail when the key is used twice, is a preset key or one the items send', () => {
+    expect(optionProblems(entry([way, drawing, { ...drawing, label: 'Again' }]), values, {}, drawings)).toContain('an option key is used twice');
+    expect(optionProblems(entry([way, drawing], { drawing: 'yes' }), values, {}, drawings)).toContain(`drawing: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(optionProblems(entry([way, { ...drawing, key: 'turns' }]), values, {}, { 'test-options': { turns: rule } })).toContain("turns: the key is one the page's items send");
+  });
+
+  it('fail when the first option is a drawing, alone or before a choice', () => {
+    expect(optionProblems(entry([drawing]), {}, {}, drawings)).toContain('drawing: the first option is a drawing');
+    expect(optionProblems(entry([drawing, way]), values, {}, drawings)).toContain('drawing: the first option is a drawing');
+    expect(optionProblems(entry([way, drawing]), values, {}, drawings)).not.toContain('drawing: the first option is a drawing');
+  });
+});
+
+describe('pictures', () => {
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'draw', label: 'Draw it' }, { value: 'picture', label: 'Use a picture' }], initial: 'draw' };
+  const picture: PictureOption = {
+    kind: 'picture',
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['draw', 'picture'] } };
+  const rule: PictureRule = { types: ['image/jpeg', 'image/png'], noticeBytes: 8 * 1_048_576, noticePixels: 16_000_000 };
+  const pictures: Pictures = { 'test-options': { picture: rule } };
+  const check = (options: ToolOption[], table: Pictures = pictures, preset?: Record<string, string>) =>
+    optionProblems(entry(options, preset), options.includes(way) ? values : {}, {}, {}, table);
+
+  it('are sound for every tool, and optionPictures names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings, optionPictures), tool.id).toEqual([]);
+    for (const id of Object.keys(optionPictures)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry: first, after a choice, with a condition, or with its own words', () => {
+    expect(check([picture])).toEqual([]);
+    expect(check([way, { ...picture, when: { key: 'way', value: 'picture' } }])).toEqual([]);
+    expect(
+      check([way, { ...picture, refusedSentence: 'This picture could not be used. Choose another picture.', largeAdvice: 'Save a smaller copy. You can still go ahead.', tooLargeAdvice: 'Crop it to the signature, or save a smaller copy.' }]),
+    ).toEqual([]);
+    expect(check([picture], { 'test-options': { picture: { ...rule, types: ['image/png'] } } })).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(check([{ ...picture, label: ' ' }])).toContain('picture: the label is empty or not plain');
+    expect(check([{ ...picture, pickLabel: '' }])).toContain('picture: the pick label is empty or not plain');
+    expect(check([{ ...picture, againLabel: 'Again!' }])).toContain('picture: the again label is empty or not plain');
+    expect(check([{ ...picture, hint: '' }])).toContain('picture: the hint is empty or not plain');
+    expect(check([{ ...picture, acceptsName: ' ' }])).toContain('picture: the accepts name is empty or not plain');
+    expect(check([{ ...picture, emptySentence: 'Choose one!' }])).toContain('picture: the empty sentence is empty or not plain');
+    expect(check([{ ...picture, refusedSentence: ' ' }])).toContain('picture: the refused sentence is empty or not plain');
+    expect(check([{ ...picture, largeAdvice: '' }])).toContain('picture: the large advice is empty or not plain');
+    expect(check([{ ...picture, tooLargeAdvice: 'Smaller!' }])).toContain('picture: the too-large advice is empty or not plain');
+  });
+
+  it('fail with no line in optionPictures, or a line that belongs to no picture', () => {
+    expect(check([picture], {})).toContain('picture: no line in optionPictures');
+    expect(check([picture], { 'test-options': { other: rule } })).toContain('picture: no line in optionPictures');
+    expect(check([picture], { 'test-options': { picture: rule, size: rule } })).toContain('size: in optionPictures but not a picture of the tool');
+    expect(check([way, picture], { 'test-options': { picture: rule, way: rule } })).toContain('way: in optionPictures but not a picture of the tool');
+    // An inherited name is never taken for a tool's or a picture's line.
+    expect(check([{ ...picture, key: 'toString' }])).toContain('toString: no line in optionPictures');
+  });
+
+  it('fail when the types are not JPG, PNG or both, once each', () => {
+    const wrong = 'picture: the types are not JPG, PNG or both, once each';
+    const typesOf = (types: readonly string[]): Pictures => ({ 'test-options': { picture: { ...rule, types: types as PictureRule['types'] } } });
+    for (const types of [[], ['image/jpeg', 'image/jpeg'], ['image/gif'], ['image/jpeg', 'image/png', 'image/webp'], ['application/pdf']]) {
+      expect(check([picture], typesOf(types)), types.join(' ')).toContain(wrong);
+    }
+    expect(check([picture], typesOf(['image/jpeg']))).not.toContain(wrong);
+  });
+
+  it('fail when a notice size is not within its bounds', () => {
+    const bytes = 'picture: the notice size is not a whole number of MB from 1 to 50';
+    const pixels = 'picture: the notice pixels are not a whole number of millions from 1 to 100';
+    const noSize = { ...picture, hint: 'A JPG or PNG picture.' };
+    for (const noticeBytes of [0, 51 * 1_048_576, 8_000_000, 1.5 * 1_048_576, Number.NaN]) {
+      expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes } } })).toContain(bytes);
+    }
+    for (const noticePixels of [0, 101_000_000, 16_500_000, Number.NaN]) {
+      expect(check([noSize], { 'test-options': { picture: { ...rule, noticePixels } } })).toContain(pixels);
+    }
+    expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes: 1_048_576, noticePixels: 1_000_000 } } })).toEqual([]);
+    expect(check([noSize], { 'test-options': { picture: { ...rule, noticeBytes: 50 * 1_048_576, noticePixels: 100_000_000 } } })).toEqual([]);
+  });
+
+  it('fail when the hint names a size in MB other than the notice size', () => {
+    expect(check([picture], { 'test-options': { picture: { ...rule, noticeBytes: 10 * 1_048_576 } } })).toContain('picture: the hint names 8 MB, not the notice size');
+    expect(check([picture])).not.toContain('picture: the hint names 8 MB, not the notice size');
+  });
+
+  it('fail when the key is used twice, is a preset key, one the items send, or passwords', () => {
+    expect(check([picture, { ...picture, label: 'Again' }])).toContain('an option key is used twice');
+    expect(check([picture], pictures, { picture: 'yes' })).toContain(`picture: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(check([{ ...picture, key: 'order' }], { 'test-options': { order: rule } })).toContain("order: the key is one the page's items send");
+    expect(check([{ ...picture, key: 'passwords' }], { 'test-options': { passwords: rule } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('the worker keys', () => {
+  it('fail for an option of any kind keyed passwords, which the worker sends beside the options', () => {
+    const merge = tools.find((each) => each.id === 'merge-pdf');
+    if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+    const choice: ToolOption = { kind: 'choice', key: 'passwords', legend: 'Which', choices: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }], initial: 'a' };
+    const tool: Tool = { ...merge, id: 'test-options', widget: { ...merge.widget, options: [choice] } };
+    expect(optionProblems(tool, { 'test-options': { passwords: ['a', 'b'] } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('new passwords', () => {
+  // Protect's key, `newPassword`: never `password`, one letter from the worker's `passwords`.
+  const password: NewPasswordOption = {
+    kind: 'new-password',
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: `Up to 127 characters. ${passwordAdvice['printable-ascii']}`,
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const way: ToolOption = { kind: 'choice', key: 'way', legend: 'How', choices: [{ value: 'lock', label: 'Lock it' }, { value: 'keep', label: 'Keep it' }], initial: 'lock' };
+  const merge = tools.find((each) => each.id === 'merge-pdf');
+  if (merge === undefined || merge.widget === undefined) throw new Error('merge-pdf has no widget');
+  const mergeWidget = merge.widget;
+  const entry = (options: ToolOption[], preset?: Record<string, string>): Tool => ({ ...merge, id: 'test-options', pages: merge.pages.map((page) => ({ ...page, preset })), widget: { ...mergeWidget, options } });
+  const values: Values = { 'test-options': { way: ['lock', 'keep'] } };
+  const rule: PasswordRule = { maxLength: 127, characters: 'printable-ascii' };
+  const passwords: Passwords = { 'test-options': { newPassword: rule } };
+  const check = (options: ToolOption[], table: Passwords = passwords, preset?: Record<string, string>) =>
+    optionProblems(entry(options, preset), options.includes(way) ? values : {}, {}, {}, {}, table);
+
+  it('are sound for every tool, and optionPasswords names only tools in the registry', () => {
+    for (const tool of tools) expect(optionProblems(tool, optionValues, optionTexts, optionDrawings, optionPictures, optionPasswords), tool.id).toEqual([]);
+    for (const id of Object.keys(optionPasswords)) expect(tools.map((tool) => tool.id)).toContain(id);
+  });
+
+  it('pass for a sound entry keyed newPassword: first, after a choice, with a condition, or with its own refused sentence', () => {
+    expect(password.key).toBe('newPassword');
+    expect(check([password])).toEqual([]);
+    expect(check([way, { ...password, when: { key: 'way', value: 'lock' } }])).toEqual([]);
+    expect(check([{ ...password, refusedSentence: 'This password could not be used. Go back to your file and type it again.' }])).toEqual([]);
+    expect(check([{ ...password, hint: passwordAdvice['printable-ascii'] }], { 'test-options': { newPassword: { maxLength: 1, characters: 'printable-ascii' } } })).toEqual([]);
+  });
+
+  it('fail when a word is empty or not plain', () => {
+    expect(check([{ ...password, label: ' ' }])).toContain('newPassword: the label is empty or not plain');
+    expect(check([{ ...password, againLabel: '' }])).toContain('newPassword: the again label is empty or not plain');
+    expect(check([{ ...password, hint: '' }])).toContain('newPassword: the hint is empty or not plain');
+    expect(check([{ ...password, emptySentence: 'Type one!' }])).toContain('newPassword: the empty sentence is empty or not plain');
+    expect(check([{ ...password, againSentence: ' ' }])).toContain('newPassword: the again sentence is empty or not plain');
+    expect(check([{ ...password, refusedSentence: '' }])).toContain('newPassword: the refused sentence is empty or not plain');
+  });
+
+  it('fail with no line in optionPasswords, or a line that belongs to no new password', () => {
+    expect(check([password], {})).toContain('newPassword: no line in optionPasswords');
+    expect(check([password], { 'test-options': { other: rule } })).toContain('newPassword: no line in optionPasswords');
+    expect(check([password], { 'test-options': { newPassword: rule, size: rule } })).toContain('size: in optionPasswords but not a new password of the tool');
+    expect(check([way, password], { 'test-options': { newPassword: rule, way: rule } })).toContain('way: in optionPasswords but not a new password of the tool');
+    // A new password's key is not a text's line, and the reverse.
+    expect(optionProblems(entry([password]), {}, { 'test-options': { newPassword: { maxLength: 50, characters: 'standard-font' } } }, {}, {}, passwords)).toContain(
+      'newPassword: in optionTexts but not a text of the tool',
+    );
+    // An inherited name is never taken for a tool's or a password's line.
+    expect(check([{ ...password, key: 'toString' }])).toContain('toString: no line in optionPasswords');
+  });
+
+  it('fail when the most characters is not a whole number from 1 to 127, or the rule is not known', () => {
+    const limit = 'newPassword: the most characters is not a whole number from 1 to 127';
+    const noNumber = { ...password, hint: passwordAdvice['printable-ascii'] };
+    for (const maxLength of [0, 128, 2.5, Number.NaN]) {
+      expect(check([noNumber], { 'test-options': { newPassword: { maxLength, characters: 'printable-ascii' } } }), String(maxLength)).toContain(limit);
+    }
+    expect(check([noNumber], { 'test-options': { newPassword: { maxLength: 127, characters: 'printable-ascii' } } })).toEqual([]);
+    for (const characters of ['any', 'standard-font', 'toString']) {
+      expect(check([password], { 'test-options': { newPassword: { maxLength: 127, characters: characters as PasswordRule['characters'] } } })).toContain(
+        'newPassword: the character rule is not known',
+      );
+    }
+  });
+
+  it('fail when the hint does not end with what its rule takes, or names another number of characters', () => {
+    const wrong = 'newPassword: the hint does not end with what its rule takes';
+    expect(check([{ ...password, hint: 'Up to 127 characters.' }])).toContain(wrong);
+    expect(check([{ ...password, hint: `${password.hint} Or anything.` }])).toContain(wrong);
+    expect(check([password])).not.toContain(wrong);
+    expect(check([password], { 'test-options': { newPassword: { maxLength: 64, characters: 'printable-ascii' } } })).toContain(
+      'newPassword: the hint names 127 characters, not the most characters',
+    );
+  });
+
+  it('fail when the key is not a plain word, is used twice, is a preset key, one the items send, or passwords', () => {
+    expect(check([{ ...password, key: 'new password' }], { 'test-options': { 'new password': rule } })).toContain('new password: the key is not a plain word');
+    expect(check([password, { ...password, label: 'Again' }])).toContain('an option key is used twice');
+    expect(check([password], passwords, { newPassword: 'x' })).toContain(`newPassword: the preset of ${merge.pages[0]?.slug ?? ''} uses the key`);
+    expect(check([{ ...password, key: 'pages' }], { 'test-options': { pages: rule } })).toContain("pages: the key is one the page's items send");
+    expect(check([{ ...password, key: 'passwords' }], { 'test-options': { passwords: rule } })).toContain('passwords: the key is one the worker sends');
+  });
+});
+
+describe('group hub pages', () => {
+  // catalogue.ts is a type, so its slugs are read as text, as catalogue.test.ts does. The pattern matches every
+  // quoted name in the file, a few more than the catalogue's slugs, which only widens what is refused.
+  const catalogueSlugs = [...readFileSync('src/tools/catalogue.ts', 'utf8').matchAll(/\| '([^']+)'/g)].map((match) => match[1] ?? '');
+  // Addresses a hub page may never take: every footer page (so a new one is covered with no second list), 404 and the two crawler files.
+  const reserved = [...footerLinks.map((link) => link.href.slice(1)), '404', 'sitemap.xml', 'robots.txt'];
+  const deviceWords = /device|browser|upload|never leaves|not sent/i;
+
+  /** Everything wrong with the groups' hub words and addresses, as plain lines naming the group. */
+  function groupProblems(all: Group[], published: Tool[]): string[] {
+    const problems: string[] = [];
+    const slugs = all.map((group) => group.slug);
+    if (new Set(slugs).size !== slugs.length) problems.push('a hub address is used twice');
+    for (const group of all) {
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(group.slug)) problems.push(`${group.name}: the address is not lowercase with hyphens`);
+      if (catalogueSlugs.includes(group.slug)) problems.push(`${group.name}: the address is a catalogue slug`);
+      if (reserved.includes(group.slug)) problems.push(`${group.name}: the address is a site page or a crawler file`);
+      if (group.title.length >= 60 || !group.title.endsWith(' - PDFkaro')) problems.push(`${group.name}: the title is 60 characters or more, or does not end with the brand`);
+      if (group.description.length >= 155) problems.push(`${group.name}: the description is 155 characters or more`);
+      for (const words of [group.title, group.description, group.sentence]) {
+        if (words.trim() === '' || words.includes('!')) problems.push(`${group.name}: a hub word is empty or has an exclamation mark`);
+      }
+      const claims = deviceWords.test([group.title, group.sentence, group.description].join(' '));
+      if (claims && !group.claimsDevice) problems.push(`${group.name}: its words say where files go, but it does not declare claimsDevice`);
+      if (group.claimsDevice) {
+        const server = published.filter((tool) => tool.group === group.id && tool.runsIn !== 'browser').map((tool) => tool.id);
+        if (server.length > 0) problems.push(`${group.name}: its words claim the device, but ${server.join(', ')} does not run in the browser`);
+      }
+    }
+    const pageWordsOf = (key: 'title' | 'description') => [
+      ...allPages(published).map(({ page }) => page[key]),
+      ...all.filter((group) => published.some((tool) => tool.group === group.id)).map((group) => group[key]),
+    ];
+    for (const key of ['title', 'description'] as const) {
+      const words = pageWordsOf(key);
+      if (new Set(words).size !== words.length) problems.push(`a ${key} is shared by two tool or hub pages`);
+    }
+    return problems;
+  }
+
+  const organise = groups.find((group) => group.id === 'organise')!;
+  const others = groups.filter((group) => group.id !== 'organise');
+  const withOrganise = (change: Partial<Group>) => [{ ...organise, ...change }, ...others];
+
+  it('are sound for every group', () => {
+    expect(groupProblems(groups, tools)).toEqual([]);
+  });
+
+  it('use the agent\'s default addresses, the group name at the root, until the owner answers', () => {
+    expect(groups.map((group) => group.slug)).toEqual([
+      'organise-pages',
+      'make-smaller-and-fix',
+      'convert-to-pdf',
+      'convert-from-pdf',
+      'edit-and-sign',
+      'protect',
+      'read-and-check',
+    ]);
+  });
+
+  it('fail when an address is a tool slug, a site page or a crawler file, or is used twice', () => {
+    expect(groupProblems(withOrganise({ slug: 'merge-pdf' as HubSlug }), tools)).toContain('Organise pages: the address is a catalogue slug');
+    // An unpublished catalogue slug is refused too.
+    expect(groupProblems(withOrganise({ slug: 'pdf-viewer' as HubSlug }), tools)).toContain('Organise pages: the address is a catalogue slug');
+    for (const slug of ['about', 'contact', '404', 'sitemap.xml', 'robots.txt']) {
+      expect(groupProblems(withOrganise({ slug: slug as HubSlug }), tools), slug).toContain('Organise pages: the address is a site page or a crawler file');
+    }
+    expect(groupProblems(withOrganise({ slug: 'protect' }), tools)).toContain('a hub address is used twice');
+    expect(groupProblems(withOrganise({ slug: 'Organise_Pages' as HubSlug }), tools)).toContain('Organise pages: the address is not lowercase with hyphens');
+  });
+
+  it('fail on a long title, a title without the brand or a long description', () => {
+    expect(groupProblems(withOrganise({ title: `${'x'.repeat(50)} - PDFkaro` }), tools)).toContain(
+      'Organise pages: the title is 60 characters or more, or does not end with the brand',
+    );
+    expect(groupProblems(withOrganise({ title: 'Organise PDF pages' }), tools)).toContain(
+      'Organise pages: the title is 60 characters or more, or does not end with the brand',
+    );
+    expect(groupProblems(withOrganise({ description: 'x'.repeat(155) }), tools)).toContain('Organise pages: the description is 155 characters or more');
+  });
+
+  it('fail when a hub title or description repeats a tool page\'s', () => {
+    const merge = tools.find((tool) => tool.id === 'merge-pdf')!.pages[0]!;
+    expect(groupProblems(withOrganise({ title: merge.title }), tools)).toContain('a title is shared by two tool or hub pages');
+    expect(groupProblems(withOrganise({ description: merge.description }), tools)).toContain('a description is shared by two tool or hub pages');
+  });
+
+  it('fail when words say where files go but the group does not declare it', () => {
+    expect(groupProblems(withOrganise({ sentence: 'Tools that work in your browser.', claimsDevice: false, description: 'Organise.' }), tools)).toContain(
+      'Organise pages: its words say where files go, but it does not declare claimsDevice',
+    );
+    for (const words of ['Files are not uploaded.', 'Your file never leaves.', 'It is not sent anywhere.', 'On your device.']) {
+      expect(groupProblems(withOrganise({ sentence: words, description: 'Organise.', claimsDevice: false }), tools), words).toContain(
+        'Organise pages: its words say where files go, but it does not declare claimsDevice',
+      );
+    }
+  });
+
+  it('fail, naming the group, when a server tool joins a group whose words claim the device', () => {
+    const merge = tools.find((tool) => tool.id === 'merge-pdf')!;
+    const server: Tool = { ...merge, id: 'test-server-tool', runsIn: 'server', pages: [{ ...merge.pages[0]!, slug: 'word-to-pdf', title: 'Test - PDFkaro', description: 'Test.' }] };
+    expect(groupProblems(groups, [...tools, server])).toContain(
+      'Organise pages: its words claim the device, but test-server-tool does not run in the browser',
     );
   });
 });

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "dev": "astro dev",
@@ -16,6 +16,8 @@
     "weigh": "node scripts/page-weight.mjs",
     "check:base": "node scripts/check-base.mjs",
     "check:worker": "node scripts/check-worker.mjs",
+    "check:csp": "node scripts/check-csp.mjs",
+    "check:seo": "node scripts/check-seo.mjs",
     "e2e": "playwright test",
     "spec": "openspec validate --all --strict --no-interactive"
   },

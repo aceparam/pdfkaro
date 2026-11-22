@@ -1,14 +1,36 @@
-// The one place a tool is declared. Pages, the home page list and related
-// links are all generated from this file. Data and types only: no logic here.
+// The one place a tool is declared. Pages, the home page list, related
+// links, the group hub pages and the sitemap are all generated from this file.
+// Data and types only: no logic here.
+//
+// Keep every import an `import type` line, and use no syntax that Node's type
+// stripping refuses (such as `enum`): scripts/check-seo.mjs imports this file
+// straight into Node, with no build step, to read the registry with its own code.
 
 import type { CatalogueSlug } from './catalogue';
 import type { OutputExtension } from '../widget/format';
 
 export type GroupId = 'organise' | 'smaller' | 'to-pdf' | 'from-pdf' | 'edit' | 'protect' | 'read';
 
+/** The address of a group's hub page, at the site root. A published address never changes. */
+export type HubSlug = 'organise-pages' | 'make-smaller-and-fix' | 'convert-to-pdf' | 'convert-from-pdf' | 'edit-and-sign' | 'protect' | 'read-and-check';
+
 export type Group = {
   id: GroupId;
+  /** The group's heading on the home page, and the h1 of its hub page. */
   name: string;
+  /** The hub page's address. Declared, not derived, so renaming a group never moves it. */
+  slug: HubSlug;
+  /** The hub page's title tag: under 60 characters, ending with the brand. */
+  title: string;
+  /** The hub page's meta description, under 155 characters. */
+  description: string;
+  /** The one sentence under the hub page's h1. */
+  sentence: string;
+  /**
+   * True when the title, sentence or description says where files go (the device, the browser,
+   * uploads). The registry test then requires every published tool in the group to run in the browser.
+   */
+  claimsDevice: boolean;
 };
 
 /** One URL that a tool serves. Most tools have one; some have several. */
@@ -42,6 +64,13 @@ export type ToolPage = {
 export type PageWords = Partial<Pick<ToolWidgetWords, 'actionLabel' | 'resultNotes' | 'outputExtension'>>;
 
 /**
+ * When an option is shown: only while the earlier choice `key` of the same tool holds `value`.
+ * The registry test checks that `key` is a choice listed earlier with no condition of its own,
+ * that `value` is one of its values, and that a tool's first option has none.
+ */
+export type OptionCondition = { key: string; value: string };
+
+/**
  * A choice of one value from several, drawn as radio buttons. The values each tool accepts are
  * also written in src/widget/option-values.ts, which its engine reads; the registry test checks
  * the two lists are the same.
@@ -56,6 +85,8 @@ export type ChoiceOption = {
   choices: { value: string; label: string }[];
   /** The value chosen at first, with which the main button works. */
   initial: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
 };
 
 /**
@@ -75,13 +106,107 @@ export type TextOption = {
   emptySentence: string;
   /** When the engine refuses the text. Left out: "The text could not be used. Check it and try again." */
   refusedSentence?: string;
+  /**
+   * Said after every refused-characters sentence, whether letters are named or not: the tool's way forward for a
+   * text in another script. Sign PDF: "To use other letters, choose “Draw it” or “Use a picture of it” above."
+   * Left out, the sentence stands alone (Watermark).
+   */
+  charactersAdvice?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
+ * A drawing on a pad, with a finger, a mouse or a pen. It is the job's input: it starts empty, and the
+ * main button waits until something is drawn. It needs a pointer, so it is never a tool's first option
+ * (the registry test), and its hint names the tool's way to do the job without drawing. Its limits are
+ * written once, in src/widget/option-values.ts (`optionDrawings`); the registry holds only its words.
+ */
+export type DrawingOption = {
+  kind: 'drawing';
+  /** The key the engine receives: `drawing`. No page preset of the tool uses it. */
+  key: string;
+  /** Above the box, naming it: "Draw your signature". */
+  label: string;
+  /** Under the box, describing it: how to draw, and the way to do the job without drawing. */
+  hint: string;
+  /** The button that empties the box: "Clear the drawing". */
+  clearLabel: string;
+  /** Tied to the main button while nothing is drawn: "Draw your signature first." */
+  emptySentence: string;
+  /** When the engine refuses the drawing. Left out: "The drawing could not be used. Clear it and draw again." */
+  refusedSentence?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
+ * One picture the visitor chooses beside the tool's file, such as a picture of a signature. It is the
+ * job's input: the main button waits until one is chosen and read. Its types and notice sizes are written
+ * once, in src/widget/option-values.ts (`optionPictures`); the registry holds only its words. The picture
+ * is not shown: a line names it with its size.
+ */
+export type PictureOption = {
+  kind: 'picture';
+  /** The key the engine receives the picture's bytes under: `picture`. No page preset of the tool uses it. */
+  key: string;
+  /** Above the button, naming the field: "Picture of your signature". */
+  label: string;
+  /** The button before a pick: "Choose a picture". */
+  pickLabel: string;
+  /** The button once a picture is chosen: "Choose another picture". */
+  againLabel: string;
+  /** Under the button, read with it: what it takes and the notice sizes. A size in MB it names is the notice size. */
+  hint: string;
+  /** What a picture of the wrong type is not: "a JPG or PNG picture", as in "notes.png is not a JPG or PNG picture, so it was not used." */
+  acceptsName: string;
+  /** Tied to the main button while none is chosen: "Choose a picture of your signature first." */
+  emptySentence: string;
+  /** When the engine refuses the picture. Left out: "The picture could not be used. Choose another picture." */
+  refusedSentence?: string;
+  /**
+   * The notice's text for a picture over the tool's notice sizes. Left out: "A picture this large makes the new
+   * file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead."
+   */
+  largeAdvice?: string;
+  /** Said after "photo.jpg (24.6 MB) is too large to place on these pages." Left out: "Choose a smaller picture." */
+  tooLargeAdvice?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
+};
+
+/**
+ * A password the visitor sets, typed twice in two hidden fields. It is the job's input: both start empty, and the
+ * main button waits until both hold the same password its rule takes. Its most characters and character rule are
+ * written once, in src/widget/option-values.ts (`optionPasswords`); the registry holds only its words. Its value is
+ * never held in the widget's state.
+ */
+export type NewPasswordOption = {
+  kind: 'new-password';
+  /** The key the engine receives: Protect's is `newPassword`, never `password`, one letter from the worker's `passwords`. No page preset uses it. */
+  key: string;
+  /** The first field's label: "New password". */
+  label: string;
+  /** The second field's label: "Type the new password again". */
+  againLabel: string;
+  /** Under the first field, read with it, before the fixed note: what it takes. Ends with the rule's own words. */
+  hint: string;
+  /** Tied to the main button while the first field is empty: "Type a password first." */
+  emptySentence: string;
+  /** Tied to the main button while the second field is empty or part-typed: "Type the password again to check it." */
+  againSentence: string;
+  /** When the engine refuses the password. Left out: "The password could not be used. Go back to your file and type it again." */
+  refusedSentence?: string;
+  /** Shown only while the earlier choice `key` holds `value` (src/widget/options.ts). Left out, always shown. */
+  when?: OptionCondition;
 };
 
 /**
  * An option a tool's working area shows once its file has been read, below the file and above
- * the main button, in registry order: a choice or a text.
+ * the main button, in registry order: a choice, a text, a drawing, a picture or a new password. One with a
+ * condition (`when`) is shown, held and sent only while its condition holds.
  */
-export type ToolOption = ChoiceOption | TextOption;
+export type ToolOption = ChoiceOption | TextOption | DrawingOption | PictureOption | NewPasswordOption;
 
 /** The kinds of per-page toggle. What each means is in src/widget/toggles.ts. */
 export type ToggleKind = 'cut-after' | 'take' | 'drop';
@@ -198,15 +323,80 @@ export type Tool = {
   widget?: ToolWidgetWords;
 };
 
-/** The seven groups, in the order the home page shows them. */
+/**
+ * The seven groups, in the order the home page shows them. A group gets a hub page once it has a
+ * published tool. The hub words (title, description, sentence) are drafts for the owner to review.
+ * A tool that joins a group with a hub page updates that group's words in its own change, so the
+ * description still names what the group's tools do and still matches each tool page's own words
+ * about where files go.
+ */
 export const groups: Group[] = [
-  { id: 'organise', name: 'Organise pages' },
-  { id: 'smaller', name: 'Make smaller and fix' },
-  { id: 'to-pdf', name: 'Convert to PDF' },
-  { id: 'from-pdf', name: 'Convert from PDF' },
-  { id: 'edit', name: 'Edit and sign' },
-  { id: 'protect', name: 'Protect' },
-  { id: 'read', name: 'Read and check' },
+  {
+    id: 'organise',
+    name: 'Organise pages',
+    slug: 'organise-pages',
+    title: 'Organise PDF pages - PDFkaro',
+    description:
+      'Combine, split, copy out, remove, reorder and turn the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
+    sentence: 'Tools that combine, split and reorder the pages of a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'smaller',
+    name: 'Make smaller and fix',
+    slug: 'make-smaller-and-fix',
+    title: 'Make a PDF smaller - PDFkaro',
+    description: 'Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that make a PDF file smaller.',
+    claimsDevice: true,
+  },
+  {
+    id: 'to-pdf',
+    name: 'Convert to PDF',
+    slug: 'convert-to-pdf',
+    title: 'Convert pictures to PDF - PDFkaro',
+    description: 'Turn JPG and PNG pictures into one PDF, in your browser. The pictures stay on your device and are not uploaded.',
+    sentence: 'Tools that turn JPG and PNG pictures into a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'from-pdf',
+    name: 'Convert from PDF',
+    slug: 'convert-from-pdf',
+    title: 'Convert a PDF to pictures - PDFkaro',
+    description: 'Turn each page of a PDF into a JPG or PNG picture, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that turn the pages of a PDF into JPG or PNG pictures.',
+    claimsDevice: true,
+  },
+  {
+    id: 'edit',
+    name: 'Edit and sign',
+    slug: 'edit-and-sign',
+    title: 'Edit and sign a PDF - PDFkaro',
+    description: 'Add page numbers, a watermark or a signature to a PDF, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that add page numbers, a watermark or a signature to a PDF.',
+    claimsDevice: true,
+  },
+  {
+    id: 'protect',
+    name: 'Protect',
+    slug: 'protect',
+    title: 'Add or remove a PDF password - PDFkaro',
+    description:
+      'Add a password to a PDF, or remove a password or restrictions. The file stays on your device. This site does not upload the file or the password.',
+    sentence: 'Tools that add a password to a PDF, or remove a password or restrictions.',
+    claimsDevice: true,
+  },
+  {
+    // No published tool yet, so no hub page. Its first tool's change rewrites these words.
+    id: 'read',
+    name: 'Read and check',
+    slug: 'read-and-check',
+    title: 'Read and check a PDF - PDFkaro',
+    description: 'Tools that read a PDF and tell you about it.',
+    sentence: 'Tools that read a PDF and tell you about it.',
+    claimsDevice: false,
+  },
 ];
 
 // A tool is published when it has an entry here. An entry is added in the
@@ -777,6 +967,236 @@ export const tools: Tool[] = [
       resultNotes: [
         'The watermark is on every page. Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    // The third row of "Edit and sign": the visitor's signature, typed, drawn or from a picture, on the first, last or every page.
+    id: 'sign-pdf',
+    group: 'edit',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    // Protect is linked once it is published.
+    related: ['watermark-pdf', 'add-page-numbers-to-pdf', 'protect-pdf', 'merge-pdf', 'compress-pdf', 'jpg-to-pdf'],
+    pages: [
+      {
+        slug: 'sign-pdf',
+        name: 'Sign PDF',
+        summary: 'Put your signature on a PDF.',
+        title: 'Sign a PDF in your browser - PDFkaro',
+        description: 'Add your signature to a PDF: type your name, draw it or use a picture. The file stays on your device and is not uploaded.',
+        heading: 'Sign a PDF',
+        sentence: 'Put your signature on a PDF: type your name, draw it, or use a picture of it. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Sign and download',
+      writingLabel: 'Writing the signed file',
+      doneHeading: 'Your signed file is ready',
+      failedHeading: 'The signature was not added.',
+      tooFewFiles: 'Choose a PDF file to sign.',
+      outputSuffix: 'signed',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or sign the last page only.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The values, the name's rule, the drawing's limits and the picture's rule are in src/widget/option-values.ts, which the engine reads.
+      // Only the input of the way chosen is shown, holds the main button and is sent (src/widget/options.ts).
+      options: [
+        {
+          kind: 'choice',
+          key: 'source',
+          legend: 'How to add your signature',
+          initial: 'type',
+          choices: [
+            { value: 'type', label: 'Type your name' },
+            { value: 'draw', label: 'Draw it' },
+            { value: 'picture', label: 'Use a picture of it' },
+          ],
+        },
+        {
+          kind: 'text',
+          key: 'name',
+          when: { key: 'source', value: 'type' },
+          label: 'Your name',
+          hint: 'Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.',
+          charactersAdvice: 'To use other letters, choose “Draw it” or “Use a picture of it” above.',
+          emptySentence: 'Type your name first.',
+          refusedSentence: 'Your name could not be used. Check it and try again.',
+        },
+        {
+          kind: 'drawing',
+          key: 'drawing',
+          when: { key: 'source', value: 'draw' },
+          label: 'Draw your signature',
+          hint: 'Use a finger, a mouse or a pen in the box. To use a keyboard, choose “Type your name” above.',
+          clearLabel: 'Clear the drawing',
+          emptySentence: 'Draw your signature first.',
+        },
+        {
+          kind: 'picture',
+          key: 'picture',
+          when: { key: 'source', value: 'picture' },
+          label: 'Picture of your signature',
+          pickLabel: 'Choose a picture',
+          againLabel: 'Choose another picture',
+          acceptsName: 'a JPG or PNG picture',
+          hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.',
+          largeAdvice:
+            'A picture this large makes the signed file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.',
+          tooLargeAdvice: 'Crop it to the signature, or save a smaller copy.',
+          emptySentence: 'Choose a picture of your signature first.',
+        },
+        {
+          kind: 'choice',
+          key: 'page',
+          legend: 'Which pages to sign',
+          initial: 'last',
+          choices: [
+            { value: 'last', label: 'Last page' },
+            { value: 'first', label: 'First page' },
+            { value: 'every', label: 'Every page' },
+          ],
+        },
+        {
+          kind: 'choice',
+          key: 'position',
+          legend: 'Where on the page',
+          initial: 'bottom-right',
+          choices: [
+            { value: 'bottom-left', label: 'Bottom left' },
+            { value: 'bottom-centre', label: 'Bottom centre' },
+            { value: 'bottom-right', label: 'Bottom right' },
+            { value: 'top-left', label: 'Top left' },
+            { value: 'top-centre', label: 'Top centre' },
+            { value: 'top-right', label: 'Top right' },
+          ],
+        },
+      ],
+      // Page tools drop passwords and restrictions (13 Nov 2026), and the decision names Sign PDF.
+      resultNotes: [
+        'Your signature is drawn on the page. It is not a digital signature.',
+        'Text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature already in the file will no longer be valid.',
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    // The first row of "Protect": a password needed to open the file, set with qpdf at 256-bit AES.
+    id: 'protect-pdf',
+    group: 'protect',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['unlock-pdf', 'compress-pdf', 'sign-pdf', 'watermark-pdf', 'merge-pdf', 'split-pdf'],
+    pages: [
+      {
+        slug: 'protect-pdf',
+        name: 'Protect with a password',
+        summary: 'Add a password that is needed to open a PDF.',
+        title: 'Protect a PDF with a password in your browser - PDFkaro',
+        // Neither this nor the sentence claims the password stays on the device: the browser may offer to save it.
+        description: 'Add a password to a PDF so it cannot be opened without it. The file and the password are not uploaded.',
+        heading: 'Protect a PDF with a password',
+        sentence: 'Add a password that is needed to open a PDF. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Protect and download',
+      writingLabel: 'Writing the protected file',
+      doneHeading: 'Your protected file is ready',
+      failedHeading: 'The password was not added.',
+      tooFewFiles: 'Choose a PDF file to protect.',
+      outputSuffix: 'protected',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The password's most characters and character rule are in src/widget/option-values.ts, which the engine reads.
+      // The hint and the result notes are page text, a draft for the owner's review.
+      options: [
+        {
+          kind: 'new-password',
+          key: 'newPassword',
+          label: 'New password',
+          againLabel: 'Type the new password again',
+          hint: 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+          emptySentence: 'Type a password first.',
+          againSentence: 'Type the password again to check it.',
+        },
+      ],
+      // The old password and restrictions are replaced: the agent's reading, an owner question.
+      resultNotes: [
+        'The file now opens only with the password you typed. Keep it somewhere safe: if it is forgotten, no one can open the file.',
+        'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'If the file you chose had a password or restrictions, the new password replaces them, and the file has no restrictions.',
+      ],
+    },
+  },
+  {
+    // The second row of "Protect": the catalogue's Unlock PDF. By the owner's decision of 22 Nov 2026 the address and
+    // id keep the word, and no page says it: the tool is named "Remove a password". qpdf writes the file decrypted,
+    // with only a password the visitor typed; restrictions need none. Page text, a draft for the owner's review.
+    id: 'unlock-pdf',
+    group: 'protect',
+    runsIn: 'browser',
+    phase: 1,
+    accepts: ['application/pdf'],
+    related: ['protect-pdf', 'compress-pdf', 'merge-pdf', 'split-pdf', 'extract-pdf-pages'],
+    pages: [
+      {
+        slug: 'unlock-pdf',
+        name: 'Remove a password',
+        summary: 'Remove print and edit restrictions from a PDF, and its password if you know it.',
+        title: 'Remove a password from a PDF in your browser - PDFkaro',
+        description: 'Remove print and edit restrictions from a PDF, and its password if you know it. The file and the password are not uploaded.',
+        heading: 'Remove a password from a PDF',
+        sentence: 'Remove print and edit restrictions from a PDF, and its password if you know it. Your file stays on your device. This site does not upload your file or the password.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Remove protection and download',
+      writingLabel: 'Writing the unprotected file',
+      doneHeading: 'Your unprotected file is ready',
+      failedHeading: 'The protection was not removed.',
+      tooFewFiles: 'Choose a PDF file.',
+      outputSuffix: 'unprotected',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // A file encrypted in a way qpdf cannot open, such as with a certificate (the engine's inspector).
+      unsupportedAdvice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      // A file with no password and no restrictions gives no new file (owner, 22 Nov 2026).
+      noSmaller: {
+        heading: 'This file has no password or restrictions.',
+        advice: 'There was nothing to remove, so no new file was made. You can use your file as it is.',
+      },
+      resultNotes: [
+        'The file now opens without a password, and its print, copy and edit restrictions are removed. Anyone who has this copy can open it.',
+        'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
       ],
     },
   },

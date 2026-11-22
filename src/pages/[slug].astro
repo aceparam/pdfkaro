@@ -1,30 +1,73 @@
 ---
-// One page for every URL in the registry.
+// One page for every URL in the registry: each tool page, and each group's hub page.
+// One route for both, so Astro never has to choose between two dynamic routes at the root.
 import Base from '../layouts/Base.astro';
 import { ToolShell } from '../components/ToolShell/ToolShell';
 import { ToolWidget } from '../components/ToolWidget/ToolWidget';
-import { tools } from '../tools/registry';
-import { allPages, pageWords, relatedItems } from '../tools/queries';
-import type { PageWithTool } from '../tools/queries';
+import { ToolList } from '../components/ToolList/ToolList';
+import { groups, tools } from '../tools/registry';
+import { allPages, groupOf, hubLink, hubPages, pageWords, relatedItems } from '../tools/queries';
+import type { HubPage, PageWithTool } from '../tools/queries';
+import { toolStructuredData } from '../tools/seo';
+import { siteName } from '../site';
 
 export function getStaticPaths() {
-  return allPages(tools).map((entry) => ({ params: { slug: entry.page.slug }, props: entry }));
+  const base = import.meta.env.BASE_URL;
+  return [
+    ...allPages(tools).map((entry) => ({ params: { slug: entry.page.slug }, props: { kind: 'tool' as const, ...entry } })),
+    ...hubPages(groups, tools, base).map((hub) => ({ params: { slug: hub.slug }, props: { kind: 'hub' as const, hub } })),
+  ];
 }
 
-type Props = PageWithTool;
+type Props = ({ kind: 'tool' } & PageWithTool) | { kind: 'hub'; hub: HubPage };
 
-const { tool, page } = Astro.props;
-// The tool's widget words, with this page's own in place of them where it has any.
-const words = pageWords(tool, page);
+const props = Astro.props;
+const base = import.meta.env.BASE_URL;
+// The origin from SITE_ORIGIN, checked in astro.config.mjs: never a trailing slash.
+const origin = import.meta.env.SITE;
 
 // The text below each tool, written in Markdown and rendered to plain HTML at build time.
 const texts = import.meta.glob<{ Content: unknown }>('../content/tools/*.md', { eager: true });
-const Below = texts[`../content/tools/${page.slug}.md`]?.Content as ((props: object) => unknown) | undefined;
+
+const hub = props.kind === 'hub' ? props.hub : undefined;
+const entry = props.kind === 'tool' ? { tool: props.tool, page: props.page } : undefined;
+// The tool's widget words, with this page's own in place of them where it has any.
+const words = entry && pageWords(entry.tool, entry.page);
+const Below = entry && (texts[`../content/tools/${entry.page.slug}.md`]?.Content as ((props: object) => unknown) | undefined);
+// Looked up once, for the JSON-LD's breadcrumb and the link to the hub page.
+const group = entry && groupOf(groups, entry.tool);
 ---
 
-<Base title={page.title} description={page.description}>
-  <ToolShell heading={page.heading} sentence={page.sentence} related={relatedItems(tools, tool, import.meta.env.BASE_URL, page)}>
-    {words && <ToolWidget client:load toolId={tool.id} accepts={page.accepts ?? tool.accepts} words={words} preset={page.preset} />}
-    {Below && <Fragment slot="below"><Below /></Fragment>}
-  </ToolShell>
-</Base>
+{
+  hub && (
+    <Base path={`/${hub.slug}`} title={hub.title} description={hub.description}>
+      <h1>{hub.name}</h1>
+      <p class="lede">{hub.sentence}</p>
+      <ToolList items={hub.items} />
+    </Base>
+  )
+}
+{
+  entry && group && (
+    <Base
+      path={`/${entry.page.slug}`}
+      title={entry.page.title}
+      description={entry.page.description}
+      structuredData={toolStructuredData({ page: entry.page, group, origin, base, siteName })}
+    >
+      <ToolShell
+        heading={entry.page.heading}
+        sentence={entry.page.sentence}
+        related={relatedItems(tools, entry.tool, base, entry.page)}
+        group={hubLink(group, base)}
+      >
+        {words && <ToolWidget client:load toolId={entry.tool.id} accepts={entry.page.accepts ?? entry.tool.accepts} words={words} preset={entry.page.preset} />}
+        {Below && (
+          <Fragment slot="below">
+            <Below />
+          </Fragment>
+        )}
+      </ToolShell>
+    </Base>
+  )
+}

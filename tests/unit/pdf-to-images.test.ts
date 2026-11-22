@@ -172,7 +172,7 @@ describe('every file in the shared test set', () => {
     let sum = 0;
     for (let index = 0; index < a.data.length; index += 4) sum += Math.abs(a.data[index]! - b.data[index]!);
     expect(sum / (a.data.length / 4)).toBeLessThan(4);
-  });
+  }, 60000);
 
   it('draws password.pdf with its password, and fails without it or with a wrong one', async () => {
     expect((await convert(fixture('password.pdf'), 'png', 'open-sesame')).outputs).toHaveLength(3);

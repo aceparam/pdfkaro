@@ -9,7 +9,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type BrowserContext, type Download, type Page } from '@playwright/test';
+import { type BrowserContext, type Download, type Page } from '@playwright/test';
+import { expect, test, watchPolicy } from './fixtures';
 import { unzipSync } from 'fflate';
 import { formatSize } from '../../src/widget/format';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -78,11 +79,22 @@ async function drop(page: Page, names: string[]) {
 }
 
 async function convertAndDownload(page: Page, on: Shown): Promise<{ download: Download; bytes: Uint8Array; type: string }> {
+  // The type the browser gives the download is the type of the result the page makes its address from.
+  // It is noted as the address is made: the Content Security Policy refuses a fetch of a blob: address.
+  await page.evaluate(() => {
+    const types = new Map<string, string>();
+    (window as unknown as { madeTypes: Map<string, string> }).madeTypes = types;
+    const create = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (object: Blob | MediaSource) => {
+      const url = create(object);
+      if (object instanceof Blob) types.set(url, object.type);
+      return url;
+    };
+  });
   await mainButton(page, on).click();
   await expect(resultHeading(page)).toBeFocused({ timeout: 90000 });
   const link = page.getByRole('link', { name: 'Download' });
-  // The type the browser gives the download, from the result's own address, which never leaves the page.
-  const type = await page.evaluate(async (href) => (await (await fetch(href!)).blob()).type, await link.getAttribute('href'));
+  const type = await page.evaluate((href) => (window as unknown as { madeTypes: Map<string, string> }).madeTypes.get(href!) ?? 'no address made', await link.getAttribute('href'));
   const download = page.waitForEvent('download');
   await link.click();
   const done = await download;
@@ -521,6 +533,7 @@ test.describe('nothing is uploaded', () => {
   test('a one-page file fetches fflate too, and the same files as a longer one', async ({ browser, baseURL }) => {
     const runOn = async (name: string) => {
       const context = await browser.newContext();
+      await watchPolicy(context);
       const page = await context.newPage();
       await open(page, pngPage);
       const seen = watch(context, page);

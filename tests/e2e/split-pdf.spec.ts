@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { type Download, type Page } from '@playwright/test';
+import { expect, test, watchPolicy } from './fixtures';
 import { unzipSync } from 'fflate';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
@@ -239,7 +240,8 @@ test.describe('focus', () => {
     await page.getByRole('button', { name: 'Cut after page 1', exact: true }).focus();
     const inside = await page.evaluate(() => {
       const button = document.activeElement as HTMLElement;
-      const cell = button.closest('li')!;
+      // The box inside the page's list item that holds what the page shows; its paint containment is what would clip.
+      const cell = button.closest('li > div')!;
       const b = button.getBoundingClientRect();
       const c = cell.getBoundingClientRect();
       // The ring is a 2px outline 2px outside the button.
@@ -369,6 +371,7 @@ test.describe('nothing is uploaded', () => {
   test('a one-part run and a several-part run each fetch the zip step, and the same files', async ({ browser, baseURL }) => {
     const run = async (name: string, pictures: number) => {
       const context = await browser.newContext();
+      await watchPolicy(context);
       const page = await context.newPage();
       await open(page);
       await pick(page, name);

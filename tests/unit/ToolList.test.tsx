@@ -35,6 +35,10 @@ describe('ToolList', () => {
     expect(itemTag(html, '/rotate-pdf')).not.toContain('hidden');
   });
 
+  it('says it is a list, so VoiceOver in Safari still announces it with its count', () => {
+    expect(html).toMatch(/^<ul[^>]* role="list">/);
+  });
+
   it('renders an empty list when there are no items', () => {
     expect(renderToStaticMarkup(<ToolList items={[]} />)).not.toContain('<li');
   });

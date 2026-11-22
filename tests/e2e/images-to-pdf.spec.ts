@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef } from '@cantoo/pdf-lib';
-import { expect, test, type FileChooser, type Page } from '@playwright/test';
+import { type FileChooser, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 

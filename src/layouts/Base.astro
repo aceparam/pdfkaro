@@ -5,21 +5,34 @@
 import '../styles/site.css';
 import { SiteHeader } from '../components/SiteHeader/SiteHeader';
 import { SiteFooter } from '../components/SiteFooter/SiteFooter';
-import { siteName, headerLinks, footerLinks, withBase } from '../site';
+import { siteName, tagline, headerLinks, footerLinks, withBase, absoluteUrl } from '../site';
 import type { SiteLink } from '../site';
+import { jsonForScript } from '../tools/seo';
 
 interface Props {
   /** The title tag. Different on every page. */
   title: string;
   /** The meta description. */
   description: string;
+  /**
+   * The page's path from the site root, such as "/merge-pdf" or "/". Only the 404 page passes null:
+   * it is served at every missing address, so it has no address of its own and gets no canonical or social tags.
+   */
+  path: string | null;
+  /** JSON-LD for the page, as an object. It is escaped here, so no page can hand raw text to the script block. */
+  structuredData?: object;
 }
 
-const { title, description } = Astro.props;
+const { title, description, path, structuredData } = Astro.props;
 
 // "/" when the site is at the root of its address; a sub-path for a preview.
 const base = import.meta.env.BASE_URL;
+// The origin from SITE_ORIGIN, checked in astro.config.mjs: never a trailing slash.
+const origin = import.meta.env.SITE;
 const atRoot = withBase(base, '/') === '/';
+// A footer page that still shows a placeholder is not offered to search engines (src/site.ts, `written`).
+const placeholder = footerLinks.some((link) => link.href === path && !link.written);
+const canonical = path === null ? null : absoluteUrl(origin, base, path);
 const based = (links: SiteLink[]) => links.map((link) => ({ ...link, href: withBase(base, link.href) }));
 ---
 
@@ -30,8 +43,24 @@ const based = (links: SiteLink[]) => links.map((link) => ({ ...link, href: withB
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    {/* A preview under a sub-path is not the real site, so search engines are asked to leave it out. */}
-    {!atRoot && <meta name="robots" content="noindex" />}
+    {
+      canonical && (
+        <>
+          <link rel="canonical" href={canonical} />
+          <meta property="og:type" content="website" />
+          <meta property="og:title" content={title} />
+          <meta property="og:description" content={description} />
+          <meta property="og:url" content={canonical} />
+          <meta property="og:image" content={absoluteUrl(origin, base, '/social.png')} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta property="og:image:alt" content={`${siteName}. ${tagline}`} />
+        </>
+      )
+    }
+    {/* A preview under a sub-path is not the real site, and a placeholder is not a page yet, so search engines are asked to leave them out. */}
+    {(!atRoot || placeholder) && <meta name="robots" content="noindex" />}
+    {structuredData && <script type="application/ld+json" set:html={jsonForScript(structuredData)} />}
   </head>
   <body>
     <div class="page">

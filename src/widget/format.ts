@@ -138,6 +138,13 @@ export function partName(base: string, suffix: string, number: number, total: nu
 /** A number as the page shows it, with a thousands separator: "1,200". */
 export const number = (value: number) => value.toLocaleString('en-GB');
 
+/**
+ * The first sentence of the note under every password field, the one SPEC.md asks of a password field
+ * ("States every tool handles", Password needed): shared by the field for an input file's password and the
+ * fields for a new password, so the two always say it in the same words.
+ */
+export const passwordStaysSentence = 'The password stays in your browser.';
+
 /** "3", "3 and 7", "3, 7 and 9". */
 export function list(values: readonly number[]): string {
   const shown = values.map(number);

@@ -1,22 +1,48 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Progress } from '../../engines/types';
-import type { ToolWidgetWords } from '../../tools/registry';
+import type { DrawingOption, ToolWidgetWords } from '../../tools/registry';
+import { createToolWorker } from '../../hooks/tool-worker';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
 import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
-import { chosenValue, enterAction, focusMovesToOptions, optionsHold, optionsShown, readyKey, typedText } from '../../widget/options';
+import {
+  chosenPicture,
+  chosenValue,
+  drawnLines,
+  enterAction,
+  firstPasswordAccepted,
+  focusMovesToOptions,
+  holdErrorId,
+  holdsUnderButton,
+  optionsHold,
+  optionsShown,
+  pictureLine,
+  pictureNotice,
+  picturePicked,
+  pictureSentence,
+  readyKey,
+  shownOptions,
+  typedPasswords,
+  typedText,
+  type Held,
+  type NewPasswordField as PasswordFieldName,
+  type OptionHold,
+} from '../../widget/options';
+import { drawingRule, pictureRule, type Drawing } from '../../widget/option-values';
 import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
-import type { WorkerLike } from '../../workers/client';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
+import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, NewPasswordField } from '../NewPasswordField/NewPasswordField';
 import { Notice } from '../Notice/Notice';
 import { PageGrid, type GridItem } from '../PageGrid/PageGrid';
 import { PasswordField } from '../PasswordField/PasswordField';
+import { PictureField, pictureErrorId } from '../PictureField/PictureField';
 import { ProgressBar } from '../ProgressBar/ProgressBar';
 import { Result } from '../Result/Result';
 import { errorId, TextField } from '../TextField/TextField';
@@ -39,9 +65,6 @@ type Props = {
 /** How many pages are put on the page first (about a screenful), and how many are added each frame after. */
 const drawFirst = 30;
 const drawStep = 100;
-
-const createWorker = (): WorkerLike =>
-  new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
 
 /** What a file's row says beside its name. `listPages: false` leaves the page count out, for a tool whose every file is one page. */
 function detailFor(file: FileEntry, listPages = true): string {
@@ -82,7 +105,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     [words.writingLabel],
   );
 
-  const run = useToolRun({ toolId, accepts, words, preset, createWorker, onProgress: announceProgress });
+  const run = useToolRun({ toolId, accepts, words, preset, createWorker: createToolWorker, onProgress: announceProgress });
   const { state, result, thumbnails } = run;
 
   const summaryRef = useRef<HTMLParagraphElement | null>(null);
@@ -200,6 +223,10 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // says the file's line. Cancel and "Go back to your file" keep the key, so focus stays on the main button.
   const options = useMemo(() => words.options ?? [], [words.options]);
   const showOptions = options.length > 0 && optionsShown(state);
+  // The options drawn: those whose condition holds, in registry order, so one shown by a choice comes after the
+  // options before it. Changing the choice neither moves focus nor says anything; the next Tab reaches the option
+  // now shown. The first option has no condition (the registry test), so optionRef always has a target.
+  const drawnOptions = useMemo(() => shownOptions(options, state.choices), [options, state.choices]);
   const filesRead = readyKey(state);
   const filesReadBefore = useRef('');
   useEffect(() => {
@@ -211,20 +238,118 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     if (focusMovesToOptions(showOptions, filesRead, before, free)) optionRef.current?.focus();
   }, [filesRead, showOptions]);
 
-  // A text that holds the main button back: empty, too long, or with characters its rule does not take.
+  // The keys of the new passwords whose first field is still being typed: focus is in it and nothing has asked for
+  // its sentence since the last key. A space at the end of such a field holds the main button quietly, so typing
+  // "open sesame" never flashes a sentence through "open ". Added on each key in the first field; removed when focus
+  // leaves it, on Enter in either field and on a press of the main button.
+  const [typing, setTyping] = useState<ReadonlySet<string>>(() => new Set());
+  const withTyping = (key: string, on: boolean): ReadonlySet<string> => {
+    if (typing.has(key) === on) return typing;
+    const next = new Set(typing);
+    if (on) next.add(key);
+    else next.delete(key);
+    return next;
+  };
+  // "Start again" and removing the last file forget the new passwords (useToolRun), so nothing is being typed either.
+  const startAgain = () => {
+    if (typing.size > 0) setTyping(new Set());
+    run.clear();
+  };
+  // Kept the same between renders while the files are, as run.removeFile is, so the page grid is not drawn again for it.
+  const runRemoveFile = run.removeFile;
+  const removeFile = useCallback(
+    (id: string) => {
+      if (state.files.every((file) => file.id === id)) setTyping((now) => (now.size > 0 ? new Set() : now));
+      runRemoveFile(id);
+    },
+    [state.files, runRemoveFile],
+  );
+
+  // What the rules read besides the choices: the pictures chosen, the new passwords as typed, and which are being typed.
+  // Its own dependencies are those the hold depends on, so the memo below follows the same values as before.
+  const heldNow = useCallback(
+    (changes: Partial<Held> = {}): Held => ({ pictures: state.pictures, newPasswords: run.newPasswords, typing, ...changes }),
+    [state.pictures, run.newPasswords, typing],
+  );
+
+  // A shown text that holds the main button back: empty, too long, or with characters its rule does not take.
   // Memoised, so a long paste is not cleaned and checked again on every thumbnail's render.
-  const hold = useMemo(() => optionsHold(toolId, options, state.choices), [toolId, options, state.choices]);
+  // A shown picture holds it too, until one is chosen and read, and while the one chosen cannot be used; and a
+  // shown new password, until both its fields hold the same password its rule takes.
+  const hold = useMemo(() => optionsHold(toolId, options, state.choices, heldNow()), [toolId, options, state.choices, heldNow]);
   const fieldId = (key: string) => `${optionName}-${key}`;
-  // Too long or refused characters: the sentence is shown by the field, and tied to the main button from there.
-  const fieldHold = showOptions && hold && hold.kind !== 'empty' ? hold : null;
-  const fieldHoldKey = fieldHold ? `${fieldHold.key}:${fieldHold.kind}` : '';
+  // The paragraph under the main button that says why it waits.
+  const whyNotId = `${toolId}-why-not`;
+  // Too long or refused characters, a picture's problem, or a new password's field problem: the sentence is shown by
+  // the field, and tied to the main button from there.
+  const fieldHold = showOptions && hold && !holdsUnderButton(hold) ? hold : null;
+  const holdKey = (each: OptionHold) => `${each.key}:${each.field ?? ''}:${each.kind}`;
+  const fieldHoldKey = fieldHold ? holdKey(fieldHold) : '';
+  // Says a field's sentence once, when it first appears or changes field or kind, for the option `key` just used.
+  const sayNewFieldHold = (key: string, next: OptionHold | null) => {
+    if (next && !holdsUnderButton(next) && next.key === key && holdKey(next) !== fieldHoldKey) setAnnouncement(next.sentence);
+  };
   // Typing in a text's field. The sentence by the field is said once by the status line when it first appears
   // or changes kind; not again for each character typed past the limit, and nothing when it goes, or for an
   // empty text, which is tied to the main button from the start. Focus never moves for it.
   const typeText = (key: string, value: string) => {
     run.setOption(key, value);
-    const next = optionsHold(toolId, options, { ...state.choices, [key]: value });
-    if (next && next.kind !== 'empty' && `${next.key}:${next.kind}` !== fieldHoldKey) setAnnouncement(next.sentence);
+    sayNewFieldHold(key, optionsHold(toolId, options, { ...state.choices, [key]: value }, heldNow()));
+  };
+  // Typing in a new password's field: as for a text. A key in the first field marks it as being typed again. The
+  // password itself is never said: every sentence is fixed words.
+  const typeNewPassword = (key: string, field: PasswordFieldName, value: string) => {
+    run.setNewPassword(key, field, value);
+    const nextTyping = field === 'first' ? withTyping(key, true) : typing;
+    if (nextTyping !== typing) setTyping(nextTyping);
+    const now = typedPasswords({ key }, run.newPasswords);
+    const newPasswords = { ...run.newPasswords, [key]: { ...now, [field]: value } };
+    sayNewFieldHold(key, optionsHold(toolId, options, state.choices, heldNow({ newPasswords, typing: nextTyping })));
+  };
+  // Focus left a new password's first field: a space at its end is now shown by the field, and said once.
+  const leaveFirstPassword = (key: string) => {
+    const nextTyping = withTyping(key, false);
+    if (nextTyping === typing) return;
+    setTyping(nextTyping);
+    sayNewFieldHold(key, optionsHold(toolId, options, state.choices, heldNow({ typing: nextTyping })));
+  };
+
+  // A picture: the line naming it is said once when it is ready ("signature.png, 120 KB."), and each problem's
+  // sentence once when it appears. Each pick gives a new entry, so the same file picked again is said again.
+  // Focus never moves for it: it stays on the button.
+  const pictureSaid = useRef<Record<string, unknown>>({});
+  useEffect(() => {
+    if (!showOptions) return;
+    for (const option of drawnOptions) {
+      if (option.kind !== 'picture') continue;
+      const entry = chosenPicture(option, state.pictures);
+      if (entry === undefined || entry.status === 'reading' || pictureSaid.current[option.key] === entry) continue;
+      pictureSaid.current[option.key] = entry;
+      const said = entry.status === 'ready' ? pictureLine(entry) : pictureSentence(option, entry);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the worker's answer reaches the page through the state, so it is said here
+      if (said) setAnnouncement(said);
+    }
+  }, [showOptions, drawnOptions, state.pictures, setAnnouncement]);
+  const pictureNoticeId = (key: string) => `${fieldId(key)}-notice`;
+  const pictureNotices = showOptions
+    ? drawnOptions.flatMap((option) => {
+        if (option.kind !== 'picture') return [];
+        const notice = pictureNotice(option, chosenPicture(option, state.pictures), pictureRule(toolId, option.key));
+        return notice ? [{ key: option.key, notice }] : [];
+      })
+    : [];
+  // A drawing: the widget is told once per finished line. When a line fills the drawing, the status line says
+  // so once; the pad takes no more lines until it is cleared, so it is not said again. An empty drawing's
+  // sentence is tied to the main button, as an empty text's is.
+  const draw = (key: string, drawing: Drawing, full: boolean) => {
+    run.setDrawing(key, drawing);
+    if (full) setAnnouncement('The drawing is full. Clear it to start again.');
+  };
+  const clearDrawing = (option: DrawingOption) => {
+    // Clear on an empty pad changes nothing, so it says nothing (UX, stage 2).
+    if (drawnLines(option, state.choices).length === 0) return;
+    run.setDrawing(option.key, []);
+    setAnnouncement('The drawing is cleared.');
   };
 
   const count = totals(state);
@@ -376,16 +501,45 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
   const ready = canRun(state, words.minFiles, blocked === null) && hold === null;
   // An empty text's sentence goes under the main button once its field is shown, after too few files and the toggles' sentence.
-  const tiedSentence = tooFew ? words.tooFewFiles : (blocked ?? (showOptions && hold?.kind === 'empty' ? hold.sentence : null));
-  const describedBy = [tiedSentence ? `${toolId}-why-not` : null, fieldHold ? errorId(fieldId(fieldHold.key)) : null, ...huge.map(hugeId)].filter(Boolean).join(' ');
-  // The main button's press, and Enter in a text's field: starts the job only when the button works.
+  // A picture still being read says so there too, as does a new password not yet typed twice.
+  const tiedFor = (each: OptionHold | null) => (tooFew ? words.tooFewFiles : (blocked ?? (showOptions && each && holdsUnderButton(each) ? each.sentence : null)));
+  const tiedSentence = tiedFor(hold);
+  const holdIds = {
+    tied: whyNotId,
+    text: (key: string) => errorId(fieldId(key)),
+    picture: (key: string) => pictureErrorId(fieldId(key)),
+    firstPassword: (key: string) => firstPasswordErrorId(fieldId(key)),
+    againPassword: (key: string) => againPasswordErrorId(fieldId(key)),
+  };
+  const fieldHoldId = fieldHold ? holdErrorId(fieldHold, options, holdIds) : null;
+  const describedBy = [tiedSentence ? whyNotId : null, fieldHoldId, ...huge.map(hugeId), ...pictureNotices.map(({ key }) => pictureNoticeId(key))]
+    .filter(Boolean)
+    .join(' ');
+  // The main button's press, and Enter in a text's field: starts the job only when the button works. A press also
+  // ends the typing of any new password, so a space at the end of one is shown by its field.
   const pressMain = () => {
+    if (typing.size > 0) setTyping(new Set());
     if (ready) void run.start();
   };
   // Enter in a text's field: as the main button when it works; else the reason it waits is said, on every press.
   const enterInField = () => {
     const action = enterAction(ready, [tiedSentence, fieldHold?.sentence]);
     if (action.kind === 'start') pressMain();
+    else if (action.kind === 'say') setAnnouncement(action.sentence);
+  };
+  // Enter in a new password's field: the same, once its first field is no longer counted as being typed, so a
+  // space at its end is shown and is the reason said. In the first field, once it holds a password its rule takes,
+  // Enter moves focus to the second field instead, as its phone key "Next" says.
+  const enterInPassword = (key: string, field: PasswordFieldName) => {
+    const nextTyping = withTyping(key, false);
+    if (nextTyping !== typing) setTyping(nextTyping);
+    const next = optionsHold(toolId, options, state.choices, heldNow({ typing: nextTyping }));
+    const nextReady = canRun(state, words.minFiles, blocked === null) && next === null;
+    const nextField = showOptions && next && !holdsUnderButton(next) ? next : null;
+    const accepted = field === 'first' && firstPasswordAccepted(toolId, { key }, heldNow());
+    const action = enterAction(nextReady, [tiedFor(next), nextField?.sentence], accepted);
+    if (action.kind === 'start') void run.start();
+    else if (action.kind === 'next-field') document.getElementById(againPasswordId(fieldId(key)))?.focus();
     else if (action.kind === 'say') setAnnouncement(action.sentence);
   };
 
@@ -406,7 +560,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // A job that gave no new file, for a tool with words for it: its sentence and advice, Start again, no Download.
   if (state.step === 'done' && isNoNewFile(state.result) && words.noSmaller) {
     return (
-      <Result heading={words.noSmaller.heading} advice={words.noSmaller.advice} notes={[]} onStartAgain={run.clear} headingRef={resultRef} />
+      <Result heading={words.noSmaller.heading} advice={words.noSmaller.advice} notes={[]} onStartAgain={startAgain} headingRef={resultRef} />
     );
   }
 
@@ -417,7 +571,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
         heading={words.doneHeading}
         file={{ name: state.result.name, detail: resultDetail(state.result), href: result.url }}
         notes={words.resultNotes}
-        onStartAgain={run.clear}
+        onStartAgain={startAgain}
         headingRef={resultRef}
       />
     );
@@ -431,7 +585,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
       {state.step === 'failed' && state.failure ? (
         <Notice heading={words.failedHeading} headingRef={failedRef}>
-          <p>{failureSentence(state.failure, words)}</p>
+          <p>{failureSentence(state.failure, words, state.choices, state.pictures)}</p>
           <div>
             <button type="button" className="button-secondary" onClick={run.backToFiles}>
               {words.multiple ? 'Go back to your files' : 'Go back to your file'}
@@ -466,7 +620,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 type="button"
                 className={`button-secondary ${styles.small}`}
                 aria-label={`Remove ${onlyFile.name}`}
-                onClick={() => run.removeFile(onlyFile.id)}
+                onClick={() => removeFile(onlyFile.id)}
               >
                 Remove
               </button>
@@ -522,7 +676,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               onMove={onMove}
               total={pageMoves ? filePages : undefined}
               turns={turns}
-              onRemove={run.removeFile}
+              onRemove={removeFile}
               onMoved={(title, place, of) => setAnnouncement(`${title} moved to place ${number(place)} of ${number(of)}.`)}
               onVisible={run.showThumbnail}
               toggle={toggle}
@@ -540,8 +694,20 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
           ) : null}
 
           {showOptions
-            ? options.map((option, index) =>
-                option.kind === 'choice' ? (
+            ? drawnOptions.map((option, index) =>
+                option.kind === 'drawing' ? (
+                  // Never first (the registry test), so never the focus target. With no rule (which the registry
+                  // test forbids) it takes no lines, and holds the main button back.
+                  <DrawingPad
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    drawing={drawnLines(option, state.choices)}
+                    rule={drawingRule(toolId, option.key) ?? { maxLines: 0, maxPoints: 0 }}
+                    onDraw={(drawing, full) => draw(option.key, drawing, full)}
+                    onClear={() => clearDrawing(option)}
+                  />
+                ) : option.kind === 'choice' ? (
                   <ChoiceGroup
                     key={option.key}
                     option={option}
@@ -549,6 +715,38 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                     name={fieldId(option.key)}
                     onChoose={(value) => run.setOption(option.key, value)}
                     chosenRef={index === 0 ? optionRef : undefined}
+                  />
+                ) : option.kind === 'picture' ? (
+                  // Its types come from its line in optionPictures; with none (which the registry test forbids) the
+                  // chooser offers nothing named and every pick is turned away, so the main button waits.
+                  <PictureField
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    types={pictureRule(toolId, option.key)?.types ?? []}
+                    picked={picturePicked(chosenPicture(option, state.pictures))}
+                    chosen={pictureLine(chosenPicture(option, state.pictures))}
+                    error={(() => {
+                      const entry = chosenPicture(option, state.pictures);
+                      return entry ? pictureSentence(option, entry) : null;
+                    })()}
+                    onPick={(file) => void run.pickPicture(option.key, file)}
+                    focusRef={index === 0 ? optionRef : undefined}
+                  />
+                ) : option.kind === 'new-password' ? (
+                  // Its rule comes from its line in optionPasswords; with none (which the registry test forbids) it always
+                  // holds the main button back, so nothing unchecked is sent.
+                  <NewPasswordField
+                    key={option.key}
+                    option={option}
+                    id={fieldId(option.key)}
+                    {...typedPasswords(option, run.newPasswords)}
+                    firstError={fieldHold?.key === option.key && fieldHold.field === 'first' ? fieldHold.sentence : undefined}
+                    againError={fieldHold?.key === option.key && fieldHold.field === 'again' ? fieldHold.sentence : undefined}
+                    onType={(field, value) => typeNewPassword(option.key, field, value)}
+                    onEnter={(field) => enterInPassword(option.key, field)}
+                    onFirstBlur={() => leaveFirstPassword(option.key)}
+                    focusRef={index === 0 ? optionRef : undefined}
                   />
                 ) : (
                   <TextField
@@ -565,6 +763,14 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               )
             : null}
 
+          {pictureNotices.map(({ key, notice }) => (
+            <div key={key} id={pictureNoticeId(key)}>
+              <Notice heading={notice.heading}>
+                <p>{notice.advice}</p>
+              </Notice>
+            </div>
+          ))}
+
           {askingPassword && problem ? (
             <PasswordField
               key={problem.id}
@@ -572,7 +778,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
               error={problem.status === 'wrong-password' ? 'That password did not open the file. Check it and try again.' : undefined}
               onSubmit={(password) => void run.submitPassword(problem.id, password)}
               onLeaveOut={() => {
-                run.removeFile(problem.id);
+                removeFile(problem.id);
                 summaryRef.current?.focus();
               }}
               inputRef={passwordRef}
@@ -588,7 +794,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                   type="button"
                   className="button-secondary"
                   onClick={() => {
-                    run.removeFile(problem.id);
+                    removeFile(problem.id);
                     summaryRef.current?.focus();
                   }}
                 >
@@ -635,7 +841,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                 {words.actionLabel}
               </button>
               {tiedSentence ? (
-                <p id={`${toolId}-why-not`} className={styles.tooFew}>
+                <p id={whyNotId} className={styles.tooFew}>
                   {tiedSentence}
                 </p>
               ) : null}

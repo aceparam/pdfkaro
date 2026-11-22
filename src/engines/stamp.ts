@@ -1,5 +1,6 @@
 // Drawing on the pages of a PDF: the shared step of Add page numbers, which
-// Watermark and Sign PDF will reuse by giving their own `draw`.
+// Watermark and Sign PDF reuse by giving their own `draw`. A tool may choose
+// which pages are drawn on (`only`, Sign PDF); a page not chosen is not touched.
 //
 // pdf-lib draws one layer per page, on a page sized as the visitor's page is
 // shown (its crop box, turn and user unit read as PDF.js reads them). Each
@@ -23,7 +24,7 @@
 // are taken only as `N G R`. Document text never goes into an error.
 
 import type * as PdfLib from '@cantoo/pdf-lib';
-import { finished, type Qpdf } from './qpdf';
+import { cappedWrite, finished, OutputLimit, type Qpdf } from './qpdf';
 import { freshQpdf } from './plain';
 import { callWithArgumentFile, isDict, isRef, readDictionaries, type Dict, type ObjectEntry } from './qpdf-json';
 import type { EngineTools } from './types';
@@ -42,16 +43,8 @@ export const largestSide = 1e8;
 /** The smallest scale the layer's matrix may have (1 / the user unit). Below it, the job stops. */
 export const smallestScale = 1e-6;
 
-/**
- * The new file, and the update that makes it, would pass their size budget.
- * Known to the worker by its name, so the page can say so in its own sentence.
- */
-export class OutputLimit extends Error {
-  override name = 'OutputLimit';
-  constructor() {
-    super('The new file would pass its size limit.');
-  }
-}
+/** Moved to qpdf.ts with the capped write; re-exported so this file's importers are unchanged. */
+export { OutputLimit } from './qpdf';
 
 /** The size budget of the update and of the new file: twice the plain copy, 2 KB a page and 16 MB. */
 export function sizeLimit(plainBytes: number, pages: number): number {
@@ -262,6 +255,21 @@ export function newId(objects: NewObjects): string {
   return `${objects.next++} 0 R`;
 }
 
+/** Each large raw stream's bytes, to a number of their own, so its key in `byText` is short. */
+const bytesNumber = new WeakMap<Uint8Array, number>();
+let nextBytesNumber = 0;
+/** Above this many bytes, a raw stream is known by its bytes' identity and its dictionary, not by its whole text. */
+const keyByIdentity = 64 * 1024;
+
+function numberOf(bytes: Uint8Array): number {
+  let number = bytesNumber.get(bytes);
+  if (number === undefined) {
+    number = nextBytesNumber++;
+    bytesNumber.set(bytes, number);
+  }
+  return number;
+}
+
 /** Bytes as base64, in chunks, with what a worker and Node both have. */
 export function base64(bytes: Uint8Array): string {
   let text = '';
@@ -291,13 +299,26 @@ export function fromPdfLib(lib: Lib, context: PdfLib.PDFContext, object: PdfLib.
     refs.set(tag, 'pending');
     const target = context.lookup(object);
     if (target === undefined) throw new Error('A drawing referred to nothing.');
-    const entry = entryOf(lib, context, target, objects, refs, depth + 1);
-    const text = JSON.stringify(entry);
+    // A raw stream over 64 KB (Sign PDF's picture, registered afresh in each run over the same bytes) is known by its
+    // bytes' identity and its dictionary, so its data is turned into base64 once per job, when first written, and never
+    // kept as a key. Anything smaller is known by its JSON text, so an identical object made in another run is written once.
+    let text: string;
+    let make: () => QpdfEntry;
+    if (target instanceof lib.PDFRawStream && target.getContents().length > keyByIdentity) {
+      const bytes = target.getContents();
+      const dict = dictOf(lib, context, target.dict, objects, refs, depth + 1, ['/Length']);
+      text = `bytes:${numberOf(bytes)}:${JSON.stringify(dict)}`;
+      make = () => ({ stream: { dict, data: base64(bytes) } });
+    } else {
+      const entry = entryOf(lib, context, target, objects, refs, depth + 1);
+      text = JSON.stringify(entry);
+      make = () => entry;
+    }
     let id = objects.byText.get(text);
     if (id === undefined) {
       id = newId(objects);
       objects.byText.set(text, id);
-      objects.entries.set(id, entry);
+      objects.entries.set(id, make());
     }
     refs.set(tag, id);
     return id;
@@ -402,8 +423,6 @@ export function freeName(xobjects: Dict): string {
   return name;
 }
 
-const writeProgress = /write progress:\s*(\d+(?:\.\d+)?)%/;
-
 /**
  * Writes the update held in /update.json into the file held as /in.pdf, as
  * /out.pdf, capped at `limit`; removes /in.pdf and /update.json; checks the
@@ -411,24 +430,13 @@ const writeProgress = /write progress:\s*(\d+(?:\.\d+)?)%/;
  * or a file past it, throws `OutputLimit`; any other failure is the engine's.
  */
 export function writeUpdate(qpdf: Qpdf, limit: number, onWriting?: (percent: number) => void): Uint8Array {
-  const capped = qpdf.capFile('/out.pdf', limit);
-  let last = -1;
-  qpdf.onLine = (line) => {
-    const match = writeProgress.exec(line);
-    if (!match) return;
-    const percent = Math.min(100, Number(match[1]));
-    if (percent === last) return;
-    last = percent;
-    onWriting?.(percent);
-  };
-  const written = callWithArgumentFile(qpdf, ['--progress', '/in.pdf', '--update-from-json=/update.json', '--object-streams=generate', '/out.pdf']);
-  qpdf.onLine = null;
-  // qpdf can finish with exit 0 and a cut-off file when a write is refused while it writes object streams,
-  // so the capped file's own record is asked first.
-  if (qpdf.refused('/out.pdf') || (capped && /no space left/i.test(written.printed))) throw new OutputLimit();
+  const written = cappedWrite(
+    qpdf,
+    limit,
+    (q) => callWithArgumentFile(q, ['--progress', '/in.pdf', '--update-from-json=/update.json', '--object-streams=generate', '/out.pdf']),
+    onWriting,
+  );
   if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
-  if (qpdf.size('/out.pdf') > limit) throw new OutputLimit();
-  qpdf.remove('/in.pdf');
   qpdf.remove('/update.json');
   if (!finished(qpdf.call(['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
   return qpdf.read('/out.pdf');
@@ -437,14 +445,26 @@ export function writeUpdate(qpdf: Qpdf, limit: number, onWriting?: (percent: num
 /**
  * What a tool gives the drawing step. `prepare` runs once for each pdf-lib document of up to
  * 2,000 layer pages, with pdf-lib itself, and gives what every page of the run draws with: Add page
- * numbers embeds Helvetica, Watermark may embed another font, Sign PDF the signature's picture.
+ * numbers embeds Helvetica, Watermark Helvetica Bold, Sign PDF the signature's form.
  * `draw` then draws on one layer page with it.
  */
 export type StampSteps<Run = unknown> = {
   prepare(doc: PdfLib.PDFDocument, lib: Lib): Promise<Run>;
-  /** Draws on one layer page, sized as the page is shown, upright; `index` counts from 0. */
+  /** Draws on one layer page, sized as the page is shown, upright; `index` counts from 0 over every page of the file. */
   draw(page: PdfLib.PDFPage, area: { width: number; height: number }, index: number, run: Run, lib: Lib): void;
-  /** After each layer page is drawn: how many are done, of how many. */
+  /**
+   * Which pages are drawn on, by index from 0 of `total`. Left out, every page. A page not chosen gets no layer and no
+   * entry in the update, so it stays exactly as in the plain copy. Choosing no page at all is refused before anything is written.
+   */
+  only?(index: number, total: number): boolean;
+  /**
+   * The encoded size in bytes of what every run's `prepare` makes and the new file is to hold once (Sign PDF's picture
+   * and signature form). Counted once against the size budget before the first run. When the chosen pages' estimate
+   * alone fits and adding it would pass the budget, the job stops with `OutputLimit` whose reason is `'shared'`; when
+   * the pages alone pass it, with a plain `OutputLimit`. Either way before anything is drawn.
+   */
+  sharedBytes?: number;
+  /** After each layer page is drawn: how many chosen pages are done, of how many chosen. */
   onPage?(done: number, total: number): void;
   /** qpdf's write progress, in percent. */
   onWriting?(percent: number): void;
@@ -453,22 +473,43 @@ export type StampSteps<Run = unknown> = {
 /** The plain copy, which the drawing step lets go of once qpdf holds it. */
 export type PlainSource = { plain?: Uint8Array };
 
+/** What the update holds for shared streams of `bytes` encoded bytes: their data as base64, and room for their dictionaries. */
+export function sharedText(bytes: number): number {
+  return Math.ceil(bytes / 3) * 4 + 4096;
+}
+
 /**
- * Draws on every page of the plain copy and gives the checked result. The
- * reading qpdf is let go first; then the stamping qpdf is made from the plain
- * copy, and `source.plain` is let go, so reading never holds a fourth copy.
- * Layers are drawn 2,000 pages at a time; each run is turned into update
- * entries, appended to the stamping qpdf's /update.json, and let go. Before a
- * run is built its update is estimated, and once the running total would pass
- * the budget the job stops with `OutputLimit`.
+ * Draws on the chosen pages of the plain copy (every page unless `only` says
+ * otherwise) and gives the checked result. The reading qpdf is let go first;
+ * then the stamping qpdf is made from the plain copy, and `source.plain` is let
+ * go, so reading never holds a fourth copy. Layers are drawn 2,000 chosen pages
+ * at a time; each run is turned into update entries, appended to the stamping
+ * qpdf's /update.json, and let go; a page not chosen gets nothing. Before a run
+ * is built its update is estimated, and once the running total would pass the
+ * budget the job stops with `OutputLimit`. What every run shares
+ * (`sharedBytes`) is counted once, at its encoded size, as the new file holds
+ * it; the update, which carries it as base64, is allowed that much more.
  */
 export async function stampPages<Run>(tools: EngineTools, source: PlainSource, steps: StampSteps<Run>): Promise<Uint8Array> {
   if (!source.plain) throw new Error('No file was given to draw on.');
   const plainBytes = source.plain.byteLength;
   const read = await readPages(tools, source.plain);
-  const lib = (await (tools.pdflib ?? missing)()) as Lib;
   const total = read.pages.length;
+  const chosen = steps.only ? read.pages.flatMap((page, index) => (steps.only!(index, total) ? [{ page, index }] : [])) : read.pages.map((page, index) => ({ page, index }));
+  // Refused before anything is written, so a tool's mistake can never hand back the plain copy as if it were drawn on.
+  if (chosen.length === 0) throw new Error('No page was chosen to draw on.');
   const limit = sizeLimit(plainBytes, total);
+  const shared = Math.max(0, steps.sharedBytes ?? 0);
+  // The update carries shared streams as base64, a third larger than the file will hold them, once.
+  const updateLimit = shared > 0 ? limit + sharedText(shared) - shared : limit;
+  const sizes = new WeakMap<object, number>();
+  if (shared > 0) {
+    const pagesAlone = chosen.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0);
+    // 'shared' only when the chosen pages alone fit, so what they share is what passes the budget; otherwise the pages do.
+    if (pagesAlone > limit) throw new OutputLimit();
+    if (shared + pagesAlone > limit) throw new OutputLimit('shared');
+  }
+  const lib = (await (tools.pdflib ?? missing)()) as Lib;
   const qpdf = await freshQpdf(tools, source.plain);
   delete source.plain;
 
@@ -477,7 +518,7 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
   const append = (text: string) => {
     const bytes = encoder.encode(text);
     appended += bytes.length;
-    if (appended > limit) throw new OutputLimit();
+    if (appended > updateLimit) throw new OutputLimit();
     qpdf.append('/update.json', bytes);
   };
   const saveId = newId(objects);
@@ -489,27 +530,29 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
       entryText(restoreId, { stream: { dict: {}, data: base64(encoder.encode('\nQ\n')) } }),
   );
   const draws = new Map<string, string>();
-  const sizes = new WeakMap<object, number>();
+  // The shared streams are still to be written until the first run is appended.
+  let sharedLeft = shared > 0 ? sharedText(shared) : 0;
 
-  for (let start = 0; start < total; start += runPages) {
-    const run = read.pages.slice(start, start + runPages);
-    const estimate = run.reduce((sum, page) => sum + pageEstimate(page, sizes), 0);
-    if (appended + estimate > limit) throw new OutputLimit();
+  // Runs of up to 2,000 chosen pages: a stretch of pages with none chosen makes no pdf-lib document and calls no `prepare`.
+  for (let start = 0; start < chosen.length; start += runPages) {
+    const run = chosen.slice(start, start + runPages);
+    const estimate = run.reduce((sum, { page }) => sum + pageEstimate(page, sizes), 0);
+    if (appended + estimate + sharedLeft > updateLimit) throw new OutputLimit();
 
     const doc = await lib.PDFDocument.create({ updateMetadata: false });
     const prepared = await steps.prepare(doc, lib);
     const layers: PdfLib.PDFPage[] = [];
-    run.forEach((page, offset) => {
+    run.forEach(({ page, index }, offset) => {
       const layer = doc.addPage([page.place.width, page.place.height]);
-      steps.draw(layer, { width: page.place.width, height: page.place.height }, start + offset, prepared, lib);
+      steps.draw(layer, { width: page.place.width, height: page.place.height }, index, prepared, lib);
       layers.push(layer);
-      steps.onPage?.(start + offset + 1, total);
+      steps.onPage?.(start + offset + 1, chosen.length);
     });
     await doc.flush();
 
     const refs = new Map<string, string>();
     const parts: string[] = [];
-    run.forEach((page, offset) => {
+    run.forEach(({ page }, offset) => {
       const { place } = page;
       const layer = layerOf(lib, layers[offset]!, objects, refs);
       const formId = newId(objects);
@@ -537,6 +580,7 @@ export async function stampPages<Run>(tools: EngineTools, source: PlainSource, s
     for (const [id, entry] of objects.entries) parts.push(entryText(id, entry));
     objects.entries.clear();
     append(`,${parts.join(',')}`);
+    sharedLeft = 0;
     layers.length = 0;
   }
   append('}]}');

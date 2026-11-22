@@ -561,7 +561,7 @@ When a tool lets the pages of one file turn, each page SHALL have "Turn left" an
 
 ### Requirement: Options a tool needs
 
-A tool with options SHALL show them once its file has been read, below the file and above the main button. A choice SHALL start at a value with which the main button works and be a group of radio buttons, one per line, named by a visible legend. A text SHALL start empty, as "A text a tool needs" says. Focus SHALL then move to the first option. What each option holds SHALL be kept and reset as the scenarios below say. (SPEC.md: Tool page anatomy, 4; Definition of done)
+A tool with options SHALL show them once its file has been read, below the file and above the main button. A choice SHALL start at a value with which the main button works and be a group of radio buttons, one per line, named by a visible legend. A text or a new password SHALL start empty, as their own requirements say. Focus SHALL then move to the first option. What each option holds SHALL be kept and reset as the scenarios below say. (SPEC.md: Tool page anatomy, 4; Definition of done)
 
 #### Scenario: A file is read in a tool with options
 
@@ -600,7 +600,7 @@ A tool with options SHALL show them once its file has been read, below the file 
 
 ### Requirement: A text a tool needs
 
-A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. (SPEC.md: Tool page anatomy, 4 and 5; What we are building, rule 4; Definition of done)
+A text SHALL be a one-line field with a visible label and a hint read with it. It is the job's input, so it SHALL start empty and the main button SHALL wait while it holds no text, with the tool's sentence tied to it. Enter in the field while the main button waits SHALL have the status region say why, on every press. (SPEC.md: Tool page anatomy, 4 and 5; Definition of done)
 
 #### Scenario: A file is read in a tool with a text
 
@@ -625,12 +625,12 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: A few Western characters the rule does not take
 
 - **WHEN** the visitor types "Łódź" into a field whose rule is the standard fonts' characters
-- **THEN** the field is marked invalid, and "Ł and ź cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, read with the field and tied to the main button, which does nothing when pressed
+- **THEN** the field is marked invalid, and "Ł and ź cannot be used." is shown, with the rule left to the hint under the field, read with the field and tied to the main button, which does nothing when pressed
 
 #### Scenario: Text in another script
 
 - **WHEN** the visitor types "नमस्ते" or "مرحبا" into such a field
-- **THEN** the field is marked invalid, and "Some characters cannot be used. Use letters from English and other Western European languages, numbers and common marks." is shown, with no list of characters, tied to the main button; nothing is ever drawn as question marks
+- **THEN** the field is marked invalid, and "Some characters cannot be used." is shown, with the rule left to the hint under the field, with no list of characters, tied to the main button; nothing is ever drawn as question marks
 
 #### Scenario: Accented letters in composed or separate form
 
@@ -645,7 +645,7 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 #### Scenario: A keyboard user uses the field
 
 - **WHEN** a keyboard user is in the field and presses Tab, or presses Enter
-- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works; the Enter that confirms a word in an input method or a phone keyboard's suggestion does not press it
+- **THEN** Tab moves on to the next option, then the rest of the working area in page order and the main button; Enter does what pressing the main button does, so it starts the job only when the main button works, and while the button waits the status region says why on every press ("Type the watermark text first.", or the field's sentence); the Enter that confirms a word in an input method or a phone keyboard's suggestion does not press it
 
 #### Scenario: A screen reader user reaches the field
 
@@ -662,6 +662,15 @@ A text SHALL be a one-line field with a visible label and a hint read with it. I
 - **WHEN** the visitor types a text, starts the job and presses Cancel, or the job fails, or the visitor picks another file with "Choose another file" while listing; and later presses "Start again" or removes the only file
 - **THEN** after Cancel, a failure or another file the text is as typed; after "Start again" or removing the only file the field is empty again
 
+### Requirement: A typed text that cannot be used
+
+Text that is too long, or has a character the tool's rule does not take, SHALL get one sentence tied to the field and to the main button, which stays focusable and does nothing. A sentence about refused characters SHALL say only which characters cannot be used, since the hint states the rule. (SPEC.md: Tool page anatomy, 4; What we are building, rule 4)
+
+#### Scenario: A text with a problem
+
+- **WHEN** the typed text is too long or has a character the tool's rule does not take
+- **THEN** one sentence saying what is wrong is tied to the field and to the main button, which stays focusable, and a press does nothing
+
 ### Requirement: A text the engine refuses
 
 When a tool's engine refuses the text it was sent, the page SHALL say "The text could not be used. Check it and try again.", or the tool's own words for its text, under the tool's heading for a failed job, and offer "Go back to your file" with the text as typed. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
@@ -670,3 +679,348 @@ When a tool's engine refuses the text it was sent, the page SHALL say "The text 
 
 - **WHEN** a test entry's engine is sent a text it refuses
 - **THEN** the page shows the failed heading and "The text could not be used. Check it and try again.", and "Go back to your file" lists the file with the text still in the field
+
+### Requirement: Options shown for one choice
+
+An option that names a condition SHALL be shown only while the earlier choice it names holds the value it names, after the options before it. While hidden it SHALL NOT hold the main button back and SHALL NOT be sent to the engine, and what it holds SHALL be kept for when it is shown again. Changing the choice SHALL NOT move focus. (SPEC.md: Tool page anatomy, 4; Scope notes, Sign PDF; Definition of done)
+
+#### Scenario: The file is read
+
+- **WHEN** a file has been read in a test entry whose first option is a choice of "a" or "b", starting at "a", followed by a text shown for "a" and a text shown for "b"
+- **THEN** the choice and the text for "a" are shown, the text for "b" is not in the page, and only the text for "a" can hold the main button back
+
+#### Scenario: The choice is changed
+
+- **WHEN** the visitor types in the text for "a", then chooses "b" with the arrow keys
+- **THEN** the text for "a" goes and the text for "b" appears after the choice, focus stays on the radio button for "b", Tab moves next to the text for "b", and the main button waits only for the text for "b"
+
+#### Scenario: Switching back
+
+- **WHEN** the visitor chooses "a" again
+- **THEN** the text for "a" is shown as the visitor typed it
+
+#### Scenario: What the engine is sent
+
+- **WHEN** the job starts with "b" chosen
+- **THEN** the engine is sent the choice and the text for "b" only, and nothing under the key of the text for "a"
+
+#### Scenario: A screen reader user changes the choice
+
+- **WHEN** a screen reader user moves through the radio buttons and chooses "b"
+- **THEN** the radio button's label, state and place are read as for any choice, nothing else is announced, and the next Tab reaches the field now shown, read with its label and hint
+
+#### Scenario: Start again and the last file removed
+
+- **WHEN** the visitor has chosen "b" and typed in both texts, then presses "Start again", or removes the only file, and picks another file
+- **THEN** once it is read the choice is at "a" again and both texts are empty
+
+#### Scenario: A tool with no conditions
+
+- **WHEN** a tool's options name no condition
+- **THEN** every option is shown, held and sent as before
+
+### Requirement: A drawing a tool needs
+
+A drawing SHALL be a box the width of the column with a visible label, a hint and a Clear button, drawn on with a finger, mouse or pen without moving the page. It is the job's input, so it SHALL start empty and the main button SHALL wait while nothing is drawn, with the tool's sentence tied to it. It SHALL never be a tool's first option, and the tool's hint SHALL name a way to do the job without drawing. (SPEC.md: Scope notes, Sign PDF; Tool page anatomy, 4 and 5; Works on a phone)
+
+#### Scenario: A drawing is shown
+
+- **WHEN** a file has been read in a test entry whose options include a drawing
+- **THEN** the drawing's label, an empty box, its hint and its Clear button are shown in registry order, and the main button waits with the tool's sentence under it and read with it
+
+#### Scenario: Drawing with a mouse or a pen
+
+- **WHEN** the visitor presses in the box, moves and lets go, twice
+- **THEN** two lines show where the pointer went, in the text colour, the sentence under the main button goes, and the main button works
+
+#### Scenario: Drawing with a finger on a phone
+
+- **WHEN** the visitor draws in the box with a finger at 360px
+- **THEN** the line follows the finger, the page does not scroll or zoom, no text is selected and no menu opens
+
+#### Scenario: A second finger
+
+- **WHEN** a second finger touches the box while the first is drawing
+- **THEN** only the first finger draws
+
+#### Scenario: Clear
+
+- **WHEN** the visitor presses Clear
+- **THEN** the box is empty, the status region says the drawing is cleared, and the main button waits again with the tool's sentence
+
+#### Scenario: A full drawing
+
+- **WHEN** a drawing reaches its most lines or points
+- **THEN** it takes no more, what was drawn stays, and the status region says once that the drawing is full and to clear it to start again
+
+#### Scenario: A keyboard user reaches the drawing
+
+- **WHEN** a keyboard user presses Tab through the working area
+- **THEN** the box takes no Tab stop, Clear does, and Clear is read with the drawing's hint, which names the tool's way to do the job without drawing
+
+#### Scenario: A screen reader user reaches the drawing
+
+- **WHEN** a screen reader user moves through the working area
+- **THEN** the box is read as a picture named by the drawing's label and described by its hint, and Clear as a button with its words, described by the same hint
+
+#### Scenario: How the drawing looks
+
+- **WHEN** the drawing is shown at 360px, at 1280px, in dark mode or with text at 200%
+- **THEN** the box is 5 wide to 2 tall, the column's width, with a 1px edge in the control colour and corners of 4px, lines stay sharp, and nothing overflows sideways
+
+#### Scenario: The window changes size
+
+- **WHEN** the window is resized or the phone is turned after something is drawn
+- **THEN** the drawing is shown again whole, at the new size, in the same place in the box
+
+#### Scenario: Cancel, Start again and another file
+
+- **WHEN** the visitor draws, starts the job and presses Cancel, or the job fails, or the visitor picks another file while listing; and later presses "Start again" or removes the only file
+- **THEN** after Cancel, a failure or another file the drawing is as it was; after "Start again" or removing the only file the box is empty
+
+#### Scenario: Drawing never blocks the page
+
+- **WHEN** the visitor draws quickly on a phone whose processor is slowed four times
+- **THEN** no task blocks the page for more than 100 ms
+
+### Requirement: A drawing the engine refuses
+
+When a tool's engine refuses the drawing it was sent, the page SHALL say "The drawing could not be used. Clear it and draw again.", or the tool's own words, under the tool's heading for a failed job, and offer "Go back to your file" with the drawing kept. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
+
+#### Scenario: The engine refuses a drawing
+
+- **WHEN** a test entry's engine is sent a drawing it refuses
+- **THEN** the page shows the failed heading and "The drawing could not be used. Clear it and draw again.", and "Go back to your file" lists the file with the drawing still in the box
+
+### Requirement: A picture a tool needs
+
+A picture SHALL be a field with a label, a button to choose one picture of the tool's types, and a hint. A chosen picture SHALL be named with its size, not shown. The main button SHALL wait until one is read. A wrong, damaged or unreadable picture SHALL get one sentence naming it and what to do, tied to the field and the main button; a large one, a notice, and still be used. (SPEC.md: Scope notes, Sign PDF; Tool page anatomy, 4 and 5; States every tool handles; Look and feel)
+
+#### Scenario: The field is shown
+
+- **WHEN** a file has been read in a test entry whose options include a picture
+- **THEN** the picture's label, a "Choose a picture" button and its hint are shown in registry order, and the main button waits with the tool's sentence under it and read with it
+
+#### Scenario: A picture is chosen
+
+- **WHEN** the visitor chooses `signature.png`, 120 KB, and it is read
+- **THEN** a line reads "signature.png, 120 KB.", the button reads "Choose another picture", the status region says "signature.png, 120 KB.", no picture is shown, and the main button works
+
+#### Scenario: Not a picture of the tool's types
+
+- **WHEN** the visitor chooses `notes.txt` renamed `notes.png`, with or without a picture chosen before
+- **THEN** no picture is chosen, any earlier one is forgotten, and "notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen." is shown between the label and the button, read with the button and tied to the main button, which does nothing when pressed, and the button reads "Choose a picture" again
+
+#### Scenario: A damaged picture
+
+- **WHEN** the visitor chooses a PNG whose data is cut short
+- **THEN** "broken.png is damaged and cannot be read. Choose another picture." is shown by the field and tied to the main button
+
+#### Scenario: A picture saved in a way the tool cannot read
+
+- **WHEN** the visitor chooses a JPG with arithmetic coding
+- **THEN** "arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy." is shown by the field and tied to the main button
+
+#### Scenario: A very large picture
+
+- **WHEN** the visitor chooses `photo.jpg`, 12.4 MB and 24 million pixels, in a tool whose notice sizes are 8 MB and 16 million pixels
+- **THEN** it is read and used, its line reads "photo.jpg, 12.4 MB.", a notice says "photo.jpg is 12.4 MB, with 24 million pixels." and "A picture this large makes the new file larger, and a phone may run out of memory. Crop it to the signature, or save a smaller copy. You can still go ahead.", the notice is tied to the main button, and the main button works
+
+#### Scenario: The worker is ended while a picture is read
+
+- **WHEN** the worker is ended while a picture is being read, because a thumbnail ran out of time
+- **THEN** the picture is read again while it is still chosen and the files are listed, and never stays "Getting ready"
+
+#### Scenario: The job ends while a hidden picture is being read
+
+- **WHEN** a picture hidden by a choice is still being read when the job starts, and the job's end cancels the read
+- **THEN** it is not read again during the job or on its result, and no worker is started for it
+
+#### Scenario: Cancel while a hidden picture is being read
+
+- **WHEN** a picture hidden by a choice is still being read when the visitor starts the job and presses Cancel
+- **THEN** the file is listed again and the picture is read again, so it never stays "Getting ready" and thumbnails are not held back
+
+#### Scenario: A picture is picked again while the last is still being read
+
+- **WHEN** the visitor picks another picture while the last one is still being read
+- **THEN** the worker reading the last one is ended, the new one is read on a fresh worker, and the last one is never read again
+
+#### Scenario: Another picture
+
+- **WHEN** the visitor chooses another picture after one was read
+- **THEN** the new one takes its place, and the old one is forgotten
+
+#### Scenario: A keyboard user chooses a picture
+
+- **WHEN** a keyboard user tabs to the button and presses Enter or Space
+- **THEN** the system's file chooser opens, the chosen picture is named in the line, and focus stays on the button
+
+#### Scenario: A screen reader user reaches the field
+
+- **WHEN** a screen reader user reaches the button
+- **THEN** its words are read, then the field's label, the line naming the picture if one is chosen, the sentence about a problem if there is one, and the hint, and nothing is announced twice
+
+#### Scenario: How the field looks
+
+- **WHEN** the field is shown at 360px, at 1280px, in dark mode or with text at 200%
+- **THEN** the label looks like the other field labels, the button has the site's secondary style, the sentence is bold in the text colour between the label and the button, a long file name wraps, and nothing overflows sideways
+
+#### Scenario: Cancel, Start again and another file
+
+- **WHEN** the visitor chooses a picture, starts the job and presses Cancel, or the job fails, or the visitor picks another PDF while listing; and later presses "Start again" or removes the only file
+- **THEN** after Cancel, a failure or another PDF the picture is still chosen; after "Start again" or removing the only file no picture is chosen and its bytes are forgotten
+
+### Requirement: A picture too large for the file
+
+When a tool's engine finds that the chosen picture alone would make the new file pass its size budget, the page SHALL say "photo.jpg (24.6 MB) is too large to place on these pages. Crop it to the signature, or save a smaller copy.", with the picture's name and size and the tool's own step where it gives one, under the failed heading, and offer "Go back to your file". (SPEC.md: States every tool handles, Too large and Failed)
+
+#### Scenario: The engine finds the picture too large
+
+- **WHEN** a test entry's engine throws the picture-too-large error for a chosen `photo.jpg` of 24.6 MB
+- **THEN** the page shows the failed heading and that sentence, and "Go back to your file" lists the file with the picture still chosen
+
+### Requirement: A picture the engine refuses
+
+When a tool's engine refuses the picture it was sent, the page SHALL say "The picture could not be used. Choose another picture.", or the tool's own words, under the tool's heading for a failed job, and offer "Go back to your file" with the picture still chosen. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
+
+#### Scenario: The engine refuses a picture
+
+- **WHEN** a test entry's engine is sent a picture it refuses
+- **THEN** the page shows the failed heading and "The picture could not be used. Choose another picture.", and "Go back to your file" lists the file with the picture still named in its line
+
+### Requirement: A new password a tool needs
+
+A new password SHALL be two hidden labelled fields, one under the other: the password, then the same again. The tool's hint SHALL sit under the first and a shared note on where the password goes under the second; both SHALL be read with the first. Both SHALL start empty, and the main button SHALL wait until both hold the same password the tool's rule takes. (SPEC.md: Tool page anatomy, 4 and 5; States every tool handles, Password needed; Definition of done)
+
+#### Scenario: A file is read in a tool with a new password
+
+- **WHEN** a file has been read in a tool whose first option is a new password
+- **THEN** both empty fields are shown below the file with their labels, the hint under the first and the shared note under the second, focus moves to the first field, and the main button waits with the tool's first sentence ("Type a password first.") shown under it and read with it
+
+#### Scenario: The password is typed in the first field only
+
+- **WHEN** the visitor types a password the rule takes in the first field and nothing in the second
+- **THEN** the main button still waits, with the tool's second sentence ("Type the password again to check it.") under it and read with it
+
+#### Scenario: The second field is being typed
+
+- **WHEN** the second field holds the start of the first field's password, but not all of it
+- **THEN** no sentence is shown by either field, the second field is not marked invalid, and the main button waits with the tool's second sentence
+
+#### Scenario: Both fields hold the same password
+
+- **WHEN** both fields hold "open  Sesame-9", with two spaces inside
+- **THEN** the sentence under the main button goes, the main button works, and the job is sent "open  Sesame-9" exactly as typed, and nothing from the second field
+
+#### Scenario: A space first
+
+- **WHEN** the first field holds " open sesame"
+- **THEN** the first field is marked invalid at once, "A password cannot start or end with a space." is shown between its label and the field, read with it and tied to the main button, which does nothing when pressed
+
+#### Scenario: A space last
+
+- **WHEN** the first field holds "open sesame " and focus is still in it
+- **THEN** no sentence is shown by the field and nothing is announced, and the main button waits with the tool's second sentence ("Type the password again to check it.") under it; once focus leaves the first field, or Enter is pressed, or the main button is pressed, the field is marked invalid and "A password cannot start or end with a space." is shown between its label and the field, tied to the main button
+
+#### Scenario: Typing a password with a space inside, one key at a time
+
+- **WHEN** the visitor types "open sesame" into the first field one key at a time, passing through "open "
+- **THEN** no sentence is shown by either field at any point, the field is never marked invalid, and the status region announces nothing
+
+#### Scenario: The two passwords differ
+
+- **WHEN** the second field holds something that is not the start of the first field's password, or is longer than it
+- **THEN** the second field is marked invalid, "The two passwords are not the same. Type the password again in this box." is shown between its label and the field, read with it and tied to the main button, which stays focusable and does nothing when pressed
+
+#### Scenario: Characters the rule does not take
+
+- **WHEN** the visitor types "café", "पासवर्ड", a tab, a no-break space or "£" into the first field of a field whose rule is printable ASCII
+- **THEN** the first field is marked invalid and "Some characters cannot be used. Use only the characters listed under the box." is shown between its label and the field, naming no character, read with the field and tied to the main button, which does nothing when pressed; the hint under the field says which characters can be used
+
+#### Scenario: The password is too long
+
+- **WHEN** the visitor types or pastes 130 characters into the first field of a field that takes 127
+- **THEN** nothing typed is cut off, the first field is marked invalid, and "This password is too long. Use 127 characters or fewer." is shown between its label and the field, tied to the main button, which does nothing when pressed; the sentence does not say how many characters were typed
+
+#### Scenario: A phone keyboard is open
+
+- **WHEN** the visitor types on a phone at 360px and the on-screen keyboard covers the lower half of the screen
+- **THEN** a sentence about either field is shown above that field, where the keyboard does not cover it, the keyboard's Enter key is labelled as "Next" in the first field and "Go" in the second, the second field's label starts close under the first field (within about 200px at 360px wide), and the fields stay hidden, so the keyboard offers no corrections, suggestions or capitals
+
+#### Scenario: A keyboard user uses the fields
+
+- **WHEN** a keyboard user is in the first field and presses Tab, or presses Enter in either field
+- **THEN** Tab moves to the second field, then to the next option, then the rest of the working area in page order and the main button; Enter in the first field moves focus to the second field once the first holds a password the rule takes, and otherwise shows the first field's sentence or has the status region say the sentence that holds the main button, on every press; Enter in the second field does what pressing the main button does, so it starts the job only when the main button works, and while the button waits the status region says why on every press, in the words of the sentence that holds it; the Enter that confirms a word in an input method does neither
+
+#### Scenario: A screen reader user reaches the fields
+
+- **WHEN** focus moves into the first field, then the second, with a screen reader running
+- **THEN** the first is read with its label, as a password field, then the hint and the shared note (the note, though shown under the second field, is part of the first field's description), and, when something is wrong with it, that it is invalid and the sentence; the second with its label, as a password field, and, when the two differ, that it is invalid and its sentence; a sentence is said once by the status region when it first appears or changes kind, never holds the password, and nothing is announced twice
+
+#### Scenario: How the fields look
+
+- **WHEN** the fields are shown at 360px, at 1280px, in dark mode or with text at 200%
+- **THEN** each has the site's field style, a label that looks like the other field labels and a height of at least 2.75rem, a sentence sits between its field's label and the field, bold in the text colour as a wrong password's is, the hint sits under the first field and the note under the second, and nothing overflows sideways
+
+#### Scenario: The note under the first field
+
+- **WHEN** a new password's fields are drawn
+- **THEN** the note is no longer under the first field but its own paragraph under the second, still read with the first field, and it reads, in draft words for the owner, "The password stays in your browser. This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account."; it never claims the password goes nowhere at all
+
+#### Scenario: Cancel, a failure and another file
+
+- **WHEN** the visitor types the password in both fields, starts the job and presses Cancel, or the job fails and the visitor presses "Go back to your file", or the visitor picks another file with "Choose another file" while listing
+- **THEN** both fields hold what was typed, and the main button works without typing it again
+
+#### Scenario: The password is forgotten
+
+- **WHEN** a job with the password finishes, or the visitor presses "Start again", removes the only file, or leaves the page
+- **THEN** the page holds the password no longer, and the next file read shows both fields empty
+
+#### Scenario: A new password shown for one choice
+
+- **WHEN** a test entry shows a new password only while an earlier choice holds one value, and the visitor types it, then changes the choice
+- **THEN** the fields go, the password is not sent and does not hold the main button, and changing the choice back shows both fields as typed
+
+### Requirement: A new password is used as typed and never said back
+
+A new password SHALL be sent exactly as typed: never trimmed, composed or cut. No sentence or status message on the page SHALL hold the password, a part of it, a refused character or its length. (SPEC.md: What we are building, rule 4; Privacy, limits and security, Browser tools)
+
+#### Scenario: What is sent
+
+- **WHEN** both fields hold "Open  Sesame-9 ", with two spaces inside and one at the end
+- **THEN** the job is not started, because of the space at the end; and once both hold "Open  Sesame-9", the job is sent "Open  Sesame-9", byte for byte
+
+#### Scenario: A sentence about a password
+
+- **WHEN** any sentence about a new password is shown or said, for refused characters, a space at an end, a password too long, two passwords that differ, or a password the engine refused
+- **THEN** it is one of the fixed sentences, naming no character and no number of characters typed
+
+### Requirement: A new password the engine refuses
+
+When a tool's engine refuses the new password it was sent, the page SHALL say "The password could not be used. Go back to your file and type it again.", or the tool's own words for its password, under the tool's heading for a failed job, and offer "Go back to your file" with both fields as typed. The sentence SHALL NOT hold the password. (SPEC.md: States every tool handles, Failed; Rules for the code, 2)
+
+#### Scenario: The engine refuses a password
+
+- **WHEN** a test entry's engine is sent a new password it refuses
+- **THEN** the page shows the failed heading and "The password could not be used. Go back to your file and type it again.", and "Go back to your file" lists the file with both fields as typed
+
+### Requirement: A tool page links to its group
+
+Below its related tools, every tool page SHALL show one text link to its group's hub page, worded "All tools in" and the group name, in the served HTML. It is part of the text below the tool and adds no new part. (SPEC.md: Tool page anatomy, 7; SEO, Site-wide; SEO, Every tool page, Structured data)
+
+#### Scenario: A tool page is fetched
+
+- **WHEN** `/merge-pdf` is fetched and no script is run
+- **THEN** after its related tools it holds a link "All tools in Organise pages" to the "Organise pages" hub page, and the link matches the middle step of its breadcrumb
+
+#### Scenario: Keyboard and screen reader
+
+- **WHEN** a visitor tabs past the related tools
+- **THEN** the hub link takes focus next with a visible outline, is at least 44px tall, and a screen reader reads its words as they are shown
+
+#### Scenario: A phone-sized screen
+
+- **WHEN** a tool page is shown 360px wide
+- **THEN** the link wraps within the column and nothing scrolls sideways

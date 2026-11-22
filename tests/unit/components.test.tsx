@@ -5,10 +5,16 @@ import { FilePicker } from '../../src/components/FilePicker/FilePicker';
 import { Notice } from '../../src/components/Notice/Notice';
 import { PageGrid, sameItem, type GridItem } from '../../src/components/PageGrid/PageGrid';
 import { PasswordField } from '../../src/components/PasswordField/PasswordField';
+import { againPasswordErrorId, againPasswordId, firstPasswordErrorId, heldValue, NewPasswordField, newPasswordSavingNote, passwordNoteId } from '../../src/components/NewPasswordField/NewPasswordField';
+import { passwordStaysSentence } from '../../src/widget/format';
 import { ProgressBar } from '../../src/components/ProgressBar/ProgressBar';
 import { Result } from '../../src/components/Result/Result';
 import { ChoiceGroup } from '../../src/components/ChoiceGroup/ChoiceGroup';
 import { errorId, TextField } from '../../src/components/TextField/TextField';
+import { DrawingPad } from '../../src/components/DrawingPad/DrawingPad';
+import { PictureField, pictureErrorId } from '../../src/components/PictureField/PictureField';
+import { readFileSync } from 'node:fs';
+import { ToolShell } from '../../src/components/ToolShell/ToolShell';
 
 const noop = () => {};
 
@@ -24,6 +30,13 @@ describe('FilePicker', () => {
 
   it('takes the plainer look once files are listed', () => {
     expect(renderToStaticMarkup(<FilePicker label="Add more files" accepts={[]} multiple onFiles={noop} look="secondary" />)).toMatch(/^<label class="button-secondary /);
+  });
+
+  it('reads no paragraph with the button unless told which, in order, leaving out empty ones', () => {
+    expect(html).not.toContain('aria-describedby');
+    const described = renderToStaticMarkup(<FilePicker label="Choose a picture" accepts={['image/png']} multiple={false} onFiles={noop} describedBy={['a', null, '', undefined, 'b']} />);
+    expect(described).toContain('aria-describedby="a b"');
+    expect(renderToStaticMarkup(<FilePicker label="Choose a picture" accepts={[]} multiple={false} onFiles={noop} describedBy={[null]} />)).not.toContain('aria-describedby');
   });
 });
 
@@ -212,6 +225,12 @@ describe('PasswordField', () => {
   it('sits in no form and has no name, so it can never be sent to an address', () => {
     expect(html).not.toContain('<form');
     expect(html).not.toContain('name=');
+  });
+
+  it("starts its note with the shared sentence, so both password fields say it in the same words", () => {
+    expect(passwordStaysSentence).toBe('The password stays in your browser.');
+    expect(html).toContain(`>${passwordStaysSentence} It is not sent anywhere.</p>`);
+    expect(html).toMatch(/autocomplete="off"/i);
   });
 
   it('ties a wrong-password message to the field', () => {
@@ -466,5 +485,577 @@ describe('Enter in a typed field (TextField and PasswordField)', async () => {
     expect(pressesButton({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false } })).toBe(false);
     expect(pressesButton({ key: 'Process', keyCode: 229 })).toBe(false);
     expect(pressesButton({ key: 'a', keyCode: 65, nativeEvent: { isComposing: false } })).toBe(false);
+  });
+});
+
+// No render harness (no jsdom): the pad's pointer handlers and effects are not run here. Its rules are
+// plain functions (tests/unit/drawing.test.ts); Sign PDF's end-to-end test is the first browser test of the pad.
+describe('DrawingPad, a drawing of a test entry', () => {
+  const option = {
+    kind: 'drawing' as const,
+    key: 'drawing',
+    label: 'Draw your signature',
+    hint: 'Draw with a finger, a mouse or a pen. To use a keyboard, type your name instead.',
+    clearLabel: 'Clear the drawing',
+    emptySentence: 'Draw your signature first.',
+  };
+  const rule = { maxLines: 50, maxPoints: 5000 };
+  const html = renderToStaticMarkup(<DrawingPad option={option} id="r5-drawing" drawing={[]} rule={rule} onDraw={noop} onClear={noop} />);
+  const canvas = html.match(/<canvas [^>]*>/)?.[0] ?? '';
+  const button = html.match(/<button [^>]*>[^<]*<\/button>/)?.[0] ?? '';
+
+  it('is the label, the box, the hint and the Clear button, in that order', () => {
+    expect(html).toMatch(
+      /^<div class="[^"]+"><p id="r5-drawing-label" class="[^"]+">Draw your signature<\/p><canvas [^>]*><\/canvas><p id="r5-drawing-hint" class="[^"]+">Draw with a finger, a mouse or a pen\. To use a keyboard, type your name instead\.<\/p><div class="actions"><button /,
+    );
+    expect(html).not.toContain('<label');
+    expect(html).not.toContain('<form');
+  });
+
+  it('names the box by its label and describes it by its hint, as a picture, with no Tab stop', () => {
+    expect(canvas).toContain('role="img"');
+    expect(canvas).toContain('aria-labelledby="r5-drawing-label"');
+    expect(canvas).toContain('aria-describedby="r5-drawing-hint"');
+    expect(canvas).not.toMatch(/tabindex/i);
+  });
+
+  it('has a Clear button in the tool\'s words, a plain button described by the hint', () => {
+    expect(button).toContain('type="button"');
+    expect(button).toContain('class="button-secondary"');
+    expect(button).toContain('aria-describedby="r5-drawing-hint"');
+    expect(button).toMatch(/>Clear the drawing<\/button>$/);
+  });
+
+  it('takes touch for itself in its CSS Module: no scroll or zoom, no text selection, no long-press menu, the control edge and 4px corners at 5 to 2, at most 60% of a short screen tall, and the column\'s width where the small viewport unit is missing', () => {
+    const css = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.module.css', import.meta.url), 'utf8');
+    const box = css.match(/\.box \{([^}]*)\}/)?.[1] ?? '';
+    for (const rule of [
+      'touch-action: none;',
+      'user-select: none;',
+      '-webkit-user-select: none;',
+      '-webkit-touch-callout: none;',
+      // The column's width, or 150% of the screen's small height, so at 5 to 2 it is never more than 60% of it (a phone turned sideways).
+      'width: min(100%, 150svh);',
+      'aspect-ratio: 5 / 2;',
+      'border: 1px solid var(--control);',
+      'border-radius: 4px;',
+      'background: transparent;',
+      'color: var(--text);',
+    ]) {
+      expect(box, rule).toContain(rule);
+    }
+    // A browser without the small viewport unit drops that width, and still gives the box the column's width.
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).toMatch(/@supports not \(width: 1svh\) \{\s*\.box \{\s*width: 100%;\s*\}\s*\}/);
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/shadow|gradient|animation|transition/);
+  });
+
+  it('never makes a picture or a data address of the canvas, and never writes to storage', () => {
+    const source = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.tsx', import.meta.url), 'utf8');
+    const rules = readFileSync(new URL('../../src/widget/drawing.ts', import.meta.url), 'utf8');
+    for (const code of [source, rules]) {
+      for (const word of ['toDataURL', 'toBlob', 'getImageData', 'convertToBlob', 'transferToImageBitmap', 'localStorage', 'sessionStorage', 'indexedDB', 'console.', 'data:']) {
+        expect(code, word).not.toContain(word);
+      }
+    }
+  });
+
+  it('prevents the context menu on the box, and starts, moves and ends lines on pointer events, ended by cancel or lost capture too', () => {
+    const source = readFileSync(new URL('../../src/components/DrawingPad/DrawingPad.tsx', import.meta.url), 'utf8');
+    for (const wiring of ['onPointerDown={start}', 'onPointerMove={move}', 'onPointerUp={end}', 'onPointerCancel={end}', 'onLostPointerCapture={end}', 'onContextMenu={(event) => event.preventDefault()}']) {
+      expect(source, wiring).toContain(wiring);
+    }
+    expect(source).toContain('setPointerCapture');
+    expect(source).toContain('event.isPrimary');
+    expect(source).toContain('getCoalescedEvents');
+    expect(source).toContain('devicePixelRatio');
+    expect(source).toContain('ResizeObserver');
+    expect(source).toContain('prefers-color-scheme');
+  });
+});
+
+describe('PictureField, a picture of a test entry', () => {
+  const option = {
+    kind: 'picture' as const,
+    key: 'picture',
+    label: 'Picture of your signature',
+    pickLabel: 'Choose a picture',
+    againLabel: 'Choose another picture',
+    hint: 'A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large.',
+    acceptsName: 'a JPG or PNG picture',
+    emptySentence: 'Choose a picture of your signature first.',
+  };
+  const types = ['image/jpeg', 'image/png'] as const;
+  const draw = (more: { picked?: boolean; chosen?: string | null; error?: string | null }) =>
+    renderToStaticMarkup(<PictureField option={option} id="r5-picture" types={types} picked={more.picked ?? false} chosen={more.chosen} error={more.error} onPick={noop} />);
+  const input = (markup: string) => markup.match(/<input [^>]*\/>/)?.[0] ?? '';
+  const before = draw({});
+  const reading = draw({ picked: true, chosen: 'signature.png, Getting ready.' });
+  const ready = draw({ picked: true, chosen: 'signature.png, 120 KB.' });
+  const problems = [
+    'notes.png is not a JPG or PNG picture, so it was not used. No picture is chosen.',
+    'broken.png is damaged and cannot be read. Choose another picture.',
+    'arithmetic.jpg is saved in a way this tool cannot read. Open it in a photo app, save a copy, and choose the copy.',
+  ];
+
+  it('before a pick: the label, a secondary button for one picture of the tool types, and the hint, in that order', () => {
+    // Not the site's `field` class, whose rules would make the button bold and full width and undo the hidden input's size.
+    expect(before).toMatch(/^<div class="[^"]+"><p id="r5-picture-label" class="[^"]+">Picture of your signature<\/p><label class="button-secondary [^"]+"><input /);
+    expect(before).not.toMatch(/class="field[ "]/);
+    expect(before).toContain('Choose a picture</label>');
+    expect(before).toMatch(/<\/label><p id="r5-picture-hint" class="[^"]+">A JPG or PNG picture\./);
+    const field = input(before);
+    expect(field).toContain('type="file"');
+    expect(field).toContain('accept="image/jpeg,image/png"');
+    expect(field).not.toContain('multiple');
+    expect(field).toContain('id="r5-picture"');
+    expect(field).toContain('aria-describedby="r5-picture-label r5-picture-hint"');
+  });
+
+  it('while read and once ready: the line naming it, the button "Choose another picture", read in order', () => {
+    expect(reading).toContain('<p id="r5-picture-chosen" class="');
+    expect(reading).toContain('signature.png, Getting ready.</p>');
+    expect(ready).toContain('signature.png, 120 KB.</p>');
+    expect(ready).toContain('Choose another picture</label>');
+    expect(input(ready)).toContain('aria-describedby="r5-picture-label r5-picture-chosen r5-picture-hint"');
+    expect(ready.indexOf('r5-picture-chosen')).toBeLessThan(ready.indexOf('<input'));
+  });
+
+  it('after a wrong pick the button reads its first words again, as no picture is chosen', () => {
+    const refused = draw({ picked: false, error: problems[0] });
+    expect(refused).toContain('Choose a picture</label>');
+    expect(draw({ picked: true, error: problems[1] })).toContain('Choose another picture</label>');
+  });
+
+  it.each(problems)('with a problem, the sentence between the label and the button, read before the hint: %s', (sentence) => {
+    const html = draw({ picked: true, error: sentence });
+    expect(pictureErrorId('r5-picture')).toBe('r5-picture-error');
+    expect(html).toMatch(/<\/p><p id="r5-picture-error" class="[^"]+">/);
+    expect(html).toContain(`${sentence.replaceAll('<', '&lt;')}</p>`);
+    expect(html.indexOf('r5-picture-error')).toBeLessThan(html.indexOf('<label'));
+    expect(input(html)).toContain('aria-describedby="r5-picture-label r5-picture-error r5-picture-hint"');
+    expect(html).not.toContain('r5-picture-chosen');
+  });
+
+  it('never shows the picture, and shows a hostile name as text', () => {
+    for (const html of [before, reading, ready]) {
+      expect(html).not.toContain('<img');
+      expect(html).not.toContain('blob:');
+      expect(html).not.toContain('<canvas');
+    }
+    const hostile = draw({ picked: true, chosen: '<img src=x onerror=alert(1)>.png, 1 KB' });
+    expect(hostile).not.toContain('<img');
+    expect(hostile).toContain('&lt;img src=x onerror=alert(1)&gt;.png, 1 KB');
+  });
+
+  it('passes on the one picture chosen, and puts the focus ref on the file input', () => {
+    const picked: File[] = [];
+    const ref = { current: null };
+    const field = PictureField({ option, id: 'r5-picture', types, picked: false, onPick: (file) => picked.push(file), focusRef: ref });
+    const children = (field.props as { children: (ReactElement | null)[] }).children;
+    const picker = children.find((child): child is ReactElement => child !== null && child.type === FilePicker);
+    const props = picker?.props as { onFiles(files: File[]): void; inputRef: unknown; multiple: boolean };
+    expect(props.inputRef).toBe(ref);
+    expect(props.multiple).toBe(false);
+    const one = new File(['x'], 'signature.png');
+    props.onFiles([one, new File(['y'], 'other.png')]);
+    props.onFiles([]);
+    expect(picked).toEqual([one]);
+  });
+
+  it('takes its look from its own stylesheet: the label as field labels, the sentence bold in the text colour, a long name wrapping', () => {
+    const css = readFileSync(new URL('../../src/components/PictureField/PictureField.module.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.picture\s*{\s*margin-top: 1\.5rem;\s*margin-bottom: 0\.75rem;/);
+    expect(css).toMatch(/\.label\s*{[^}]*font-weight: 700;/);
+    expect(css).toMatch(/\.error\s*{[^}]*font-weight: 700;[^}]*color: var\(--text\);[^}]*overflow-wrap: anywhere;/);
+    expect(css).toMatch(/\.chosen\s*{[^}]*overflow-wrap: anywhere;/);
+    expect(css).toMatch(/\.note\s*{[^}]*color: var\(--muted\);/);
+    expect(css).not.toMatch(/shadow|gradient|border-radius: (?:[5-9]|\d{2})/);
+  });
+});
+
+describe("Sign PDF's entry, drawn by ChoiceGroup, TextField, DrawingPad and PictureField", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { chosenValue, optionsHold, optionsToSend, picturesToSend, shownOptions } = await import('../../src/widget/options');
+  const { drawingRule, pictureRule } = await import('../../src/widget/option-values');
+  const widget = tools.find((tool) => tool.id === 'sign-pdf')!.widget!;
+  const options = widget.options!;
+  const [source, name, drawing, picture, page, position] = options;
+  if (source?.kind !== 'choice' || name?.kind !== 'text' || drawing?.kind !== 'drawing' || picture?.kind !== 'picture' || page?.kind !== 'choice' || position?.kind !== 'choice') {
+    throw new Error('Sign PDF lists its six options in the order of the design');
+  }
+
+  it('once the file is read: "How to add your signature" with "Type your name" chosen, the field "Your name", "Last page" and "Bottom right"; the pad and the picture field hidden', () => {
+    expect(shownOptions(options, {}).map((option) => option.key)).toEqual(['source', 'name', 'page', 'position']);
+    const how = renderToStaticMarkup(<ChoiceGroup option={source} value={chosenValue(source, {})} name="r9-source" onChoose={noop} />);
+    expect(how).toContain('<legend');
+    expect(how).toContain('How to add your signature</legend>');
+    expect([...how.matchAll(/<span>([^<]*)<\/span>/g)].map((match) => match[1])).toEqual(['Type your name', 'Draw it', 'Use a picture of it']);
+    expect(how).toMatch(/<input type="radio" name="r9-source" checked="" value="type"\/>/);
+    const field = renderToStaticMarkup(<TextField option={name} id="r9-name" raw="" onType={noop} onEnter={noop} />);
+    expect(field).toContain('<label for="r9-name">Your name</label>');
+    expect(field).toContain('>Up to 50 characters, on one line. Use letters from English and other Western European languages, numbers and common marks.</p>');
+    for (const [option, chosen, labels] of [
+      [page, 'last', ['Last page', 'First page', 'Every page']],
+      [position, 'bottom-right', ['Bottom left', 'Bottom centre', 'Bottom right', 'Top left', 'Top centre', 'Top right']],
+    ] as const) {
+      const html = renderToStaticMarkup(<ChoiceGroup option={option} value={chosenValue(option, {})} name={`r9-${option.key}`} onChoose={noop} />);
+      expect(chosenValue(option, {})).toBe(chosen);
+      expect([...html.matchAll(/<span>([^<]*)<\/span>/g)].map((match) => match[1])).toEqual(labels);
+    }
+    expect(renderToStaticMarkup(<ChoiceGroup option={page} value="last" name="r9-page" onChoose={noop} />)).toContain('Which pages to sign</legend>');
+    expect(renderToStaticMarkup(<ChoiceGroup option={position} value="bottom-right" name="r9-position" onChoose={noop} />)).toContain('Where on the page</legend>');
+  });
+
+  it('the main button waits with each way\'s sentence until the way chosen has a signature, and only that way\'s input is sent', () => {
+    const file = new File(['x'], 'qz7sig.png', { type: 'image/png' });
+    const ready = { picture: { name: 'qz7sig.png', size: 1, pixels: 1, status: 'ready' as const } };
+    expect(optionsHold('sign-pdf', options, {})).toEqual({ key: 'name', kind: 'empty', sentence: 'Type your name first.' });
+    expect(optionsHold('sign-pdf', options, { source: 'draw' })).toEqual({ key: 'drawing', kind: 'empty', sentence: 'Draw your signature first.' });
+    expect(optionsHold('sign-pdf', options, { source: 'picture' })).toEqual({ key: 'picture', kind: 'empty', sentence: 'Choose a picture of your signature first.' });
+    const all = { name: 'Jane Doe', drawing: [[1, 2, 3, 4]] };
+    expect(optionsHold('sign-pdf', options, all)).toBeNull();
+    expect(optionsHold('sign-pdf', options, { ...all, source: 'draw' })).toBeNull();
+    expect(optionsHold('sign-pdf', options, { ...all, source: 'picture' }, { pictures: ready })).toBeNull();
+    expect(optionsToSend(options, all)).toEqual({ source: 'type', name: 'Jane Doe', page: 'last', position: 'bottom-right' });
+    expect(optionsToSend(options, { ...all, source: 'draw' })).toEqual({ source: 'draw', drawing: [[1, 2, 3, 4]], page: 'last', position: 'bottom-right' });
+    expect(optionsToSend(options, { ...all, source: 'picture' })).toEqual({ source: 'picture', page: 'last', position: 'bottom-right' });
+    const held = new Map([['picture', file]]);
+    expect(picturesToSend(options, { source: 'picture' }, ready, held)).toEqual({ picture: file });
+    expect(picturesToSend(options, { source: 'type' }, ready, held)).toEqual({});
+    // A refused letter names it, followed by the tool's way forward.
+    expect(optionsHold('sign-pdf', options, { name: 'Łukasz' })?.sentence).toBe('Ł cannot be used. To use other letters, choose “Draw it” or “Use a picture of it” above.');
+  });
+
+  it('the pad: "Draw your signature", its hint naming typing as the keyboard way, and "Clear the drawing"; the picture field: its label, button and hint', () => {
+    const pad = renderToStaticMarkup(<DrawingPad option={drawing} id="r9-drawing" drawing={[]} rule={drawingRule('sign-pdf', 'drawing')!} onDraw={noop} onClear={noop} />);
+    expect(pad).toContain('>Draw your signature</p>');
+    expect(pad).toContain('>Use a finger, a mouse or a pen in the box. To use a keyboard, choose “Type your name” above.</p>');
+    expect(pad).toContain('>Clear the drawing</button>');
+    const field = renderToStaticMarkup(<PictureField option={picture} id="r9-picture" types={pictureRule('sign-pdf', 'picture')!.types} picked={false} onPick={noop} />);
+    expect(field).toContain('>Picture of your signature</p>');
+    expect(field).toContain('Choose a picture');
+    expect(field).toContain('accept="image/jpeg,image/png"');
+    expect(field).toContain('>A JPG or PNG picture. One over 8 MB or 16 million pixels still works but makes the signed file large. A picture with a see-through background works best.</p>');
+    expect(field).not.toContain('<img');
+  });
+});
+
+describe('NewPasswordField, a new password of a test entry', () => {
+  const option = {
+    kind: 'new-password' as const,
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const html = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="open" again="op" onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const inputs = (markup: string) => markup.match(/<input [^>]*\/>/g) ?? [];
+  const characters = 'Some characters cannot be used. Use only the characters listed under the box.';
+  const mismatch = 'The two passwords are not the same. Type the password again in this box.';
+  const firstWrong = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="café" again="" firstError={characters} onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const againWrong = renderToStaticMarkup(<NewPasswordField option={option} id="r5-pw" first="open" again="opex" againError={mismatch} onType={noop} onEnter={noop} onFirstBlur={noop} />);
+
+  it('is two labelled fields, one under the other, in the site field style', () => {
+    expect(html).toMatch(/<div class="field field-short"><label for="r5-pw">New password<\/label><input /);
+    expect(html).toMatch(/<div class="field field-short [^"]+"><label for="r5-pw-again">Type the new password again<\/label><input /);
+    expect(againPasswordId('r5-pw')).toBe('r5-pw-again');
+    expect(inputs(html)).toHaveLength(2);
+    expect(inputs(html)[0]).toContain('id="r5-pw"');
+    expect(inputs(html)[1]).toContain('id="r5-pw-again"');
+  });
+
+  it('keeps both hidden, for a password being set, with no name, no form and no length cap, and labels Enter "Next" then "Go"', () => {
+    for (const field of inputs(html)) {
+      expect(field).toContain('type="password"');
+      expect(field).toMatch(/\sautocomplete="new-password"/i);
+      expect(field).not.toMatch(/\sname=/);
+      expect(field).not.toMatch(/maxlength/i);
+    }
+    expect(inputs(html)[0]).toMatch(/\senterkeyhint="next"/i);
+    expect(inputs(html)[1]).toMatch(/\senterkeyhint="go"/i);
+    expect(html).not.toContain('<form');
+  });
+
+  it('never writes what is typed into a value attribute: both fields are uncontrolled', () => {
+    for (const markup of [html, firstWrong, againWrong]) {
+      for (const field of inputs(markup)) expect(field).not.toMatch(/\svalue=/);
+      for (const typed of ['open', 'op', 'café', 'opex']) expect(markup).not.toContain(`"${typed}"`);
+    }
+  });
+
+  it('puts only the hint under the first field, the shared note as its own paragraph after the second, and reads both with the first', () => {
+    expect(passwordNoteId('r5-pw')).toBe('r5-pw-note');
+    expect(inputs(html)[0]).toContain('aria-describedby="r5-pw-hint r5-pw-note"');
+    expect(inputs(html)[1]).not.toContain('aria-describedby');
+    const hint = html.match(/<p id="r5-pw-hint" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
+    expect(hint).toBe(option.hint);
+    const note = html.match(/<p id="r5-pw-note" class="[^"]+">([^<]*)<\/p>/)?.[1] ?? '';
+    expect(note).toBe(`${passwordStaysSentence} ${newPasswordSavingNote}`);
+    // In order: the first field, its hint, the second field, the note; nothing else between the two fields.
+    expect(html.indexOf('id="r5-pw-hint"')).toBeGreaterThan(html.indexOf('id="r5-pw"'));
+    expect(html.indexOf('id="r5-pw-hint"')).toBeLessThan(html.indexOf('id="r5-pw-again"'));
+    expect(html.indexOf('id="r5-pw-note"')).toBeGreaterThan(html.indexOf('id="r5-pw-again"'));
+    expect(html).toMatch(/<p id="r5-pw-hint" class="[^"]+">[^<]*<\/p><\/div><div class="field field-short [^"]+"><label for="r5-pw-again">/);
+    expect(html).toMatch(/<input [^>]*id="r5-pw-again"[^>]*\/><\/div><p id="r5-pw-note" class="[^"]+">[^<]*<\/p><\/div>$/);
+  });
+
+  it("says the browser may offer to save or suggest it and copy it to the browser account, and never that it goes nowhere", () => {
+    expect(newPasswordSavingNote).toBe(
+      'This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account.',
+    );
+    expect(html).toContain(passwordStaysSentence);
+    expect(html).toContain('offer to save it or to suggest one');
+    expect(html).toContain('browser account');
+    expect(html).not.toContain('It is not sent anywhere');
+  });
+
+  it('with nothing wrong: no sentence and neither field invalid', () => {
+    expect(html).not.toContain('aria-invalid');
+    expect(html).not.toContain(firstPasswordErrorId('r5-pw'));
+    expect(html).not.toContain(againPasswordErrorId('r5-pw'));
+  });
+
+  it("with the first field wrong: its sentence between its label and the field, invalid, read before the hint, and nothing typed in it", () => {
+    expect(firstPasswordErrorId('r5-pw')).toBe('r5-pw-error');
+    expect(firstWrong).toMatch(/<label for="r5-pw">New password<\/label><p id="r5-pw-error" class="[^"]+">Some characters cannot be used\. Use only the characters listed under the box\.<\/p><input /);
+    expect(inputs(firstWrong)[0]).toContain('aria-invalid="true"');
+    expect(inputs(firstWrong)[0]).toContain('aria-describedby="r5-pw-error r5-pw-hint r5-pw-note"');
+    expect(inputs(firstWrong)[1]).not.toContain('aria-invalid');
+    expect(firstWrong).not.toContain('café');
+  });
+
+  it('with the two different: the sentence on the second field, between its label and the field, invalid', () => {
+    expect(againPasswordErrorId('r5-pw')).toBe('r5-pw-again-error');
+    expect(againWrong).toMatch(/<label for="r5-pw-again">Type the new password again<\/label><p id="r5-pw-again-error" class="[^"]+">The two passwords are not the same\. Type the password again in this box\.<\/p><input /);
+    expect(inputs(againWrong)[1]).toContain('aria-invalid="true"');
+    expect(inputs(againWrong)[1]).toContain('aria-describedby="r5-pw-again-error"');
+    expect(inputs(againWrong)[0]).not.toContain('aria-invalid');
+    expect(inputs(againWrong)[0]).toContain('aria-describedby="r5-pw-hint r5-pw-note"');
+  });
+
+  it('passes on what is typed with its field, does what the main button does on Enter only, tells of leaving the first field, and puts the focus ref on it', () => {
+    const typed: [string, string][] = [];
+    const entered: string[] = [];
+    let blurred = 0;
+    const ref = { current: null };
+    const element = NewPasswordField({
+      option,
+      id: 'r5-pw',
+      first: '',
+      again: '',
+      onType: (field, value) => typed.push([field, value]),
+      onEnter: (field) => entered.push(field),
+      onFirstBlur: () => (blurred += 1),
+      focusRef: ref,
+    });
+    const fields = (element.props as { children: ReactElement[] }).children;
+    const inputOf = (field: ReactElement) =>
+      ((field.props as { children: (ReactElement | null)[] }).children.find((child) => child !== null && child.type === 'input') as ReactElement & {
+        props: {
+          ref?: unknown;
+          onChange(event: { currentTarget: { value: string } }): void;
+          onKeyDown(event: { key: string; keyCode?: number; nativeEvent: { isComposing: boolean }; preventDefault(): void }): void;
+          onBlur?(): void;
+        };
+      });
+    const first = inputOf(fields[0]!);
+    const again = inputOf(fields[1]!);
+    // The focus ref is handed the first field by its callback ref; the second has its own and no focus ref.
+    const node = { value: '' } as HTMLInputElement;
+    (first.props.ref as (node: HTMLInputElement | null) => void)(node);
+    expect(ref.current).toBe(node);
+    (again.props.ref as (node: HTMLInputElement | null) => void)({ value: '' } as HTMLInputElement);
+    expect(ref.current).toBe(node);
+    for (const input of [first, again]) expect(input.props).not.toHaveProperty('value');
+    for (const input of [first, again]) expect(input.props).not.toHaveProperty('defaultValue');
+    first.props.onChange({ currentTarget: { value: 'open ' } });
+    again.props.onChange({ currentTarget: { value: 'op' } });
+    expect(typed).toEqual([
+      ['first', 'open '],
+      ['again', 'op'],
+    ]);
+    let prevented = 0;
+    const prevent = () => (prevented += 1);
+    first.props.onKeyDown({ key: 'a', nativeEvent: { isComposing: false }, preventDefault: prevent });
+    first.props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true }, preventDefault: prevent });
+    again.props.onKeyDown({ key: 'Enter', keyCode: 229, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    expect([entered, prevented]).toEqual([[], 0]);
+    first.props.onKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    again.props.onKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false }, preventDefault: prevent });
+    expect([entered, prevented]).toEqual([['first', 'again'], 2]);
+    first.props.onBlur?.();
+    expect(blurred).toBe(1);
+    expect(again.props.onBlur).toBeUndefined();
+  });
+});
+
+describe("NewPasswordField with Protect's entry", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { optionsHold, optionsToSend } = await import('../../src/widget/options');
+  const widget = tools.find((tool) => tool.id === 'protect-pdf')!.widget!;
+  const option = widget.options![0]!;
+  if (option.kind !== 'new-password') throw new Error('Protect lists a new password first');
+  // As the workspace draws it once the file is read: both fields empty.
+  const html = renderToStaticMarkup(<NewPasswordField option={option} id="r7-pw" first="" again="" onType={noop} onEnter={noop} onFirstBlur={noop} />);
+  const hint = 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
+
+  it('is the only option: "New password" and "Type the new password again", empty, the hint under the first and the note under the second', () => {
+    expect(widget.options).toHaveLength(1);
+    expect(option.key).toBe('newPassword');
+    expect(html).toContain('<label for="r7-pw">New password</label>');
+    expect(html).toContain('<label for="r7-pw-again">Type the new password again</label>');
+    expect(html).not.toMatch(/\svalue=/);
+    expect(html).toContain(`<p id="r7-pw-hint" class="${html.match(/<p id="r7-pw-hint" class="([^"]+)"/)?.[1]}">${hint.replaceAll('&', '&amp;')}</p>`);
+    expect(html.indexOf('id="r7-pw-note"')).toBeGreaterThan(html.indexOf('id="r7-pw-again"'));
+    expect(html).toContain(`${passwordStaysSentence} ${newPasswordSavingNote}`);
+  });
+
+  it('holds the main button with "Type a password first." while empty, then the second sentence, then works and sends the first field only', () => {
+    const held = (first: string, again: string) => ({ newPasswords: { newPassword: { first, again } } });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('', ''))).toEqual({ key: 'newPassword', kind: 'empty', sentence: 'Type a password first.', field: 'first' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', ''))?.sentence).toBe('Type the password again to check it.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toBeNull();
+    expect(optionsToSend(widget.options, {}, held('Kv4 #%@ wq9', 'Kv4 #%@ wq9'))).toEqual({ newPassword: 'Kv4 #%@ wq9' });
+    expect(optionsHold('protect-pdf', widget.options, {}, held('x'.repeat(128), ''))?.sentence).toBe('This password is too long. Use 127 characters or fewer.');
+    expect(optionsHold('protect-pdf', widget.options, {}, held('café', ''))?.kind).toBe('characters');
+  });
+});
+
+describe('the held value of an uncontrolled password field', () => {
+  const option = {
+    kind: 'new-password' as const,
+    key: 'newPassword',
+    label: 'New password',
+    againLabel: 'Type the new password again',
+    hint: 'Up to 127 characters.',
+    emptySentence: 'Type a password first.',
+    againSentence: 'Type the password again to check it.',
+  };
+  const refsOf = (first: string, again: string) => {
+    const element = NewPasswordField({ option, id: 'r6-pw', first, again, onType: noop, onEnter: noop, onFirstBlur: noop });
+    // The two fields' boxes; the shared note after them is a paragraph.
+    const fields = (element.props as { children: ReactElement[] }).children.slice(0, 2);
+    return fields.map(
+      (field) =>
+        ((field.props as { children: (ReactElement | null)[] }).children.find((child) => child !== null && child.type === 'input') as ReactElement & {
+          props: { ref: (node: HTMLInputElement | null) => void };
+        }).props.ref,
+    );
+  };
+
+  it('leaves the field alone while what it shows is what is held, as when typing', () => {
+    const node = { value: 'open ses' } as HTMLInputElement;
+    let writes = 0;
+    const watched = new Proxy(node, { set: (target, key, value) => ((writes += 1), Reflect.set(target, key, value)) });
+    refsOf('open ses', '')[0]!(watched);
+    expect(writes).toBe(0);
+    expect(node.value).toBe('open ses');
+  });
+
+  it('empties both fields when the password is forgotten', () => {
+    const first = { value: 'open sesame' } as HTMLInputElement;
+    const again = { value: 'open sesame' } as HTMLInputElement;
+    const [firstRef, againRef] = refsOf('', '');
+    firstRef!(first);
+    againRef!(again);
+    expect([first.value, again.value]).toEqual(['', '']);
+  });
+
+  it('shows what is held when the field is drawn again, as after Cancel, and hands the field to an object or function ref', () => {
+    const node = { value: '' } as HTMLInputElement;
+    const object: { current: HTMLInputElement | null } = { current: null };
+    heldValue('kept', object)(node);
+    expect(node.value).toBe('kept');
+    expect(object.current).toBe(node);
+    const seen: (HTMLInputElement | null)[] = [];
+    heldValue('kept', (each) => void seen.push(each))(null);
+    expect(seen).toEqual([null]);
+  });
+});
+
+describe('PasswordField is uncontrolled', () => {
+  it('writes no value attribute, so a typed password is never in the markup', () => {
+    const html = renderToStaticMarkup(<PasswordField fileName="secret.pdf" onSubmit={noop} onLeaveOut={noop} />);
+    expect(html.match(/<input [^>]*\/>/)?.[0]).not.toMatch(/\svalue=/);
+    // It keeps what is typed in state, which no test here can fill in without a render harness, so its source is
+    // read: the input is given neither `value` nor `defaultValue`, the two props React writes into the attribute.
+    const source = readFileSync(new URL('../../src/components/PasswordField/PasswordField.tsx', import.meta.url), 'utf8');
+    const input = source.slice(source.indexOf('<input'), source.indexOf('/>', source.indexOf('<input')));
+    expect(input).toContain('type="password"');
+    expect(input).not.toMatch(/\bvalue=/);
+    expect(input).not.toMatch(/defaultValue=/);
+  });
+});
+
+describe("Remove a password's entry, drawn by Result and Notice", async () => {
+  const { tools } = await import('../../src/tools/registry');
+  const { unreadableNotice } = await import('../../src/widget/failures');
+  const widget = tools.find((tool) => tool.id === 'unlock-pdf')!.widget!;
+
+  it('a file given back: its name, size and pages, Download, the two notes and Start again', () => {
+    const html = renderToStaticMarkup(
+      <Result heading={widget.doneHeading} file={{ name: 'password-unprotected.pdf', detail: '6 KB, 3 pages', href: 'blob:abc' }} notes={widget.resultNotes ?? []} onStartAgain={noop} />,
+    );
+    expect(html).toContain('Your unprotected file is ready');
+    expect(html).toContain('download="password-unprotected.pdf">Download</a>');
+    for (const note of widget.resultNotes!) expect(html).toContain(note.replaceAll("'", '&#x27;'));
+    expect(html).toContain('>Start again</button>');
+    expect(html.toLowerCase()).not.toContain('unlock');
+  });
+
+  it('nothing to remove: the sentence and its advice, no Download and no notes', () => {
+    const html = renderToStaticMarkup(<Result heading={widget.noSmaller!.heading} advice={widget.noSmaller!.advice} notes={[]} onStartAgain={noop} />);
+    expect(html).toContain('This file has no password or restrictions.');
+    expect(html).toContain('There was nothing to remove, so no new file was made. You can use your file as it is.');
+    expect(html).not.toContain('Download');
+    expect(html).toContain('>Start again</button>');
+  });
+
+  it('a file protected with a certificate: named as one this tool cannot read, with the advice, never as damaged', () => {
+    const notice = unreadableNotice('certified.pdf', 'unsupported', widget);
+    expect(notice).toEqual({
+      heading: 'certified.pdf is saved in a way this tool cannot read.',
+      advice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      announcement:
+        'certified.pdf is saved in a way this tool cannot read. It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+    });
+    expect(renderToStaticMarkup(<Notice heading={notice.heading} />)).toContain('certified.pdf is saved in a way this tool cannot read.');
+    expect(unreadableNotice('broken.pdf', 'damaged', widget)).toEqual({ heading: 'broken.pdf is damaged and cannot be read.', announcement: 'broken.pdf is damaged and cannot be read.' });
+  });
+});
+
+describe('ToolShell', () => {
+  const related = [
+    { name: 'Split PDF', href: '/split-pdf', summary: 'Cut one PDF into several.' },
+    { name: 'Rotate PDF', href: '/rotate-pdf', summary: 'Turn the pages of a PDF.' },
+  ];
+  const group = { name: 'Organise pages', href: '/organise-pages' };
+
+  it('links to the group\'s hub page once, after the related tools, as a tap link', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." related={related} group={group} />);
+    const link = '<a class="tap" href="/organise-pages">All tools in Organise pages</a>';
+    expect(html.split(link)).toHaveLength(2);
+    expect(html.indexOf(link)).toBeGreaterThan(html.indexOf('href="/rotate-pdf"'));
+    expect(html).toContain('<h2>Related tools</h2>');
+  });
+
+  it('shows the hub link on a page with no related tools and no text below', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." group={group} />);
+    expect(html).toContain('All tools in Organise pages');
+    expect(html).not.toContain('Related tools');
+    expect(html).toContain('<section');
+  });
+
+  it('draws no section and no hub link without a group, related tools or text below', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." />);
+    expect(html).not.toContain('<section');
+    expect(html).not.toContain('All tools in');
+  });
+
+  it('gives the related list role="list"', () => {
+    const html = renderToStaticMarkup(<ToolShell heading="Merge PDF files" sentence="Combine." related={related} group={group} />);
+    expect(html).toMatch(/<ul[^>]* role="list"/);
   });
 });
