@@ -898,7 +898,7 @@ describe("NewPasswordField with Protect's entry", async () => {
   if (option.kind !== 'new-password') throw new Error('Protect lists a new password first');
   // As the workspace draws it once the file is read: both fields empty.
   const html = renderToStaticMarkup(<NewPasswordField option={option} id="r7-pw" first="" again="" onType={noop} onEnter={noop} onFirstBlur={noop} />);
-  const hint = 'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
+  const hint = 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
 
   it('is the only option: "New password" and "Type the new password again", empty, the hint under the first and the note under the second', () => {
     expect(widget.options).toHaveLength(1);

@@ -55,7 +55,7 @@
             minFiles: 1, multiple: false, resultPages: 'input', items: 'files', itemControls: false, outputs: 'one',
             memoryAdvice: 'Try on a computer.',
             options: [{ kind: 'new-password', key: 'newPassword', label: 'New password', againLabel: 'Type the new password again',
-                        hint: 'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+                        hint: 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
                         emptySentence: 'Type a password first.', againSentence: 'Type the password again to check it.' }],
             resultNotes: ['The file now opens only with the password you typed. Keep it somewhere safe: if it is forgotten, no one can open the file.',
                           'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
@@ -68,7 +68,7 @@
 - **The page sentence and meta description** say only what the site does: the file stays on the device, and the site uploads neither. Neither claims the password stays on the device, because the browser may offer to save it (UX U4, privacy M1, stage 1).
 - **The hint has four sentences,** in this order:
   1. the cannot-be-recovered sentence, carried forward from PR #28;
-  2. "A short password can be guessed by anyone who has the file." (UX U3, stage 1; owner question 2);
+  2. "A short password is easy to guess." (UX U3, stage 1; owner question 2), shortened from the page text's "A short password can be guessed by anyone who has the file." so the hint wraps to six lines at 360px and the second field's label starts within 200px (coordinator, while building);
   3. the limit;
   4. the rule.
 

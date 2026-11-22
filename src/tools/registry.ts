@@ -1049,7 +1049,7 @@ export const tools: Tool[] = [
           key: 'newPassword',
           label: 'New password',
           againLabel: 'Type the new password again',
-          hint: 'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
+          hint: 'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.',
           emptySentence: 'Type a password first.',
           againSentence: 'Type the password again to check it.',
         },

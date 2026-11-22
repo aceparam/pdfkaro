@@ -14,7 +14,7 @@ Protect with a password (`/protect-pdf`) is the next Phase 1 tool in catalogue o
   - The visitor picks one PDF. It is listed as one row (thumbnail of the first page, name, pages, size), as the other one-file tools list theirs.
 - **The new password is the job's input.** It uses `add-password-option`'s two hidden fields under the key `newPassword`: "New password" and "Type the new password again". Both start empty, and focus goes to the first once the file is read.
   - Its line in `optionPasswords` is 127 characters at most, printable ASCII.
-  - The hint under the first field reads: "If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters." It ends with the rule's own words.
+  - The hint under the first field reads: "If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters." It ends with the rule's own words.
   - The main button, "Protect and download", waits until both fields hold the same password the rule takes, with the shared sentences.
 - **What the button does,** in the tool worker with qpdf: one call that opens the file and writes it again encrypted with 256-bit AES.
   - The file is opened with its old password, if it has one, through the existing password flow.
@@ -134,7 +134,7 @@ The agent's own choices, named in the pull request:
 
 New questions for the owner, each with the default used until answered:
 1. **Old restrictions.** Default: dropped, and the page says so. Keep them under the new password instead?
-2. **Where "A short password can be guessed by anyone who has the file." goes.** Default: in the hint, as its second sentence, and in the questions below the tool, but not in the result notes. Also put it in the result, or keep it out of the hint?
+2. **Where the short-password warning goes.** Default: in the hint, as its second sentence, in the short form "A short password is easy to guess." (so the hint fits the 200px limit at 360px), and in the questions below the tool as "A short password can be guessed by anyone who has the file.", but not in the result notes. Also put it in the result, or keep it out of the hint?
 
 No open decision needs more than its assumed default.
 

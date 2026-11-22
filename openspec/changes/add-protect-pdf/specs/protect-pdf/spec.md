@@ -90,7 +90,7 @@ The new password SHALL be typed twice in two hidden fields, as every new passwor
 #### Scenario: Screen reader
 
 - **WHEN** a screen reader user reaches "New password"
-- **THEN** it is announced as a password field with its label, the hint saying the password cannot be recovered and a short one can be guessed, and the note that the password stays in the browser, though the note is shown under the second field
+- **THEN** it is announced as a password field with its label, the hint saying the password cannot be recovered and a short one is easy to guess, and the note that the password stays in the browser, though the note is shown under the second field
 
 #### Scenario: The engine is sent a password it does not accept
 
@@ -99,12 +99,12 @@ The new password SHALL be typed twice in two hidden fields, as every new passwor
 
 ### Requirement: The cannot-be-recovered warning
 
-The hint next to the first field SHALL say first that if the password is forgotten the file cannot be opened and no one can get it back, then that a short password can be guessed by anyone who has the file, then the length and the rule. (SPEC.md: What we are building, rule 4, "Honest about limits")
+The hint next to the first field SHALL say first that if the password is forgotten the file cannot be opened and no one can get it back, then that a short password is easy to guess, then the length and the rule. (SPEC.md: What we are building, rule 4, "Honest about limits")
 
 #### Scenario: The hint is read
 
 - **WHEN** the file has been read and the fields are shown
-- **THEN** the hint under "New password" begins "If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file." and is part of the field's description
+- **THEN** the hint under "New password" begins "If you forget this password, no one can open the file or get it back. A short password is easy to guess." and is part of the field's description
 
 ### Requirement: Writing the protected file
 

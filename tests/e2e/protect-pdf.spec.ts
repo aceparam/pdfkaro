@@ -20,7 +20,7 @@ const fixture = (name: string) => join(here, '../fixtures', name);
 const oldPassword = 'open-sesame';
 const typed = 'Kv4 #%@ wq9';
 const hint =
-  'If you forget this password, no one can open the file or get it back. A short password can be guessed by anyone who has the file. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
+  'If you forget this password, no one can open the file or get it back. A short password is easy to guess. Up to 127 characters. Use English letters without accents, numbers, spaces and marks such as @, # and -.';
 const note =
   'The password stays in your browser. This site does not send it anywhere. Your browser may offer to save it or to suggest one. A saved password is kept by your browser and may be copied to your browser account.';
 const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
