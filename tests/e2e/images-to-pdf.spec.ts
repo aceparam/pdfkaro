@@ -11,7 +11,8 @@ import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef } from '
 import { type FileChooser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -390,11 +391,8 @@ test.describe('problems', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Image to PDF's own files that may load after a pick, by exact name, read from the build. No qpdf, no PDF.js. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|images-to-pdf-[A-Za-z0-9_-]{8}\.js|picture-[A-Za-z0-9_-]{8}\.js|picture-thumbnail-[A-Za-z0-9_-]{8}\.js|pdflib-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** Image to PDF's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts). No qpdf, no PDF.js. */
+const filesAfterPick = () => toolFiles('images-to-pdf').all;
 const paths = (seen: Seen[]) => seen.map((request) => new URL(request.url).pathname);
 
 test.describe('nothing is uploaded', () => {

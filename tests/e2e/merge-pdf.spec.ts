@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { type FileChooser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { builtFiles, headersRead, violations, watch } from './no-upload';
+import { headersRead, violations, watch } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -303,11 +304,8 @@ test.describe('problems', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Merge PDF's own files that may load after a pick, by exact name, read from the build. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|merge-pdf-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** Merge PDF's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts). */
+const filesAfterPick = () => toolFiles('merge-pdf').all;
 
 test.describe('nothing is uploaded', () => {
   test('picks, types a password, merges and downloads, with only the listed files fetched and nothing kept', async ({ page, context, baseURL }) => {

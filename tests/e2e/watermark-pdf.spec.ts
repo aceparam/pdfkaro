@@ -14,7 +14,8 @@ import { expect, test } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { changed, pictures, texts } from '../unit/stamp-helpers';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -135,7 +136,7 @@ async function watchLongTasks(page: Page) {
 const longTasks = (page: Page) => page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks.filter((duration) => duration > 100));
 
 /** An engine that reads a file as ready and then does what `run` says, in place of the real one. */
-const fakeEngine = (run: string) => `export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { ${run} };`;
+const fakeEngine = (run: string) => `export const loads = { read: ['qpdf'], job: ['qpdf', 'pdflib'] }; export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { ${run} };`;
 const engineFile = /\/_astro\/watermark-pdf-[A-Za-z0-9_-]{8}\.js$/;
 const pdflibFile = /\/_astro\/pdflib-[A-Za-z0-9_-]{8}\.js$/;
 
@@ -505,11 +506,8 @@ test.describe('the words below the tool', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Watermark's own files that may load after a pick, by exact name, read from the build: with the drawing step, pdf-lib and fflate. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|watermark-pdf-[A-Za-z0-9_-]{8}\.js|stamp-[A-Za-z0-9_-]{8}\.js|option-values-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|pdflib-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** Watermark's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts): with the drawing step, pdf-lib and fflate. */
+const filesAfterPick = () => toolFiles('watermark-pdf').all;
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))];
 const built = (path: string) => readFileSync(join(here, '../../dist', path), 'utf8');
 /** The built files, among those fetched, that hold a sentence from a source file. */

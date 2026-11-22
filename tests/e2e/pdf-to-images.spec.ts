@@ -10,10 +10,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Download, type Page } from '@playwright/test';
-import { expect, test, watchPolicy } from './fixtures';
+import { expect, test } from './fixtures';
 import { unzipSync } from 'fflate';
 import { formatSize } from '../../src/widget/format';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -408,7 +409,7 @@ test.describe('problems with the file', () => {
 
   /** An engine that reads the file as the real one does, then throws as a hostile file or a phone might. */
   const failingEngine = (thrown: string) =>
-    `export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { ${thrown} };`;
+    `export const loads = { read: ['qpdf'], job: ['fflate', 'pdfjs'] }; export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { ${thrown} };`;
 
   test('when the browser runs out of memory, the page says so and what to try, and the file stays listed', async ({ page, context }) => {
     await context.route(/\/_astro\/pdf-to-images-[A-Za-z0-9_-]{8}\.js$/, (route) =>
@@ -454,11 +455,8 @@ test.describe('problems with the file', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** The tool's own files that may load after a pick, by exact name, read from the build. No pdf-lib. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|pdf-to-images-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** The tool's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts). No pdf-lib. */
+const filesAfterPick = () => toolFiles('pdf-to-images').all;
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))];
 
 async function watchedRun(page: Page, given: Given, typed?: string) {
@@ -530,24 +528,6 @@ test.describe('nothing is uploaded', () => {
     });
   }
 
-  test('a one-page file fetches fflate too, and the same files as a longer one', async ({ browser, baseURL }) => {
-    const runOn = async (name: string) => {
-      const context = await browser.newContext();
-      await watchPolicy(context);
-      const page = await context.newPage();
-      await open(page, pngPage);
-      const seen = watch(context, page);
-      await watchedRun(page, name);
-      await downloadOnly(page, pngPage);
-      await headersRead(seen);
-      expect(violations(seen, new URL(baseURL!).origin, [name], filesAfterPick())).toEqual([]);
-      const fetched = fetchedPaths(seen).sort();
-      await context.close();
-      return fetched;
-    };
-    const one = await runOn('form.pdf');
-    const three = await runOn('text.pdf');
-    expect(one.some((path) => /\/fflate-/.test(path))).toBe(true);
-    expect(one).toEqual(three);
-  });
+  // A one-page file and a longer one fetch the same files, fflate among them: uniform-requests.spec.ts compares
+  // form.pdf (one page) with text.pdf on both pages, at the pick and at the main button.
 });

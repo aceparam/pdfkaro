@@ -11,7 +11,8 @@ import { PDFDocument } from '@cantoo/pdf-lib';
 import { type Download, type Page } from '@playwright/test';
 import { expect, test, watchPolicy } from './fixtures';
 import { unzipSync } from 'fflate';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) => join(here, '../fixtures', name);
@@ -330,11 +331,8 @@ test.describe('long files', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Split PDF's own files that may load after a pick, by exact name, read from the build. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|split-pdf-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** Split PDF's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts). */
+const filesAfterPick = () => toolFiles('split-pdf').all;
 const fflatePath = () => filesAfterPick().find((path) => /\/fflate-/.test(path))!;
 const paths = (seen: Seen[]) => new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname));
 

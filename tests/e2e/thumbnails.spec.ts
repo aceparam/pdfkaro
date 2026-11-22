@@ -287,17 +287,16 @@ test.describe('thumbnails are forgotten with their files', () => {
     const before = (await toolWorkers()).length;
     expect(before).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Remove text.pdf' }).click();
-    // Removing it stops that drawing on a fresh worker; from here on, let the data through. The held request
-    // belonged to the ended worker, so it may already be gone; continuing it only tidies up.
+    // Removing it drops that waiting picture; from here on, let the data through.
     released = true;
     for (const route of held.splice(0)) await route.continue().catch(() => {});
     await expect(pictures(page)).toHaveCount(1, { timeout: 20000 });
     await expect(items(page).filter({ hasText: 'mixed.pdf' }).locator('img')).toHaveCount(1);
     // One address only: mixed.pdf's. text.pdf's picture was dropped before an address was made.
     expect(await page.evaluate(() => (window as unknown as { made: string[] }).made.length)).toBe(1);
-    // Removing the file being drawn ended that worker, so the next picture was drawn on a fresh one and
-    // two were never drawn at once.
-    expect((await toolWorkers()).length).toBe(before + 1);
+    // PDF.js's data had not arrived, so no drawing was under way: the waiting picture was dropped by message and the
+    // same worker drew the next one, so its files were never cut short and asked for again (add-uniform-requests).
+    expect((await toolWorkers()).length).toBe(before);
   });
 
   test('Start again and leaving the page revoke every picture', async ({ page }) => {
