@@ -2,35 +2,58 @@
 
 ## Context
 
-See proposal.md for why. What the build and the code do today, read from `npm run build` at `5dec1cd` (23 pages):
+See proposal.md for why. These facts come from reading the output of `npm run build` at `5dec1cd` (23 pages), and from probes run in Chromium (Playwright 1.63) in the scratchpad.
 
-- **Inline blocks.** Pages with no island (404, About, Changes, Contact, Known problems, Privacy) carry no inline `<script>`, no `<style>` and no `style` attribute. Every page with an island (the home page and 16 tool pages) carries one inline `<style>` (`astro-island,astro-slot,astro-static-slot{display:contents}`, 59 bytes) and two inline `<script>`s from Astro: the island element (4,896 bytes, the same on every page) and one directive loader, `client:load` on tool pages and `client:idle` on the home page. That is four distinct hashes across the site:
-  - style `sha256-vv9IoKo7BSLbWcUHr3tNmfNVmm5L/9Cfn2H6LMk7/ow=` (17 pages)
-  - island element `sha256-UIrFqcaitjA3OKa9mHKajg3N+0Y7tW9+y0o3QmMFeZQ=` (17 pages)
-  - `client:load` loader `sha256-1BvDVWLr3QCC20uHhUDi27eDFVJpk1uMQJGIWKUks2I=` (16 pages)
-  - `client:idle` loader `sha256-xIb/Pa7FUshAu4ihwjchYcQpyCI8eS8kt40GpOAYCz8=` (home page)
-  These are recorded as evidence only; the build computes them, and they change whenever Astro changes its loader.
-- **No `style` attribute, inline handler, `<form>`, `<base>` or `javascript:` address** in any built page. `inlineStylesheets: 'never'` (`astro.config.mjs`) already keeps stylesheets in files. The one `style={…}` in components (`ProgressBar`, a width) is not in the server HTML: React sets it at run time through the CSSOM (`element.style`), which a policy does not govern.
-- **Where scripts come from.** Every `<script>`/module and every dynamic `import()` is a same-origin file under `/_astro/` (or `/<base>/_astro/` under a sub-path). No shipped file calls `eval`, `new Function` or `Function(` (grep over `dist/_astro/*.js|*.mjs`; PDF.js 6 no longer has `isEvalSupported` or font compiling; the only "new Function" in `pdf.worker.min.mjs` is `new FunctionBasedShading`). React's `createElement('style')` path (for `<style precedence>`) and PDF.js's `FontLoader` style element are unused (no such resources; `disableFontFace: true`, and PDF.js runs only in workers).
-- **WebAssembly.** qpdf (`qpdf.js` uses `WebAssembly.instantiateStreaming`, fetching `/_astro/qpdf-*.wasm`), and PDF.js's picture decoders (bundled as script data in `pdfjs-data`, compiled in the PDF.js worker). Both run only in workers.
-- **Requests the site makes.** Same-origin scripts and stylesheets; one `fetch` of `qpdf-*.wasm` (connect-src); `blob:` images for thumbnails (`useToolRun` makes them with `URL.createObjectURL`); a `blob:` address for the download link (a download, not governed by the policy). PDF.js's `wasmUrl` is `data:,/` on purpose so that its JavaScript fallback fails without the network; with WebAssembly allowed it is never asked for, and if it were, `connect-src 'self'` blocks it, which is the intent.
-- **Workers.** `ToolWorkspace.tsx` starts `new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' })`; the tool worker starts PDF.js's worker as `new Worker(pdfjsWorkerUrl, { type: 'module' })`, where `pdfjsWorkerUrl` and `qpdfWasm` are Vite `?url` imports, written in the built worker as root-relative strings (`/_astro/pdf.worker.min-*.mjs`, `/_astro/qpdf-*.wasm`).
-- **No policy reaches those workers today, and a meta tag would not change that.** By the HTML standard a worker's policy comes from its creator only when its address is a local scheme (`blob:`, `data:`); otherwise from its own response headers. Checked in Chromium (Playwright, a page with a meta policy of `default-src 'none'; script-src 'self'; worker-src 'self' blob:`): a worker from `/w.js` ran `eval('1+1')` and compiled WebAssembly; the same file imported from a `blob:` worker had both blocked. Firefox and WebKit are not installed here; the HTML standard says the same, and the hand checks below cover them.
-- **Astro's own `security.csp` (Astro 6+, here 7.4.8)** was tried in a scratch build: it writes a meta tag, but puts every directive-loader hash (seven) on every page, including pages with no script, places the tag after the title and description, and warns about Shiki. See decision 2.
+- **Inline blocks.**
+  - Pages with no island (404, About, Changes, Contact, Known problems, Privacy) carry no inline `<script>`, no `<style>` and no `style` attribute.
+  - Every page with an island (the home page and 16 tool pages) carries one inline `<style>`: `astro-island,astro-slot,astro-static-slot{display:contents}`, 59 bytes.
+  - The same pages carry two inline `<script>`s from Astro, neither with a `type`. One is the island element, 4,896 bytes and the same on every page. The other is one directive loader: `client:load` on tool pages and `client:idle` on the home page.
+  - That is four distinct hashes across the site:
+    - style `sha256-vv9IoKo7BSLbWcUHr3tNmfNVmm5L/9Cfn2H6LMk7/ow=` (17 pages)
+    - island element `sha256-UIrFqcaitjA3OKa9mHKajg3N+0Y7tW9+y0o3QmMFeZQ=` (17 pages)
+    - `client:load` loader `sha256-1BvDVWLr3QCC20uHhUDi27eDFVJpk1uMQJGIWKUks2I=` (16 pages)
+    - `client:idle` loader `sha256-xIb/Pa7FUshAu4ihwjchYcQpyCI8eS8kt40GpOAYCz8=` (home page)
+  - These are recorded as evidence only. The build computes them, and they change whenever Astro changes its loader.
+- **Nothing else inline.** No built page has a `style` attribute, inline handler, `<form>`, `<base>` or `javascript:` address. `inlineStylesheets: 'never'` in `astro.config.mjs` already keeps stylesheets in files. The one `style={…}` in components is `ProgressBar`'s width. It is not in the server HTML; React sets it at run time through the CSSOM (`element.style`), which a policy does not govern.
+- **Where scripts come from.**
+  - Every `<script>`, module and dynamic `import()` is a same-origin file under `/_astro/`, or `/<base>/_astro/` under a sub-path.
+  - No shipped file calls `eval`, `new Function` or `Function(`. This was checked with grep over `dist/_astro/*.js` and `*.mjs`. PDF.js 6 no longer has `isEvalSupported` or font compiling. The only "new Function" in `pdf.worker.min.mjs` is `new FunctionBasedShading`.
+  - Two style-element paths exist and are unused. React's `createElement('style')` is for `<style precedence>` resources, which the site has none of. PDF.js's `FontLoader` style element is off because of `disableFontFace: true`, and PDF.js runs only in workers.
+- **WebAssembly.** qpdf's `qpdf.js` uses `WebAssembly.instantiateStreaming` and fetches `/_astro/qpdf-*.wasm`. PDF.js's picture decoders are bundled as script data in `pdfjs-data` and compiled in the PDF.js worker. Both run only in workers.
+- **Requests the site makes.**
+  - Same-origin scripts and stylesheets.
+  - One `fetch` of `qpdf-*.wasm`, governed by `connect-src`.
+  - `blob:` images for thumbnails, which `useToolRun` makes with `URL.createObjectURL`.
+  - A `blob:` address for the download link. That is a download, not governed by the policy.
+- **PDF.js's `data:,/` fallback.** PDF.js's `wasmUrl` is set to `data:,/`. PDF.js asks our factory for the WebAssembly decoder bytes (`useWorkerFetch: false`). Only if compiling them fails does it load its JavaScript fallback, with a dynamic `import()` of `data:,/openjpeg_nowasm_fallback.js` (or the JBIG2 one). That is governed by `script-src`, which does not allow `data:`, so the policy blocks it. With `'wasm-unsafe-eval'` allowed it is never asked for. If it were, the blocked import would be a violation, which the end-to-end watch reports, and the decoder would fail as designed.
+- **Workers today.** `ToolWorkspace.tsx` starts `new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' })`. The tool worker starts PDF.js's worker as `new Worker(pdfjsWorkerUrl, { type: 'module' })`. `pdfjsWorkerUrl` and `qpdfWasm` are Vite `?url` imports, written in the built worker as root-relative strings (`/_astro/pdf.worker.min-*.mjs`, `/_astro/qpdf-*.wasm`).
+  - The built `new Worker(` calls are in `ToolWorkspace-*.js`, `tool.worker-*.js` and PDF.js's display file `pdf-*.js`.
+  - `pdf-*.js` has two. One is PDF.js's own worker, which is not started because we set `GlobalWorkerOptions.workerPort`. The other is its renderer worker, which starts only if `GlobalWorkerOptions.rendererSrc` is set. We never set it, and with it unset PDF.js throws before calling `new Worker`.
+- **A meta tag does not reach those workers.** By the HTML standard, a worker inherits its creator's policy only when its address is a local scheme (`blob:`, `data:`). Otherwise the policy comes from the worker's own response headers. Probes in Chromium, with a page meta policy that denies `eval` and other origins:
+  1. A worker from `/w.js` ran `eval('1+1')` and compiled WebAssembly.
+  2. The same file imported from a `blob:` worker had `eval` blocked, WebAssembly blocked (without `'wasm-unsafe-eval'`), and a fetch to another origin blocked. The other origin's server received nothing.
+  3. A `blob:` worker started inside that one, importing a file the same way, was blocked the same way.
+  4. With `worker-src blob:` (no `'self'`), no worker started at all. The `import` inside the `blob:` script is fetched as a worker script, so `worker-src` applies to it. The architect's stage 1 measurement found the same.
+  5. Playwright reported both the outer and the nested `blob:` worker through `page.on('worker')`. A `securitypolicyviolation` listener on each worker's scope saw its own violations (`script-src eval`, `connect-src <address>`). A listener on the document did not see them.
+  6. Without a listener, a violation leaves no message in the console of the page or of the worker. Init scripts do not reach workers, and Playwright's `evaluate` is not limited by the `eval` rule (architect, stage 1).
+
+  Firefox and WebKit are not installed in this container. Per the coordinator's instruction they are not installed locally; they run in CI (decision 4).
+- **Astro's own `security.csp`** (Astro 6 and later; here 7.4.8) was tried in a scratch build. It writes a meta tag, but puts every directive-loader hash (seven) on every page, including pages with no script. It also places the tag after the title and description, and warns about Shiki. See decision 2.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - One exact policy on every page, allowing only what the code uses, with hashes that cannot drift.
-- The policy reaches every worker, so file-handling code also runs with `connect-src 'self'` and no `eval`.
-- A build check and an end-to-end watch that fail on any gap.
-- Nothing visible changes; page weight and late loading stay as they are.
+- The policy reaches every worker, so the code that reads files also runs with `connect-src 'self'` and no `eval`.
+- A build check, lint rules and an end-to-end watch that fail on any gap, in Chromium, Firefox and WebKit.
+- Nothing visible changes. Page weight and late loading stay as they are.
 
 **Non-Goals:**
 
-- Headers, `frame-ancestors`, reporting, Trusted Types (proposal, Out of scope).
-- Making `astro dev` run under the policy. The integration runs on `astro build` only; the dev server injects its own inline scripts. End-to-end tests run against the build.
+- Headers, `frame-ancestors`, reporting and Trusted Types (proposal, Out of scope).
+- Running `astro dev` under the policy. The integration runs on `astro build` only, because the dev server injects its own inline scripts. End-to-end tests run against the build.
+- Stopping requests to the site's own origin, navigation, windows or WebRTC. A policy cannot, so the no-upload test keeps guarding them (decision 1).
 
 ## Decisions
 
@@ -38,87 +61,185 @@ See proposal.md for why. What the build and the code do today, read from `npm ru
 
 ```
 default-src 'none';
-script-src 'self' 'wasm-unsafe-eval' <hashes of this page's inline scripts>;
+script-src 'self' 'wasm-unsafe-eval' <hashes of this page's runnable inline scripts>;
 style-src 'self' <hashes of this page's inline styles>;
 img-src 'self' blob:;
 connect-src 'self';
-worker-src blob:;
+worker-src 'self' blob:;
 base-uri 'none';
 form-action 'none'
 ```
 
-(Written on one line in the tag, directives separated by `; `.)
+In the tag it is written on one line, with directives separated by `; `.
 
-- **`default-src 'none'`** over `'self'`: anything not named is denied, so a new kind of load (font, frame, media, manifest, object) fails loudly in the end-to-end watch instead of passing quietly. It covers `font-src` (no web fonts, `SPEC.md` "Look and feel"), `object-src`, `frame-src`, `media-src` and `manifest-src`.
-- **`script-src 'self' 'wasm-unsafe-eval'` + hashes.** `'self'` matches the origin, so it holds under the preview's sub-path too. `'wasm-unsafe-eval'` is "what WebAssembly needs" and nothing more: it allows compiling WebAssembly, not `eval`. It is on every page, though only tool pages start a worker: one policy shape everywhere is easier to read and test, and on a page with no worker it allows nothing that page does. No `'strict-dynamic'`: it would make `'self'` ignored and let any script our scripts add load from anywhere. No `'unsafe-inline'` and no `'unsafe-eval'`.
-- **Hashes are per page**, exactly the page's own inline blocks: a page with no island lists none, the home page lists the `client:idle` loader and tool pages the `client:load` loader. SHA-256, base64, over the exact text between the tags, as the browser hashes it.
-- **`style-src 'self'` + hashes.** Stylesheets are files; the one inline style is hashed. Style attributes stay blocked (a hash does not allow them without `'unsafe-hashes'`, which is not used); none are in the HTML, and React's run-time width goes through the CSSOM.
-- **`img-src 'self' blob:`.** Thumbnails are `blob:` images. `'self'` is kept so a browser's own request for `/favicon.ico` is not reported as a violation; no `data:`.
-- **`connect-src 'self'`.** The qpdf `.wasm` fetch. With the policy in the workers (decision 3), this is the browser-enforced form of the no-upload promise. Analytics or the conversion server, when they come, are added by their own change.
-- **`worker-src blob:` without `'self'`.** Every worker starts from a `blob:` address (decision 3). Leaving `'self'` out means no code can start a worker straight from a same-origin address, which would run with no policy. A `blob:` address can only be made by script already running on the page, which the rest of the policy limits.
-- **`base-uri 'none'`, `form-action 'none'`.** The site uses no `<base>` and no form (checked). They are not covered by `default-src`.
-- **No `upgrade-insecure-requests`.** Every address is relative to the HTTPS page, so there is nothing to upgrade, and over `http://localhost` in tests it would only add risk.
-- **Not possible in a meta tag:** `frame-ancestors`, `report-uri`/`report-to`, `sandbox` (browsers ignore them there and warn). See Risks.
+- **`default-src 'none'`**, not `'self'`. Anything not named is denied, so a new kind of load (font, frame, media, manifest, object) fails loudly in the end-to-end watch instead of passing quietly. It covers `font-src` (no web fonts, per `SPEC.md` "Look and feel"), `object-src`, `frame-src`, `media-src` and `manifest-src`.
+- **`script-src 'self' 'wasm-unsafe-eval'` plus hashes.**
+  - `'self'` matches the origin, so it holds under the preview's sub-path too.
+  - `'wasm-unsafe-eval'` is "what WebAssembly needs" and nothing more. It allows compiling WebAssembly, not `eval`.
+  - It is on every page, though only tool pages start a worker. One policy shape everywhere is easier to read and test. On a page with no worker it allows nothing that page does.
+  - No `'strict-dynamic'`. It would make `'self'` ignored and let any script our scripts add load from anywhere.
+  - No `'unsafe-inline'` and no `'unsafe-eval'`.
+- **Hashes are per page**, covering exactly the page's own runnable inline blocks. A page with no island lists none. The home page lists the `client:idle` loader, and tool pages the `client:load` loader.
+  - The hash is SHA-256, base64, over the exact text between the tags, as the browser hashes it.
+  - A `<script>` is hashed when the browser would run it, or when `script-src` governs it anyway. That means:
+    - no `type`, or an empty one;
+    - a JavaScript MIME type;
+    - `module`;
+    - `importmap` and `speculationrules`, which `script-src` also governs inline.
+  - A data block such as `type="application/ld+json"` (the later SEO change's structured data) is not hashed and needs no allowance.
+- **`style-src 'self'` plus hashes.** Stylesheets are files, and the one inline style is hashed. Style attributes stay blocked: a hash does not allow them without `'unsafe-hashes'`, which is not used. None are in the HTML, and React's run-time width goes through the CSSOM.
+- **`img-src 'self' blob:`.** Thumbnails are `blob:` images. `'self'` is kept so that a browser's own request for `/favicon.ico` is not reported as a violation. No `data:`.
+- **`connect-src 'self'`** allows the qpdf `.wasm` fetch. With the policy in the workers (decision 3), the browser blocks `fetch`, XHR, `sendBeacon`, WebSocket and EventSource to other origins from the page and its workers.
+  - It does **not** stop a request to the site's own origin, with or without a body. A same-origin `POST` of a whole file would pass the policy. On the preview, the site's own origin is all of `https://aceparam.github.io`, which also holds every other Pages site of that account.
+  - The policy also does not govern page navigation, `window.open`, link clicks, a meta refresh, WebRTC or DNS prefetching. Workers cannot navigate or open windows.
+  - So the no-upload test (`tests/e2e/no-upload.ts`, unchanged) stays the guard for the page and the workers. The policy is a second wall for other origins, not a replacement.
+  - Analytics or the conversion server, when they come, are added by their own change.
+- **`worker-src 'self' blob:`.** `blob:` is needed because every worker starts from a `blob:` address (decision 3). `'self'` is needed because the `import` inside that `blob:` script is fetched as a worker script (Context, probe 4).
+  - `'self'` also lets same-origin code start a worker straight from a same-origin address, and such a worker would run with no policy. The policy cannot forbid that, so the code does instead (decision 3: a lint rule and a built-file check).
+  - A `blob:` address can only be made by script already running on the page, which the rest of the policy limits.
+  - `worker-src` is never widened beyond this.
+- **`base-uri 'none'`, `form-action 'none'`.** The site uses no `<base>` and no form (checked). `default-src` does not cover them.
+- **No `upgrade-insecure-requests`.** Every address is relative to the HTTPS page, so there is nothing to upgrade. Over `http://localhost` in tests it would only add risk.
+- **Not possible in a meta tag:** `frame-ancestors`, `report-uri`/`report-to` and `sandbox`. Browsers ignore them there and warn. See Risks.
 
 ### 2. Written into the built HTML by a small integration of our own
 
-`scripts/csp.mjs` holds plain functions, Node only, no DOM: `inlineBlocks(html)` (each inline `<script>` and `<style>` body, in order), `hashOf(text)` (`'sha256-…'`), `policyFor(html)` (the string above with that page's hashes) and `withPolicy(html)` (inserts `<meta http-equiv="Content-Security-Policy" content="…">` straight after `<meta charset="utf-8">`; throws if there is no charset tag, if a policy tag is already there, or if a script, stylesheet or link comes before the charset tag). `astro.config.mjs` adds a tiny integration, `cspMeta()`, whose `astro:build:done` hook runs `withPolicy` over every `.html` file in the output directory, so the hashes are taken from the files exactly as served. It runs in every build, the sub-path build of `check:base` included.
+`scripts/csp.mjs` holds plain functions, Node only, with no DOM:
+
+- `inlineBlocks(html)` returns each runnable inline `<script>` body (decision 1's types) and each `<style>` body, in order.
+- `hashOf(text)` returns `'sha256-…'`.
+- `policyFor(html)` returns the decision 1 string with that page's hashes.
+- `withPolicy(html)` inserts `<meta http-equiv="Content-Security-Policy" content="…">` straight after `<meta charset="utf-8">`. It throws if there is no charset tag, if a policy tag is already there, or if a script, stylesheet or link comes before the charset tag.
+
+`astro.config.mjs` adds a tiny integration, `cspMeta()`. Its `astro:build:done` hook runs `withPolicy` over every `.html` file in the output directory, so the hashes are taken from the files exactly as served. It runs in every build, including the sub-path build of `check:base`.
 
 Alternatives:
-- **Astro's `security.csp`.** Maintained by Astro, but adds seven loader hashes to every page (four of them for directives the site never uses, and all of them on pages with no script), puts the tag after the title, and prints a Shiki warning on every build. Its output is not as strict as `SPEC.md` asks, and we would still need our own check. Rejected for now; it can replace `withPolicy` later if it learns per-page hashes, with the same check and tests.
-- **Writing the tag in `Base.astro`.** Astro adds its loader scripts after the layout renders, so the layout cannot know their hashes; hard-coding them would drift on the next Astro update.
-- **Hashes in a config list.** Drifts; rejected for the same reason.
+- **Astro's `security.csp`.** It is maintained by Astro, but it adds seven loader hashes to every page. Four of them are for directives the site never uses, and all of them land on pages with no script. It puts the tag after the title and prints a Shiki warning on every build. Its output is not as strict as `SPEC.md` asks, and we would still need our own check. Rejected for now. It can replace `withPolicy` later if it learns per-page hashes, keeping the same check and tests.
+- **Writing the tag in `Base.astro`.** Astro adds its loader scripts after the layout renders, so the layout cannot know their hashes. Hard-coding them would drift on the next Astro update.
+- **Hashes in a config list.** This would drift too, so it is rejected for the same reason.
 
 ### 3. Workers start from a `blob:` address that imports the real file
 
-`src/workers/start-worker.ts`, one plain function:
+`src/workers/start-worker.ts` exports one plain function:
 
 ```ts
-startWorker(file: string, base: string): { worker: Worker; end(): void }
+workerFromBlob(file: string, base: string): Worker
 ```
 
-It resolves `file` against `base` to a full `https://…` address, makes a `Blob` holding exactly `import "<address>";` (the address through `JSON.stringify`), starts `new Worker(blobUrl, { type: 'module' })`, and returns an `end()` that terminates the worker and revokes the `blob:` address. The worker file runs at its plain address, so the "one copy of each module per address" rule in `tool.worker.ts` still holds, and its own `import()`s resolve against its real address (`import.meta.url`).
+- It resolves `file` against `base` to a full same-origin address.
+- It makes a `Blob` holding exactly `import "<address>";`, with the address passed through `JSON.stringify`.
+- It starts `new Worker(blobUrl, { type: 'module' })` and returns that worker with `terminate()` wrapped, so that ending the worker also revokes the `blob:` address. The return type still satisfies `WorkerLike`, so `ToolClient` and `WorkerLike` do not change.
+- It is the only place in `src/` that writes `new Worker`.
+- The worker file runs at its plain address. So the "one copy of each module per address" rule in `tool.worker.ts` still holds, and the file's own `import()`s resolve against its real address (`import.meta.url`).
+- The `blob:` script holds nothing but the import. No forwarding listener is needed, because Playwright reaches the nested worker (Context, probe 5).
 
-- **The tool worker.** `ToolWorkspace.tsx` imports the worker's address with Vite's `import toolWorker from '../../workers/tool.worker.ts?worker&url'` and starts it with `startWorker(toolWorker, location.href)`. The worker client already ends the worker after every job; it calls `end()`. `check:worker` must still find exactly one `tool.worker-*.js`; if `?worker&url` names the file differently, its pattern or `chunkFileNames` is adjusted in the same task.
-- **The PDF.js worker.** `tool.worker.ts` starts it with `startWorker(pdfjsWorkerUrl, import.meta.url)`; it ends when the tool worker ends.
-- **Absolute addresses inside the tool worker.** In a worker started from `blob:`, a root-relative address such as `/_astro/qpdf-*.wasm` cannot be resolved against the worker's own address (a `blob:` address has no path). So `qpdfWasm` and `pdfjsWorkerUrl` are passed as `new URL(…, import.meta.url).href`. Module `import()`s already use `./` paths against `import.meta.url` and are unaffected. Emscripten's `locateFile` already returns our address.
-- **The `blob:` start holds no file data.** A unit test checks the text is exactly one `import` of a same-origin `/_astro/` address and that `end()` revokes it. The existing no-upload watcher already accepts same-origin `blob:` GET requests and refuses any other, so it needs no widening; the picture-option source check (`createObjectURL` banned in `PictureField` and the picking code) is unaffected, as the start lives in `src/workers/`.
+How each worker uses it:
+
+- **The tool worker.** Components may not import workers (lint, unchanged), so `src/hooks/tool-worker.ts` holds `createToolWorker()`. It takes the worker's address with Vite's `import toolWorker from '../workers/tool.worker.ts?worker&url'` and returns `workerFromBlob(toolWorker, location.href)`. `ToolWorkspace.tsx` imports `createToolWorker` from the hook and passes it to `useToolRun` as it passes `createWorker` now. The worker client already ends the worker after every job, and its `terminate()` now also revokes. `check:worker` must still find exactly one `tool.worker-*.js`. If `?worker&url` names the file differently, its pattern or `chunkFileNames` is adjusted in the same task.
+- **The PDF.js worker.** `tool.worker.ts` imports `workerFromBlob`, a name distinct from `createPdfjsLoader`'s `startWorker` parameter. It passes `() => workerFromBlob(pdfjsWorkerUrl, import.meta.url)` to `createPdfjsLoader`. That worker needs no separate end, because it ends when the tool worker is ended. Its `blob:` address lives no longer than the tool worker's realm.
+- **Absolute addresses inside the tool worker.** In a worker started from `blob:`, a root-relative address such as `/_astro/qpdf-*.wasm` cannot be resolved against the worker's own address, because a `blob:` address has no path. So `qpdfWasm` and `pdfjsWorkerUrl` are passed as `new URL(…, import.meta.url).href`.
+  - Module `import()`s already use `./` paths against `import.meta.url`, so they are unaffected.
+  - Emscripten's `locateFile` override in `createQpdf` must keep returning our absolute address. A test job in a `blob:`-started worker proves it.
+  - Any other relative address used inside a worker is made absolute the same way.
+- **Keeping every worker on this path (the policy allows `'self'`).**
+  - **Lint.** An `eslint.config.js` rule (`no-restricted-syntax` on `NewExpression[callee.name=/^(Shared)?Worker$/]`) fails anywhere in `src/` except `src/workers/start-worker.ts`. This does not loosen any rule that exists today.
+  - **Built files.** `scripts/check-worker.mjs` finds every `new Worker(` and `new SharedWorker(` in `dist/_astro/*.js` and `*.mjs`. Each `new Worker(` must be in the start helper's built code, which the check recognises by the helper's fixed blob text (`import ` with `JSON.stringify`, and `text/javascript`) within the same function, just before the call. `new SharedWorker(` must not appear at all.
+  - **The one named exception** is PDF.js's display file (`pdf-*.js`). We set `GlobalWorkerOptions.workerPort` and never set `workerSrc` or `rendererSrc`, so PDF.js never reaches its `new Worker`. A unit test reads `src/` and fails if `workerSrc` or `rendererSrc` is ever assigned.
+- **The `blob:` script holds no file data.** A unit test stubs `Worker`, `Blob` and `URL.createObjectURL` in Node, and checks four things. The text is exactly one `import` of a same-origin address. Addresses resolve at the root and under `/pdfkaro`. `terminate()` ends the worker and revokes the address. Nothing else is in the blob.
+  - The existing no-upload watcher already accepts same-origin `blob:` GET requests and refuses any other, so it needs no change.
+  - The picture-option source check (`createObjectURL` banned in `PictureField` and the picking code) is unaffected, because the start lives in `src/workers/` and `src/hooks/tool-worker.ts`, not in the picking code.
 
 Alternatives:
-- **Leave workers without a policy until a header host.** Simplest, but then the code that reads files, qpdf and PDF.js, the part a hostile PDF attacks, runs with no `connect-src`, so the policy would protect the part of the site that holds no file. Rejected.
-- **`worker-src 'self' blob:`.** Keeps a way to start a worker with no policy; rejected (decision 1).
-- **Inline the worker as a `blob:` of its whole code.** Breaks late loading and the per-engine files `check:worker` checks; rejected.
+- **Leave workers without a policy until a header host.** This is the simplest, but then qpdf and PDF.js, the code that reads files and that a hostile PDF attacks, run with no `connect-src`. The policy would protect only the part of the site that holds no file. Rejected.
+- **`worker-src blob:` without `'self'`.** No worker would start at all (Context, probe 4). Rejected.
+- **Inline the worker as a `blob:` of its whole code.** This breaks late loading and the per-engine files that `check:worker` checks. Rejected.
 
 ### 4. Checks
 
-- **`scripts/check-csp.mjs` (`npm run check:csp`, optional directory argument, default `dist`).** For every `.html` file: exactly one policy tag; it comes straight after the charset tag and before any `<script>`, `<link>` or `<style>`; its directives are exactly the set in decision 1 (no `'unsafe-inline'`, `'unsafe-eval'`, `'strict-dynamic'`, `data:`, `*` or other origin); every inline `<script>`/`<style>` body's hash is listed, and no hash is listed that is not on the page; no `style=` attribute, no `on…=` attribute, no `javascript:` address; no `<script src>` or `<link href>` outside the site. It finds blocks and computes hashes with its own small code, not `scripts/csp.mjs`, so a mistake in one is caught by the other. CI runs it after the build; `check:base` runs it on its sub-path build.
-- **Unit tests (`tests/unit/csp.test.ts`).** `hashOf` against the known value of Astro's style block (`sha256-vv9IoKo7…`, the same value a browser computes); `inlineBlocks` on scripts with attributes, `type="module"` with `src` (not inline), empty blocks and two blocks with the same body; `policyFor` on a page with no block and with each kind; `withPolicy` placement, refusal of a second tag and of a script before the charset tag; `check-csp` refusing each problem on a small made-up page. `tests/unit/start-worker.test.ts` for the `blob:` text, address resolution with and without a sub-path, and revoking.
-- **End-to-end watch (`tests/e2e/fixtures.ts`).** Extends Playwright's `test` with an automatic fixture: an init script records every `securitypolicyviolation` event on the document; `page.on('console')`, plus `worker.on('console')` for each worker where Playwright gives one, record messages naming a Content Security Policy; after each test, any record fails it with the blocked address and directive. Every spec imports `test` and `expect` from `./fixtures` instead of `@playwright/test`; a unit test fails if any spec in `tests/e2e/` imports `test` from `@playwright/test`. A test that blocks something on purpose (only `csp.spec.ts`) opts out with a fixture option, and asserts the violation instead.
-- **`tests/e2e/csp.spec.ts`.** For every page in `allPages`: one policy tag, first after the charset tag. Positive controls, so the policy is shown to bite: an added inline script (`page.addScriptTag({ content })`) does not run and raises a violation; a script from another origin is blocked; `fetch` to another origin from the page is blocked; starting `new Worker('/_astro/tool.worker-*.js')` from the page is refused; after a file is picked on Merge PDF, in the tool worker, `eval('1')` throws and a `fetch` to `http://127.0.0.1:<port>/` (another origin, same test server) is blocked, with no such request seen by the server; qpdf still runs (the merge finishes). If Playwright reaches the nested PDF.js worker, the same two checks run there; if not, that is recorded and the hand checks cover it.
-- **Existing tests stay as they are.** Playwright's own `page.evaluate`, init scripts and routes are not limited by the page's policy, so existing tests need no change beyond the import. `site.spec.ts` "loads no script" still holds (the tag is not a script).
+- **`scripts/check-csp.mjs`** (`npm run check:csp`, optional directory argument, default `dist`). For every `.html` file it checks that:
+  - there is exactly one policy tag;
+  - it comes straight after the charset tag and before any `<script>`, `<link>` or `<style>`;
+  - its directives are exactly the set in decision 1, with no `'unsafe-inline'`, `'unsafe-eval'`, `'strict-dynamic'`, `data:`, `*` or other origin;
+  - every runnable inline `<script>` (decision 1's types) and every `<style>` has its hash listed, and no hash is listed that is not on the page;
+  - there is no `style=` attribute, no `on…=` attribute and no `javascript:` address;
+  - no `<script src>` or `<link href>` points outside the site.
+
+  It finds blocks and computes hashes with its own small code, not `scripts/csp.mjs`, so a mistake in one is caught by the other. CI runs it after the build, and `check:base` runs it on its sub-path build.
+- **Unit tests (`tests/unit/csp.test.ts`).**
+  - `hashOf` against the known value of Astro's style block (`sha256-vv9IoKo7…`, the same value a browser computes).
+  - `inlineBlocks` on scripts with no type, `text/javascript`, `module`, `importmap` and `application/ld+json` (the last not returned); on `type="module"` with `src` (not inline); on empty blocks; and on two blocks with the same body.
+  - `policyFor` on a page with no block and with each kind.
+  - `withPolicy`: placement, refusal of a second tag, and refusal of a script before the charset tag.
+  - `check-csp` refusing each problem on a small made-up page, and accepting an unhashed JSON-LD block.
+- **Unit tests (`tests/unit/start-worker.test.ts`):** decision 3's cases, plus the `workerSrc`/`rendererSrc` source check.
+- **ESLint for the fixture.** A `no-restricted-imports` rule for `tests/e2e/**/*.spec.ts` bans importing `test` from `@playwright/test`, with the message "Import test and expect from ./fixtures".
+- **End-to-end watch (`tests/e2e/fixtures.ts`).** It extends Playwright's `test` with an automatic fixture and exports `watch(context)` for tests that open their own browser context: `pdf-to-images.spec.ts:523`, `sign-pdf.spec.ts:1014` and `split-pdf.spec.ts:372`. (`home.spec.ts:17`'s context has JavaScript off, so it needs no watch.) For each page and context the watch does three things:
+  - An init script adds a `securitypolicyviolation` listener on the document that records the directive and blocked address.
+  - `page.on('worker', w => w.evaluate(() => self.addEventListener('securitypolicyviolation', e => console.log(<fixed marker> + directive + blocked address))))` is set, and that worker's `console` is read for the marker. Probe 5 shows Playwright reports nested `blob:` workers too.
+  - After the test, any record fails it with the directive and blocked address.
+
+  A violation in a worker before its listener is added, such as a blocked worker start or import, makes the worker fail to load. That shows as a worker error, which fails the job and so the test.
+
+  A test that blocks something on purpose (only in `csp.spec.ts`) opts out with a fixture option, and asserts the records instead.
+- **`tests/e2e/csp.spec.ts`.**
+  - For every page in `allPages`: one policy tag, first after the charset tag.
+  - On the page:
+    - an added inline script (`page.addScriptTag({ content })`) does not run and is recorded;
+    - a script from another origin is blocked;
+    - `fetch` to another origin is blocked.
+  - **Worker checks through a probe.** Playwright's `evaluate` is not limited by the `eval` rule, so it cannot prove `eval` is blocked. `page.route` serves two same-origin probe files used only by the test, `/_test/probe.js` and `/_test/probe-worker.js`, and `page.addScriptTag({ url: '/_test/probe.js' })` adds the first.
+    - The probe starts `probe-worker.js` exactly the way `workerFromBlob` does, with the same blob text, which the unit test pins.
+    - In that worker, `eval('1')` throws, and a `fetch` to `http://127.0.0.1:<port>/csp-probe` (another origin, served by the same test server) is refused, while a tiny WebAssembly module still compiles.
+    - The worker then starts a nested worker the same way, which repeats the checks.
+    - The test asserts that each worker reported its results. It also asserts that the fixture recorded `script-src` and `connect-src` violations on both workers' scopes, and that the server never received `/csp-probe`.
+  - In a real job: on Merge PDF, a file is picked and merged with the watch on. Both the tool worker and the PDF.js worker are seen through `page.on('worker')` as `blob:` workers, and no violation is recorded. This shows the real workers start the `blob:` way and run under the policy. The probe shows what that policy blocks.
+  - A page's own `new Worker('/_astro/tool.worker-*.js')` is not tested as refused, because `'self'` allows it. Lint and the built-file check stop it in our code instead.
+- **Other browser engines.** `playwright.config.ts` gains `firefox` and `webkit` projects that run only `csp.spec.ts`, at desktop size. That covers the worker probe checks, nested worker included, and one ordinary job per engine kind under the watch:
+  - Merge PDF, for qpdf;
+  - PDF to JPG, for PDF.js drawing and the picture decoders;
+  - Sign PDF, for pdf-lib;
+  - Split PDF, for the zip.
+
+  CI installs `chromium firefox webkit`. Only Chromium is installed in this container, and others must not be installed locally, so these projects run in CI only. `npm run e2e` locally runs them only where those browsers exist.
+- **Existing tests stay as they are.** Playwright's own `page.evaluate`, init scripts and routes are not limited by the page's policy, so existing tests need no change beyond the import (and `watch(context)` in the three tests above).
+  - `site.spec.ts` "loads no script" still holds, because the tag is not a script.
+  - The worker-request checks in `merge-pdf.spec.ts:291-295` (`.wasm`, `pdf.worker.min-*.mjs`, `pdfjs-data-*.js` seen) stay as they are and must still pass.
 
 ### 5. Page weight and loading
 
-The tag is about 330 bytes on a page with no island and about 480 on a tool page, roughly 0.2–0.3 KB by gzip. Largest page today 79.0 KB of 100 KB. `startWorker` adds a few hundred bytes to the widget chunk, which loads after a pick as now. No new request, no new dependency, WebAssembly fetched when it is now.
+- The tag is about 330 bytes on a page with no island and about 480 on a tool page, roughly 0.2–0.3 KB by gzip. The largest page today is 79.0 KB of 100 KB.
+- `createToolWorker` and `workerFromBlob` add a few hundred bytes to the island and worker chunks, which load as now.
+- No new request, no new dependency, and WebAssembly is fetched when it is now.
+
+### 6. For the Privacy page
+
+These are recorded for the later Privacy page change, not written here:
+
+- The site sets a Content Security Policy on every page, and in the workers that read files. The browser blocks scripts, styles, images, fonts, frames and objects from other origins. From the page and its workers it blocks `fetch`, XHR, `sendBeacon`, WebSocket and EventSource requests to other origins.
+- It does not govern page navigation, opening a window, link clicks, a meta refresh, WebRTC, DNS prefetching, or any request to the site's own origin. On GitHub Pages that origin is the whole `aceparam.github.io`. The site's own tests check that no file data leaves the page.
+- On GitHub Pages the policy is a meta tag. That cannot stop another site from showing a PDFkaro page in a frame (`frame-ancestors`), and it cannot report violations.
 
 ## Threats considered
 
-- **Malicious PDF.** A parser bug in PDF.js or qpdf that leads to script running in a worker can no longer `eval`, load script from elsewhere or send data to another origin: `connect-src 'self'` and `script-src` now apply in both workers (decision 3). It could still post messages to the page, as today.
-- **Injected markup on a page** (a future bug that writes untrusted HTML): inline scripts, handlers and `javascript:` addresses do not run; `<base>` and forms are refused; nothing loads from another origin.
-- **Oversized file, hostile file name:** unchanged; names are never put in HTML, and the policy adds a second wall against a name reaching a request.
-- **Supply chain:** a compromised dependency is same-origin code and is not stopped from running, but it cannot send data to another origin from the page or a worker, or load more code from one.
-- **Clickjacking:** not covered; see Risks.
+- **Malicious PDF.** A parser bug in PDF.js or qpdf that leads to script running in a worker can no longer `eval`, load script from elsewhere, or send data to another origin, because `connect-src` and `script-src` now apply in both workers (decision 3). It could still post messages to the page, as today, or send to the site's own origin (decision 1). The no-upload test guards the site's own code paths, not an exploit.
+- **Injected markup on a page**, from a future bug that writes untrusted HTML. Inline scripts, handlers and `javascript:` addresses do not run, `<base>` and forms are refused, and nothing loads from another origin. A meta refresh or a link would still navigate.
+- **Oversized file, hostile file name:** unchanged. Names are never put in HTML, and the policy adds a second wall against a name reaching a request to another origin.
+- **Supply chain.** A compromised dependency is same-origin code and is not stopped from running. It cannot send data to another origin by request from the page or a worker, or load more code from one. It could still navigate the page, or start a worker straight from a same-origin address; lint and the built-file check catch the second in our build.
+- **Clickjacking:** not covered. See Risks.
 
 ## Risks / Trade-offs
 
-- **[No `frame-ancestors` on GitHub Pages]** Another site can put a PDFkaro page in a frame and draw over it to trick clicks. Harm is small: files never leave the visitor's device, the framing site cannot read the frame, and the site has no account or setting to change. → Recorded on the change and, through the Privacy and hosting questions, for launch: a host that sends headers adds `frame-ancestors 'none'` (and the same policy as a header). No frame-busting script is added: it can be defeated by the framing page and adds script to every page for little gain.
-- **[Firefox and Safari start module workers from `blob:` differently]** Supported in current Firefox and Safari, but CI runs Chromium only. → Hand checks in issue #7: one job of each engine kind (qpdf, PDF.js drawing, pdf-lib, zip) in Firefox and Safari, desktop and phone, on the preview. If one fails there, the fallback is decision 3's rejected first alternative for that browser, which the owner would be told of.
-- **[A worker started from `blob:` breaks a test route or a request check]** `context.route` and the no-upload watcher see worker requests today. → Every existing end-to-end test must pass unchanged; the watcher already accepts same-origin `blob:` requests.
-- **[Astro changes its loader]** New hashes; nothing to update by hand, since they come from the built files. If Astro adds a `style` attribute or handler, `check:csp` fails the build, which is wanted.
-- **[`'wasm-unsafe-eval'` on pages with no worker]** Allows WebAssembly compiling where none is used. Accepted for one policy shape; `SPEC.md` allows it.
+- **[No `frame-ancestors` on GitHub Pages]** Another site can put a PDFkaro page in a frame and draw over it to trick clicks. The harm is small: files never leave the visitor's device, the framing site cannot read the frame, and the site has no account or setting to change. → Recorded here, and for the launch hosting question: a host that sends headers adds `frame-ancestors 'none'`, plus the same policy as a header. No frame-busting script is added; the framing page can defeat it, and it would add script to every page for little gain.
+- **[`'self'` on the preview is the whole `aceparam.github.io` origin]** A same-origin request can reach every Pages site of that account. → Recorded with the hosting question. Not narrowed by path now. The no-upload test guards requests to the site's own origin.
+- **[Firefox or Safari start module workers from `blob:` differently]** → They are covered in CI by the `firefox` and `webkit` projects, and by hand on iOS Safari and Android Chrome (issue #7), including a check that proves blocking. If one fails, the shared policy's `worker-src` is never widened for it. Any per-browser fallback goes back to security review and to the owner as a decision.
+- **[A worker started from `blob:` breaks a test route or a request check]** `context.route` and the no-upload watcher see worker requests today. → Every existing end-to-end test must pass unchanged, and the watcher already accepts same-origin `blob:` requests.
+- **[Astro changes its loader]** The hashes change, but nothing needs updating by hand, since they come from the built files. If Astro adds a `style` attribute or handler, `check:csp` fails the build, which is wanted.
+- **[`'wasm-unsafe-eval'` on pages with no worker]** It allows compiling WebAssembly where none is used. Accepted for one policy shape; `SPEC.md` allows it.
 - **[A browser without `'wasm-unsafe-eval'`]** Very old Safari (before 16) would block WebAssembly. `SPEC.md` asks for current browsers.
-- **[Dev server]** No policy in `astro dev`; a violation shows only in the build. The end-to-end tests and `check:csp` run on the build, so CI catches it.
+- **[Dev server]** There is no policy in `astro dev`, so a violation shows only in the build. The end-to-end tests and `check:csp` run on the build, so CI catches it.
 
 ## Migration Plan
 
-The tag and the worker start ship together in one pull request; the preview shows them after merge. Rollback is reverting the pull request. The first preview deploy is checked by hand under `/pdfkaro/` (one job, no console violations), since `check:base` reads files and does not run a browser.
+The tag and the worker start ship together in one pull request, and the preview shows them after merge. Rollback is reverting the pull request.
+
+`check:base` reads files and does not run a browser. So before merge, Merge PDF and PDF to JPG jobs are run in Chromium, with the watch on, against a build served under `/pdfkaro/` (task 4.5). After merge, the first preview deploy is checked by hand.

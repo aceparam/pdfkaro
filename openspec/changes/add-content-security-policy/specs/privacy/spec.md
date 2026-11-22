@@ -4,7 +4,7 @@
 
 ### Requirement: Content Security Policy
 
-The site SHALL send a strict Content Security Policy that allows scripts from the site's own origin only, plus what WebAssembly needs. Where the host cannot send headers, the policy SHALL be a `<meta http-equiv="Content-Security-Policy">` tag on every page, placed before any stylesheet or script. The policy SHALL deny by default, SHALL allow no `'unsafe-inline'` and no `'unsafe-eval'`, SHALL allow an inline script or style only by the hash of that exact block, and SHALL allow requests to the site's own origin only. (SPEC.md: Privacy, limits and security, Whole site; Architecture and tech stack, Hosting; Look and feel, Font)
+The site SHALL send a strict Content Security Policy that allows scripts from the site's own origin only, plus what WebAssembly needs. Without headers, it SHALL be a meta tag on every page, before any stylesheet or script. It SHALL deny by default, allow no `'unsafe-inline'` or `'unsafe-eval'`, allow an inline block only by its hash, and allow requests to the site's own origin only. It does not stop requests to that origin; the no-upload test does. (SPEC.md: Privacy, limits and security, Whole site)
 
 #### Scenario: A third-party script is added
 
@@ -21,15 +21,20 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 - **WHEN** any built page, including the 404 page, is read as served
 - **THEN** it has exactly one policy tag, straight after the character set tag and before any stylesheet, script or link, and the policy denies by default
 
-#### Scenario: Only the page's own inline blocks are allowed
+#### Scenario: Only the page's own runnable inline blocks are allowed
 
 - **WHEN** a page's policy is read
-- **THEN** its script and style allowances are the site's own origin plus the hash of each inline script and style block on that page and no other hash, and a page with no inline block lists no hash
+- **THEN** its script and style allowances are the site's own origin plus the hash of each inline script and style block on that page that the browser would run or apply, and no other hash; a data block such as JSON-LD is not hashed, and a page with no such block lists no hash
 
-#### Scenario: A request to another origin
+#### Scenario: Requests and loads from another origin
 
-- **WHEN** a page tries to fetch from, send to, or load an image, font, frame or object from another origin
+- **WHEN** a page or one of its workers tries `fetch`, `XMLHttpRequest`, `sendBeacon`, a WebSocket or an EventSource to another origin, or the page tries to load a script, stylesheet, image, font, frame or object from another origin
 - **THEN** the browser blocks it under the policy
+
+#### Scenario: What the policy does not stop
+
+- **WHEN** the page navigates, opens a window, follows a link, is sent elsewhere by a meta refresh, uses WebRTC or prefetches a name, or a request goes to the site's own origin (on the preview, the whole `github.io` origin of the account), with or without a body
+- **THEN** the policy does not govern it, and the no-upload test remains the guard that no file data leaves the page
 
 #### Scenario: Pictures the site draws
 
@@ -44,7 +49,7 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 #### Scenario: Pages look and work the same
 
 - **WHEN** any page is opened, with or without a keyboard or a screen reader, and any tool's job is run
-- **THEN** the page looks, reads and behaves as before the policy, and every existing end-to-end and no-upload test passes unchanged
+- **THEN** the page looks, reads and behaves as before the policy, and every existing end-to-end and no-upload test passes with no change beyond importing the shared watching fixture (and, in tests that open their own browser context, calling its watch helper)
 
 #### Scenario: What a meta tag cannot carry
 
@@ -60,35 +65,40 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 
 ### Requirement: The policy reaches every worker
 
-Every worker the site starts, the tool worker and any worker started inside it, SHALL run under the page's policy. A worker MUST NOT be started in a way that gives it no policy, and the policy SHALL allow workers from the page's own `blob:` addresses only. The `blob:` script that starts a worker SHALL hold only an import of the site's own worker file, never file data. (SPEC.md: Privacy, limits and security, Whole site and Browser tools)
+Every worker the site starts, the tool worker and any worker started inside it, SHALL run under the page's policy, by being started from a `blob:` address of the page whose script holds only an import of the site's own worker file, never file data. No code SHALL start a worker any other way: the site's own code SHALL start workers only through one start helper, and the built files SHALL show no other worker start. (SPEC.md: Privacy, limits and security, Whole site and Browser tools)
 
 #### Scenario: Eval inside a worker
 
-- **WHEN** code running in the tool worker calls `eval`
-- **THEN** the browser blocks it, while qpdf's WebAssembly still runs
+- **WHEN** code running in a worker started the site's way, or in a worker it starts, calls `eval`
+- **THEN** the browser blocks it and reports a violation, while WebAssembly still compiles there
 
 #### Scenario: A worker tries another origin
 
-- **WHEN** code running in the tool worker tries to fetch from another origin
-- **THEN** the browser blocks the request before it is sent
+- **WHEN** code running in a worker started the site's way, or in a worker it starts, tries to fetch from another origin
+- **THEN** the browser blocks the request before it is sent, reports a violation on that worker, and the other origin receives nothing
 
-#### Scenario: A worker from an ordinary address
+#### Scenario: A worker started another way
 
-- **WHEN** a page tries to start a worker straight from a same-origin script address
-- **THEN** the browser refuses it under the policy
+- **WHEN** the site's source starts a worker outside the start helper, or a built file contains a worker start outside the helper's code (other than PDF.js's own display file, which the site configures never to start one)
+- **THEN** lint or the built-file check fails
 
 #### Scenario: Every tool's job under the policy
 
 - **WHEN** each tool's end-to-end tests run their jobs, with thumbnails, WebAssembly and zip output
-- **THEN** every job finishes as before and no policy violation is seen
+- **THEN** every job finishes as before and no policy violation is seen in the page or any worker
+
+#### Scenario: Other browser engines
+
+- **WHEN** CI runs the policy checks in Firefox and WebKit
+- **THEN** eval and a request to another origin are blocked in a worker started the site's way and in one nested in it, and one ordinary job of each engine kind finishes with no violation
 
 ### Requirement: The policy is checked on every build and in every end-to-end test
 
-A build check SHALL fail if any built page lacks the policy tag or has it after a stylesheet or script, or if a page carries an inline script or style whose hash the policy lacks, a `style` attribute, an inline event handler or a `javascript:` address. Every end-to-end test SHALL fail if the page or one of its workers reports a policy violation. CI SHALL run both. (SPEC.md: Privacy, limits and security, Whole site; Build phases)
+A build check SHALL fail if any built page lacks the policy tag or has it after a stylesheet or script, or if a page carries a runnable inline script or style whose hash the policy lacks, a `style` attribute, an inline event handler or a `javascript:` address. Every end-to-end test SHALL fail if the page or one of its workers reports a policy violation. CI SHALL run both. (SPEC.md: Privacy, limits and security, Whole site; Build phases)
 
 #### Scenario: An inline script without a hash
 
-- **WHEN** a built page carries an inline script or style whose hash is not in its policy
+- **WHEN** a built page carries a runnable inline script or style whose hash is not in its policy
 - **THEN** the build check names the page and the block, and fails
 
 #### Scenario: A style attribute or event handler in the HTML
@@ -98,8 +108,8 @@ A build check SHALL fail if any built page lacks the policy tag or has it after 
 
 #### Scenario: A violation during a test
 
-- **WHEN** any end-to-end test sees a `securitypolicyviolation` event or a policy message in the console of the page or one of its workers
-- **THEN** that test fails and names what was blocked
+- **WHEN** any end-to-end test sees a `securitypolicyviolation` event on the page or on the scope of one of its workers
+- **THEN** that test fails and names the directive and what was blocked
 
 #### Scenario: The checks run in CI
 
