@@ -62,7 +62,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
     - `warning.pdf` is protected;
     - the damaged files and `not-a-pdf.pdf` fail;
   - the title and XMP file made in the test;
-  - `tagged.pdf`'s markers, with `SECRET-DEST-NAME` recorded as the one readable name, and no `/MediaBox` readable in any result;
+  - `tagged.pdf`'s markers, with `SECRET-DEST-NAME` recorded as readable, and recorded the same way `/Width` on `images.pdf`'s result, the attached file's `/Subtype` on `rich.pdf`'s and `/Helvetica` on `form.pdf`'s; no `/MediaBox` readable in any result, and `note.txt` not readable in `rich.pdf`'s;
   - an RC4 file made in the test;
   - two runs giving different keys;
   - the order of progress;
@@ -79,7 +79,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
 
 ## 6. Worker wiring and the job step
 
-- [ ] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
+- [ ] 6.1 Confirm `tool.worker.ts` already gives `qpdf`, and that the worker maps `PasswordRefused` and `OutputLimit` with no change. Move the body of `useToolRun`'s `start` into `runJob` in `src/hooks/run-job.ts`, as the design's decision 6 gives it: it returns the outcome with no finish callback, and `start` does the dispatches and the object URL, with no change in behaviour. Write `tests/unit/run-job.test.ts` with a fake client. Verify:
   - the new password holder is `{}` after a run that gives a file and after one that gives no new file, before anything else clears it;
   - it still holds the password after an engine failure, a run that throws and a cancel.
 - [ ] 6.2 Accept the new shared file:
@@ -103,7 +103,7 @@ Built on `add-password-option` (PR #28), merged first. Two shared changes and on
   - one question on what changes and what stays;
   - signatures;
   - an earlier password and restrictions being replaced;
-  - what a password hides and does not hide: the file's name, whether it has bookmarks, attachments or a form, rough size and some names stay visible; pages, page sizes and text do not.
+  - what a password hides and does not hide: the file's name, whether it has bookmarks, attached files or a form, rough size, each picture's pixel size and format, each attached file's type and size, font names and some other names stay visible; pages, page sizes, text, what pictures show and the names and contents of attached files do not; it never says pictures or attached files are hidden as a whole (wording a draft for the owner).
 
   The privacy words say only what the page controls. No "unlock", no "100%", no capitals for emphasis, and no question that restates the title. Check it against "Banned patterns". Verify that the built page holds the heading, sentence, steps and questions with scripts off, and that the word count is within range.
 

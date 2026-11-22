@@ -18,7 +18,7 @@
   - **Nothing secret was in the bytes.** P never appeared in a result. The marked title and XMP words did not either, and PDF.js read the title back once the file was opened with P. PDF.js refused no password, and refused P less its last character.
   - **Progress:** qpdf printed several `write progress: N%` lines (52 for `pages-500.pdf`).
   - **Sizes went down** with object streams generated: `text.pdf` from 6,057 to 4,302 bytes, `pages-500.pdf` from 198,025 to 112,521, `tagged.pdf` from 5,118 to about 3,400. With object streams preserved, `tagged.pdf` came out at 6,448. `pages-500.pdf` took about 0.2 s.
-  - **What stays readable.** PDF encryption covers strings and streams only. Names, numbers and dictionaries outside an encrypted object stream are written as they are, and qpdf keeps the catalog outside object streams. So `tagged.pdf`'s `SECRET-DEST-NAME`, a key of the catalog's old-style `/Dests`, stayed readable. The catalog's keys also show whether the file has bookmarks (`/Outlines`), attached files (`/Names /EmbeddedFiles`, with the attachment's name encrypted) or a form. Page dictionaries went into encrypted object streams, so `/MediaBox`, `/Count` and font names were not readable in `text.pdf`, `mixed.pdf` or `rich.pdf`. Page sizes and the page count are therefore hidden, which corrects the privacy reviewer's V6 premise. The file's own name is outside the file and is always visible. Every encrypting tool behaves this way, because it is the format.
+  - **What stays readable.** PDF encryption covers strings and streams only. Names, numbers and dictionaries outside an encrypted object stream are written as they are, and qpdf keeps the catalog outside object streams. So `tagged.pdf`'s `SECRET-DEST-NAME`, a key of the catalog's old-style `/Dests`, stayed readable. The catalog's keys also show whether the file has bookmarks (`/Outlines`), attached files (`/Names /EmbeddedFiles`, with the attachment's name encrypted) or a form. Page dictionaries went into encrypted object streams, so `/MediaBox` and `/Count` were not readable in `text.pdf`, `mixed.pdf` or `rich.pdf`: page sizes and the page count are hidden. But a stream's own dictionary can never go in an object stream, so it stays readable (the privacy reviewer, round 2, with the repo's qpdf): for pictures, how many there are, their pixel size (`/Width`, `/Height`), bits, colour space and format (such as `/JPXDecode`), as on `images.pdf` and `scanned.pdf`; for attached files, their type (`/Subtype`, such as `text/plain`) and size (`/Params /Size`), as on `rich.pdf`, whose attachment's name and dates are encrypted; and font names named in appearance streams (`/Helvetica` on `tagged.pdf` and `form.pdf`). Font names were absent only from `text.pdf`, `mixed.pdf` and `rich.pdf`, whose fonts sit in page resources inside object streams. The file's own name is outside the file and is always visible. Every encrypting tool behaves this way, because it is the format.
   - **Two qpdf options are unusable here.** `--requires-password` is not usable in this build: it gave exit 2 with "invalid password" on an encrypted file. And qpdf will not write JSON on an instance that has already written. So the result is checked on a fresh instance (decision 4).
   - **`--show-encryption` prints the password.** It prints "User password = P". The JSON form (`--json=2 --json-key=encrypt`) gives R, V, the methods and the capabilities without the password, so the engine reads that.
 
@@ -156,8 +156,16 @@ Any other answer throws "The protected file did not pass its check."
 ### 5. Shared change: `OutputLimit` and `cappedWrite` in `src/engines/qpdf.ts` (architect A1, stage 1)
 
 ```ts
-/** Thrown when a capped write passes its limit. The worker knows it by its name and gives `output-limit`. */
-export class OutputLimit extends Error { override name = 'OutputLimit'; }
+/** Moved unchanged from stamp.ts. The worker knows it by its name and gives `output-limit`. */
+export class OutputLimit extends Error {
+  override name = 'OutputLimit';
+  /** `'shared'` when what the chosen pages share would pass the budget (Sign PDF checks `error.reason === 'shared'`). */
+  readonly reason: 'shared' | undefined;
+  constructor(reason?: 'shared') {
+    super('The new file would pass its size limit.');
+    this.reason = reason;
+  }
+}
 
 /** qpdf's "write progress: N%" line, as a percentage, or undefined. */
 export function writePercent(line: string): number | undefined;
@@ -183,9 +191,10 @@ export function cappedWrite(qpdf: Qpdf, limit: number, call: (qpdf: Qpdf) => Ret
 There is no DOM in the unit tests (`environment: 'node'`, no jsdom or happy-dom), so the hook itself cannot be rendered. Adding a DOM library for one test was considered. It was not chosen, because it is a dependency.
 
 Instead, the body of `useToolRun`'s `start`, from sending the job to reading its outcome, moves into a plain async function, `runJob`, in `src/hooks/run-job.ts`:
-- It takes the client, the inputs, the input passwords, the options, the zip and pictures to send, and three callbacks: `onProgress`, `forgetNewPasswords` and `finish(result)`.
-- It gives back the outcome: a file, no new file, a failure or a cancel.
-- `start` keeps its dispatches and its object URL, and passes the hook's own `forgetNewPasswords`.
+- It takes the client, the inputs, the input passwords, the options, the zip and pictures to send, and two callbacks: `onProgress` and `forgetNewPasswords`. There is no finish callback.
+- It returns the outcome: a file (its bytes and parts), no new file, a failure kind or a cancel. It calls `forgetNewPasswords` itself when the job finishes with a file or with no new file, so the test sees the rule.
+- `start` calls it, then does the dispatches and makes the object URL from the outcome, as now, passing the hook's own `forgetNewPasswords`.
+- `run-job.ts` is the one plain function in `src/hooks/`, which otherwise holds hooks; the repo's lint rules still apply to it (no component or engine imports), and the pull request names it.
 
 **The test,** `tests/unit/run-job.test.ts`, uses a fake client and a `newPasswords` holder that `forgetNewPasswords` empties:
 - after a run that gives a file, the holder is `{}` before anything else clears it;
@@ -205,7 +214,7 @@ The moved code keeps its comments. `useToolRun` behaves exactly as before; the e
 - **Never used:** `--cleartext-metadata` (the title and XMP stay encrypted), `--allow-insecure`, `--allow-weak-crypto` or `--show-encryption`. A unit test reads the engine's source and `protectArgs`, and fails if any of the four appears.
 - **`--object-streams=generate`,** as `writeTurned` and Compress PDF write.
   - It gives smaller files.
-  - It hides page dictionaries (sizes, count, font names) inside encrypted streams.
+  - It hides page dictionaries (page sizes and count) inside encrypted streams. Stream dictionaries (pictures, attached files, appearance streams) cannot go in object streams and stay readable.
   - Strings packed in object streams are encrypted with their stream rather than one by one, which bounds the growth of a hostile file of many tiny strings.
   - AES-256 needs PDF 1.7 extension level 8, which qpdf sets, so object streams (PDF 1.5) shut out no reader.
 - **Also not used:** `--decrypt`, `--qdf` and linearization.
@@ -231,7 +240,7 @@ These are the facts, checked against the code, for that change to use (privacy V
 - **The input file's own password,** typed to open a protected file, is kept while that file is listed. It is forgotten when the file is replaced or left out, on "Start again", and when the page is left.
 - **The browser's offer.** The browser may offer to save the new password, or suggest one. A saved password is kept by the browser and may be copied to the visitor's browser account. That is the browser's offer, which the visitor accepts or not.
 - **It cannot be recovered.** The site never has the password, so it cannot reset it.
-- **What a protected file does not hide:** the file's name; whether it holds bookmarks, attached files or a form; roughly how large its parts are; and names in the catalog, such as old-style link names. Its pages, their sizes, its text, pictures, bookmarks' titles, attachments, title and details are hidden.
+- **What a protected file does not hide:** the file's name; whether it holds bookmarks, attached files or a form; roughly how large its parts are; for each picture, its pixel size, colour space and format; for each attached file, its type and size; font names; and names in the catalog, such as old-style link names. What is hidden: its pages and their sizes, its text, the picture data itself, bookmarks' titles, the contents, names and dates of attached files, and its title and details. The page must not say pictures or attached files are hidden, only their contents. Wording is a draft for the owner.
 
 ### 10. The page text
 
@@ -256,8 +265,9 @@ These are the facts, checked against the code, for that change to use (privacy V
   - Earlier saved versions are not, and a digital signature stops being valid.
 - **My file already has a password.** You type it first. The new password replaces it, and restrictions are removed.
 - **What does a password hide?**
-  - It hides the pages, text, pictures, bookmarks, attached files and the file's title and details.
-  - It does not hide the file's name (which now ends in "-protected"), whether the file holds bookmarks, attachments or a form, roughly how large it is, or some names used inside it.
+  - It hides the pages, the text, what the pictures show, bookmarks' titles, the contents and names of attached files, and the file's title and details.
+  - It does not hide the file's name (which now ends in "-protected"), whether the file holds bookmarks, attached files or a form, roughly how large it is, how many pictures it has with their size in pixels and format, the type and size of each attached file, the names of fonts, or some other names used inside it.
+  - The page does not say pictures or attached files are hidden, only what they show and contain.
   - It stops someone opening the file. It does not stop someone who has the password from passing the file on.
 
 No question restates the title, and nothing is in capitals for emphasis. The word "unlock" is not used (banned list). The text is checked against "Banned patterns".
@@ -300,7 +310,7 @@ None added.
 - **A result that balloons.** The output cap (decision 8).
 - **Option abuse.** Each of these is refused by `acceptedPassword` before the file is read, with `PasswordRefused`, whose message holds nothing of the password: `'__proto__'`, a number, `null`, a missing key, an empty or long password, a space at an end, a line break, non-ASCII.
 - **Hostile file names.** Unchanged: `stem` cleans the output name, and names never reach the engine.
-- **What the format leaves readable.** See Context. It is said on the page. A unit test records `SECRET-DEST-NAME` as the one marked word that stays readable, and checks that no other marked string or stream, and no `/MediaBox`, can be read.
+- **What the format leaves readable.** See Context. It is said on the page. A unit test records what stays readable (`SECRET-DEST-NAME`, `/Width` on `images.pdf`, the attached file's `/Subtype` on `rich.pdf`, `/Helvetica` on `form.pdf`), and checks that no other marked string or stream, and no `/MediaBox`, can be read.
 
 ## Tests
 
@@ -317,7 +327,7 @@ None added.
     - `warning.pdf` is protected;
     - the damaged files fail as damaged, and `not-a-pdf.pdf` fails.
   - **Title and XMP.** A file made in the test with a title and an XMP stream holding marked words: neither word is in the result's bytes, and both are read back with the password.
-  - **What stays readable.** In `tagged.pdf`, every `SECRET-` marker held in a string or stream is absent from the bytes. `SECRET-DEST-NAME`, a name, is present, because the format leaves names readable; it is recorded, not hidden. No result shows `/MediaBox` in plain text.
+  - **What stays readable.** In `tagged.pdf`, every `SECRET-` marker held in a string or stream is absent from the bytes. `SECRET-DEST-NAME`, a name, is present, because the format leaves names readable; it is recorded, not hidden. Recorded the same way: `/Width` on `images.pdf`'s result, the attached file's `/Subtype` on `rich.pdf`'s, and `/Helvetica` on `form.pdf`'s, as stream dictionaries stay readable. No result shows `/MediaBox` in plain text, and `rich.pdf`'s attachment name `note.txt` is not readable.
   - **Older encryption.** A file made in the test with RC4 128-bit encryption (made with `--allow-weak-crypto` in the test only) comes back AESv3 only, and the old password is refused.
   - **Fresh keys.** The same file protected twice gives different `/U`, `/O`, `/UE` and `/OE`.
   - **Progress:** reading first, then writing percentages that never go back, with 93, 96 and 100 last.
@@ -346,7 +356,7 @@ None added.
 - **[A forgotten password]** The visitor loses their file for good. → Said in the hint next to the field, in the result and in the page text. The password is typed twice. The questions suggest keeping a copy without a password.
 - **[Only printable ASCII]** A password in Hindi or with accents cannot be set. → Refused with a sentence; it is the owner's question from PR #28.
 - **[The browser saves the password]** It may sync to the visitor's browser account. → The note and the page text say so; it is the owner's question from PR #28.
-- **[Some things stay readable]** The file name, which parts it holds, rough sizes and catalog names can be seen without the password. → The format's limit, said on the page.
+- **[Some things stay readable]** The file name, which parts it holds, rough sizes, each picture's pixel size and format, each attached file's type and size, font names and catalog names can be seen without the password. → The format's limit, said on the page.
 - **[Old restrictions dropped]** A file that had restrictions loses them. → The result note says so; owner question 1.
 - **[Signatures]** A digital signature stops being valid. → Said in the result and the page text.
 - **[An extra check]** Decision 4 parses the file once more. → The progress steps keep the bar moving. Task 3.2 measures it. It is dropped only with the reviewers' agreement, if it more than doubles the time on the largest file.
