@@ -91,8 +91,8 @@
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
-/* A page of the grid: a plain grid item, filled by .page, which holds what the page shows and draws the
-   page's box exactly as the item itself used to. */
+/* A page of the grid: a plain grid item, filled by .page, which holds what the page shows and draws its
+   box. */
 .cell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
