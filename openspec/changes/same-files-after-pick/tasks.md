@@ -17,11 +17,11 @@ No registry entry, page, page text or dependency changes: this is a privacy fix 
 
 - [x] 3.1 In `tests/e2e/compress-pdf.spec.ts`, add the fresh-context test of design 3 on `compress-text.pdf`, `compress-small-jpg.pdf`, `compress-scans.pdf` and `compress-packed.pdf` (which ends with no new file, so both endings are recorded): no violations, fflate's exact path in each set, all sets equal.
 - [x] 3.2 In `tests/e2e/images-to-pdf.spec.ts`, add the fresh-context test of design 3 on `/image-to-pdf` with a JPG alone and a PNG alone: no violations, fflate's exact path at pick time in both, pick-time sets equal, whole-run sets equal.
-- [ ] 3.3 Confirm 3.1 and 3.2 fail on `main`'s engines (record the failure) and pass after group 1. Run `npm run build`, `npm run e2e -- --trace off` for both specs at 360px and 1280px, and the full e2e suite.
+- [x] 3.3 Confirm 3.1 and 3.2 fail on `main`'s engines (record the failure) and pass after group 1. Run `npm run build`, `npm run e2e -- --trace off` for both specs at 360px and 1280px, and the full e2e suite.
 
 ## 4. Checks and weight
 
-- [ ] 4.1 Run `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp` and `npm run spec`; record that page weights are unchanged and the fflate chunk's gzip size.
+- [x] 4.1 Run `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp` and `npm run spec`; record that page weights are unchanged and the fflate chunk's gzip size.
 - [x] 4.2 No screenshots: no page changes how it looks. Say so in the pull request.
 
 ## 5. Record and review

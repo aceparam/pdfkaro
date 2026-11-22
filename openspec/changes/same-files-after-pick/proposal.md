@@ -18,7 +18,7 @@ On a cold cache the host sees that request, and GitHub Pages logs it with the vi
   - end-to-end: for each tool, two or more runs in fresh browser contexts (a cold cache each) on inputs that differ in kind, recording every request from the pick to the downloaded result, give the same set of paths, and each passes the existing no-upload check.
 - **Spec deltas** to `compress-pdf` and `images-to-pdf` "Nothing is uploaded": which files are fetched after a pick SHALL NOT depend on the file.
 
-No page text changes. No Privacy page wording changes in this change. The Privacy page draft (`add-privacy-draft`) must not say that these two tools' requests do not depend on the file until this change is merged; this change should merge first (program manager, stage 1).
+No page text changes. No Privacy page wording changes in this change. The Privacy page draft (`add-privacy-draft`, PR #33) merged first; it says only that requests after a pick carry nothing from the file, which stays true, and claims nothing about which files are fetched, so it needs no change. It must not claim that the files fetched never depend on the file while the gap below is open (program manager and privacy, stage 1).
 
 ## Cost
 
