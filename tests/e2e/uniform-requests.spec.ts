@@ -54,6 +54,8 @@ const pdfJobs: Input[] = [
   { label: 'rich.pdf', files: ['rich.pdf'], job: true },
   { label: 'password.pdf with its password', files: ['password.pdf'], password, job: true },
 ];
+/** A file read as ready whose job fails in the browser, on the pages where one does (the drawing step's JSON cap). */
+const failingJob: Input = { label: 'compress-json-bomb.pdf (the job fails)', files: ['compress-json-bomb.pdf'], job: true };
 const asPicks = (inputs: Input[]) => inputs.map((input) => ({ ...input, job: false }));
 
 /** The inputs of each page (design.md, decision 11). A page with no row fails. */
@@ -80,11 +82,13 @@ const inputs: Record<string, Input[]> = {
   // A one-page file gives one picture, a longer one a zip: both fetch the same files, fflate among them.
   '/pdf-to-jpg': [...pdfPicks, ...pdfJobs, { label: 'form.pdf (one page, one picture)', files: ['form.pdf'], job: true }],
   '/pdf-to-png': [...pdfPicks, ...pdfJobs, { label: 'form.pdf (one page, one picture)', files: ['form.pdf'], job: true }],
-  '/add-page-numbers-to-pdf': [...pdfPicks, ...pdfJobs],
-  '/watermark-pdf': [...pdfPicks, ...pdfJobs],
+  // compress-json-bomb.pdf reads as ready, and its job fails once the pages are read: before this change pdf-lib was
+  // then never fetched, so the host could tell (engine-loads report, task 2.4).
+  '/add-page-numbers-to-pdf': [...pdfPicks, ...pdfJobs, failingJob],
+  '/watermark-pdf': [...pdfPicks, ...pdfJobs, failingJob],
   '/sign-pdf': [
     ...pdfPicks,
-    ...pdfJobs.map((input) => ({ ...input, sign: 'type' as const })),
+    ...[...pdfJobs, failingJob].map((input) => ({ ...input, sign: 'type' as const })),
     { label: 'text.pdf, a PDF chosen as the signature picture', files: ['text.pdf'], picture: 'rich.pdf', job: false },
     { label: 'text.pdf, a drawn line', files: ['text.pdf'], sign: 'draw', job: true },
     { label: 'text.pdf, a JPG picture', files: ['text.pdf'], picture: 'pictures/details.jpg', sign: 'picture', job: true },

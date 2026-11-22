@@ -325,7 +325,7 @@ Today the nested worker's request waits for the import to arrive and be evaluate
   - a thumbnail asked for before the set settles waits at most 60 seconds for it;
   - `dropThumbnail` resolves `'dropped'` when the empty answer comes first and `'too-late'` when `prepared` does;
   - `end()` ends a worker waiting in `endWhenSettled` at once.
-- **`tests/unit/engine-loads.test.ts`** (new): for every file in `src/engines/tools/`, it runs `inspect` (and `inspectPicture`) and `run` against every file in `tests/fixtures/` (and `pictures/` for picture engines and Sign PDF's picture). It uses a valid option set per tool, from one small table in the test, and a recording `tools` filled from disk, as the engine tests do. It fails when:
+- **`tests/unit/engine-loads.test.ts`** (new; as built, the per-engine runs are split over `engine-loads-a.test.ts` to `-d.test.ts`, with the shared steps in `engine-loads-helpers.ts`, so Vitest runs them side by side: one file took 261 s, four take about 155 s): for every file in `src/engines/tools/`, it runs `inspect` (and `inspectPicture`) and `run` against every file in `tests/fixtures/` (and `pictures/` for picture engines and Sign PDF's picture). It uses a valid option set per tool, from one small table in the test, and a recording `tools` filled from disk, as the engine tests do. It fails when:
   - a step asks for a library outside its declared set;
   - `loads` is missing;
   - a tool with `outputs: 'several'` lacks `fflate` in `job`.
@@ -395,7 +395,7 @@ Claim table, added to the one in `add-privacy-draft`'s design:
 
 | Claim | Code | Proof |
 | --- | --- | --- |
-| Which programs are fetched does not depend on what the file holds, damaged, protected and wrong-kind files included | `loads` on every engine; draw set from `thumbnails`; `toolLibrary` and phase-gated `tools`; `ready(phase)` in `worker-core.ts`; `prepare` on every pick and the wrong-kind wait; no file-driven end before `prepared`; a fresh worker for every job | `uniform-requests.spec.ts` (the host's record compared across inputs on all 17 pages, and the slow-mode cases); `engine-loads.test.ts`; `worker-core.test.ts`; `client.test.ts` |
+| Which programs are fetched does not depend on what the file holds, damaged, protected and wrong-kind files included | `loads` on every engine; draw set from `thumbnails`; `toolLibrary` and phase-gated `tools`; `ready(phase)` in `worker-core.ts`; `prepare` on every pick and the wrong-kind wait; no file-driven end before `prepared`; a fresh worker for every job | `uniform-requests.spec.ts` (the host's record compared across inputs on all 17 pages, and the slow-mode cases); `engine-loads.test.ts` with `engine-loads-a` to `-d.test.ts` (the engines split over four files so they run side by side); `worker-core.test.ts`; `client.test.ts` |
 | GitHub can tell which tool page was opened and when a file was first chosen, and may be able to tell when a job was started | Requests at page load, after a pick (`prepare`), and after the main button only when the job needs a file not yet fetched | `uniform-requests.spec.ts` records exactly these phases; release check of the live host's headers |
 | A program may be asked for more than once, and in a few cases how often can depend on the file; a page slow to show can be told that way | The named exceptions in Risks: no usable cache, stale copies, a thumbnail over 10 seconds after the set settled, the main button while P arrives, a crash, jobs over the cache lifetime | Risks below; the host's `Cache-Control` read again at release |
 
