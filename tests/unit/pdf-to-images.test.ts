@@ -19,7 +19,7 @@ import { maxOutputBytes, TooBigForZip, TooManyPictures } from '../../src/widget/
 import { createPdfjsLoader, type NestedWorker } from '../../src/workers/pdfjs-loader';
 import { failureKind } from '../../src/workers/worker-core';
 import { createRequire } from 'node:module';
-import { box, fixture, tools } from './thumbnail-helpers';
+import { box, fixture, nestedWorker, tools } from './thumbnail-helpers';
 
 const require = createRequire(import.meta.url);
 const qpdfTools: EngineTools = {
@@ -422,7 +422,7 @@ describe('a PDF.js worker that stops', () => {
         destroy: () => never,
       }),
     };
-    const port: NestedWorker = { onerror: null, terminate: () => {} };
+    const port: NestedWorker = nestedWorker();
     const loader = createPdfjsLoader(async () => stalled, () => port);
     const given: EngineTools = { ...tools, pdfjs: () => loader.load(), pdfjsGuard: async () => loader.guard };
     const progress: Progress[] = [];

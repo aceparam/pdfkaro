@@ -3,7 +3,12 @@
 // from the worker's globals so that it can be tested in Node.
 
 /** The parts of a nested Worker this uses. */
-export type NestedWorker = { onerror: ((event: { preventDefault(): void }) => void) | null; terminate(): void };
+export type NestedWorker = {
+  onerror: ((event: { preventDefault(): void }) => void) | null;
+  terminate(): void;
+  addEventListener(type: 'message', listener: () => void): void;
+  removeEventListener(type: 'message', listener: () => void): void;
+};
 
 export type PdfjsLoader = {
   /** PDF.js, ready to open documents. Rejects at once after PDF.js has failed. */
@@ -40,14 +45,32 @@ export function createPdfjsLoader(
           failed = true;
           return Promise.reject(error instanceof Error ? error : new Error('PDF.js could not start.'));
         }
+        // PDF.js's worker posts "ready" once its script has loaded, unasked, and PDF.js ignores that message for a
+        // worker it is given. PDF.js counts as loaded only then: otherwise a pick that draws nothing (a damaged file,
+        // one of the wrong kind) could settle and end the tool worker before that script was even asked for, so the
+        // host would see it for some files only. The listener takes nothing from PDF.js, which listens on its own.
+        let markStarted: () => void = () => {};
+        let markFailed: (reason: Error) => void = () => {};
+        const started = new Promise<void>((resolve, reject) => {
+          markStarted = resolve;
+          markFailed = reject;
+        });
+        started.catch(() => {});
+        const onFirstMessage = () => {
+          port.removeEventListener('message', onFirstMessage);
+          markStarted();
+        };
+        port.addEventListener('message', onFirstMessage);
         port.onerror = (event) => {
           // Keep PDF.js's errors inside the tool worker; the page sees only a missing picture.
           event.preventDefault();
           failed = true;
-          stop(new Error('PDF.js stopped.'));
+          const reason = new Error('PDF.js stopped.');
+          markFailed(reason);
+          stop(reason);
         };
-        return imported.then(
-          (pdfjs) => {
+        return Promise.all([imported, started]).then(
+          ([pdfjs]) => {
             if (failed) throw new Error('PDF.js is unavailable in this worker.');
             pdfjs.GlobalWorkerOptions.workerPort = port;
             return pdfjs;

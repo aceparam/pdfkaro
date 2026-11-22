@@ -8,6 +8,7 @@ import { isFromWorker, isToWorker } from '../../src/workers/messages';
 import { createHandler } from '../../src/workers/worker-core';
 import { ToolClient, type WorkerLike } from '../../src/workers/client';
 import { createPdfjsLoader, type NestedWorker } from '../../src/workers/pdfjs-loader';
+import { nestedWorker } from './thumbnail-helpers';
 
 const file = new Blob(['%PDF-1.7']);
 const box = { width: 104, height: 136 };
@@ -294,7 +295,7 @@ describe('the PDF.js loader', () => {
     const loader = createPdfjsLoader(
       async () => pdfjs,
       () => {
-        const nested: NestedWorker = { onerror: null, terminate: () => {} };
+        const nested: NestedWorker = nestedWorker();
         started.push(nested);
         return nested;
       },
@@ -327,10 +328,7 @@ describe('the PDF.js loader', () => {
     let resolveImport: (value: { GlobalWorkerOptions: { workerPort: unknown } }) => void = () => {};
     let rejectImport: (reason: Error) => void = () => {};
     const pdfjs = { GlobalWorkerOptions: { workerPort: null as unknown } };
-    const nested: NestedWorker = {
-      onerror: null,
-      terminate: () => log.push('terminated'),
-    };
+    const nested = nestedWorker({ held: true, terminate: () => log.push('terminated') });
     const loader = createPdfjsLoader(
       () => {
         log.push('import');
@@ -344,18 +342,33 @@ describe('the PDF.js loader', () => {
         return nested;
       },
     );
-    return { log, loader, nested, pdfjs, resolve: () => resolveImport(pdfjs), reject: () => rejectImport(new Error('network')) };
+    return { log, loader, nested, pdfjs, resolve: () => resolveImport(pdfjs), reject: () => rejectImport(new Error('network')), ready: () => nested.ready() };
   }
 
   it("starts PDF.js's worker before the import resolves, and hands it over once it does", async () => {
-    const { log, loader, nested, pdfjs, resolve } = held();
+    const { log, loader, nested, pdfjs, resolve, ready } = held();
     const loading = loader.load();
     expect(log).toEqual(['import', 'worker']);
     expect(nested.onerror).not.toBeNull();
     expect(pdfjs.GlobalWorkerOptions.workerPort).toBeNull();
     resolve();
+    ready();
     await loading;
     expect(pdfjs.GlobalWorkerOptions.workerPort).toBe(nested);
+  });
+
+  it("counts PDF.js as loaded only once its worker has said ready, so its script is always asked for first", async () => {
+    const { loader, nested, resolve, ready } = held();
+    let loaded = false;
+    const loading = loader.load().then(() => (loaded = true));
+    resolve();
+    await new Promise((done) => setTimeout(done, 10));
+    expect(loaded).toBe(false);
+    ready();
+    await loading;
+    expect(loaded).toBe(true);
+    // The loader stops listening once it has heard, and takes nothing from PDF.js, which listens on its own.
+    expect(nested.listening()).toBe(0);
   });
 
   it('leaves PDF.js failed when its worker fails before the import resolves', async () => {
@@ -365,7 +378,7 @@ describe('the PDF.js loader', () => {
     nested.onerror!({ preventDefault });
     expect(preventDefault).toHaveBeenCalled();
     resolve();
-    await expect(loading).rejects.toThrow(/unavailable/);
+    await expect(loading).rejects.toThrow(/stopped/);
     await expect(loader.load()).rejects.toThrow(/unavailable/);
   });
 
