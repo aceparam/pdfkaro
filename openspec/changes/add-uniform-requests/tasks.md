@@ -6,7 +6,7 @@
 
 ## 2. Engine declarations
 
-- [ ] 2.1 Add `src/workers/libraries.ts` (design.md, decision 3) with `LibraryName`, the canonical order and the `toolLibrary` table (`satisfies Record<keyof typeof tools, LibraryName | 'always'>`; `'pdfjs'` covers `pdfjs`, `pdfjsData` and the `thumbnail` import). Add a required `loads: { read; job }` to `EngineModule` in `src/engines/types.ts`, with a comment saying the sets are chosen by tool, never by a file, and that the draw set follows from `thumbnails`. Verify `npm run check` reports only the engines still to be declared.
+- [ ] 2.1 Define `LibraryName` in `src/engines/types.ts`. Add `src/workers/libraries.ts` (design.md, decision 3), importing it, with the canonical order and the `toolLibrary` table (`satisfies Record<keyof typeof tools, LibraryName | 'always'>`; `'pdfjs'` covers `pdfjs`, `pdfjsData` and the `thumbnail` import). Add a required `loads: { read; job }` to `EngineModule` in `src/engines/types.ts`, with a comment saying the sets are chosen by tool, never by a file, and that the draw set follows from `thumbnails`. Verify `npm run check` reports only the engines still to be declared.
 - [ ] 2.2 Declare `loads` in each of the 14 files in `src/engines/tools/` as in design.md, decision 2. Verify `npm run check` passes and `npm test` passes as before (no engine's output changes).
 - [ ] 2.3 Write `tests/unit/engine-loads.test.ts` (design.md, decision 11). For every engine it runs `inspect`, `inspectPicture` where there is one, and `run` against every file in `tests/fixtures/`, with `pictures/` for Image to PDF and Sign PDF's picture. It uses a valid option table and a recording `tools` filled from disk. It fails when:
   - a step asks for a library outside its declared set;
@@ -43,14 +43,14 @@
   - Only then copy any file.
   - Post `prepared` once, when the draw set has settled.
   - Post a read's or picture read's `failed` only after `prepared`, held to 60 seconds.
-  - Answer `drop-thumbnail` by giving a waiting thumbnail no picture.
+  - Answer `drop-thumbnail` by giving a waiting thumbnail no picture, and record the dropped id: after the libraries load and before `openDocument`, a dropped request returns without opening anything.
   - Hand engines, for each phase, `tools` that refuse undeclared keys, so the step fails as `engine-load`.
 
-  Verify the new `worker-core.test.ts` tests of design.md, decision 11, and that every existing `worker-core` and `thumbnail-plumbing` test passes.
+  Verify the new `worker-core.test.ts` tests of design.md, decision 11 (among them: a thumbnail dropped while its library is loading never calls `openDocument`), and that every existing `worker-core` and `thumbnail-plumbing` test passes.
 - [ ] 3.7 In `src/workers/client.ts` (design.md, decision 7), add:
   - `prepare()`;
   - a per-worker settled flag set by `prepared`;
-  - the thumbnail limit started only once settled;
+  - the thumbnail limit started only once settled, and a thumbnail asked for before then waiting at most 60 seconds for the set;
   - `dropThumbnail()`;
   - `endWhenSettled()`, which waits for `prepared` or 60 seconds; `end()` still ends at once, a waiting worker included.
 
@@ -107,7 +107,7 @@
 - [ ] 6.3 Write `tests/e2e/uniform-requests.spec.ts`, tagged `@desktop`, with one test per page in `widgetPages` and the input table of design.md, decision 11.
   - Each input runs in a new context with `watchPolicy`, and no `route` or `routeFromHAR`.
   - Job inputs double as pick inputs; duplicates are dropped.
-  - A phase ends when every request expected from `tool-files.ts` has arrived and none is open, then `quietMs`.
+  - A phase ends when every request expected from `tool-files.ts` has arrived and none is open, then `quietMs`. The job phase's expected set is the job libraries not already fetched at the pick; the rest come from the cache.
   - Compare the pick multiset, nothing new after a password, and the job multiset, with "expected X, got Y" messages.
   - A page with no row fails.
 

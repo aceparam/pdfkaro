@@ -104,7 +104,7 @@ None.
 ## Impact
 
 - `src/engines/types.ts` (a `loads` declaration on `EngineModule`) and every file in `src/engines/tools/` (its declaration). No engine's output changes.
-- New files: `src/workers/libraries.ts` (`LibraryName`, the canonical order, the `toolLibrary` table), `src/workers/spare-qpdf.ts` and `src/workers/fflate.ts`.
+- New files: `src/workers/libraries.ts` (the canonical order, the `toolLibrary` table; `LibraryName` itself is in `src/engines/types.ts`), `src/workers/spare-qpdf.ts` and `src/workers/fflate.ts`.
 - `src/workers/worker-core.ts`: loads a tool's set for each phase before touching a file; phase-gated `tools`; the zip step taken from `fflate`; `prepare`, `prepared` and `drop-thumbnail`; reading failures posted after the set settles.
 - `src/workers/messages.ts`.
 - `src/workers/tool.worker.ts`: libraries by name, checked against `toolLibrary`; the spare qpdf; no `loadZip`.

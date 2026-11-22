@@ -148,7 +148,7 @@ loads: {
 }
 ```
 
-`LibraryName` is one of `'qpdf' | 'fflate' | 'pdflib' | 'pdfjs' | 'pictureThumbnail'`. The **draw set** is not declared. It follows from the existing `thumbnails` field: `['pictureThumbnail']` when `thumbnails === 'picture'`, otherwise `['pdfjs']`. That makes it one fact, written once. Static imports are not listed, because they always come with the engine.
+`LibraryName` is one of `'qpdf' | 'fflate' | 'pdflib' | 'pdfjs' | 'pictureThumbnail'`. It is defined in `src/engines/types.ts`, beside `EngineModule`, and `src/workers/libraries.ts` imports it: engines must not import worker code (stage 1, architect). The **draw set** is not declared. It follows from the existing `thumbnails` field: `['pictureThumbnail']` when `thumbnails === 'picture'`, otherwise `['pdfjs']`. That makes it one fact, written once. Static imports are not listed, because they always come with the engine.
 
 The declarations, which the unit test of decision 10 confirms against every fixture:
 
@@ -172,9 +172,8 @@ Alternatives considered:
 
 ### 3. One table from `tools` keys to libraries (R6)
 
-`src/workers/libraries.ts` holds, once:
+`src/workers/libraries.ts` holds, once (with `LibraryName` imported from `src/engines/types.ts`):
 
-- `LibraryName`;
 - the canonical order `['qpdf', 'fflate', 'pdflib', 'pdfjs', 'pictureThumbnail']`;
 - the table that maps every key of the worker's `tools` to the library it belongs to:
 
@@ -250,8 +249,10 @@ Alternatives considered:
 
 `ToolClient` learns, per worker, whether the set has settled, from the worker's single `prepared` message.
 
-- **The thumbnail time limit** in `thumbnail()` starts its 10-second timer only once `prepared` has arrived. Before that, a thumbnail waits without a limit, but the visitor's own actions still end the worker.
-- **`stopThumbnail`** before `prepared` sends `drop-thumbnail`. The worker answers the waiting thumbnail with no picture and keeps going, and the page calls it stopped. No drawing can be under way before P has loaded. After `prepared`, a drawing in progress is stopped by ending the worker, as today.
+- **The thumbnail time limit** in `thumbnail()` starts its 10-second timer only once `prepared` has arrived. Before that, a thumbnail waits at most the same 60 seconds as the other waits (stage 1, architect); if the set has not settled by then, the worker is ended and the thumbnail gives no picture, as a stalled network is the network's doing, not the file's. The visitor's own actions still end the worker at once.
+- **`stopThumbnail`** before `prepared` sends `drop-thumbnail`, carrying the waiting thumbnail's request id. The worker answers the waiting thumbnail with no picture and keeps going, and the page calls it stopped. No drawing can be under way before P has loaded. After `prepared`, a drawing in progress is stopped by ending the worker, as today.
+  - **A dropped thumbnail never opens its document afterwards** (stage 1, security). `worker-core` records dropped request ids. A thumbnail waits for the read set and for the draw set to settle; after that and before `openDocument`, a dropped request returns without opening anything. Otherwise a crafted PDF that stalls PDF.js's open would hold the kept-document close chain, and the next file's read with it, at "Getting ready" for ever.
+  - **The handshake.** The drop is honoured only if the worker meets it before the draw set settles. The worker posts `prepared` and passes the drop check in the same turn of its event loop, so the page can tell which happened from the order of replies: the waiting thumbnail's empty answer arriving first means it was dropped; `prepared` arriving while it is still waiting means it was too late, and the page then ends the worker, which is allowed once the set has settled. `ToolClient.dropThumbnail()` resolves `'dropped'` or `'too-late'` accordingly, and `stopThumbnail` waits for it before the next read is sent, so no read is ever queued behind an open that was not dropped.
 - **`endReplacedRead`** calls `client.endWhenSettled()`. It waits until the set has settled or 60 seconds have passed, then ends the worker. The new picture's read waits for it, and then starts a fresh worker.
 - **A reading failure.** `worker-core` posts `failed` for a read or picture read only after `prepared`, held to 60 seconds. The client's `failAll` then ends a worker whose set has settled.
 - **The visitor's own actions** (`end()`: Cancel, "Start again", Remove of the last file, `pagehide`, unmount, the main button) end the worker at once. They also end one waiting in `endWhenSettled`.
@@ -315,11 +316,14 @@ Today the nested worker's request waits for the import to arrive and be evaluate
   - `prepared` is posted once, after the draw set settles.
   - A reading failure is posted only after `prepared` (held to 60 s).
   - `drop-thumbnail` answers a waiting thumbnail with no picture.
+  - A thumbnail dropped while its library is loading never calls `openDocument` (stage 1, security).
   - An undeclared key fails as `engine-load`.
 - **`tests/unit/client.test.ts`**:
   - `prepare` posts no file and resolves on `prepared`;
   - the thumbnail limit does not end a worker whose set has not settled, and does once it has;
   - `endWhenSettled` waits for `prepared` or 60 seconds;
+  - a thumbnail asked for before the set settles waits at most 60 seconds for it;
+  - `dropThumbnail` resolves `'dropped'` when the empty answer comes first and `'too-late'` when `prepared` does;
   - `end()` ends a worker waiting in `endWhenSettled` at once.
 - **`tests/unit/engine-loads.test.ts`** (new): for every file in `src/engines/tools/`, it runs `inspect` (and `inspectPicture`) and `run` against every file in `tests/fixtures/` (and `pictures/` for picture engines and Sign PDF's picture). It uses a valid option set per tool, from one small table in the test, and a recording `tools` filled from disk, as the engine tests do. It fails when:
   - a step asks for a library outside its declared set;
@@ -338,7 +342,7 @@ Today the nested worker's request waits for the import to arrive and be evaluate
 - **`tests/e2e/uniform-requests.spec.ts`** (new, tagged `@desktop` so it runs once): one test per tool page, taken from `widgetPages` in `pages.ts`, so a new page without a row in the input table fails.
   - Each input runs in a new browser context, so the cache starts empty, with `watchPolicy` from `fixtures.ts`. No compared context uses `route` or `routeFromHAR`, which switch off the HTTP cache (R7).
   - Each job input's context also counts as a pick input, and duplicate inputs are dropped (R14).
-  - A phase ends when every request expected for it has arrived and none is still open, then one short quiet (`quietMs`, one named constant). The expected requests come from the file table below.
+  - A phase ends when every request expected for it has arrived and none is still open, then one short quiet (`quietMs`, one named constant). The expected requests come from the file table below. The job phase expects the job libraries not already fetched at the pick; the rest come from the browser's cache (stage 1, architect).
   - It compares, across a page's inputs:
     - the pick phase's multiset of `(method, path)`;
     - after a password is typed, nothing new;
@@ -381,7 +385,7 @@ In "What happens to your file", after "These requests carry nothing from your fi
 
 At the end of "Who serves the site":
 
-> From your browser's requests, GitHub can tell which tool page you opened and when you chose a file, and may be able to tell when you started a job. Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that.
+> From your browser's requests, GitHub can tell which tool page you opened and when you first chose a file, and may be able to tell when you started a job. Your browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, these later requests can tell GitHub that.
 
 Both are marked for the owner. The last two sentences are Open question 1 either way.
 
@@ -392,7 +396,7 @@ Claim table, added to the one in `add-privacy-draft`'s design:
 | Claim | Code | Proof |
 | --- | --- | --- |
 | Which programs are fetched does not depend on what the file holds, damaged, protected and wrong-kind files included | `loads` on every engine; draw set from `thumbnails`; `toolLibrary` and phase-gated `tools`; `ready(phase)` in `worker-core.ts`; `prepare` on every pick and the wrong-kind wait; no file-driven end before `prepared`; a fresh worker for every job | `uniform-requests.spec.ts` (the host's record compared across inputs on all 17 pages, and the slow-mode cases); `engine-loads.test.ts`; `worker-core.test.ts`; `client.test.ts` |
-| GitHub can tell which tool page was opened and when a file was chosen, and may be able to tell when a job was started | Requests at page load, after a pick (`prepare`), and after the main button only when the job needs a file not yet fetched | `uniform-requests.spec.ts` records exactly these phases; release check of the live host's headers |
+| GitHub can tell which tool page was opened and when a file was first chosen, and may be able to tell when a job was started | Requests at page load, after a pick (`prepare`), and after the main button only when the job needs a file not yet fetched | `uniform-requests.spec.ts` records exactly these phases; release check of the live host's headers |
 | A program may be asked for more than once, and in a few cases how often can depend on the file; a page slow to show can be told that way | The named exceptions in Risks: no usable cache, stale copies, a thumbnail over 10 seconds after the set settled, the main button while P arrives, a crash, jobs over the cache lifetime | Risks below; the host's `Cache-Control` read again at release |
 
 ## Page weight, memory and WebAssembly
