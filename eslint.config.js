@@ -5,6 +5,20 @@ import tseslint from 'typescript-eslint';
 import astro from 'eslint-plugin-astro';
 import reactHooks from 'eslint-plugin-react-hooks';
 
+// Every worker starts from a blob: address through one helper, so it runs under
+// the page's Content Security Policy (src/workers/start-worker.ts). A worker
+// started straight from a file would run with no policy at all. ESLint lets a
+// later block replace an earlier one's setting for a rule, so every block below
+// that sets no-restricted-syntax repeats these.
+const workerStarts = [
+  'NewExpression[callee.name=/^(Shared)?Worker$/]',
+  'NewExpression[callee.property.name=/^(Shared)?Worker$/]',
+  'NewExpression[callee.property.value=/^(Shared)?Worker$/]',
+].map((selector) => ({
+  selector,
+  message: 'Start a worker only with workerFromBlob in src/workers/start-worker.ts, so it runs under the page policy.',
+}));
+
 export default defineConfig(
   { ignores: ['dist/', 'dist-base/', '.astro/', 'node_modules/', 'design/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
@@ -16,6 +30,11 @@ export default defineConfig(
     rules: reactHooks.configs.recommended.rules,
   },
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
+  {
+    files: ['src/**'],
+    ignores: ['src/workers/start-worker.ts'],
+    rules: { 'no-restricted-syntax': ['error', ...workerStarts] },
+  },
   {
     // Engines are pure: bytes in, bytes out. They never reach the page or the network.
     files: ['src/engines/**'],
@@ -61,6 +80,7 @@ export default defineConfig(
       ],
       'no-restricted-syntax': [
         'error',
+        ...workerStarts,
         {
           selector: 'ImportExpression[source.value=/^pdfjs-dist/]',
           message: 'Engines take PDF.js from `tools.pdfjs`, never with import().',
@@ -109,6 +129,7 @@ export default defineConfig(
       // The same rules for import() calls, which the rule above does not see.
       'no-restricted-syntax': [
         'error',
+        ...workerStarts,
         {
           selector: 'ImportExpression[source.value=/tools\\//]',
           message: 'Components may not load src/tools/ with import(). Pass data in through props.',
@@ -163,6 +184,16 @@ export default defineConfig(
             },
           ],
         },
+      ],
+    },
+  },
+  {
+    // Every end-to-end test runs under the Content Security Policy watch, which comes with `test` from ./fixtures.
+    files: ['tests/e2e/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: '@playwright/test', importNames: ['test', 'expect'], message: 'Import test and expect from ./fixtures' }] },
       ],
     },
   },

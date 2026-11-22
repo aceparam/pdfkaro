@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { type Download, type Page } from '@playwright/test';
+import { expect, test, watchPolicy } from './fixtures';
 import { unzipSync } from 'fflate';
 import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
 
@@ -370,6 +371,7 @@ test.describe('nothing is uploaded', () => {
   test('a one-part run and a several-part run each fetch the zip step, and the same files', async ({ browser, baseURL }) => {
     const run = async (name: string, pictures: number) => {
       const context = await browser.newContext();
+      await watchPolicy(context);
       const page = await context.newPage();
       await open(page);
       await pick(page, name);

@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { expect, test, type Browser, type BrowserContext, type Download, type Page } from '@playwright/test';
+import { type Browser, type BrowserContext, type Download, type Page } from '@playwright/test';
+import { expect, test, watchPolicy } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { changed, pictures, texts } from '../unit/stamp-helpers';
@@ -931,13 +932,28 @@ const filesAfterPick = () =>
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))].sort();
 
 /**
+ * Every blob: address the browser loaded as a script in each context. Workers start from blob: scripts
+ * (src/workers/start-worker.ts), and PDF.js's worker's is made inside the tool worker, out of the page's sight.
+ */
+const workerScripts = new WeakMap<BrowserContext, Set<string>>();
+function trackWorkerScripts(context: BrowserContext) {
+  if (workerScripts.has(context)) return;
+  const scripts = new Set<string>();
+  workerScripts.set(context, scripts);
+  context.on('request', (request) => {
+    if (request.url().startsWith('blob:') && request.resourceType() === 'script') scripts.add(request.url());
+  });
+}
+
+/**
  * Watches, from before the page's own scripts run: each Blob given to URL.createObjectURL (its type, size, address,
  * and whether its bytes hold the marker), every image address the page shows, and what each message to a worker
  * carries besides the file (the picture keys of a run, never the bytes).
  */
 async function watchPageScripts(context: BrowserContext, marker: string) {
+  trackWorkerScripts(context);
   await context.addInitScript((mark) => {
-    const made: { type: string; size: number; url: string; marked?: boolean }[] = [];
+    const made: { type: string; size: number; url: string; marked?: boolean; text?: string }[] = [];
     const shown = new Set<string>();
     const runs: { pictures: string[]; options: string[] }[] = [];
     const scope = window as unknown as { made: typeof made; shown: string[]; runs: typeof runs };
@@ -951,6 +967,8 @@ async function watchPageScripts(context: BrowserContext, marker: string) {
         const entry: (typeof made)[number] = { type: object.type, size: object.size, url };
         made.push(entry);
         void object.arrayBuffer().then((buffer) => {
+          // The tool worker's start script is kept whole, so the test can read that it holds only an import.
+          if (object.type === 'text/javascript') entry.text = new TextDecoder().decode(buffer);
           entry.marked = new TextDecoder('latin1').decode(buffer).includes(mark);
         });
       }
@@ -970,12 +988,20 @@ async function watchPageScripts(context: BrowserContext, marker: string) {
 
 async function pageRecords(page: Page) {
   return page.evaluate(() => {
-    const scope = window as unknown as { made: { type: string; size: number; url: string; marked?: boolean }[]; shown: string[]; runs: { pictures: string[]; options: string[] }[] };
+    const scope = window as unknown as {
+      made: { type: string; size: number; url: string; marked?: boolean; text?: string }[];
+      shown: string[];
+      runs: { pictures: string[]; options: string[] }[];
+    };
     return { made: scope.made, shown: scope.shown, runs: scope.runs };
   });
 }
 
-/** Every Blob is the result (a PDF) or a page thumbnail shown in the row; none is the picture: not its size, not its marker; every blob: address fetched was made so. */
+/**
+ * Every Blob is the result (a PDF), a page thumbnail shown in the row, or the tool worker's start script, which
+ * holds only an import of the worker file (src/workers/start-worker.ts); none is the picture: not its size, not its
+ * marker; every blob: address fetched was made so, or was loaded as a worker's start script.
+ */
 async function expectNoPictureBlob(page: Page, seen: Seen[], pictureSize: number) {
   await expect.poll(async () => (await pageRecords(page)).made.every((entry) => entry.marked !== undefined)).toBe(true);
   const { made, shown } = await pageRecords(page);
@@ -984,11 +1010,17 @@ async function expectNoPictureBlob(page: Page, seen: Seen[], pictureSize: number
     expect(entry.marked, entry.url).toBe(false);
     expect(entry.size, entry.url).not.toBe(pictureSize);
     if (entry.type === 'application/pdf') continue;
+    if (entry.type === 'text/javascript') {
+      expect(entry.text, entry.url).toMatch(/^import "http:\/\/localhost:4321\/_astro\/tool\.worker-[A-Za-z0-9_-]{8}\.js";$/);
+      continue;
+    }
     // An image Blob is only ever a page thumbnail, a PNG the row shows.
     expect(entry.type, entry.url).toBe('image/png');
     expect(shown, entry.url).toContain(entry.url);
   }
-  const addresses = new Set(made.map((entry) => entry.url));
+  // A blob: address fetched is one the page made, or a worker's start script loaded as a script: PDF.js's worker's
+  // is made inside the tool worker by the same helper, which the unit tests and check:worker pin, and never holds file data.
+  const addresses = new Set([...made.map((entry) => entry.url), ...(workerScripts.get(page.context()) ?? [])]);
   for (const request of seen.filter((each) => each.url.startsWith('blob:'))) expect(addresses.has(request.url), request.url).toBe(true);
 }
 
@@ -1012,6 +1044,7 @@ const contract = () => ({ name: 'qz7contract.pdf', mimeType: 'application/pdf', 
 /** Opens the page in a fresh context, picks the protected file under its telling name and opens it with its password. */
 async function freshRun(browser: Browser, viewport: { width: number; height: number } | null) {
   const context = await browser.newContext({ viewport, baseURL: 'http://localhost:4321' });
+  await watchPolicy(context);
   await watchPageScripts(context, marker);
   const page = await context.newPage();
   const consoleText: string[] = [];
@@ -1022,6 +1055,9 @@ async function freshRun(browser: Browser, viewport: { width: number; height: num
   await page.getByLabel(/^Password for /).fill(password);
   await page.keyboard.press('Enter');
   await waitUntilRead(page, 'qz7contract.pdf');
+  // The row's thumbnail is drawn by PDF.js in its own worker. Waiting for it means every way fetches the same files,
+  // rather than the job ending the worker before PDF.js's worker was fetched.
+  await expect(rows(page).locator('img')).toHaveCount(1, { timeout: 20000 });
   return { context, page, seen, consoleText };
 }
 

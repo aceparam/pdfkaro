@@ -3,7 +3,8 @@
 // stylesheets, and every built asset address inside a script, sits under that
 // sub-path.
 // A link written as "/about" in a page, and not passed through withBase, would
-// work at the root and break on the preview. This catches it.
+// work at the root and break on the preview. This catches it. It also runs
+// the Content Security Policy check over the sub-path build.
 //
 // It reads what is in the built files. It cannot see a link that a script adds
 // after the visitor does something; a lint rule covers those in components.
@@ -11,6 +12,7 @@
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkDirectory } from './check-csp.mjs';
 
 const base = '/base-check';
 const outDir = 'dist-base';
@@ -82,6 +84,10 @@ if (walk(outDir).some((name) => name.endsWith('.wasm')) && inScripts === 0) {
   problems.push('A WebAssembly file is built, but no script names its address; this check may have missed it.');
 }
 
+// Every page under the sub-path carries the same Content Security Policy (scripts/check-csp.mjs).
+const csp = checkDirectory(outDir);
+for (const problem of csp.problems) problems.push(`${outDir}/${problem}`);
+
 rmSync(outDir, { recursive: true, force: true });
 
 if (problems.length > 0) {
@@ -89,4 +95,4 @@ if (problems.length > 0) {
   for (const problem of problems) console.error(`  ${problem}`);
   process.exit(1);
 }
-console.log(`${pages.length} pages and ${checked} addresses in them all sit under the sub-path.`);
+console.log(`${pages.length} pages and ${checked} addresses in them all sit under the sub-path, and every page carries the policy.`);

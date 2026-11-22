@@ -49,7 +49,7 @@ The site SHALL send a strict Content Security Policy that allows scripts from th
 #### Scenario: Pages look and work the same
 
 - **WHEN** any page is opened, with or without a keyboard or a screen reader, and any tool's job is run
-- **THEN** the page looks, reads and behaves as before the policy, and every existing end-to-end and no-upload test passes with no change beyond importing the shared watching fixture (and, in tests that open their own browser context, calling its watch helper)
+- **THEN** the page looks, reads and behaves as before the policy, and every existing end-to-end and no-upload test passes with no change beyond importing the shared watching fixture (in tests that open their own browser context, calling its watch helper), and, in test helpers that fetched a `blob:` address, read a worker's own address or listed every `Blob` the page made, an equivalent check that keeps the same assertion
 
 #### Scenario: What a meta tag cannot carry
 

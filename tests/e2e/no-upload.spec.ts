@@ -2,7 +2,8 @@
 // carry a file out is planted, and the watcher must catch it. Run once, against
 // the shared watcher every tool's no-upload test uses.
 
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { violations, watch } from './no-upload';
 
 async function open(page: Page) {

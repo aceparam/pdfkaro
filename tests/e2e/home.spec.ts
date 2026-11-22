@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { registryDescriptions, toolPages } from './pages';
 
 const filterBox = 'What do you need to do?';

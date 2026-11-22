@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Progress } from '../../engines/types';
 import type { DrawingOption, ToolWidgetWords } from '../../tools/registry';
+import { createToolWorker } from '../../hooks/tool-worker';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
@@ -34,7 +35,6 @@ import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
-import type { WorkerLike } from '../../workers/client';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
@@ -65,9 +65,6 @@ type Props = {
 /** How many pages are put on the page first (about a screenful), and how many are added each frame after. */
 const drawFirst = 30;
 const drawStep = 100;
-
-const createWorker = (): WorkerLike =>
-  new Worker(new URL('../../workers/tool.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike;
 
 /** What a file's row says beside its name. `listPages: false` leaves the page count out, for a tool whose every file is one page. */
 function detailFor(file: FileEntry, listPages = true): string {
@@ -108,7 +105,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     [words.writingLabel],
   );
 
-  const run = useToolRun({ toolId, accepts, words, preset, createWorker, onProgress: announceProgress });
+  const run = useToolRun({ toolId, accepts, words, preset, createWorker: createToolWorker, onProgress: announceProgress });
   const { state, result, thumbnails } = run;
 
   const summaryRef = useRef<HTMLParagraphElement | null>(null);

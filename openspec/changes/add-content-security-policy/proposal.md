@@ -71,7 +71,7 @@ None.
   - `scripts/check-csp.mjs` and `npm run check:csp`.
   - `src/workers/start-worker.ts`, which starts a worker from a `blob:` address.
   - `src/hooks/tool-worker.ts` (`createToolWorker`).
-  - `tests/e2e/fixtures.ts` (the watch, plus `watch(context)` for tests that open their own context).
+  - `tests/e2e/fixtures.ts` (the watch, plus `watchPolicy(context)` for tests that open their own context).
   - `tests/e2e/csp.spec.ts`.
   - Unit tests for the hashing, the tag, the check and the worker start.
 - **Changed files:**
@@ -83,6 +83,7 @@ None.
   - `playwright.config.ts`, which gains `firefox` and `webkit` projects for the policy checks.
   - `.github/workflows/ci.yml`, with one step plus the extra browsers.
   - Every end-to-end spec's `test` import.
+  - Four test helpers that fetched a `blob:` address, read a worker's own address or listed every `Blob` the page made, which the policy and the `blob:` start change (design.md decision 4, "Existing tests stay as they are, except four helpers"). Each keeps its assertion.
   - CLAUDE.md's commands list.
   - `tests/e2e/no-upload.ts` stays byte-for-byte unchanged.
 - **Dependencies:** none new. Firefox and WebKit are Playwright's own browsers, installed in CI only.

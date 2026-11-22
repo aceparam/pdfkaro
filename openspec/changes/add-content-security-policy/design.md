@@ -126,7 +126,7 @@ Alternatives:
 workerFromBlob(file: string, base: string): Worker
 ```
 
-- It resolves `file` against `base` to a full same-origin address.
+- It resolves `file` against `base` to a full address, and throws if that address is not of `base`'s origin (added while building: a guard, not a change in behaviour).
 - It makes a `Blob` holding exactly `import "<address>";`, with the address passed through `JSON.stringify`.
 - It starts `new Worker(blobUrl, { type: 'module' })` and returns that worker with `terminate()` wrapped, so that ending the worker also revokes the `blob:` address. The return type still satisfies `WorkerLike`, so `ToolClient` and `WorkerLike` do not change.
 - It is the only place in `src/` that writes `new Worker`.
@@ -142,7 +142,7 @@ How each worker uses it:
   - Emscripten's `locateFile` override in `createQpdf` must keep returning our absolute address. A test job in a `blob:`-started worker proves it.
   - Any other relative address used inside a worker is made absolute the same way.
 - **Keeping every worker on this path (the policy allows `'self'`).**
-  - **Lint.** An `eslint.config.js` rule (`no-restricted-syntax` on `NewExpression[callee.name=/^(Shared)?Worker$/]`) fails anywhere in `src/` except `src/workers/start-worker.ts`. This does not loosen any rule that exists today.
+  - **Lint.** An `eslint.config.js` rule (`no-restricted-syntax` on `NewExpression[callee.name=/^(Shared)?Worker$/]`, and on `callee.property.name` and `callee.property.value` with the same pattern, so `new self.Worker(…)`, `new globalThis.SharedWorker(…)` and `new window['Worker'](…)` are caught too) fails anywhere in `src/` except `src/workers/start-worker.ts`. ESLint lets a later block replace an earlier block's setting for the same rule, so the blocks for `src/engines/**` and for components and hooks repeat these selectors in their own `no-restricted-syntax`. This does not loosen any rule that exists today.
   - **Built files.** `scripts/check-worker.mjs` finds every `new Worker(` and `new SharedWorker(` in `dist/_astro/*.js` and `*.mjs`. Each `new Worker(` must be in the start helper's built code, which the check recognises by the helper's fixed blob text (`import ` with `JSON.stringify`, and `text/javascript`) within the same function, just before the call. `new SharedWorker(` must not appear at all.
   - **The one named exception** is PDF.js's display file (`pdf-*.js`). We set `GlobalWorkerOptions.workerPort` and never set `workerSrc` or `rendererSrc`, so PDF.js never reaches its `new Worker`. A unit test reads `src/` and fails if `workerSrc` or `rendererSrc` is ever assigned.
 - **The `blob:` script holds no file data.** A unit test stubs `Worker`, `Blob` and `URL.createObjectURL` in Node, and checks four things. The text is exactly one `import` of a same-origin address. Addresses resolve at the root and under `/pdfkaro`. `terminate()` ends the worker and revokes the address. Nothing else is in the blob.
@@ -173,14 +173,14 @@ Alternatives:
   - `check-csp` refusing each problem on a small made-up page, and accepting an unhashed JSON-LD block.
 - **Unit tests (`tests/unit/start-worker.test.ts`):** decision 3's cases, plus the `workerSrc`/`rendererSrc` source check.
 - **ESLint for the fixture.** A `no-restricted-imports` rule for `tests/e2e/**/*.spec.ts` bans importing `test` from `@playwright/test`, with the message "Import test and expect from ./fixtures".
-- **End-to-end watch (`tests/e2e/fixtures.ts`).** It extends Playwright's `test` with an automatic fixture and exports `watch(context)` for tests that open their own browser context: `pdf-to-images.spec.ts:523`, `sign-pdf.spec.ts:1014` and `split-pdf.spec.ts:372`. (`home.spec.ts:17`'s context has JavaScript off, so it needs no watch.) For each page and context the watch does three things:
+- **End-to-end watch (`tests/e2e/fixtures.ts`).** It extends Playwright's `test` with an automatic fixture (`policyViolations`) and exports `await watchPolicy(context)` for tests that open their own browser context. It is not called `watch`, because the no-upload watcher's `watch` is already imported in those specs; it is async, because the init script must be in place before the test opens a page. The tests that open their own context: `pdf-to-images.spec.ts:523`, `sign-pdf.spec.ts:1014` and `split-pdf.spec.ts:372`. (`home.spec.ts:17`'s context has JavaScript off, so it needs no watch.) For each page and context the watch does three things:
   - An init script adds a `securitypolicyviolation` listener on the document that records the directive and blocked address.
-  - `page.on('worker', w => w.evaluate(() => self.addEventListener('securitypolicyviolation', e => console.log(<fixed marker> + directive + blocked address))))` is set, and that worker's `console` is read for the marker. Probe 5 shows Playwright reports nested `blob:` workers too.
+  - `page.on('worker', w => w.evaluate(() => self.addEventListener('securitypolicyviolation', e => console.log(<fixed marker> + directive + blocked address))))` is set, and that worker's `console` is read for the marker. Probe 5 shows Playwright reports nested `blob:` workers too. The `evaluate` rejection is ignored when the worker has already closed, since the tool client ends workers after every job. Playwright also passes a worker's console lines to the page's `console` event; those are skipped there (`message.worker()` is set) and read from the worker alone, so nothing is counted twice. The listener also sets `self.policyWatched`, so the test's own probe worker can wait until it is watched before it tries anything.
   - After the test, any record fails it with the directive and blocked address.
 
   A violation in a worker before its listener is added, such as a blocked worker start or import, makes the worker fail to load. That shows as a worker error, which fails the job and so the test.
 
-  A test that blocks something on purpose (only in `csp.spec.ts`) opts out with a fixture option, and asserts the records instead.
+  A test that blocks something on purpose (only in `csp.spec.ts`) opts out with the fixture option `blocksOnPurpose`, and asserts the records in `policyViolations` instead.
 - **`tests/e2e/csp.spec.ts`.**
   - For every page in `allPages`: one policy tag, first after the charset tag.
   - On the page:
@@ -200,15 +200,20 @@ Alternatives:
   - Sign PDF, for pdf-lib;
   - Split PDF, for the zip.
 
-  CI installs `chromium firefox webkit`. Only Chromium is installed in this container, and others must not be installed locally, so these projects run in CI only. `npm run e2e` locally runs them only where those browsers exist.
-- **Existing tests stay as they are.** Playwright's own `page.evaluate`, init scripts and routes are not limited by the page's policy, so existing tests need no change beyond the import (and `watch(context)` in the three tests above).
+  CI installs `chromium firefox webkit`. The two projects are added only when `process.env.CI` is set or that browser's executable exists, so `npm run e2e` passes on a machine with Chromium alone. Only Chromium is installed in this container, and others must not be installed locally, so here these projects run in CI only.
+- **Existing tests stay as they are, except four helpers.** Playwright's own init scripts and routes are not limited by the page's policy, and `evaluate` is not limited by the `eval` rule. But a `fetch` made inside `page.evaluate` is: `connect-src 'self'` refuses a fetch of a `blob:` address. And a worker started the `blob:` way reports a `blob:` address, and its start script is a `text/javascript` blob the page makes. Found while building, four test helpers change, each keeping its assertion:
+  - `pdf-to-images.spec.ts`, `convertAndDownload`: the download's type was read by fetching the result's `blob:` address. It is now noted from the `Blob` as the page makes the address (`URL.createObjectURL` wrapped just before the main button is pressed).
+  - `thumbnails.spec.ts`, `stillOpen`: whether a thumbnail's address can still be opened was a `fetch`. It is now opened as a picture, which `img-src blob:` allows; a revoked address fails to load either way. Under the policy the old helper would have answered "not open" for every address, so the revoke tests would have passed without proving anything.
+  - `thumbnails.spec.ts`, "a picture that arrives after its file was removed…": tool workers were counted by `worker.url()` containing `tool.worker`. They are now the workers whose `blob:` address the page itself made (`text/javascript` blobs, recorded by the test's existing `createObjectURL` wrap); PDF.js's worker's blob is made inside the tool worker. The test also now checks that at least one tool worker was counted before the removal.
+  - `sign-pdf.spec.ts`, `expectNoPictureBlob` (two no-upload tests): every `Blob` the page made had to be the result or a PNG thumbnail. The tool worker's start script is now a third kind: it is accepted only when its text is exactly `import "http://localhost:4321/_astro/tool.worker-<hash>.js";`. And every `blob:` request seen had to be an address the page made; PDF.js's worker's start address is made inside the tool worker, so a `blob:` address the browser loaded as a script (a worker's start script, by Playwright's `resourceType()`) is accepted too. In the same spec, `freshRun` now waits for the row's thumbnail before the job: with PDF.js's worker started through one more step, the job sometimes ended the worker before PDF.js's worker file was fetched, so the three ways' fetched-file lists differed (2 runs in 6 before the wait, 0 in 8 after).
+  - `connect-src` is not widened to `blob:` for these: the site's own code never fetches a `blob:` address.
   - `site.spec.ts` "loads no script" still holds, because the tag is not a script.
   - The worker-request checks in `merge-pdf.spec.ts:291-295` (`.wasm`, `pdf.worker.min-*.mjs`, `pdfjs-data-*.js` seen) stay as they are and must still pass.
 
 ### 5. Page weight and loading
 
-- The tag is about 330 bytes on a page with no island and about 480 on a tool page, roughly 0.2–0.3 KB by gzip. The largest page today is 79.0 KB of 100 KB.
-- `createToolWorker` and `workerFromBlob` add a few hundred bytes to the island and worker chunks, which load as now.
+- Measured in the build (task 4.2): the tag is 232 bytes on a page with no island and 394 bytes on a tool page or the home page (the architect measured 231 and 393). By gzip, a page's HTML grows by 106–109 bytes with no island and 249–275 bytes with one. In `npm run weigh`, every page grows by 0.1–0.3 KB; the largest page, Sign PDF, goes from 79.0 KB to 79.3 KB of 100 KB.
+- `createToolWorker` and `workerFromBlob` add a few hundred bytes to the island and worker chunks, which load as now. The after-a-pick total goes from 2010.5 KB to 2010.9 KB by gzip.
 - No new request, no new dependency, and WebAssembly is fetched when it is now.
 
 ### 6. For the Privacy page
