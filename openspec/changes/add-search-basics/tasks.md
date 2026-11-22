@@ -26,7 +26,7 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
   Extend `tests/unit/site.test.ts`:
   - `absoluteUrl` at `/` and under `/pdfkaro`, for the home page and a tool page, using `https://example.org`;
   - each kind of refused origin in `seo` "A setting that is not a plain origin";
-  - the tagline guard of decision 9. The test fails while `tagline` contains "browser" or "device" and any published tool has `runsIn !== 'browser'`, with a message saying to change the tagline and run `scripts/social-image.mjs` again. A test entry with a server tool proves it trips.
+  - the tagline guard of decision 9. The test fails while `tagline` contains "browser" or "device" and any published tool has `runsIn !== 'browser'`, with a message saying the change must stop and ask the owner for a new tagline, then run `scripts/social-image.mjs` again. A test entry with a server tool proves it trips.
 
   Verify:
   - `npm test` passes;
@@ -157,4 +157,4 @@ This change adds no tool, so the usual tool order is followed in spirit: the reg
   - Add the six owner questions under "Questions waiting for the owner". Mark questions 1 to 3 as needing an answer before launch, and say so beside the Phase 1 gate note in "Where the project stands", because they decide whether the "Definition of done, The site" sitemap and hub items pass.
   - Add the hub and hub-link words to the page text review in issue #7.
 - The Privacy page draft change sets `/privacy` to `written: true` in `footerLinks`.
-- Any later tool whose addition makes its group's hub words inaccurate updates them in its own change. The device-claim guard forces this for a server tool; Repair PDF must update "Make smaller and fix". The first server tool must also change the tagline and the social image (the tagline guard). The first "Read and check" tool's change writes that group's words, and gets its hub page with no extra work.
+- Any later tool whose addition makes its group's hub words inaccurate updates them in its own change. The device-claim guard forces this for a server tool; Repair PDF must update "Make smaller and fix". The first server tool trips the tagline guard: its change stops and asks the owner for a new tagline, then makes the social image again. The first "Read and check" tool's change writes that group's words, and gets its hub page with no extra work.

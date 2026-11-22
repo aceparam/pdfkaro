@@ -61,7 +61,7 @@ Every page except the 404 page SHALL carry `og:type` ("website"), `og:title` and
 #### Scenario: The tagline stops being true
 
 - **WHEN** the tagline, which is the image's text and alt text, says "browser" or "device" and a published tool does not run in the browser, as a test entry does
-- **THEN** a unit test fails, and its message says to change the tagline and make `public/social.png` again with `scripts/social-image.mjs`
+- **THEN** a unit test fails, and its message says the change must stop and ask the owner for a new tagline (the owner's text, set in `SPEC.md` "Names"), then make `public/social.png` again with `scripts/social-image.mjs`
 
 #### Scenario: Weight and policy
 

@@ -61,7 +61,7 @@ They are pure and unit tested. `astro.config.mjs` and `scripts/check-seo.mjs` im
   - Fail every build without the setting. Rejected: it breaks `npm run build` for everyone and in CI for no gain.
   - A `.invalid` placeholder. Rejected: it breaks the end-to-end canonical check, and localhost already cannot be real.
 - **Preview.** `pages.yml`'s build job sets `SITE_ORIGIN` in a step. The owner name reaches the shell only through `env:` (`OWNER: ${{ github.repository_owner }}`), never by putting the expression into the script. The step writes `SITE_ORIGIN=https://${OWNER,,}.github.io` to `GITHUB_ENV`. The owner name may have capitals; Pages hosts are lower case. The build then refuses the value unless it passes `isSiteOrigin`, and `npm run check:seo` runs after the build. `SITE_BASE` is unchanged.
-- **No committed test or fixture names the owner's origin.** Unit tests, `check:base` and the checker's tests use `https://example.org`. Only `pages.yml` derives the preview origin, at run time.
+- **No file this change adds names the owner's origin** (an older test, `tests/unit/start-worker.test.ts`, already uses the public preview address). Unit tests, `check:base` and the checker's tests use `https://example.org`. Only `pages.yml` derives the preview origin, at run time.
 - **Launch.** The launch build sets the real origin, once a domain exists. The owner steps below list it.
 
 ### 2. Head tags in `Base.astro`
@@ -215,7 +215,7 @@ It exports pure functions over strings for unit tests (`tests/unit/check-seo.tes
 It saves a PNG screenshot to `public/social.png`. The script is run by hand when the image should change, and the PNG is committed. It is not rebuilt in CI, because a different machine's fonts would change its bytes.
 
 - **No picture, icon, border, shadow or gradient,** following "Look and feel" and "Banned patterns". Light colours only: a link preview is not on the visitor's device setting.
-- **The tagline guard.** The image and its alt text say "done in your browser", which stops being true once a server tool ships. A unit test in `tests/unit/site.test.ts` fails while `tagline` contains "browser" or "device" and any published tool has `runsIn !== 'browser'`. Its message says to change the tagline and make `public/social.png` again with `scripts/social-image.mjs`. A test entry with a server tool proves it trips.
+- **The tagline guard.** The image and its alt text say "done in your browser", which stops being true once a server tool ships. A unit test in `tests/unit/site.test.ts` fails while `tagline` contains "browser" or "device" and any published tool has `runsIn !== 'browser'`. Its message says the change must stop and ask the owner for a new tagline (the owner's text, set in `SPEC.md` "Names"), then make `public/social.png` again with `scripts/social-image.mjs`. A test entry with a server tool proves it trips.
 - **Centred, not left-aligned like the pages,** because several apps crop link images to a centred square and would cut a left-aligned name.
 - **Alternative considered:** drawing it at build time with a rasteriser library (resvg, sharp, satori). Rejected: that is a new dependency for one fixed picture.
 - **Alternative considered:** an SVG. Rejected: link previews mostly do not show SVG.
