@@ -46,8 +46,17 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      # Absolute addresses (canonical, social tags, JSON-LD, sitemap) use the account's Pages origin.
+      # The owner name reaches the shell only through env, never written into the script. Pages
+      # hosts are lower case; the build refuses anything that is not a plain origin.
+      - name: Set the preview origin
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "SITE_ORIGIN=https://${OWNER,,}.github.io" >> "$GITHUB_ENV"
       - name: Build for the preview address
         run: npm run build
+      - name: Search tags and sitemap
+        run: npm run check:seo
       - name: Upload the built site
         uses: actions/upload-pages-artifact@v3
         with:
