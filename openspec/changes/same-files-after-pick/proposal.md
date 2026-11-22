@@ -22,7 +22,7 @@ No page text changes. No Privacy page wording changes in this change. The Privac
 
 ## Cost
 
-fflate's built file is 13,650 bytes, 6,282 bytes by gzip (measured on this branch's build). It is now fetched by every Compress job and every Image to PDF pick that did not fetch it before. Nothing changes before a pick, so `npm run weigh` is unchanged. Compress already fetches qpdf's WebAssembly (megabytes) for every job, so 6 KB is small beside it. This is within the owner's 11 Nov decision, which accepted larger fixed downloads for the same reason, so it is not put to the owner as a new question.
+fflate's built file is 13,650 bytes, 6,283 bytes by gzip (measured on this branch's build). It is now fetched by every Compress job and every Image to PDF pick that did not fetch it before. Nothing changes before a pick, so `npm run weigh` is unchanged. Compress already fetches qpdf's WebAssembly (megabytes) for every job, so 6 KB is small beside it. This is within the owner's 11 Nov decision, which accepted larger fixed downloads for the same reason, so it is not put to the owner as a new question.
 
 ## Scope
 

@@ -43,7 +43,7 @@ In `inspect`, fflate is asked for first, before `readPicture`, so a JPG, a PNG a
 
 ## Effect on page weight and late loading
 
-Nothing changes before a pick: `npm run weigh` gives the same numbers. After a pick, Compress jobs on files without lossless pictures and Image to PDF picks of JPGs now fetch `fflate-*.js`, 6,282 bytes by gzip. WebAssembly is fetched at the same moment as before. fflate stays its own late chunk (`check:worker` unchanged).
+Nothing changes before a pick: `npm run weigh` gives the same numbers. After a pick, Compress jobs on files without lossless pictures and Image to PDF picks of JPGs now fetch `fflate-*.js`, 6,283 bytes by gzip. WebAssembly is fetched at the same moment as before. fflate stays its own late chunk (`check:worker` unchanged).
 
 ## Threats considered
 
