@@ -102,20 +102,20 @@ unprotectedBytes(tools, file, password, onWriting):      // the writer lives onl
 unprotectArgs(password) = ['--progress', ...passwordArgsFor(password), '/in.pdf', '--decrypt', '--', '/out.pdf']
 unprotectLimit(size) = 2 * size + 16 MB
 
-verify(tools, out, onStep):                             // no password given
-  isEncrypted(tools, out, undefined) must be false       → 55   (the same function, one parse, architect stage 1)
-  a fresh qpdf holding only out: --check finishes        → 100
+verify(tools, out, onStep):                             // no password given, one fresh qpdf holding only out
+  encryptedIn(checker, undefined) must be false          → 55   (the same reading, one parse, architect stage 1)
+  --check on the same checker finishes                   → 100  (shared after task 3.2's measurement)
   anything else: throw 'The unprotected file did not pass its check.'
 ```
 
 - **Why the JSON probe, not `--is-encrypted`:** the experiment showed `--is-encrypted` exits 2 for a file that needs a password and gets none, the same as for a file with no encryption. The JSON answer is exact.
 - **Why only `encrypted` is read from it:** `recovereduserpassword` can hold the opening password of a revision 2 to 4 file opened with its permissions password (Context). `isEncrypted` takes the one boolean and lets the rest go; no error, return value or progress report holds any of it, which a unit test checks (Tests).
 - **Why a probe before writing, not after:** a file with nothing to remove gives `[]` without writing a byte. The probe costs one parse; qpdf will not write JSON on an instance that has written, so it has its own fresh instance, let go before the writer is made. Task 3.2 may measure sharing the writer's instance (probe first, then write); fresh instances stay unless that measurably helps.
-- **`verify` reuses `isEncrypted`**, so the JSON is parsed by one function in the file. Moving Protect's own check onto a shared reader is left for later.
+- **`verify` reuses the same reading** (`encryptedIn`, which `isEncrypted` wraps with a fresh qpdf), so the JSON is parsed by one function in the file. As the architect allowed at stage 1 if memory showed it, the reading of the result and its `--check` share one fresh qpdf: task 3.2 measured the 100 MB file's peak in Node at 1.09 GB shared against 1.19 GB with a fresh qpdf for each (`tests/fixtures/README.md`). The probe of the input stays on its own fresh qpdf; reading it on the writer's qpdf did not lower the peak. Moving Protect's own check onto a shared reader is left for later.
 - **Why `--decrypt` alone:** it writes the file with no encryption and so no restrictions. Object streams are kept as they were (qpdf's default `preserve`), which changes the file least; Protect's `generate` was for hiding page dictionaries, which does not apply. No `--remove-restrictions` (it concerns certified files, `/Perms` and `/DocMDP`, not passwords; non-goal), no `--qdf`, no linearization, no `--allow-weak-crypto` (only needed to write weak encryption).
 - **The password's path:** only `passwordArgsFor` (`--password=P`, the named form, so a password such as `--help` or `@in.pdf` is never read as an option or an argument file), only in the in-memory argument list, never `callWithArgumentFile` or `callWithPassword`. The probe and the writer each get it; the checker does not, and must open the result without one. No error, progress message or console line holds qpdf's printed text or the password; errors are fixed sentences. `--show-encryption` (prints the password) is never used, and a unit test reads the source to make sure.
 - **Wrong password at job time** cannot happen in normal use (inspect has opened the file with it), but if it does the fixed sentence goes out as the existing engine failure.
-- **`unprotectArgs`, `unprotectLimit`, `unprotectedBytes` and `isEncrypted` are exported** for the unit tests.
+- **`unprotectArgs`, `unprotectLimit`, `unprotectedBytes`, `isEncrypted` and `encryptedIn` are exported** for the unit tests.
 
 ### 3. The inspector, and the shared `readPdf` (architect, stage 1)
 

@@ -26,7 +26,7 @@ No dependency. Two small shared changes ride along, each named in the pull reque
   - one file only; the password from `passwordFrom`, used only through `passwordArgsFor` in qpdf's in-memory argument list;
   - `isEncrypted` on its own fresh qpdf, reading only `encrypt.encrypted` and keeping neither the parsed object nor qpdf's output; the job gives `[]` when the file is not encrypted;
   - one write with `--decrypt` through `cappedWrite` at `2 × file + 16 MB`, the writer local to its function;
-  - `verify` with no password: `isEncrypted` must be false, then `--check` on a fresh qpdf;
+  - `verify` with no password: the same reading must say not encrypted, then `--check`, on one fresh qpdf (shared after task 3.2's measurement);
   - progress: reading, writing scaled to 50, then 55 and 100;
   - fixed error sentences that never hold qpdf's printed text or the password;
   - `unprotectArgs`, `unprotectLimit`, `unprotectedBytes` and `isEncrypted` exported.
@@ -75,7 +75,7 @@ No dependency. Two small shared changes ride along, each named in the pull reque
 
 ## 8. Screenshots
 
-- [ ] 8.1 Take screenshots of `/unlock-pdf` at 360px and 1280px, light, of: empty; listed (restricted file) with the button ready; password field; wrong password; working; result; nothing to remove; certificate file; failed. At 360px, dark: password field and result; at 360px, 200% text: password field, with nothing overflowing sideways. Put them in `.github/pr-screenshots/unlock-pdf/`. Verify by looking at each, and against "Banned patterns".
+- [ ] 8.1 Take screenshots of `/unlock-pdf` at 360px and 1280px, light, of: empty; listed (restricted file) with the button ready; password field; wrong password; working; result; nothing to remove; certificate file; failed. At 360px, dark: password field and result; at 360px, 200% text: password field, with nothing overflowing sideways. Put them in `.github/pr-screenshots/unlock/`. Verify by looking at each, and against "Banned patterns".
 
 ## 9. Checks and review
 

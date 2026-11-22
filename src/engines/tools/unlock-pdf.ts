@@ -23,7 +23,7 @@
 
 import { readPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
-import { cappedWrite, finished, saidInvalidPassword } from '../qpdf';
+import { cappedWrite, finished, saidInvalidPassword, type Qpdf } from '../qpdf';
 import { isDict, passwordArgsFor } from '../qpdf-json';
 import type { Engine, EngineTools, Inspector } from '../types';
 
@@ -43,12 +43,11 @@ const unreadable = 'qpdf could not read the file.';
 const wrongPassword = 'A password did not open the file.';
 
 /**
- * Whether qpdf reads these bytes as encrypted, on its own fresh qpdf (qpdf will not write JSON on an instance that
- * has written). Only `encrypt.encrypted` is taken from the answer; nothing else of it is kept, returned or put in
- * an error.
+ * Whether qpdf reads /in.pdf of this qpdf as encrypted. Only `encrypt.encrypted` is taken from qpdf's answer;
+ * nothing else of it is kept, returned or put in an error. qpdf will not write JSON on an instance that has
+ * written, so the instance must not have written yet.
  */
-export async function isEncrypted(tools: EngineTools, bytes: Uint8Array, password: string | undefined): Promise<boolean> {
-  const reader = await freshQpdf(tools, bytes);
+export function encryptedIn(reader: Qpdf, password: string | undefined): boolean {
   const { code, out, printed } = reader.call([...passwordArgsFor(password), '--json=2', '--json-key=encrypt', '/in.pdf']);
   if (!finished(code)) throw new Error(saidInvalidPassword(printed) ? wrongPassword : unreadable);
   let encrypted: unknown;
@@ -60,6 +59,11 @@ export async function isEncrypted(tools: EngineTools, bytes: Uint8Array, passwor
   }
   if (typeof encrypted !== 'boolean') throw new Error(unreadable);
   return encrypted;
+}
+
+/** Whether qpdf reads these bytes as encrypted, on a fresh qpdf of its own. */
+export async function isEncrypted(tools: EngineTools, bytes: Uint8Array, password: string | undefined): Promise<boolean> {
+  return encryptedIn(await freshQpdf(tools, bytes), password);
 }
 
 /**
@@ -83,18 +87,19 @@ const notChecked = 'The unprotected file did not pass its check.';
 
 /**
  * Checks the new file with no password, moving progress to 55 and 100 as each step passes: it is read as not
- * encrypted (quick), then `--check` on a fresh qpdf holding only the new file (reads every stream).
+ * encrypted (quick), then `--check` (reads every stream), both on a fresh qpdf holding only the new file.
  */
 async function verify(tools: EngineTools, out: Uint8Array, onStep: (percent: number) => void): Promise<void> {
+  // One fresh qpdf holds only the new file for both steps: the JSON reading first, as it must come before any write.
+  const checker = await freshQpdf(tools, out);
   let encrypted: boolean;
   try {
-    encrypted = await isEncrypted(tools, out, undefined);
+    encrypted = encryptedIn(checker, undefined);
   } catch {
     throw new Error(notChecked);
   }
   if (encrypted) throw new Error(notChecked);
   onStep(55);
-  const checker = await freshQpdf(tools, out);
   if (!finished(checker.call(['--check', '/in.pdf']).code)) throw new Error(notChecked);
   onStep(100);
 }

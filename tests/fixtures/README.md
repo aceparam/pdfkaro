@@ -682,3 +682,42 @@ The input is let go before the output is read: in Node, with the 100 MB file wri
 What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; each drawn part's box (a form XObject's `/BBox`), such as a form field's appearance (`/BBox` on `form.pdf`'s result) and, in a file that carries a layer of Add page numbers, Watermark or Sign PDF, each page's size; and names in the catalog, such as old-style destination names. What is hidden: its pages and the sizes their dictionaries give, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
 
 The multilingual file is still missing. Protect leaves text as it is, but the test set needs the file, so Protect is not done until it exists and Protect has been run on it.
+
+### Remove a password (Unlock PDF) (`src/engines/tools/unlock-pdf.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/unlock-pdf.test.ts`), the encrypted ones with the password they need (`open-sesame`, and for `password.pdf` also its password for permissions `owner-secret`). Every file given back is not encrypted, reports every permission allowed, passes `qpdf --check` with no password, opens in PDF.js with no password with each page's size, turn and text as in the file chosen, and holds neither password in its bytes. A file with no encryption gives no file ("This file has no password or restrictions."), after reading only: progress says "Reading the file" and nothing is written. Sizes in bytes, from a run on 22 Nov 2026; object streams are kept as they were.
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `password.pdf` | 7,178 | 6,183 | Given back, opened with `open-sesame` or with `owner-secret`. Without a password, or with `open-sesam`: "A password did not open the file.", with no other password tried. Progress "Reading the file", then writing up to 50%, then 55 and 100 as each check of the result passes |
+| `restricted.pdf` | 7,181 | 6,183 | Given back with no password typed; every permission allowed |
+| `compress-password.pdf` | 36,730 | 36,088 | Given back, opened with `open-sesame` |
+| `text.pdf`, `warning.pdf`, `pages-500.pdf`, `scanned.pdf`, `form.pdf`, `mixed.pdf`, `rich.pdf`, `images.pdf`, `tagged.pdf` | | | Nothing to remove: no file. qpdf's warning on `warning.pdf` does not stop the reading |
+| Every other `compress-*.pdf` | | | Nothing to remove: no file, in at most about 0.1 seconds; the bombs are never inflated, as only the encryption is read |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not read the file." and hands back nothing |
+
+Files and inputs made in the test (`tests/unit/unlock-pdf.test.ts`):
+
+| File or input | Outcome |
+| --- | --- |
+| `rich.pdf`, `form.pdf`, `tagged.pdf`, `mixed.pdf` and `pages-500.pdf`, each protected with `Qz7 pw#%@ Kv4` (256-bit AES) | Given back with everything kept: bookmarks pointing to their pages, the link and `note.txt` with its contents; both fields with the value `Sample text`; tags, named destination, reading thread, note, link and the tagged field with its value; each page's size and turn; all 500 pages with their text |
+| `text.pdf` with 128-bit AES, 128-bit RC4 and 40-bit RC4 (made with `--allow-weak-crypto`, in the test only), each opened with its password and with its password for permissions | Given back, not encrypted, passing the check, without `--allow-weak-crypto` |
+| `text.pdf` with only a password for permissions, printing and changes refused | Read as ready with no password; given back with every permission |
+| 128-bit RC4 and 128-bit AES files opened with their password for permissions | qpdf's own `encrypt` answer holds the opening password it recovered (`recovereduserpassword`); no value the engine returns, no progress report and no error on the way (a wrong password, a result still encrypted) holds it |
+| The passwords `--help`, `@in.pdf` and `--decrypt` | Each taken as a password |
+| A file whose encryption names a certificate filter (`/Filter /Adobe.PubSec`, `certificatePdf` in `tests/unit/unlock-helpers.ts`) | Read with one qpdf call as `unsupported` ("… is saved in a way this tool cannot read." with the advice to ask for a copy without this protection); `inspectPdf`, which other tools use, still calls it damaged |
+| A writer that copies the input instead of decrypting it | Refused before it is given back: "The unprotected file did not pass its check." |
+| `pages-500.pdf` protected, written under a cap of 10,000 bytes | Stopped with `OutputLimit` (`output-limit`) |
+| Every failure above, with the marked passwords | No error's message or stack holds a password or its parts |
+
+Measured on 22 Nov 2026 as Protect's were: in Node, each case in a process of its own under the test runner, with qpdf loaded first on `restricted.pdf`, peak the process's highest resident memory including the runner's own; in Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press, the check timed from the bar passing half way. Each file was first protected with qpdf (256-bit AES, `Qz7 pw#%@ Kv4`). Node's times varied by up to a third between runs on this machine.
+
+| File | In | Out | Node: time (reading and parse, write, check) | Node: peak | Chromium: time (check) | Chromium: peak over baseline |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | 204,908 bytes | 194,135 bytes | 0.2 s (0.12, 0.04, 0.05) | 0.10 GB | 0.3 s (0.1) | 0.02 GB |
+| 120,000 pages (`make-many-pages.mjs`) | 17.4 MB | 17.4 MB, 614 bytes fewer | 12.6 s (4.1, 1.7, 6.8) | 0.35 GB | 6.4 s (3.4) | 0.30 GB |
+| `make-large.mjs`'s file | 110.1 MB | 110.1 MB, 1,050 bytes fewer | 2.8 s (0.23, 2.3, 0.27) | 1.09 GB | 2.8 s (0.7) | 0.92 GB |
+
+The reading of the result and its `--check` share one fresh qpdf, as the stage 1 review allowed if memory showed it: on the 100 MB file the Node peak fell from 1.19 GB, with a fresh qpdf for each, to 1.09 GB, in three runs each; on the 120,000-page file both gave 0.35 GB, with the shared one about a second slower, within this machine's spread. The reading of the input stays on a fresh qpdf of its own: reading it on the writer's qpdf before the write gave the same 1.09 GB on the 100 MB file and 0.50 GB on the 120,000-page file. On the 120,000-page file the check takes about half the time, as qpdf's `--check` reads every page; on the 100 MB file, whose size is one picture, the write takes most of it. No genuine file comes near the cap of twice the file and 16 MB: every file shrinks.
+
+The multilingual file is still missing. Remove a password leaves text as it is, but the test set needs the file, so the tool is not done until it exists and it has been run on it.

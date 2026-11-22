@@ -366,9 +366,9 @@ describe('only the typed password', () => {
     const { instances, given } = spied();
     const { output } = await unprotect(fixture('password.pdf'), [open], given);
     await expectUnprotected(output);
-    // The reading, the write, the reading of the result, the check of the result: four instances, one call each.
-    expect(instances.map((calls) => calls.length)).toEqual([1, 1, 1, 1]);
-    const [reading, writing, checkRead, check] = instances.map((calls) => calls[0]!);
+    // The reading and the write, each on its own fresh qpdf; then one fresh qpdf for the result's reading and check.
+    expect(instances.map((calls) => calls.length)).toEqual([1, 1, 2]);
+    const [reading, writing, checkRead, check] = instances.flat();
     expect(reading).toEqual([`--password=${open}`, '--json=2', '--json-key=encrypt', '/in.pdf']);
     expect(writing).toEqual(unprotectArgs(open));
     expect(checkRead).toEqual(['--json=2', '--json-key=encrypt', '/in.pdf']);
