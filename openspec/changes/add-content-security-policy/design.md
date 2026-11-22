@@ -221,10 +221,10 @@ These are recorded for the later Privacy page change, not written here:
 
 ## Threats considered
 
-- **Malicious PDF.** A parser bug in PDF.js or qpdf that leads to script running in a worker can no longer `eval`, load script from elsewhere, or send data to another origin, because `connect-src` and `script-src` now apply in both workers (decision 3). It could still post messages to the page, as today, or send to the site's own origin (decision 1). The no-upload test guards the site's own code paths, not an exploit.
+- **Malicious PDF.** A parser bug in PDF.js or qpdf that leads to script running in a worker can no longer `eval`, load script from elsewhere, or send data to another origin by its own requests, because `connect-src` and `script-src` now apply in both workers (decision 3). But code that already runs in a worker can start a same-origin script as a worker outside the policy (`worker-src` allows `'self'`), for example PDF.js's own worker pointed at its own server, so the policy is a second wall, not a sandbox. It could still post messages to the page, as today, or send to the site's own origin (decision 1). The no-upload test guards the site's own code paths, not an exploit.
 - **Injected markup on a page**, from a future bug that writes untrusted HTML. Inline scripts, handlers and `javascript:` addresses do not run, `<base>` and forms are refused, and nothing loads from another origin. A meta refresh or a link would still navigate.
 - **Oversized file, hostile file name:** unchanged. Names are never put in HTML, and the policy adds a second wall against a name reaching a request to another origin.
-- **Supply chain.** A compromised dependency is same-origin code and is not stopped from running. It cannot send data to another origin by request from the page or a worker, or load more code from one. It could still navigate the page, or start a worker straight from a same-origin address; lint and the built-file check catch the second in our build.
+- **Supply chain.** A compromised dependency is same-origin code and is not stopped from running. It cannot send data to another origin by request from the page or a worker, or load more code from one. It could still navigate the page, or start a worker straight from a same-origin address; lint and the built-file check catch accidental use of the second in our own code; a hostile dependency could still do it (for example by building the constructor name at run time).
 - **Clickjacking:** not covered. See Risks.
 
 ## Risks / Trade-offs
