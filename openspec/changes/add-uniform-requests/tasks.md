@@ -140,19 +140,19 @@
 
 ## 10. Stage 2 fixes
 
-- [ ] 10.1 (code) `stopThumbnail`: when a drop comes back too late, forget any drawing started meanwhile before ending the worker, then nudge the queue. Named in Risks (no test can hit the window on purpose).
-- [ ] 10.2 (privacy M1) No hold ever ends a worker: a thumbnail past the hold is dropped by message; `retireWhenSettled` for a replaced picture; a reading failure retires the worker; the wrong-kind wait retires it and a module list in `useToolRun.ts` ends it on settle, `pagehide` or the next pick. Verify with short holds in `client.test.ts` and `worker-core.test.ts`, and that the visitor's end still ends every worker.
-- [ ] 10.3 (privacy M2, UX) The Privacy sentences of decision 12 as reworded; `issue-7-comment.md` to match.
-- [ ] 10.4 (code, architect) `settleHoldMs` once, in `messages.ts`; `ToolClient.prepare(holdMs)`; no timer of the hook's own.
-- [ ] 10.5 (code) `pdfjs-loader`: PDF.js's worker ended when it failed after "ready" and before the import resolved.
-- [ ] 10.6 (code) A refused library maps to `engine-load` in a read and a picture read even when the engine catches it.
-- [ ] 10.7 (privacy S1) `uniform-requests.spec.ts`: nothing between phases or after the last; a pick phase is read only after its visible outcome.
-- [ ] 10.8 (privacy S2) The comparison and gap logic in `tests/e2e/request-record.ts`, with a unit test on a recorded log that must report `/compress-pdf`.
-- [ ] 10.9 (privacy S3) Inputs picked as buffers under unique long names, so every stem is a secret; the six-letter rule goes.
-- [ ] 10.10 (architect 1) `engine-loads`: the option table covers exactly the engines; each engine gives a file for at least one fixture.
-- [ ] 10.11 (architect 3) `tool-files.ts` reads the engines from `src/engines/tools/` by dynamic import; engine-loads shards by index.
-- [ ] 10.12 (architect 4) `check:worker` reads `thumbnails` allowing a type, and fails on a form it does not know.
-- [ ] 10.13 (security) The gated `tools` is not thenable.
+- [x] 10.1 (code) `stopThumbnail`: when a drop comes back too late, forget any drawing started meanwhile before ending the worker, then nudge the queue. Named in Risks (no test can hit the window on purpose).
+- [x] 10.2 (privacy M1) No hold ever ends a worker: a thumbnail past the hold is dropped by message; `retireWhenSettled` for a replaced picture; a reading failure retires the worker; the wrong-kind wait retires it and a module list in `useToolRun.ts` ends it on settle, `pagehide` or the next pick. Verify with short holds in `client.test.ts` and `worker-core.test.ts`, and that the visitor's end still ends every worker.
+- [x] 10.3 (privacy M2, UX) The Privacy sentences of decision 12 as reworded; `issue-7-comment.md` to match.
+- [x] 10.4 (code, architect) `settleHoldMs` once, in `messages.ts`; `ToolClient.prepare(holdMs)`; no timer of the hook's own.
+- [x] 10.5 (code) `pdfjs-loader`: PDF.js's worker ended when it failed after "ready" and before the import resolved.
+- [x] 10.6 (code) A refused library maps to `engine-load` in a read and a picture read even when the engine catches it.
+- [x] 10.7 (privacy S1) `uniform-requests.spec.ts`: nothing between phases or after the last; a pick phase is read only after its visible outcome.
+- [x] 10.8 (privacy S2) The comparison and gap logic in `tests/e2e/request-record.ts`, with a unit test on a recorded log that must report `/compress-pdf`.
+- [x] 10.9 (privacy S3) Inputs picked as buffers under unique long names, so every stem is a secret; the six-letter rule goes.
+- [x] 10.10 (architect 1) `engine-loads`: the option table covers exactly the engines; each engine gives a file for at least one fixture.
+- [x] 10.11 (architect 3) `tool-files.ts` reads the engines from `src/engines/tools/` by dynamic import; engine-loads shards by index.
+- [x] 10.12 (architect 4) `check:worker` reads `thumbnails` allowing a type, and fails on a form it does not know.
+- [x] 10.13 (security) The gated `tools` is not thenable.
 - [ ] 10.14 Re-run every check and the full end-to-end suite on both projects.
 
 ## Workflow follow-up
