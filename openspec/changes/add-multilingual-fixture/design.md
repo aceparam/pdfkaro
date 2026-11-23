@@ -158,6 +158,20 @@ Whatever the runs show goes into the README, including anything worse than expec
 > - [ ] `chinese-unembedded.pdf` in Adobe Reader: note whether it asks for the Asian font pack; that is the input's own prompt, not a tool's warning. In Chrome and Firefox, note whether the Chinese shows.
 > - [ ] Protect with a password and Remove a password: with the steps above done, their "multilingual file" item is met.
 
+## As built (23 Nov 2026)
+
+Where the build departed from the decisions above, or measured something they predicted:
+
+- **Fonts read** (decision 3): each family is two faces with their own names, the script's piece and its Latin piece (`noto-sans-devanagari-devanagari-400-normal.woff2` and `…-latin-400-normal.woff2`, and so on), so CSS falls back by character with no `unicode-range`. For Chinese the package's single `noto-sans-sc-chinese-simplified-400-normal.woff2` (1.1 MB) holds every character used, so the 102 numbered pieces are not read. The script also refuses any font whose name is not one of the four Noto families, so no system font can slip in.
+- **Chromium's sandbox** cannot start as root on the build machine; the script printed its line and printed without it. JavaScript off, offline, the route and the policy still applied.
+- **The file**: 48,414 bytes, seven embedded `CID TrueType` subsets, 114 actual-text spans, pages of 594.96 by 841.92 points (so PDF to JPG and PNG pictures are 1239 by 1754). Two runs gave the same bytes.
+- **Compress PDF** gives a file for both (48,414 to 37,027 bytes; 1,693 to 1,147), by packing objects, not "no new file" as decision 8 guessed. Every page keeps its text and content streams.
+- **Character maps** (decision 6): PDF.js asks the data factory once for `cMapUrl` with the filename `UniGB-UCS2-H.bcmap`, and `multilingual.pdf` asks for none. The test asserts exactly that.
+- **Content streams** are read by `pageStreams` in `tests/unit/stamp-helpers.ts`, which decodes only the pages' content streams (`--json-object`), so `compress-bomb-attachment.pdf` is not inflated when Protect's loop compares it. `rawJsonOf` moved there from `sign-pdf.test.ts`. `expectNumbered` and `expectWatermarked` compare with the plain copy, as `expectSignedLast` does, so `compress-password.pdf` is compared too.
+- **Thumbnails** count pixels lighter than the pictures' threshold (a sum under 600 rather than 384), because a 104 by 136 thumbnail's text is mostly grey.
+- **The second file** is not run through Delete pages, which refuses to delete a file's only page.
+- **End to end**: `/pdf-to-jpg` took 34.5 s against 27.9 s before (+6.6 s); the whole spec 5.0 minutes.
+
 ## Threats considered
 
 - **Font packages changed on the registry**: pinned versions, the public registry named explicitly, and SHA-512 computed by the script over the tarball before it is unpacked; the script stops on a mismatch. The packages' code is never run (`--ignore-scripts`, no shell, nothing imported), and their CSS is not read: only named `woff2` files that are regular files inside the package's own folder (decision 3).
