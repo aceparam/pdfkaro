@@ -149,7 +149,8 @@ export type PageRead = {
   place: PagePlace;
   /**
    * Asked for with `{ pictures: true }` (Crop PDF): the most pixels (width × height) of any picture the page draws
-   * through its resources' XObjects, forms included to a depth limit; Infinity when that limit is passed.
+   * through its resources' XObjects, forms included to a depth limit; Infinity when that limit is passed or the forms
+   * loop back on themselves.
    */
   largestPicture?: number;
 };
@@ -225,8 +226,9 @@ export async function readPages(tools: EngineTools, plain: Uint8Array, options: 
     const known = picturesOf.get(resources);
     if (known !== undefined) return known;
     if (depth > treeDepthLimit) return Infinity;
-    // Counted as nothing while it is walked, so a form that draws itself ends.
-    picturesOf.set(resources, 0);
+    // Counted as without limit while it is walked: a form that draws itself, or a loop of forms, ends the walk, and
+    // every page that reaches the loop is left as it is, never measured as if part of the loop held no picture.
+    picturesOf.set(resources, Infinity);
     let largest = 0;
     const xobjects = resolve(resources['/XObject']);
     if (isDict(xobjects)) {

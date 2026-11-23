@@ -287,6 +287,36 @@ describe('what a cropped file keeps', () => {
     expect((await readPages(tools, bytes)).pages.every((page) => page.largestPicture === undefined)).toBe(true);
   });
 
+  it('treats a loop of forms as without limit, so no page that reaches it is cut, whichever page is read first', async () => {
+    const bytes = await build((doc) => {
+      const context = doc.context;
+      const huge = context.register(context.flateStream(new Uint8Array(4), { Type: 'XObject', Subtype: 'Image', Width: 5000, Height: 4000, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }));
+      // Form A holds the large picture and draws form B; form B draws form A; form C draws itself.
+      const a = context.nextRef();
+      const b = context.nextRef();
+      const c = context.nextRef();
+      context.assign(a, context.flateStream('/Im1 Do /FmB Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { Im1: huge, FmB: b } } }));
+      context.assign(b, context.flateStream('/FmA Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { FmA: a } } }));
+      context.assign(c, context.flateStream('/FmC Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { FmC: c } } }));
+      const first = doc.addPage([595, 842]);
+      first.node.normalizedEntries().XObject.set(PDFName.of('FmA'), a);
+      // A mark, so the page would be cut if its pictures were not looked at.
+      first.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+      const second = doc.addPage([595, 842]);
+      second.node.normalizedEntries().XObject.set(PDFName.of('FmB'), b);
+      // A mark, so the page would be cut if its pictures were not looked at.
+      second.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+      const third = doc.addPage([595, 842]);
+      third.node.normalizedEntries().XObject.set(PDFName.of('FmC'), c);
+      // A mark, so the page would be cut if its pictures were not looked at.
+      third.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+    });
+    const { pages } = await readPages(tools, bytes, { pictures: true });
+    expect(pages.map((page) => page.largestPicture)).toEqual([Infinity, Infinity, Infinity]);
+    // So Crop leaves every one of them as it is, and gives no file.
+    expect((await crop(bytes)).outputs).toEqual([]);
+  });
+
   it('leaves chinese-unembedded.pdf as it is, giving no file', async () => {
     expect((await crop(fixture('chinese-unembedded.pdf'))).outputs).toEqual([]);
   });
