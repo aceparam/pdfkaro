@@ -153,7 +153,7 @@
 - [x] 10.11 (architect 3) `tool-files.ts` reads the engines from `src/engines/tools/` by dynamic import; engine-loads shards by index.
 - [x] 10.12 (architect 4) `check:worker` reads `thumbnails` allowing a type, and fails on a form it does not know.
 - [x] 10.13 (security) The gated `tools` is not thenable.
-- [ ] 10.14 Re-run every check and the full end-to-end suite on both projects.
+- [x] 10.14 Re-run every check and the full end-to-end suite on both projects.
 
 ## Workflow follow-up
 
