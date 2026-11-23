@@ -955,3 +955,27 @@ save('compress-packed.pdf', qpdfRun(textBytes, ['--deterministic-id', '--object-
   drawPictures(doc, [288, 288], [[imageStream(doc, photo, { Width: 1200, Height: 1200, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }), [0, 0, 288, 288]]]);
   save('compress-password.pdf', qpdfRun(await doc.save(), ['--encrypt', 'open-sesame', 'owner-secret', '256', '--print=low']));
 }
+
+// ---------------------------------------------------------------------------
+// 16. Chinese text in a font that is not embedded, reached through a named character map, as older
+// Asian-language PDFs are: Acrobat's STSong-Light through UniGB-UCS2-H. The owner's fixed PDF.js helper data
+// (11 Nov 2026) holds no character maps, so PDF.js draws none of this text; the test set records that gap.
+// The words are the first two Chinese lines of tests/fixtures/multilingual-text.json, as UCS-2 codes.
+{
+  const doc = await newDoc('Chinese text in a font that is not embedded');
+  const context = doc.context;
+  const descriptor = context.register(
+    context.obj({ Type: 'FontDescriptor', FontName: 'STSong-Light', Flags: 6, FontBBox: [-25, -254, 1000, 880], ItalicAngle: 0, Ascent: 880, Descent: -120, CapHeight: 880, StemV: 93 }),
+  );
+  const cidFont = context.register(
+    context.obj({ Type: 'Font', Subtype: 'CIDFontType0', BaseFont: 'STSong-Light', CIDSystemInfo: { Registry: PDFString.of('Adobe'), Ordering: PDFString.of('GB1'), Supplement: 4 }, FontDescriptor: descriptor, DW: 1000 }),
+  );
+  const songFont = context.register(context.obj({ Type: 'Font', Subtype: 'Type0', BaseFont: 'STSong-Light-UniGB-UCS2-H', Encoding: 'UniGB-UCS2-H', DescendantFonts: [cidFont] }));
+  const words = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'multilingual-text.json'), 'utf8')).pages.find((page) => page.lang === 'zh-Hans');
+  const ucs2 = (line) => [...line].map((character) => character.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+  const page = doc.addPage([595, 842]);
+  page.node.setFontDictionary(PDFName.of('F1'), songFont);
+  const shown = [words.heading, words.lines[0]].map((line, index) => `BT /F1 ${index === 0 ? 24 : 16} Tf 60 ${760 - index * 40} Td <${ucs2(line)}> Tj ET`).join('\n');
+  page.node.set(PDFName.of('Contents'), context.register(context.stream(shown)));
+  save('chinese-unembedded.pdf', await doc.save({ useObjectStreams: false }));
+}

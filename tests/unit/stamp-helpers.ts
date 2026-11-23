@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { createCanvas } from '@napi-rs/canvas';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import type { EngineTools } from '../../src/engines/types';
@@ -36,6 +37,48 @@ export async function jsonOf(bytes: Uint8Array, given?: string): Promise<{ pages
 
 /** The decoded data of a stream in `jsonOf`'s objects. */
 export const streamText = (objects: Awaited<ReturnType<typeof jsonOf>>['objects'], id: string) => Buffer.from(objects[`obj:${id}`]?.stream?.data ?? '', 'base64').toString('latin1');
+
+/**
+ * qpdf's JSON of a file with stream data as stored, for a file with a stream qpdf will not decode (compress-flate-bomb.pdf);
+ * each Flate stream is then inflated here, up to 1 MB, so content streams can be compared as text.
+ */
+export async function rawJsonOf(bytes: Uint8Array): ReturnType<typeof jsonOf> {
+  const qpdf = await makeQpdf();
+  qpdf.write('/in.pdf', bytes);
+  const { code } = qpdf.call(['--json=2', '--json-key=pages', '--json-key=qpdf', '--json-stream-data=inline', '--decode-level=none', '/in.pdf', '/out.json']);
+  if (code !== 0 && code !== 3) throw new Error(`qpdf exit ${code}`);
+  const parsed = JSON.parse(new TextDecoder().decode(qpdf.read('/out.json'))) as { pages: { object: string; contents: string[] }[]; qpdf: [unknown, Awaited<ReturnType<typeof jsonOf>>['objects']] };
+  for (const entry of Object.values(parsed.qpdf[1])) {
+    if (entry.stream?.data === undefined || entry.stream.dict['/Filter'] !== '/FlateDecode') continue;
+    try {
+      entry.stream.data = inflateSync(Buffer.from(entry.stream.data, 'base64'), { maxOutputLength: 1 << 20 }).toString('base64');
+    } catch {
+      // Left as stored.
+    }
+  }
+  return { pages: parsed.pages, objects: parsed.qpdf[1] };
+}
+
+/**
+ * Each page's own content streams, decoded, as text, in page order, read with a password when one is given. Only the
+ * content streams are decoded, so a file whose other streams inflate to gigabytes (compress-bomb-attachment.pdf) is
+ * read as quickly as any.
+ */
+export async function pageStreams(bytes: Uint8Array, given?: string): Promise<string[][]> {
+  const qpdf = await makeQpdf();
+  qpdf.write('/in.pdf', bytes);
+  const withPassword = given ? [`--password=${given}`] : [];
+  const listed = qpdf.call([...withPassword, '--json=2', '--json-key=pages', '/in.pdf', '/pages.json']);
+  if (listed.code !== 0 && listed.code !== 3) throw new Error(`qpdf exit ${listed.code}`);
+  const { pages } = JSON.parse(new TextDecoder().decode(qpdf.read('/pages.json'))) as { pages: { contents: string[] }[] };
+  const ids = [...new Set(pages.flatMap((page) => page.contents))];
+  if (ids.length === 0) return pages.map(() => []);
+  const objects = ids.map((id) => `--json-object=${id.replace(/ 0 R$/, '').replace(/ (\d+) R$/, ',$1')}`);
+  const read = qpdf.call([...withPassword, '--json=2', '--json-key=qpdf', ...objects, '--json-stream-data=inline', '--decode-level=generalized', '/in.pdf', '/streams.json']);
+  if (read.code !== 0 && read.code !== 3) throw new Error(`qpdf exit ${read.code}`);
+  const parsed = JSON.parse(new TextDecoder().decode(qpdf.read('/streams.json'))) as { qpdf: [unknown, Awaited<ReturnType<typeof jsonOf>>['objects']] };
+  return pages.map((page) => page.contents.map((id) => streamText(parsed.qpdf[1], id)));
+}
 
 /** Each page's stored values that say where it is shown, its own and up the tree, by page order. */
 export async function storedPlaces(bytes: Uint8Array): Promise<Json[]> {

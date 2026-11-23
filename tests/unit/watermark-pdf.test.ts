@@ -7,11 +7,12 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFOperator, StandardFonts } from '@cantoo/pdf-lib';
+import { plainCopy } from '../../src/engines/plain';
 import { describe, expect, it } from 'vitest';
 import { descent, fullHeight, inspect, run, watermarkPlace } from '../../src/engines/tools/watermark-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { failureKind } from '../../src/workers/worker-core';
-import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
+import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, pageStreams, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
 
 const fifty = 'Confidential draft for review only - do not share.';
 
@@ -172,13 +173,17 @@ async function expectWatermarked(input: Uint8Array, output: Uint8Array, text = '
   const pages = Number((await qpdfOn(input, [...(given ? [`--password=${given}`] : []), '--show-npages'])).out.trim());
   expect((await qpdfOn(output, ['--show-npages'])).out.trim()).toBe(String(pages));
   expect(await encryption(output)).toMatch(/File is not encrypted/);
-  const before = given ? null : await texts(input);
+  // A file that needs a password is read through the plain copy the engine starts from, so it is compared too.
+  const before = await texts(given ? (await plainCopy(tools, input, given)).plain : input);
   const after = await texts(output);
   expect(after).toHaveLength(pages);
   after.forEach((items, index) => {
     expect(items.at(-1), `page ${index + 1}`).toBe(text);
-    if (before) expect(items.slice(0, -1), `page ${index + 1}`).toEqual(before[index]);
+    expect(items.slice(0, -1), `page ${index + 1}`).toEqual(before[index]);
   });
+  // Each page's own streams are unchanged, between the added q and Q.
+  const streamsBefore = await pageStreams(input, given);
+  (await pageStreams(output)).forEach((streams, index) => expect(streams.slice(1, -2), `page ${index + 1}`).toEqual(streamsBefore[index]));
 }
 
 // Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
@@ -456,6 +461,7 @@ describe('watermarking the shared test set', { timeout: 60_000 }, () => {
     const covered = new Set(['text.pdf', 'mixed.pdf', 'pages-500.pdf', 'scanned.pdf', 'warning.pdf', 'images.pdf', 'password.pdf', 'restricted.pdf', 'rich.pdf', 'form.pdf', 'tagged.pdf', 'damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']);
     const others = readdirSync(join(__dirname, '../fixtures')).filter((name) => name.endsWith('.pdf') && !covered.has(name));
     expect(others.sort()).toEqual([
+      'chinese-unembedded.pdf',
       'compress-bomb-attachment.pdf',
       'compress-flate-bomb.pdf',
       'compress-jpeg-mismatch.pdf',
@@ -467,6 +473,7 @@ describe('watermarking the shared test set', { timeout: 60_000 }, () => {
       'compress-scans.pdf',
       'compress-small-jpg.pdf',
       'compress-text.pdf',
+      'multilingual.pdf',
     ]);
     for (const name of others) {
       const input = fixture(name);

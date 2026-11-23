@@ -105,6 +105,9 @@ describe('every file in the shared test set', () => {
     ['compress-jpeg-mismatch.pdf', undefined, [{ width: 75, height: 75 }, { width: 75, height: 75 }]],
     ['compress-json-bomb.pdf', undefined, [{ width: 150, height: 150 }]],
     ['compress-password.pdf', 'open-sesame', [{ width: 600, height: 600 }]],
+    // Chromium's A4 of 594.96 by 841.92 points, one pixel narrower than a4 here.
+    ['multilingual.pdf', undefined, Array.from({ length: 5 }, () => ({ width: 1239, height: 1754 }))],
+    ['chinese-unembedded.pdf', undefined, [a4]],
   ];
 
   it('names every PDF in the folder here or below, so a new fixture is not forgotten', () => {

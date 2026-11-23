@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deflateSync, inflateSync } from 'node:zlib';
+import { deflateSync } from 'node:zlib';
 import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFOperator, StandardFonts } from '@cantoo/pdf-lib';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
@@ -18,7 +18,7 @@ import { drawingContent, drawingLine, inspect, inspectPicture, pictureParts, run
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { optionDrawings, optionPictures, pad, pictureRule } from '../../src/widget/option-values';
 import { failureKind } from '../../src/workers/worker-core';
-import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, storedPlaces, streamText, texts, tools as stampTools, type Picture } from './stamp-helpers';
+import { changed, fixture, jsonOf, makeQpdf, open, password, pictures, qpdfOn, rawJsonOf, storedPlaces, streamText, texts, tools as stampTools, type Picture } from './stamp-helpers';
 
 const tools: EngineTools = { ...stampTools, fflate: async () => ({ Inflate }) };
 const picture = (name: string) => new Uint8Array(readFileSync(join(__dirname, '../fixtures/pictures', name)));
@@ -619,27 +619,6 @@ async function expectSignedLast(input: Uint8Array, output: Uint8Array, given?: s
   });
 }
 
-/**
- * qpdf's JSON of a file with stream data as stored, for a file with a stream qpdf will not decode (compress-flate-bomb.pdf);
- * each Flate stream is then inflated here, up to 1 MB, so content streams can be compared as text.
- */
-async function rawJsonOf(bytes: Uint8Array): ReturnType<typeof jsonOf> {
-  const qpdf = await makeQpdf();
-  qpdf.write('/in.pdf', bytes);
-  const { code } = qpdf.call(['--json=2', '--json-key=pages', '--json-key=qpdf', '--json-stream-data=inline', '--decode-level=none', '/in.pdf', '/out.json']);
-  if (code !== 0 && code !== 3) throw new Error(`qpdf exit ${code}`);
-  const parsed = JSON.parse(new TextDecoder().decode(qpdf.read('/out.json'))) as { pages: { object: string; contents: string[] }[]; qpdf: [unknown, Awaited<ReturnType<typeof jsonOf>>['objects']] };
-  for (const entry of Object.values(parsed.qpdf[1])) {
-    if (entry.stream?.data === undefined || entry.stream.dict['/Filter'] !== '/FlateDecode') continue;
-    try {
-      entry.stream.data = inflateSync(Buffer.from(entry.stream.data, 'base64'), { maxOutputLength: 1 << 20 }).toString('base64');
-    } catch {
-      // Left as stored.
-    }
-  }
-  return { pages: parsed.pages, objects: parsed.qpdf[1] };
-}
-
 // Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
 describe('signing the shared test set with a typed name on the last page', { timeout: 60_000 }, () => {
   it('text.pdf: the name on the last page only, with progress for reading and writing, no page count, and nothing typed in a progress message', async () => {
@@ -886,6 +865,7 @@ describe('signing the shared test set with a typed name on the last page', { tim
     const covered = new Set(['text.pdf', 'mixed.pdf', 'pages-500.pdf', 'scanned.pdf', 'warning.pdf', 'images.pdf', 'password.pdf', 'restricted.pdf', 'rich.pdf', 'form.pdf', 'tagged.pdf', 'damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']);
     const others = readdirSync(join(__dirname, '../fixtures')).filter((name) => name.endsWith('.pdf') && !covered.has(name));
     expect(others.sort()).toEqual([
+      'chinese-unembedded.pdf',
       'compress-bomb-attachment.pdf',
       'compress-flate-bomb.pdf',
       'compress-jpeg-mismatch.pdf',
@@ -897,6 +877,7 @@ describe('signing the shared test set with a typed name on the last page', { tim
       'compress-scans.pdf',
       'compress-small-jpg.pdf',
       'compress-text.pdf',
+      'multilingual.pdf',
     ]);
     for (const name of others) {
       const input = fixture(name);

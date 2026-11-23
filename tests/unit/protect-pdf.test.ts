@@ -11,6 +11,7 @@ import { createQpdf, finished, OutputLimit, type Qpdf } from '../../src/engines/
 import { inspect, protectArgs, protectedBytes, protectLimit, run, strongEncryption } from '../../src/engines/tools/protect-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { PasswordRefused } from '../../src/widget/option-values';
+import { pageStreams } from './stamp-helpers';
 
 const require = createRequire(import.meta.url);
 const wasm = require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
@@ -199,6 +200,8 @@ describe('every file in the test set', () => {
 
       // What a reader shows is as before: pages, sizes, turns, text, bookmarks, form fields and values, attached files.
       expect(await shown(output, P)).toEqual(await shown(file, old));
+      // Each page's own content streams, decoded, are byte for byte the input's.
+      expect(await pageStreams(output, P)).toEqual(await pageStreams(file, old));
 
       // Neither password is in the bytes, and no page dictionary is readable.
       const bytes = latin1(output);

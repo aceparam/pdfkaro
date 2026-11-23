@@ -40,6 +40,7 @@ The project's own licence is not set yet. It waits on the owner's decision under
 | `@playwright/test` | Apache-2.0 | End-to-end tests. Pinned to an exact version so it matches the installed browser |
 | `@fission-ai/openspec` | MIT | Checks OpenSpec changes and specs |
 | `@napi-rs/canvas` | MIT | Draws pages in Node for the thumbnail unit tests. Also installed by npm as PDF.js's optional dependency. A native package that is never shipped; PDF.js loads it only in Node. Pinned to an exact version |
+| Noto Sans Devanagari, Noto Sans Telugu, Noto Naskh Arabic and Noto Sans SC, from `@fontsource/noto-sans-devanagari` 5.3.0, `@fontsource/noto-sans-telugu` 5.3.0, `@fontsource/noto-naskh-arabic` 5.3.0 and `@fontsource/noto-sans-sc` 5.3.1 | OFL-1.1 | Make the test file `tests/fixtures/multilingual.pdf`, with real text in the scripts `SPEC.md` lists. Not in `package.json`: `tests/fixtures/make-multilingual.mjs` fetches them at pinned versions with checked SHA-512 into a temporary folder and deletes it. Never committed or shipped; only the subsets Chromium embeds in that one test PDF are kept, which the OFL allows in documents. Released Jul and Oct 2026 |
 
 `minimatch` (BlueOak-1.0.0) is not used directly. It is pinned to a patched version in `package.json` under `overrides`, because the version the lint tools ask for (`^10`) has a known advisory, GHSA-g3hv-75wg-m249. Remove the override once ESLint and `typescript-eslint` ask for version 11 themselves.
 

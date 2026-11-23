@@ -42,6 +42,8 @@ type Input = {
   /** Sign PDF: the way the signature is given for the job. */
   sign?: 'type' | 'draw' | 'picture';
   job: boolean;
+  /** How the job must end: `'done'` refuses the failed heading, so a failed job cannot pass as the same requests. */
+  expect?: 'done';
 };
 
 const pdfPicks: Input[] = [
@@ -81,7 +83,15 @@ const inputs: Record<string, Input[]> = {
     { label: 'compress-scans.pdf (JPGs)', files: ['compress-scans.pdf'], job: true },
   ],
   // A one-page file gives one picture, a longer one a zip: both fetch the same files, fflate among them.
-  '/pdf-to-jpg': [...pdfPicks, ...pdfJobs, { label: 'form.pdf (one page, one picture)', files: ['form.pdf'], job: true }],
+  '/pdf-to-jpg': [
+    ...pdfPicks,
+    ...pdfJobs,
+    { label: 'form.pdf (one page, one picture)', files: ['form.pdf'], job: true },
+    // Embedded fonts in four scripts; and a Chinese font that is not embedded, for which PDF.js asks its data factory
+    // for a character map that is not shipped. Neither may lead to a request (add-multilingual-fixture, decision 7).
+    { label: 'multilingual.pdf', files: ['multilingual.pdf'], job: true, expect: 'done' },
+    { label: 'chinese-unembedded.pdf (a character map asked for)', files: ['chinese-unembedded.pdf'], job: true, expect: 'done' },
+  ],
   '/pdf-to-png': [...pdfPicks, ...pdfJobs, { label: 'form.pdf (one page, one picture)', files: ['form.pdf'], job: true }],
   // compress-json-bomb.pdf reads as ready, and its job fails once the pages are read: before this change pdf-lib was
   // then never fetched, so the host could tell (engine-loads report, task 2.4).
@@ -246,7 +256,7 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
       await expect(main).not.toHaveAttribute('aria-disabled', 'true', { timeout: limit });
       from = begin();
       await main.click();
-      const endings = [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
+      const endings = input.expect === 'done' ? [words.doneHeading] : [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
       await expect(page.getByRole('heading').filter({ hasText: new RegExp(`^(${endings.map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`) })).toBeVisible({ timeout: 120_000 });
       await end('the main button', from, files.job);
     }
