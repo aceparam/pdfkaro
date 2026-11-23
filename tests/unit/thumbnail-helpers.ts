@@ -30,6 +30,9 @@ export const canvasMaker: CanvasMaker = {
 export const jpegCanvasMaker = {
   ...canvasMaker,
   jpeg: async (canvas: unknown, quality: number) => new Uint8Array(await (canvas as Canvas).encode('jpeg', Math.round(quality * 100))),
+  // As the worker gives it: the pixels of a rectangle, for measuring a page (Crop PDF).
+  pixels: (canvas: unknown, x: number, y: number, width: number, height: number) =>
+    (canvas as Canvas).getContext('2d').getImageData(x, y, width, height).data as Uint8ClampedArray,
 };
 
 /** Decodes a picture with @napi-rs/canvas, counting each call so a test can see nothing was decoded. */
