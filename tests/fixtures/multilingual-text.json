@@ -1,0 +1,45 @@
+{
+  "title": "Text in Hindi, Telugu, Arabic and Chinese",
+  "pages": [
+    {
+      "lang": "hi",
+      "dir": "ltr",
+      "font": "Noto Sans Devanagari",
+      "heading": "हिन्दी",
+      "lines": ["यह एक परीक्षण दस्तावेज़ है। इसमें हिन्दी में लिखा पाठ है।", "क्षत्रिय, श्रद्धा, द्वार, प्रश्न, कृपया, ज़रूरी", "०१२३४५६७८९"]
+    },
+    {
+      "lang": "te",
+      "dir": "ltr",
+      "font": "Noto Sans Telugu",
+      "heading": "తెలుగు",
+      "lines": ["ఇది ఒక పరీక్ష పత్రం. ఇందులో తెలుగులో వ్రాసిన పాఠ్యం ఉంది.", "శ్రీ, క్ష, స్త్రీ, ద్రాక్ష, కృష్ణ", "౦౧౨౩౪౫౬౭౮౯"]
+    },
+    {
+      "lang": "ar",
+      "dir": "rtl",
+      "font": "Noto Naskh Arabic",
+      "heading": "العربية",
+      "lines": ["هذه وثيقة اختبار. فيها نص مكتوب باللغة العربية.", "لا، الله، مستشفى", "ملف PDF من ٥ صفحات"]
+    },
+    {
+      "lang": "zh-Hans",
+      "dir": "ltr",
+      "font": "Noto Sans SC",
+      "heading": "中文",
+      "lines": ["这是一份测试文件。其中有用简体中文写的文字。", "标点符号：，。、；？"]
+    },
+    {
+      "lang": "en",
+      "dir": "ltr",
+      "font": null,
+      "heading": "Four languages",
+      "lines": [
+        { "label": "Hindi: ", "lang": "hi", "dir": "ltr", "font": "Noto Sans Devanagari", "text": "हिन्दी पाठ" },
+        { "label": "Telugu: ", "lang": "te", "dir": "ltr", "font": "Noto Sans Telugu", "text": "తెలుగు పాఠ్యం" },
+        { "label": "Arabic: ", "lang": "ar", "dir": "rtl", "font": "Noto Naskh Arabic", "text": "نص عربي" },
+        { "label": "Chinese: ", "lang": "zh-Hans", "dir": "ltr", "font": "Noto Sans SC", "text": "中文文字" }
+      ]
+    }
+  ]
+}
