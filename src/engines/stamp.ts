@@ -147,6 +147,11 @@ export type PageRead = {
   /** That dictionary's /XObject, resolved; undefined when it has none. */
   xobjects: Dict | undefined;
   place: PagePlace;
+  /**
+   * Asked for with `{ pictures: true }` (Crop PDF): the most pixels (width × height) of any picture the page draws
+   * through its resources' XObjects, forms included to a depth limit; Infinity when that limit is passed.
+   */
+  largestPicture?: number;
 };
 
 export type PagesRead = { max: number; pages: PageRead[] };
@@ -185,7 +190,7 @@ async function readJson(tools: EngineTools, plain: Uint8Array) {
  * limit and a set of visited nodes, so a loop in the page tree ends. Over a
  * cap or unreadable, it throws (the engine's failure).
  */
-export async function readPages(tools: EngineTools, plain: Uint8Array): Promise<PagesRead> {
+export async function readPages(tools: EngineTools, plain: Uint8Array, options: { pictures?: true } = {}): Promise<PagesRead> {
   // The reading qpdf lives only inside readJson, so it is let go before the pages are worked out.
   const { order, dictionaries } = await readJson(tools, plain);
   if (!order || !dictionaries || order.length === 0) throw new Error('The pages could not be read.');
@@ -212,6 +217,36 @@ export async function readPages(tools: EngineTools, plain: Uint8Array): Promise<
     }
     return undefined;
   };
+  // The largest picture each resources dictionary reaches, kept by that dictionary, so pages that share their
+  // resources are walked once.
+  const picturesOf = new WeakMap<Dict, number>();
+  const largestPicture = (resources: Dict | undefined, depth = 0): number => {
+    if (!resources) return 0;
+    const known = picturesOf.get(resources);
+    if (known !== undefined) return known;
+    if (depth > treeDepthLimit) return Infinity;
+    // Counted as nothing while it is walked, so a form that draws itself ends.
+    picturesOf.set(resources, 0);
+    let largest = 0;
+    const xobjects = resolve(resources['/XObject']);
+    if (isDict(xobjects)) {
+      for (const value of Object.values(xobjects)) {
+        if (!isRef(value)) continue;
+        const entry = objects.get(value);
+        if (!entry || !('stream' in entry)) continue;
+        const dict = entry.stream.dict;
+        if (dict['/Subtype'] === '/Image') {
+          const [width, height] = [resolve(dict['/Width']), resolve(dict['/Height'])];
+          if (typeof width === 'number' && typeof height === 'number') largest = Math.max(largest, width * height);
+        } else if (dict['/Subtype'] === '/Form') {
+          const own = resolve(dict['/Resources']);
+          if (isDict(own)) largest = Math.max(largest, largestPicture(own, depth + 1));
+        }
+      }
+    }
+    picturesOf.set(resources, largest);
+    return largest;
+  };
   const pages = order.map(({ id, contents }): PageRead => {
     const dict = resolve(id);
     if (!isDict(dict)) throw new Error('A page could not be read.');
@@ -230,6 +265,7 @@ export async function readPages(tools: EngineTools, plain: Uint8Array): Promise<
         cropBox: inherited(dict, '/CropBox'),
         userUnit: resolve(dict['/UserUnit']),
       }),
+      ...(options.pictures ? { largestPicture: largestPicture(own) } : {}),
     };
   });
   return { max: dictionaries.max, pages };

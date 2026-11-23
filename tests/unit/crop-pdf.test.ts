@@ -10,10 +10,12 @@ import { describe, expect, it } from 'vitest';
 import { createQpdf } from '../../src/engines/qpdf';
 import { OutputLimit } from '../../src/engines/qpdf';
 import { cutBox, croppedDict, makeRun, marginFraction, run } from '../../src/engines/tools/crop-pdf';
-import { type Box, type Measured } from '../../src/engines/thumbnail';
+import { maxImagePixels, type Box, type Measured } from '../../src/engines/thumbnail';
+import { readPages } from '../../src/engines/stamp';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { pageStreams, texts } from './stamp-helpers';
 import { fixture, tools as drawTools } from './thumbnail-helpers';
+import { bigPicturePage } from './crop-helpers';
 
 const require = createRequire(import.meta.url);
 const makeQpdf = () => createQpdf(async () => require('@neslinesli93/qpdf-wasm'), require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm'));
@@ -259,6 +261,32 @@ describe('what a cropped file keeps', () => {
     await expectNoInkCut(bytes, after);
   });
 
+  it('leaves a page whose picture PDF.js cannot draw as it is, never cutting it to its page number', async () => {
+    expect((await crop(await bigPicturePage())).outputs).toEqual([]);
+  });
+
+  it('reads the largest picture a page draws, through forms, only when asked', async () => {
+    const bytes = await build((doc) => {
+      const context = doc.context;
+      // Dictionaries only: the sizes are read from them, and these pages are never drawn.
+      const huge = context.register(context.flateStream(new Uint8Array(4), { Type: 'XObject', Subtype: 'Image', Width: 5000, Height: 4000, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }));
+      const small = context.register(context.flateStream(new Uint8Array(4), { Type: 'XObject', Subtype: 'Image', Width: 4096, Height: 4096, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }));
+      const inner = context.register(context.flateStream('/Im1 Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { Im1: huge } } }));
+      const outer = context.register(context.flateStream('/Fm1 Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { Fm1: inner } } }));
+      const first = doc.addPage([595, 842]);
+      first.node.normalizedEntries().XObject.set(PDFName.of('Fm2'), outer);
+      const second = doc.addPage([595, 842]);
+      second.node.normalizedEntries().XObject.set(PDFName.of('Im2'), small);
+      doc.addPage([595, 842]);
+    });
+    const { pages } = await readPages(tools, bytes, { pictures: true });
+    expect(pages.map((page) => page.largestPicture)).toEqual([20_000_000, 4096 * 4096, 0]);
+    // A picture of exactly the limit is drawn by PDF.js, so only one above it leaves a page as it is.
+    expect(4096 * 4096).toBe(maxImagePixels);
+    // Without the option, the stamp tools' reading is as it was.
+    expect((await readPages(tools, bytes)).pages.every((page) => page.largestPicture === undefined)).toBe(true);
+  });
+
   it('leaves chinese-unembedded.pdf as it is, giving no file', async () => {
     expect((await crop(fixture('chinese-unembedded.pdf'))).outputs).toEqual([]);
   });
@@ -460,7 +488,7 @@ describe('runs, refusals, progress and limits', () => {
     expect(writing).toEqual([...writing].sort((a, b) => a - b));
   });
 
-  it('leaves every page from the first refusal on, carried past the end of a run', { timeout: 600_000 }, async () => {
+  it('leaves every page from a refusal in the first run on, starting no second run', { timeout: 600_000 }, async () => {
     const bytes = await long(2_003, 3);
     const record = counting();
     const { output, progress } = await crop(bytes, undefined, run, record.given);
@@ -472,8 +500,38 @@ describe('runs, refusals, progress and limits', () => {
     expect(progress.filter((step) => step.stage === 'working').at(-1)).toMatchObject({ done: 2_003, total: 2_003 });
   });
 
-  it('stops at the size budget with OutputLimit', async () => {
+  it('leaves every page from a refusal in the second run on, keeping the first run’s cuts', { timeout: 600_000 }, async () => {
+    const bytes = await long(2_003, 2_001);
+    const record = counting();
+    const { output } = await crop(bytes, undefined, run, record.given);
+    expect(record.opened()).toBe(2);
+    const values = await pageValues(output!);
+    expect(values.slice(0, 2_000).every((page) => Array.isArray(page['/CropBox']))).toBe(true);
+    expect(values.slice(2_000).every((page) => page['/CropBox'] === undefined)).toBe(true);
+  });
+
+  it('stops with OutputLimit when the update is over the size budget', async () => {
     await expect(crop(fixture('text.pdf'), undefined, makeRun({ sizeLimit: () => 100 }))).rejects.toBeInstanceOf(OutputLimit);
+  });
+
+  it('stops with OutputLimit in the capped write when the update fits and the written file does not', async () => {
+    // compress-small-jpg.pdf's update is about 400 bytes and its cropped file about 8.8 KB: a budget between them lets
+    // the update through and stops the write.
+    const written: string[] = [];
+    const watching: EngineTools = {
+      ...tools,
+      qpdf: async () => {
+        const qpdf = await makeQpdf();
+        const write = qpdf.write.bind(qpdf);
+        qpdf.write = (path: string, bytes: Uint8Array) => {
+          written.push(path);
+          write(path, bytes);
+        };
+        return qpdf;
+      },
+    };
+    await expect(crop(fixture('compress-small-jpg.pdf'), undefined, makeRun({ sizeLimit: () => 4_000 }), watching)).rejects.toBeInstanceOf(OutputLimit);
+    expect(written).toContain('/update.json');
   });
 
   it('puts no password and no page text into an error', async () => {

@@ -430,16 +430,25 @@ export async function openDocument(file: Uint8Array, password: string | undefine
     if (!pixels) throw new Error('No pixel reader was given.');
     // From the first refusal on, a font or map PDF.js could not load may be used on any later page, undrawn.
     if (refused > 0) return { kind: 'unsafe', refused: true };
-    const pdfPage = await pageOf(page);
-    const shown = shownOf(pdfPage);
-    if (!shown || !pdfPage.getAnnotations) {
-      pdfPage.cleanup();
-      return { kind: 'unsafe' };
-    }
+    let pdfPage: Awaited<ReturnType<typeof pageOf>> | undefined;
     let ink: Box | null | 'unsafe';
-    let annotations: Awaited<ReturnType<NonNullable<typeof pdfPage.getAnnotations>>>;
+    let annotations: Awaited<ReturnType<NonNullable<NonNullable<typeof pdfPage>['getAnnotations']>>>;
+    let shown: Shown | null;
+    // Everything that reads the page is inside the try: an error on one page leaves that page as it is. The caller
+    // decides whether the error ends the job (PDF.js stopping, memory running out).
     try {
+      pdfPage = await pageOf(page);
+      shown = shownOf(pdfPage);
+      if (!shown || !pdfPage.getAnnotations) {
+        pdfPage.cleanup();
+        return { kind: 'unsafe' };
+      }
       annotations = await guard(pdfPage.getAnnotations({ intent: 'display' }));
+      // Too many to count: not drawn at all.
+      if (annotations.length > maxMeasuredAnnotations) {
+        pdfPage.cleanup();
+        return { kind: 'unsafe' };
+      }
       const natural = pdfPage.getViewport({ scale: 1 });
       const longer = Math.max(natural.width, natural.height);
       const scale = longer > 0 && longer < smallPageSide ? smallPageSide / longer : 1;
@@ -455,16 +464,15 @@ export async function openDocument(file: Uint8Array, password: string | undefine
           [found[0], found[3]],
           [found[2], found[3]],
         ].map(([x, y]) => viewport.convertToPdfPoint!(x!, y!));
-        return boxAround(corners);
+        return boxAround(corners) ?? ('unsafe' as const);
       });
     } catch (error) {
-      pdfPage.cleanup();
+      pdfPage?.cleanup();
       return { kind: 'unsafe', error };
     }
     // Counted after the drawing: a request refused while drawing this page makes this page unsafe too.
     if (refused > 0) return { kind: 'unsafe', refused: true };
     if (ink === 'unsafe') return { kind: 'unsafe' };
-    if (annotations.length > maxMeasuredAnnotations) return { kind: 'unsafe' };
     let box: Box | null = ink;
     for (const annotation of annotations) {
       if (annotation.subtype === 'Popup') continue;

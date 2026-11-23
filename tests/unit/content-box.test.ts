@@ -7,6 +7,7 @@ import { PDFDocument, PDFName, PDFNumber, PDFString, StandardFonts, degrees, rgb
 import { inkPixels, measurePixels, openDocument, smallPageSide, type Box, type CanvasMaker, type Measured } from '../../src/engines/thumbnail';
 import type { EngineTools } from '../../src/engines/types';
 import { fixture, jpegCanvasMaker, tools } from './thumbnail-helpers';
+import { bigPicturePage } from './crop-helpers';
 
 const fetched: unknown[] = [];
 const realFetch = globalThis.fetch;
@@ -197,6 +198,15 @@ describe('measure', () => {
     expect(holds(boxOf(shown!), [40, 60, 160, 80], 0.01)).toBe(true);
     expect(holds(boxOf(shown!), [450, 780, 560, 800], 0.01)).toBe(true);
     expect(boxOf(hidden!)).toEqual(boxOf(plain!));
+  });
+
+  it('cannot see a picture over PDF.js’s size limit, which is why Crop PDF checks picture sizes before measuring', async () => {
+    // PDF.js leaves the picture out of its drawing with only a warning, even when told to stop at errors: its
+    // drawing has already started when the error arrives, and it ends without it. So the page reads as its page
+    // number alone, and the engine leaves such a page as it is from the picture's size (readPages' largestPicture).
+    const [lenient] = await measureAll(await bigPicturePage());
+    expect(lenient!.kind).toBe('box');
+    expect(boxOf(lenient!)[3]).toBeLessThan(60);
   });
 
   it('calls chinese-unembedded.pdf unsafe, as its character map is refused', async () => {

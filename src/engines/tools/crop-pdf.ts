@@ -26,7 +26,7 @@ import { passwordFrom, freshQpdf, plainCopy } from '../plain';
 import { callWithArgumentFile, isRef, objectArg, objectsPerCall, updateJson, type Dict } from '../qpdf-json';
 import { finished, OutputLimit } from '../qpdf';
 import { readPages, runPages, sizeLimit, writeUpdate, type PagePlace, type PlainSource } from '../stamp';
-import { boxFrom, intersect, openDocument, type Box, type Measured } from '../thumbnail';
+import { boxFrom, intersect, maxImagePixels, openDocument, type Box, type Measured } from '../thumbnail';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 import { outOfMemory } from '../../widget/memory';
 
@@ -143,9 +143,12 @@ export function makeRun(limits: Partial<Limits> = {}): Engine<Options> {
     if (!file || files.length !== 1) throw new Error('Crop PDF takes one file.');
     // The plain copy is handed over in an object and read only through it, so it can be let go once qpdf holds it.
     const source: PlainSource = { plain: (await plainCopy(tools, file, passwordFrom(options))).plain };
-    const read = await readPages(tools, source.plain!);
-    // Only what is needed is kept: the resources and their pictures' dictionaries are let go.
-    const pages = read.pages.map(({ id, dict, place }) => ({ id, dict, place }));
+    // Only what is needed is kept, and the read itself is not held, so the resources and their pictures'
+    // dictionaries it also read are let go.
+    const { max, pages } = await readPages(tools, source.plain!, { pictures: true }).then((read) => ({
+      max: read.max,
+      pages: read.pages.map(({ id, dict, place, largestPicture }) => ({ id, dict, place, largestPicture: largestPicture ?? 0 })),
+    }));
     const total = pages.length;
     const progress = (done: number) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true });
 
@@ -159,6 +162,12 @@ export function makeRun(limits: Partial<Limits> = {}): Engine<Options> {
         if (doc.pages !== total) throw new Error('The pages could not be read.');
         const end = Math.min(total, start + runPages);
         for (let index = start; index < end; index++) {
+          // A page that draws a picture over PDF.js's size limit is left as it is: PDF.js leaves such a picture out
+          // of its drawing with only a warning, so the page would be measured without it.
+          if (pages[index]!.largestPicture > maxImagePixels) {
+            progress(index + 1);
+            continue;
+          }
           const measured = await doc.measure(index + 1);
           if (measured.kind === 'unsafe' && measured.error !== undefined && endsTheJob(measured.error)) throw measured.error;
           if (measured.kind === 'unsafe' && measured.refused) {
@@ -193,7 +202,7 @@ export function makeRun(limits: Partial<Limits> = {}): Engine<Options> {
       if (!update.has(page.id)) update.set(page.id, croppedDict(page.dict, box, (ref) => values.get(ref)));
     }
     const limit = budget(source.plain!.byteLength, total);
-    const text = new TextEncoder().encode(updateJson(read.max, update));
+    const text = new TextEncoder().encode(updateJson(max, update));
     if (text.byteLength > limit) throw new OutputLimit();
 
     const qpdf = await freshQpdf(tools, source.plain!);

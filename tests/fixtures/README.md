@@ -796,6 +796,8 @@ Each file was run in Node with the same qpdf, PDF.js and helper data the browser
 | `scanned.pdf`, `compress-kinds.pdf`, `compress-jpeg-mismatch.pdf`, `compress-password.pdf` (with `open-sesame`) | | | 0 | No page cut: their pictures reach the edges of each page |
 | `compress-scans.pdf` | | | 0 | No page cut: the grey scan's paper is grey 236, under the white of 240, and the other two pages are filled to their edges |
 | `compress-flate-bomb.pdf` | | | 0 | No page cut: the picture whose data inflates to 100 MB is not drawn, so the page is blank to PDF.js and left as it is |
+
+After the stage 2 fix for pictures over PDF.js's size limit (a page whose largest picture is over 16,777,216 pixels is left as it is, before drawing), every file above gave the same outcome: no page changed from cut to uncut. The code reviewer's file (`bigPicturePage` in `tests/unit/crop-helpers.ts`: an A4 page with a 5,000 by 4,000 picture and "Page 1") gives no file, where it was cut to the page number before.
 | `compress-json-bomb.pdf` | | | | Fails with "The pages could not be read.", after about 15 seconds: its JSON of dictionaries passes the page-reading cap. The page gives the shared failure |
 | `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | | Read as damaged before any job; a run fails with "qpdf could not read the file." |
 
