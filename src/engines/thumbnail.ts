@@ -124,7 +124,11 @@ export type Shown = { view: Box; rotate: number; userUnit: number };
  * read of where the page is shown; blank, with nothing drawn and no annotation a reader shows; or not safe to
  * measure, with the error when its drawing threw (the caller decides whether that error ends the job).
  */
-export type Measured = { kind: 'box'; box: Box; shown: Shown } | { kind: 'blank'; shown: Shown } | { kind: 'unsafe'; error?: unknown };
+export type Measured =
+  | { kind: 'box'; box: Box; shown: Shown }
+  | { kind: 'blank'; shown: Shown }
+  /** `refused`: a helper-data request of this document has been refused, so no later page is safe either. */
+  | { kind: 'unsafe'; refused?: true; error?: unknown };
 
 /** How to draw a whole page: at `scale` (1 is 72 pixels to the inch), at most `maxPixels`, as JPG or PNG. */
 export type DrawOptions = { scale: number; maxPixels: number; format: 'jpg' | 'png'; quality?: number };
@@ -363,7 +367,7 @@ export async function openDocument(file: Uint8Array, password: string | undefine
 
   /**
    * The one paint step: draws the page at `scale`, held to `maxPixels`, on white, onto a canvas counted by the
-   * budget, hands it to `use`, and then lets go of the canvas, every canvas counted for this drawing and the page's
+   * budget, hands it to `take`, and then lets go of the canvas, every canvas counted for this drawing and the page's
    * decoded pictures and drawing steps, whatever happens.
    */
   async function paint<T>(
@@ -371,7 +375,7 @@ export async function openDocument(file: Uint8Array, password: string | undefine
     scale: number,
     maxPixels: number,
     annotationMode: number,
-    use: (made: CanvasAndContext, size: { width: number; height: number }, viewport: PdfjsViewport) => Promise<T>,
+    take: (made: CanvasAndContext, size: { width: number; height: number }, viewport: PdfjsViewport) => Promise<T>,
   ): Promise<T> {
     if (!Number.isInteger(maxPixels) || maxPixels < 1) throw new Error('The picture has no size.');
     const asked = pdfPage.getViewport({ scale });
@@ -386,7 +390,7 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       budget.take(own, size.width * size.height);
       made = canvases.create(size.width, size.height);
       await guard(pdfPage.render({ canvas: made.canvas, canvasContext: made.context, viewport, background: '#ffffff', annotationMode }).promise);
-      return await use(made, { width: size.width, height: size.height }, viewport);
+      return await take(made, { width: size.width, height: size.height }, viewport);
     } finally {
       // The picture's canvas is let go, then the page's decoded pictures and drawing steps, before the next page.
       // Every canvas counted for this drawing is forgotten, PDF.js's cached masks and a failed drawing's leftovers
@@ -425,7 +429,7 @@ export async function openDocument(file: Uint8Array, password: string | undefine
     const pixels = canvases.pixels;
     if (!pixels) throw new Error('No pixel reader was given.');
     // From the first refusal on, a font or map PDF.js could not load may be used on any later page, undrawn.
-    if (refused > 0) return { kind: 'unsafe' };
+    if (refused > 0) return { kind: 'unsafe', refused: true };
     const pdfPage = await pageOf(page);
     const shown = shownOf(pdfPage);
     if (!shown || !pdfPage.getAnnotations) {
@@ -458,7 +462,8 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       return { kind: 'unsafe', error };
     }
     // Counted after the drawing: a request refused while drawing this page makes this page unsafe too.
-    if (refused > 0 || ink === 'unsafe') return { kind: 'unsafe' };
+    if (refused > 0) return { kind: 'unsafe', refused: true };
+    if (ink === 'unsafe') return { kind: 'unsafe' };
     if (annotations.length > maxMeasuredAnnotations) return { kind: 'unsafe' };
     let box: Box | null = ink;
     for (const annotation of annotations) {
