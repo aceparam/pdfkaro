@@ -136,6 +136,7 @@ What readers on the build machine make of it (23 Nov 2026):
 | Reader | Result |
 | --- | --- |
 | Poppler `pdffonts` | Seven fonts, every one `CID TrueType`, `Identity-H`, embedded, subset, with a Unicode map; no Type 3 font |
+| Font names | The Chinese font is embedded as `NotoSansSCThin-Regular`, but its outlines are regular weight: the file read is the 400-weight `noto-sans-sc-chinese-simplified-400-normal.woff2`, the subset's OS/2 weight class is 400, and drawn by Chromium it inks about 2.4 times as much as the package's 100-weight file. "Thin" is a name left in the static file by the variable font it was made from |
 | Poppler `pdftotext` | Hindi, Telugu, Chinese and English read back as written, except a space poppler adds inside three Hindi and Telugu words (`कृ पया`, `వ్రా సిన`, `ద్రా క్ష`); Arabic in the right letters with spaces poppler adds inside words, as it does with right-to-left text |
 | PDF.js `getTextContent` (6.5.438) | Chinese read back exactly. Hindi, Telugu and Arabic come back in part: `U+0000` where a glyph maps only through an actual-text span, and Arabic in presentation forms, reversed. PDF.js does not read the `/ActualText` spans Chromium writes for shaped letter groups (114 in the file) |
 

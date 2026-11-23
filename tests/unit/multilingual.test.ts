@@ -77,6 +77,21 @@ async function darkPixels(picture: Uint8Array, band?: [number, number], threshol
   return dark;
 }
 
+/** Every font on every one of the five pages is a Type 0 Noto subset with a Unicode map and an embedded TrueType font file. */
+async function expectEmbedded(bytes: Uint8Array) {
+  const fonts = await pageFonts(bytes);
+  expect(fonts).toHaveLength(5);
+  for (const [index, page] of fonts.entries()) {
+    expect(page.length, `page ${index + 1}`).toBeGreaterThan(0);
+    for (const { font, descriptor } of page) {
+      expect(font['/Subtype'], `page ${index + 1}`).toBe('/Type0');
+      expect(String(font['/BaseFont']), `page ${index + 1}`).toMatch(/^\/[A-Z]{6}\+Noto/);
+      expect(font['/ToUnicode'], `page ${index + 1}`).toBeTruthy();
+      expect(descriptor?.['/FontFile2'], `page ${index + 1} ${String(font['/BaseFont'])}`).toBeTruthy();
+    }
+  }
+}
+
 describe('multilingual.pdf itself', () => {
   it('has five pages, one per script and one with all four', async () => {
     expect(words.pages.map((page) => page.lang)).toEqual(['hi', 'te', 'ar', 'zh-Hans', 'en']);
@@ -84,27 +99,21 @@ describe('multilingual.pdf itself', () => {
   });
 
   it('embeds every font on every page as a Type 0 TrueType subset with a Unicode map', async () => {
-    const fonts = await pageFonts(multilingual);
-    expect(fonts).toHaveLength(5);
-    for (const [index, page] of fonts.entries()) {
-      expect(page.length, `page ${index + 1}`).toBeGreaterThan(0);
-      for (const { font, descriptor } of page) {
-        expect(font['/Subtype'], `page ${index + 1}`).toBe('/Type0');
-        expect(String(font['/BaseFont']), `page ${index + 1}`).toMatch(/^\/[A-Z]{6}\+Noto/);
-        expect(font['/ToUnicode'], `page ${index + 1}`).toBeTruthy();
-        expect(descriptor?.['/FontFile2'], `page ${index + 1}`).toBeTruthy();
-      }
-    }
+    await expectEmbedded(multilingual);
   });
 
-  it('the embedded check fails on a copy whose font file is taken out', async () => {
+  it('the embedded check fails on a copy with one font file taken out', async () => {
     const { PDFDocument, PDFDict, PDFName } = await import('@cantoo/pdf-lib');
     const doc = await PDFDocument.load(multilingual.slice(), { updateMetadata: false });
+    let taken = 0;
     for (const [, object] of doc.context.enumerateIndirectObjects()) {
-      if (object instanceof PDFDict && object.get(PDFName.of('Type'))?.toString() === '/FontDescriptor') object.delete(PDFName.of('FontFile2'));
+      if (taken === 0 && object instanceof PDFDict && object.get(PDFName.of('Type'))?.toString() === '/FontDescriptor') {
+        object.delete(PDFName.of('FontFile2'));
+        taken++;
+      }
     }
-    const fonts = await pageFonts(await doc.save({ useObjectStreams: false }));
-    expect(fonts.flat().some(({ descriptor }) => !descriptor?.['/FontFile2'])).toBe(true);
+    expect(taken).toBe(1);
+    await expect(expectEmbedded(await doc.save({ useObjectStreams: false }))).rejects.toThrow();
   });
 
   it('PDF.js reads the Chinese page exactly', async () => {
@@ -200,7 +209,7 @@ describe('the tools no other loop covers keep the text and content of every page
 });
 
 describe('chinese-unembedded.pdf keeps its text through the tools', { timeout: 120_000 }, () => {
-  it('the page tools, Protect and the tools that draw on pages keep its text operators and font reference', async () => {
+  it('the page tools keep its text operators and font reference; Protect and the tools that draw on pages keep its font reference', async () => {
     const [streamBefore] = await pageStreams(unembedded);
     const shown = streamBefore!.join('\n').match(/<[0-9a-f]+> Tj/g)!;
     expect(shown).toHaveLength(2);
@@ -215,10 +224,15 @@ describe('chinese-unembedded.pdf keeps its text through the tools', { timeout: 1
     await one('Add page numbers', runOn(numberPages, [unembedded], { position: 'bottom-centre', passwords: [undefined] }));
     await one('Watermark', runOn(watermark, [unembedded], { text: 'DRAFT', passwords: [undefined] }));
     await one('Sign PDF', runOn(sign, [unembedded], { source: 'type', name: 'Ann Lee', page: 'last', position: 'bottom-right', passwords: [undefined] }));
-    // Delete pages refuses to delete the only page, so it has no result here.
+    // Delete pages refuses to delete the only page, so it has no result here. Protect's, Add page numbers', Watermark's and
+    // Sign PDF's own loops over every fixture already compare this file's content streams, so only the font reference
+    // is checked here for them: a check for one file inside those loops would be a special case in a generic loop.
+    const streamsCompared = new Set(['Merge PDF', 'Split PDF', 'Extract pages', 'Reorder pages', 'Rotate PDF']);
     for (const [name, output, given] of results) {
-      const content = (await pageStreams(output, given))[0]!.join('\n');
-      for (const operator of shown) expect(content, name).toContain(operator);
+      if (streamsCompared.has(name)) {
+        const content = (await pageStreams(output, given))[0]!.join('\n');
+        for (const operator of shown) expect(content, name).toContain(operator);
+      }
       const fonts = (await pageFonts(output, given))[0]!.map(({ font }) => font);
       expect(fonts.some((font) => font['/BaseFont'] === '/STSong-Light-UniGB-UCS2-H' && font['/Encoding'] === '/UniGB-UCS2-H'), name).toBe(true);
     }
@@ -233,7 +247,12 @@ const pictureInk = [5_700, 5_400, 2_900, 4_200, 5_300];
 const thumbnailInk = [60, 65, 29, 50, 65];
 
 /** Where each script's line of page 5 sits, from PDF.js's placing of its text items, as shares of the page height from the top. */
-async function mixedPageBands(): Promise<[number, number][]> {
+const mixedPageBands = (() => {
+  let bands: Promise<[number, number][]> | undefined;
+  return () => (bands ??= readMixedPageBands());
+})();
+
+async function readMixedPageBands(): Promise<[number, number][]> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await pdfjs.getDocument({ data: multilingual.slice(), disableFontFace: true, useSystemFonts: false, verbosity: 0 }).promise;
   const page = await doc.getPage(5);
@@ -298,8 +317,15 @@ describe('pictures and thumbnails', { timeout: 120_000 }, () => {
   });
 });
 
+/** The dark pixels of each English label on page 5 alone, worked out once per format. */
+const labelInk = new Map<'jpg' | 'png', Promise<number[]>>();
+function darkPixelsOfLabels(format: 'jpg' | 'png'): Promise<number[]> {
+  if (!labelInk.has(format)) labelInk.set(format, readDarkPixelsOfLabels(format));
+  return labelInk.get(format)!;
+}
+
 /** The dark pixels of each English label on page 5 alone, drawn from a copy with the four scripts' words taken out. */
-async function darkPixelsOfLabels(format: 'jpg' | 'png'): Promise<number[]> {
+async function readDarkPixelsOfLabels(format: 'jpg' | 'png'): Promise<number[]> {
   const { PDFDocument, PDFName } = await import('@cantoo/pdf-lib');
   const doc = await PDFDocument.load(multilingual.slice(), { updateMetadata: false });
   const content = (await pageStreams(multilingual))[4]!.join('\n');
@@ -314,7 +340,7 @@ async function darkPixelsOfLabels(format: 'jpg' | 'png'): Promise<number[]> {
 
 describe('character maps are asked for in memory only', () => {
   /** A tools whose PDF.js records each call to the data factory it is given. */
-  function recordingTools(calls: { kind: string; filename: string }[]): EngineTools {
+  function recordingTools(calls: { kind: string; filename: string; refused?: boolean }[]): EngineTools {
     return {
       ...tools,
       pdfjs: async () => {
@@ -326,8 +352,14 @@ describe('character maps are asked for in memory only', () => {
             const Factory = options.BinaryDataFactory as new () => { fetch(request: { kind: string; filename: string }): Promise<Uint8Array> };
             class Recording extends Factory {
               override fetch(request: { kind: string; filename: string }) {
-                calls.push({ kind: request.kind, filename: request.filename });
-                return super.fetch(request);
+                const call: { kind: string; filename: string; refused?: boolean } = { kind: request.kind, filename: request.filename };
+                calls.push(call);
+                const answer = super.fetch(request);
+                answer.then(
+                  () => (call.refused = false),
+                  () => (call.refused = true),
+                );
+                return answer;
               }
             }
             return real.getDocument({ ...options, BinaryDataFactory: Recording });
@@ -338,13 +370,14 @@ describe('character maps are asked for in memory only', () => {
   }
 
   it('chinese-unembedded.pdf asks once per document for UniGB-UCS2-H, which is refused; multilingual.pdf asks for none', async () => {
-    const calls: { kind: string; filename: string }[] = [];
+    const calls: { kind: string; filename: string; refused?: boolean }[] = [];
     const doc = await openDocument(unembedded.slice(), undefined, recordingTools(calls));
     await doc.render(1, box);
     await doc.close();
-    expect(calls.filter((call) => call.kind === 'cMapUrl')).toEqual([{ kind: 'cMapUrl', filename: 'UniGB-UCS2-H.bcmap' }]);
+    // Refused by the fixed helper data, which holds no character maps.
+    expect(calls.filter((call) => call.kind === 'cMapUrl')).toEqual([{ kind: 'cMapUrl', filename: 'UniGB-UCS2-H.bcmap', refused: true }]);
 
-    const none: { kind: string; filename: string }[] = [];
+    const none: { kind: string; filename: string; refused?: boolean }[] = [];
     const other = await openDocument(multilingual.slice(), undefined, recordingTools(none));
     for (let page = 1; page <= 5; page++) await other.render(page, box);
     await other.close();

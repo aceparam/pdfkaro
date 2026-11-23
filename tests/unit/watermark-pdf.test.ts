@@ -173,9 +173,8 @@ async function expectWatermarked(input: Uint8Array, output: Uint8Array, text = '
   const pages = Number((await qpdfOn(input, [...(given ? [`--password=${given}`] : []), '--show-npages'])).out.trim());
   expect((await qpdfOn(output, ['--show-npages'])).out.trim()).toBe(String(pages));
   expect(await encryption(output)).toMatch(/File is not encrypted/);
-  // Compared with the plain copy the engine starts from, so a file that needs a password is compared too.
-  const plain = (await plainCopy(tools, input, given)).plain;
-  const before = await texts(plain);
+  // A file that needs a password is read through the plain copy the engine starts from, so it is compared too.
+  const before = await texts(given ? (await plainCopy(tools, input, given)).plain : input);
   const after = await texts(output);
   expect(after).toHaveLength(pages);
   after.forEach((items, index) => {
@@ -183,7 +182,7 @@ async function expectWatermarked(input: Uint8Array, output: Uint8Array, text = '
     expect(items.slice(0, -1), `page ${index + 1}`).toEqual(before[index]);
   });
   // Each page's own streams are unchanged, between the added q and Q.
-  const streamsBefore = await pageStreams(plain);
+  const streamsBefore = await pageStreams(input, given);
   (await pageStreams(output)).forEach((streams, index) => expect(streams.slice(1, -2), `page ${index + 1}`).toEqual(streamsBefore[index]));
 }
 
