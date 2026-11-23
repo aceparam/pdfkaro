@@ -184,21 +184,21 @@ Pressing "Crop and download" SHALL write one PDF in which each cut page's only c
 #### Scenario: The result's notes
 
 - **WHEN** a job finishes
-- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages, pages with no white margin and pages the tool cannot measure safely are left as they are, that what was cut off is still in the file and can be got back and found by searching, that pages, text, links, form fields, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions
+- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages, pages with no white margin and pages the tool cannot measure safely are left as they are, that what was cut off is still in the file and can be got back and its text found by some programs, that pages, text, links, form fields, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions
 
 ### Requirement: The cut-off part stays in the file
 
-The result, the text below the tool and the Privacy page draft SHALL say that what was cut off is still in the file: anyone who has the file can get it back, with no special editor, and its text can still be found by searching, copied or read aloud, so cropping is not a way to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
+The result, the text below the tool and the Privacy page draft SHALL say that what was cut off is still in the file: anyone who has the file can get it back, with no special editor, and some programs can still find, copy or read aloud its text, so cropping is not a way to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
 
 #### Scenario: The result says so
 
 - **WHEN** a job finishes
-- **THEN** the result's notes include "What was cut off is still in the file. Anyone who has the file can get it back, and its text can still be found by searching, copied or read aloud. Cropping is not a way to hide something private."
+- **THEN** the result's notes include "What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private."
 
 #### Scenario: The text below the tool and the Privacy draft say so
 
 - **WHEN** the built `/crop-pdf` and `/privacy` pages are fetched without running scripts
-- **THEN** each says that what Crop PDF cuts off stays in the file, that anyone who has the file can get it back, and that its text can still be found by searching, copied or read aloud
+- **THEN** each says that what Crop PDF cuts off stays in the file, that anyone who has the file can get it back, and that some programs can still find, copy or read aloud its text
 
 #### Scenario: The text is still in the file
 
