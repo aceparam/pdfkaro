@@ -279,8 +279,9 @@ export async function readPages(tools: EngineTools, plain: Uint8Array, options: 
           best.set(frame.node, Math.max(best.get(frame.node)!, done));
         } else if (!index.has(child)) {
           if (!enter(child)) {
-            // Deeper than the limit: every dictionary on the path reaches past it, so each is left as it is.
-            for (const each of frames) picturesOf.set(each.node, Infinity);
+            // Deeper than the limit: every dictionary still on the component stack reaches the path, which
+            // reaches past it, so each is left as it is (and none is walked again).
+            for (const each of stack) picturesOf.set(each, Infinity);
             return Infinity;
           }
         } else if (onStack.has(child)) {
