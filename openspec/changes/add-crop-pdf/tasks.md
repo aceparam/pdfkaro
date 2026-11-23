@@ -1,6 +1,6 @@
 # Tasks
 
-No dependency. No new shared component. One shared engine change rides along, named in the pull request: one internal `paint` step in `src/engines/thumbnail.ts` shared by `render`, `draw` and the new `measure`, with `pixels` on the canvas maker (design decision 2). Thumbnails, PDF to JPG and PDF to PNG must pass their tests unchanged.
+No dependency. No new shared component. Two shared engine changes ride along, named in the pull request: one internal `paint` step in `src/engines/thumbnail.ts` shared by `render`, `draw` and the new `measure`, with `pixels` on the canvas maker (design decision 2); and the `pictures` option of `readPages` in `src/engines/stamp.ts`, each page's largest picture (task 2.3), with the stamp tools' reading unchanged without it. Thumbnails, PDF to JPG, PDF to PNG and the stamp tools must pass their tests unchanged.
 
 ## 0. The owner's answers
 
@@ -45,6 +45,8 @@ No dependency. No new shared component. One shared engine change rides along, na
 
 - [x] 6.1 Write `tests/e2e/crop-pdf.spec.ts`, importing `test` from `tests/e2e/fixtures.ts`, at 360px and 1280px, as the design's Tests list it: the page; the row and focus; "Getting ready" with the engine's route held; two files dropped; not a PDF; damaged; the password flow; a job on `text.pdf` with "Page N of M" and the bar never going back, the four result notes, and the download `text-cropped.pdf` checked with qpdf (new crop box, same paper box) and PDF.js (same text); a file where no page is cut (`chinese-unembedded.pdf`): "No pages were cropped." with its advice, focus on the heading, no Download, "Start again"; Cancel back to the file without the password asked again; failures from a stand-in engine (memory, `output-limit`, engine not fetched) under "The pages were not cropped." with "Go back to your file"; the 100 MB and 20,000-page notices; keyboard only. Verify it passes, with every other e2e test unchanged.
 
+
+  Since stage 2 the result has three notes, not four (the password sentence joined the note on what is kept); the test checks the three.
 - [x] 6.2 Found at stage 2: the 100 ms rule had no test for Crop. Added "Crop PDF: listing and cropping the 500-page file blocks the page for no more than 100 ms at a time" to `tests/e2e/performance.spec.ts`, as PDF to PNG's. Verified by running it five times in a row in Chromium.
 
 ## 7. No-upload test
