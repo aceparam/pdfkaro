@@ -121,7 +121,7 @@ else {
 for (const name of [workers[0], ...files.filter((each) => engineIds.some((id) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each)))]) {
   if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name} holds pdf-lib's code.`);
 }
-// The drawing step (stamp.ts, for Add page numbers, then Watermark and Sign PDF) takes pdf-lib from its tools too:
+// The drawing step (stamp.ts, for Add page numbers, then Watermark and Sign PDF, and its page reading for Crop PDF) takes pdf-lib from its tools too:
 // whichever file holds its code, found by a sentence of its own, holds none of pdf-lib's, and is not the worker.
 const stampSentence = 'A drawing used an object that cannot be written.';
 const stampFiles = files.filter((name) => /\.js$/.test(name) && readFileSync(join(assets, name), 'utf8').includes(stampSentence));

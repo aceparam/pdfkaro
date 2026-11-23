@@ -30,7 +30,7 @@ const loadedLater = [
   { name: 'plain', type: 'js', why: 'the plain copy, outline and write steps (keepPages, writePages, writeTurned) the page engines share; the bundler gives them a file of their own' },
   { name: 'inspect', type: 'js', why: 'reads one PDF before a job; shared by the engines, so the bundler gives it a file of its own' },
   { name: 'qpdf', type: 'js', why: 'the qpdf wrapper, and qpdf compiled to WebAssembly, which the worker loads' },
-  { name: 'thumbnail', type: 'js', why: "draws a page thumbnail, started with PDF.js after every pick on a PDF tool's page, whatever the file, and whole pages for PDF to JPG and PNG" },
+  { name: 'thumbnail', type: 'js', why: "draws a page thumbnail, started with PDF.js after every pick on a PDF tool's page, whatever the file, whole pages for PDF to JPG and PNG, and measures pages for Crop PDF" },
   { name: 'pdf', type: 'js', why: "PDF.js, which the worker starts after every pick on a PDF tool's page, damaged, protected and wrong-kind files included, once the reading libraries have loaded" },
   { name: 'pdf.worker.min', type: 'mjs', why: "PDF.js's own worker, started by the tool worker in the same step as PDF.js, after every pick on a PDF tool's page" },
   { name: 'pdfjs-data', type: 'js', why: "PDF.js's fonts and decoders, one fixed set, loaded with PDF.js after every pick on a PDF tool's page" },
@@ -38,7 +38,7 @@ const loadedLater = [
   { name: 'picture', type: 'js', why: "reads a JPG or PNG without decoding it, for Image to PDF and Sign PDF's signature picture; shared by their engines and Image to PDF's thumbnails" },
   { name: 'picture-thumbnail', type: 'js', why: "draws a picture's thumbnail with the browser's image decoder, started after every pick on Image to PDF's pages, whatever the file" },
   { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads at the start of every Image to PDF, Add page numbers, Watermark or Sign PDF job, before the engine reads the file' },
-  { name: 'stamp', type: 'js', why: 'the drawing step (stamp.ts) that Add page numbers, Watermark and Sign PDF share; a file of its own' },
+  { name: 'stamp', type: 'js', why: 'the drawing step (stamp.ts) that Add page numbers, Watermark and Sign PDF share, whose page reading Crop PDF also uses; a file of its own' },
   { name: 'option-values', type: 'js', why: "each tool's accepted option values and its rules for texts, drawings, pictures and new passwords (option-values.ts), which Add page numbers, Watermark, Sign PDF and Protect's engines read; the bundler gives them a file of their own" },
   ...engineIds.map((id) => ({ name: id, type: 'js', why: `the ${id} engine, which the worker loads` })),
 ].map((entry) => ({ ...entry, pattern: new RegExp(`^_astro/${entry.name.replaceAll('.', '\\.')}[.-][A-Za-z0-9_-]{8}\\.${entry.type}$`) }));
