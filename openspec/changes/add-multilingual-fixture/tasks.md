@@ -30,13 +30,13 @@ This change adds no tool, so the usual order is followed in spirit: the test dat
 
 - [x] 4.1 In `tests/fixtures/README.md`: add both files to "The files" table; replace the "Missing: a file with text in Hindi, Telugu, Arabic and Chinese" paragraph with how `multilingual.pdf` is made (script, fonts and versions, Chromium and Playwright versions, the poppler and PDF.js readings from 1.4, including that PDF.js does not read actual-text spans) and how `chinese-unembedded.pdf` is made; add both files to each engine's table; replace every "The multilingual file is still missing" sentence with what the runs in 2.2 to 2.8 showed, including what does not work (the character-map gap). Verify: `grep -n "multilingual file is still missing" tests/fixtures/README.md` finds nothing, and every engine section names both files.
 - [x] 4.2 Add one line to `LICENSES.md` under "Used to build and test only" for Noto Sans Devanagari, Noto Sans Telugu, Noto Naskh Arabic and Noto Sans SC (OFL-1.1), fetched from the four `@fontsource` packages at the pinned versions by `make-multilingual.mjs`, not in `package.json`, never shipped, with subsets embedded only in `tests/fixtures/multilingual.pdf`. Verify: the line is there; no `LICENSE` file is added.
-- [ ] 4.3 In the pull request description, add the sentence on why the fonts are needed (design.md decision 3; `SPEC.md` "Build phases", 4): what they are for, their release dates as the sign they are maintained, and that only subsets inside one test PDF are kept. Verify: the sentence is in the description.
-- [ ] 4.4 Put the issue #7 comment of design.md decision 9 in the pull request description for the owner or the program manager to post. Verify: it is in the description.
+- [x] 4.3 In the pull request description, add the sentence on why the fonts are needed (design.md decision 3; `SPEC.md` "Build phases", 4): what they are for, their release dates as the sign they are maintained, and that only subsets inside one test PDF are kept. Verify: the sentence is in the description.
+- [x] 4.4 Put the issue #7 comment of design.md decision 9 in the pull request description for the owner or the program manager to post. Verify: it is in the description.
 
 ## 5. Whole checks and review
 
-- [ ] 5.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass; paste the real output in the pull request. No screenshots: no page changes.
-- [ ] 5.2 Run the `review-panel` skill, stage 2, and resolve every must-fix finding, updating design.md where a decision changes. Put the verdicts and the owner questions from proposal.md in the pull request description. Verify: every reviewer approves.
+- [x] 5.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify: all pass; paste the real output in the pull request. No screenshots: no page changes. (Locally: all pass, e2e run for the spec touched in Chromium; the full e2e run, Firefox included, is CI on the pull request.)
+- [x] 5.2 Run the `review-panel` skill, stage 2, and resolve every must-fix finding, updating design.md where a decision changes. Put the verdicts and the owner questions from proposal.md in the pull request description. Verify: every reviewer approves.
 
 ## Workflow follow-up
 
