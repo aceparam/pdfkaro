@@ -60,11 +60,17 @@ Alternatives considered:
 | 4, Chinese (`zh-Hans`, Noto Sans SC) | 中文 / 这是一份测试文件。其中有用简体中文写的文字。 / 标点符号：，。、；？ |
 | 5, all four (`en`, with each line in its own language) | Four languages / Hindi: हिन्दी पाठ / Telugu: తెలుగు పాఠ్యం / Arabic: نص عربي / Chinese: 中文文字 |
 
-Headings are weight 400 and nothing is italic, so no synthetic bold or italic turns a font into Type 3 shapes. CSS: `@page { size: A4; margin: 20mm }`, 16 pt text, one section per page with `break-after: page`. Printed with `page.pdf({ format: 'A4', tagged: true, outline: false, printBackground: false })`: tagged, because real files from browsers and office programs are, and the screen-reader hand check needs it.
+Headings are weight 400 and nothing is italic, so no synthetic bold or italic turns a font into Type 3 shapes. CSS: `@page { size: A4; margin: 20mm }`, 16 pt text, one section per page with `break-after: page`. The page has a `<title>` (the same as the file's title), and every text from the JSON is escaped into the HTML with the same `escapeHtml` rule as `scripts/social-image.mjs`. Printed with `page.pdf({ format: 'A4', tagged: true, outline: false, printBackground: false, displayHeaderFooter: false })`: tagged, because real files from browsers and office programs are, and the screen-reader hand check needs it; no header or footer, so Chromium writes no address, title or date into the pages.
 
 ### 3. Fonts are fetched when the file is made, never committed
 
-`make-multilingual.mjs` fetches these packages with `npm pack <name>@<version>` into a new empty folder under the system's temporary folder, checks the SHA-512 of each tarball against the value written in the script, extracts each into its own empty folder with `tar`, and deletes the folder at the end. `npm pack` runs no package scripts, and the script never imports anything from the packages: it only reads their `woff2` files and the `@font-face` CSS for the 400 weight, rewriting `./files/` to `file:` addresses.
+`make-multilingual.mjs` fetches these packages as follows (security review, stage 1):
+
+- A temporary folder is made with `fs.mkdtemp` under the system's temporary folder, and removed in a `finally` block whatever happens.
+- Each package is fetched with `execFile('npm', ['pack', '<name>@<version>', '--ignore-scripts', '--registry', 'https://registry.npmjs.org', '--pack-destination', <tmp>, '--cache', <tmp>/cache])`, with an argument array (no shell) and the temporary folder as working folder, so no package script runs, no other registry or `.npmrc` setting is used, and the 74 MB tarball does not stay in `~/.npm`.
+- The script computes the SHA-512 of each tarball's bytes itself with `node:crypto` and compares it with the value written in the script, before `tar` runs. npm's own report is not trusted for this. A mismatch stops the script.
+- Each tarball is extracted into its own new empty folder with `tar -xzf <file> -C <folder> --no-same-owner --no-same-permissions`.
+- The script reads only the `woff2` files it names in a fixed list in its own code: the 400-weight file for Devanagari, Telugu and Arabic, and the 102 numbered pieces of Noto Sans SC (`noto-sans-sc-<n>-400-normal.woff2`). Each is opened only if `lstat` shows a regular file whose resolved path lies inside that package's folder. The packages' CSS is not read: the script writes its own `@font-face` rules, one per file, with no `unicode-range`, so Chromium picks the piece that holds each character by trying the pieces of the family in order. Nothing from the packages is imported or run.
 
 | Package | Version (released) | Licence | Unpacked size | Integrity |
 | --- | --- | --- | --- | --- |
@@ -73,13 +79,21 @@ Headings are weight 400 and nothing is italic, so no synthetic bold or italic tu
 | `@fontsource/noto-naskh-arabic` | 5.3.0 (Jul 2026) | OFL-1.1 | 0.9 MB | `sha512-S/GDgQ6mh/PKo4mz5+eXNYbEarvpI7yh6eCdOz8tTVbeM7+OUiacIEscaYEibr/+egDtGbO2ZB00sjy1bJC1kQ==` |
 | `@fontsource/noto-sans-sc` | 5.3.1 (Oct 2026) | OFL-1.1 | 74.6 MB (102 pieces by Unicode range) | `sha512-YxZ/VWAWo9FWzH08Q6fGTzIW6vYNP2TMhUFCnfhlimbhdXnWrxJLrzX3KWt2FKnV0s8XiM5vjpGHQiyFRlTj0w==` |
 
-Why not commit the fonts: Noto Sans SC alone is 74 MB, the OFL asks for its licence text beside any copy of the fonts, and nothing reads them after the file is made. The PDF holds only the subsets Chromium embeds, which the OFL allows in documents without putting the document under the OFL. These are not dependencies in `package.json`: nothing installs them, and the compressed page size of the site is unchanged. `LICENSES.md` gets one line under "Used to build and test only" naming the four fonts, their licence, the packages, and that only the font subsets inside the one committed test PDF are kept.
+Why not commit the fonts: Noto Sans SC alone is 74 MB, the OFL asks for its licence text beside any copy of the fonts, and nothing reads them after the file is made. The PDF holds only the subsets Chromium embeds, which the OFL allows in documents without putting the document under the OFL. These are not dependencies in `package.json`: nothing installs them, and the compressed page size of the site is unchanged. `LICENSES.md` gets one line under "Used to build and test only" naming the four fonts, their licence, the packages, and that only the font subsets inside the one committed test PDF are kept. The pull request says in a sentence why they are needed (`SPEC.md` "Build phases", 4): to make the test file `SPEC.md` asks for with real text in each script; their release dates (Jul and Oct 2026) show the packages are maintained; only subsets inside `multilingual.pdf` are kept.
 
-Chromium opens the page from a `file:` address, and a route refuses every request that is not a `file:` request, so the page can fetch nothing.
+Chromium is started by Playwright with its sandbox on where the system allows it (`chromiumSandbox: true`, falling back with a printed line when the machine cannot run it), in a context with `javaScriptEnabled: false` and `offline: true`. The page is written into the temporary folder and opened from there. A route allows only `file:` addresses inside the temporary folder and aborts every other request. The page also carries a policy `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src file:; style-src 'unsafe-inline'">`, so even a mistake in the route could not load anything but fonts.
 
 ### 4. The file is tidied with pdf-lib, then checked by qpdf
 
-The script loads Chromium's bytes into pdf-lib, sets the title ("Text in Hindi, Telugu, Arabic and Chinese"), creator ("PDFkaro test set") and the fixed creation and modification dates `make.mjs` uses, keeps Chromium's producer line, and saves without object streams, as `text.pdf` is. Then qpdf (the same WebAssembly build) runs `--check`, and the script refuses to write the file if it fails, if any page font is not an embedded subset, or if the page count is not five. Two runs with the same Chromium must give the same bytes; the task checks this. The fixtures README records the Chromium and Playwright versions used, because a later Chromium may give different bytes. Expected size: about 50 to 70 KB.
+The script loads Chromium's bytes into pdf-lib with `updateMetadata: false`, so pdf-lib writes nothing of its own; it then sets the title ("Text in Hindi, Telugu, Arabic and Chinese"), the creator ("PDFkaro test set"), keeps Chromium's producer line, and sets both the creation and the modification date explicitly to the fixed date `make.mjs` uses. It sets the trailer `/ID` to a fixed pair (the SHA-256 of the JSON's bytes, cut to 16 bytes, twice), or, if pdf-lib cannot set it, checks that the file has none. It saves without object streams, as `text.pdf` is.
+
+Then qpdf (the same WebAssembly build) runs `--check`, and writes an uncompressed copy (`--qdf --object-streams=disable --stream-data=uncompress`) for the script to search. The script refuses to write the file if:
+
+- `qpdf --check` fails, the page count is not five, or any page font is not an embedded Type 0 subset with a Unicode map;
+- the final bytes or the uncompressed copy hold `file:`, any part of the temporary folder's path, or the home folder's path;
+- the document information holds any key other than `/Title`, `/Creator`, `/Producer`, `/CreationDate` and `/ModDate`.
+
+Two runs with the same Chromium must give the same bytes; the task checks this. The fixtures README records the Chromium and Playwright versions used, because a later Chromium may give different bytes. Expected size: about 50 to 70 KB.
 
 Alternative: qpdf's JSON update to set the dates. Dropped; pdf-lib already sets them in `make.mjs`, and the result is checked either way.
 
@@ -89,18 +103,33 @@ Alternative: qpdf's JSON update to set the dates. Dropped; pdf-lib already sets 
 
 ### 6. What the tests check
 
-A new `tests/unit/multilingual.test.ts`, in Node with the same qpdf and PDF.js the other engine tests use:
+No tool is run twice on the same file for the same check (architecture review, stage 1). Loops that already run every fixture pick up both files once their name lists are updated:
+
+- `protect-pdf.test.ts` (the loop over every readable fixture) already protects each file, checks the encryption, and compares what each page shows with the password;
+- `unlock-pdf.test.ts` (the loop over every unencrypted fixture) already checks that Remove a password alone gives no new file;
+- `add-page-numbers.test.ts`, `watermark-pdf.test.ts` and `sign-pdf.test.ts` already compare each page's text and own content streams for every other file in their lists, once task 2.5 adds the two names.
+
+A new `tests/unit/multilingual.test.ts`, in Node with the same qpdf and PDF.js the other engine tests use, holds only what those loops do not:
 
 - **The file itself**: five pages; every font in every page's resources is Type 0 with a `FontFile2` and a `ToUnicode` (read with qpdf's JSON); PDF.js reads each Chinese line of page 4 exactly (after removing white space); pages 1, 2 and 3 each hold at least one actual-text span (read from qpdf's decoded content streams).
-- **Text kept**: the text of a page is PDF.js's `getTextContent` strings joined, kept as read, `U+0000` included, because PDF.js's reading of these scripts is incomplete and comparing with itself before and after is what shows a tool kept the text. For each tool, with the options in `engine-loads-helpers.ts` unless stated: Merge (with `text.pdf` after it: pages 1 to 5 match); Split (part *n* matches page *n*); Extract pages 2 and 4; Delete page 1 (pages 2 to 5 left); Reorder reversed; Rotate one turn; Compress (a file: every page matches; no new file: recorded); Add page numbers, Watermark and Sign PDF (each input page's strings appear in order within the output page's, with only the tool's text added); Protect (read with the new password); Protect then Remove a password with that password (read with none). Remove a password alone gives no new file (the file has neither a password nor restrictions). For the page tools, each kept page's decoded content stream must also be byte for byte the input page's (qpdf copies pages without rewriting their content), which covers the actual-text spans PDF.js does not read.
-- **Drawn**: PDF to JPG and PDF to PNG give five pictures; thumbnails are drawn with `draw` from `src/engines/thumbnail.ts`. The pages hold nothing but text, so each picture of `multilingual.pdf` must hold at least a set number of dark pixels (the number is measured once and written in the test with a wide margin), and each picture of `chinese-unembedded.pdf` none.
-- **Second file kept**: for the page tools, Protect (with its password) and the drawing-on tools, the result's page content still holds the original text-showing operator bytes and the font reference `STSong-Light-UniGB-UCS2-H`.
+- **Text kept, for the tools no loop covers**: Merge (with `text.pdf` after it: pages 1 to 5 match); Split (part *n* matches page *n*); Extract pages 2 and 4; Delete page 1 (pages 2 to 5 left); Reorder reversed; Rotate one turn; Compress (a file: every page matches; no new file: recorded); Protect then Remove a password with the same password (read with none). The text of a page is what `texts()` in `tests/unit/stamp-helpers.ts` gives, reused as it is (moved to a neutral helper file, `tests/unit/pdf-helpers.ts`, if importing it from a stamp helper reads oddly), compared before and after with `U+0000` kept, because PDF.js's reading of these scripts is incomplete and comparing it with itself is what shows a tool kept the text.
+- **Content streams, for every tool that gives back a PDF**: each kept page's own decoded content streams must be byte for byte the input page's. For the page tools, Compress (when it gives a file) and Protect then Remove a password, compared here as above. For Add page numbers, Watermark and Sign PDF the existing loops already compare `contents[1..-2]` with the input's streams for every listed file, so the check lives there and is not repeated. The existing Protect loop compares what each page shows but not its streams, so the comparison is added inside that loop, on the output it already makes, read with the password through `--decrypt --qdf --object-streams=disable --stream-data=uncompress` as `plainDump` does: Protect still runs once per fixture, and every readable fixture gains the check, not only the new ones. This covers the actual-text spans PDF.js does not read.
+- **Drawn**: PDF to JPG and PDF to PNG give five pictures; thumbnails are drawn with `draw` from `src/engines/thumbnail.ts`. Each picture and thumbnail of `multilingual.pdf` must hold at least the number of dark pixels measured for its page, written in the test with a wide margin. On page 5, each script's line must also show ink in its own horizontal band, found from where PDF.js places that line's text items. Each picture of `chinese-unembedded.pdf` is drawn without failing; its dark-pixel count is recorded and checked as none, a record of today's gap (owner decision, 11 Nov 2026) that changes when the owner answers the character-map question.
+- **Character maps asked for in memory only** (privacy review, stage 1): the test passes a `tools.pdfjs` whose `getDocument` wraps the `BinaryDataFactory` it is given and records every `fetch` call's `kind` and `filename`. Drawing `chinese-unembedded.pdf` must ask for the kind `cMapUrl` with the name `UniGB-UCS2-H`, once per document opened, and the factory refuses it as it does today; drawing `multilingual.pdf` must ask for no `cMapUrl`. If PDF.js turns out to refuse before reaching the factory, the test records that it makes no call at all, and the README and the pull request say so.
+- **Second file kept**: for the page tools, Protect (with its password) and the tools that draw on pages, the result's page content still holds the original text-showing operator bytes and the font reference `STSong-Light-UniGB-UCS2-H`.
 
 The engine-loads tests run every engine on both files with no change. The tests that name every fixture gain the two names, with each outcome measured (for example PDF to JPG's picture size of Chromium's 595.92 by 842.88 point pages).
 
 ### 7. One end-to-end addition
 
-`uniform-requests.spec.ts` adds two inputs to `/pdf-to-jpg`'s list, each picked and run: `multilingual.pdf` and `chinese-unembedded.pdf`. The second makes PDF.js ask for a character map, the one place in the PDF.js path where a file's contents could lead to a fetch; the test proves the record of requests matches `text.pdf`'s, and the policy watch in `fixtures.ts` fails on any blocked request. Only this page: thumbnails on every other PDF page run the same PDF.js code with the same fixed data. About 10 seconds more on a spec that takes about 5 minutes.
+`uniform-requests.spec.ts` adds two inputs to `/pdf-to-jpg`'s list, each picked and run: `multilingual.pdf` and `chinese-unembedded.pdf`. The second makes PDF.js ask for a character map, the one place in the PDF.js path where a file's contents could lead to a fetch. Today the spec accepts either the done heading or the failed heading at the end of a job; these two inputs gain a field on `Input` (`expect: 'done'`) that requires the done heading, so a failed job cannot pass as "the same requests".
+
+"No other request" rests on two mechanisms, both already in place:
+
+- **Requests to the site's own origin**: the stand-in host (`host-log.ts`) records every request it receives, and the test fails unless the record after the pick and after the main button matches `text.pdf`'s.
+- **Requests to any other origin**: the page's Content Security Policy blocks them, and `tests/e2e/fixtures.ts` fails the test on any `securitypolicyviolation` in the page or its workers.
+
+Only this page: thumbnails on every other PDF page run the same PDF.js code with the same fixed data. About 10 seconds more on a spec that takes about 5 minutes.
 
 ### 8. Expected outcomes, to be replaced by measured ones
 
@@ -131,8 +160,9 @@ Whatever the runs show goes into the README, including anything worse than expec
 
 ## Threats considered
 
-- **Font packages changed on the registry**: pinned versions and SHA-512 checks; the script stops on a mismatch. The packages' code is never run (`npm pack` runs no scripts; the script reads only font and CSS files, each package in its own empty folder).
-- **The printed page fetching something**: loaded from a local file with every non-`file:` request refused.
+- **Font packages changed on the registry**: pinned versions, the public registry named explicitly, and SHA-512 computed by the script over the tarball before it is unpacked; the script stops on a mismatch. The packages' code is never run (`--ignore-scripts`, no shell, nothing imported), and their CSS is not read: only named `woff2` files that are regular files inside the package's own folder (decision 3).
+- **The printed page fetching something**: JavaScript off, the context offline, a route that allows only files in the temporary folder, a policy meta tag, and Chromium's sandbox where available (decision 3).
+- **The build machine leaking into the file**: no header or footer, and the script refuses a file holding `file:`, the temporary or home folder's path, or extra document information keys (decision 4).
 - **A malicious PDF**: both files are our own, checked with `qpdf --check`. The unembedded file is a common real-world shape, not a hostile one.
 - **Oversized file, hostile file name**: not applicable; nothing on the site changes.
 - **Page budget and WebAssembly timing**: unchanged. No shipped file changes.
@@ -140,7 +170,7 @@ Whatever the runs show goes into the README, including anything worse than expec
 ## Risks / Trade-offs
 
 - [The sentences contain a mistake no one here can see] → plain, short sentences; a reader of each script checks them by hand (issue #7). A mistake in the words does not weaken the checks, which compare each tool's output with the input.
-- [PDF.js reads Hindi, Telugu and Arabic incompletely, so a "text kept" check could pass while actual-text spans were dropped] → the check also compares the page's content operators on the page tools (qpdf leaves them byte for byte), and the file check counts actual-text spans; Protect, Compress and the drawing-on tools are covered by the PDF.js comparison and by the hand check in readers that use actual text.
+- [PDF.js reads Hindi, Telugu and Arabic incompletely, so a "text kept" check could pass while actual-text spans were dropped] → every tool that gives back a PDF also has its pages' own decoded content streams compared byte for byte with the input's (decision 6), and the file check counts actual-text spans.
 - [A later Chromium makes different bytes] → the file is committed; the README names the versions; regeneration is only needed if the words change.
 - [Noto Sans SC is a 74 MB download] → only when the file is made again, on the developer's machine; not in CI.
 - [Tests that name every fixture need updating] → listed in the tasks; their purpose is exactly this.

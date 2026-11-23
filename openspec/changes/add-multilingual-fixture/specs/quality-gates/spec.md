@@ -19,7 +19,12 @@ The test set's file with text in Hindi, Telugu, Arabic and Chinese SHALL hold re
 #### Scenario: The file is made again
 
 - **WHEN** the script makes the file again
-- **THEN** it fetches each font package at a pinned version, refuses one whose checksum differs, refuses every request from the printed page that is not a local file, and writes fixed dates, so the file depends only on the pinned fonts and the browser version the fixtures README names
+- **THEN** it fetches each font package at a pinned version from the public npm registry without running any package script, refuses one whose checksum differs before unpacking it, lets the printed page load only font files from its own temporary folder, and writes fixed dates and a fixed file identifier, so the file depends only on the pinned fonts and the browser version the fixtures README names
+
+#### Scenario: Nothing of the build machine is left in the file
+
+- **WHEN** the script has made the file
+- **THEN** it refuses to write it if the uncompressed file holds a `file:` address, the temporary folder's path or the home folder's path, or if its document information holds anything but its title, creator, producer and two dates
 
 ### Requirement: Tools keep the multilingual text
 
@@ -40,6 +45,11 @@ Each tool that gives back a PDF SHALL keep the text of every page it keeps when 
 - **WHEN** Protect with a password runs on `multilingual.pdf`, and Remove a password then runs on its result with the same password
 - **THEN** the protected file reads the same text with the password, and the unprotected file reads the same text with none
 
+#### Scenario: The page content is unchanged
+
+- **WHEN** any tool that gives back a PDF runs on `multilingual.pdf`
+- **THEN** each kept page's own decoded content streams are byte for byte those of the input page, in their place: alone for the page tools and Remove a password, between the added save and restore for the tools that draw on pages, read with the password for Protect, and for Compress when it gives a file
+
 #### Scenario: Nothing to change
 
 - **WHEN** Compress PDF or Remove a password cannot change `multilingual.pdf`
@@ -52,28 +62,33 @@ PDF to JPG, PDF to PNG and page thumbnails SHALL draw the text of every page of 
 #### Scenario: Pictures of the pages
 
 - **WHEN** PDF to JPG or PDF to PNG runs on `multilingual.pdf`
-- **THEN** it gives five pictures, and each shows ink where its page's text lines are
+- **THEN** it gives five pictures, each holds at least the amount of ink measured for its page and written in the test, and on the mixed page each script's line shows ink in its own band, found from where PDF.js places that line
 
 #### Scenario: Thumbnails
 
 - **WHEN** a page tool draws the thumbnails of `multilingual.pdf`
-- **THEN** each thumbnail shows ink where its page's text lines are
+- **THEN** each thumbnail holds at least the amount of ink measured for its page and written in the test
 
 ### Requirement: A Chinese file whose font is not embedded
 
-The test set SHALL also hold a file with Chinese text in a font that is not embedded, reached through a named character map. Tools SHALL keep its text as they keep any text. The owner's fixed PDF.js helper data holds no character maps, so its pictures and thumbnails are drawn without that text; the fixtures README SHALL record this, and no request SHALL be made for the missing map. (SPEC.md: The test set; owner decision, 11 Nov 2026)
+The test set SHALL also hold a file with Chinese text in a font that is not embedded, reached through a named character map. Tools SHALL keep its text as they keep any text. Drawing it SHALL NOT fail and SHALL NOT make a request for the character map; the fixtures README SHALL record whether the Chinese is drawn, as the known gap of the owner's decision of 11 Nov 2026 on PDF.js helper data. (SPEC.md: The test set; CLAUDE.md: Owner decisions)
 
 #### Scenario: Tools keep its text
 
 - **WHEN** a page tool, Protect with a password or a tool that draws on the pages runs on `chinese-unembedded.pdf`
 - **THEN** the page's text-drawing instructions and its font reference are kept unchanged in the result
 
-#### Scenario: Drawn without its text
+#### Scenario: Drawn without failing
 
 - **WHEN** PDF to JPG or a thumbnail draws `chinese-unembedded.pdf`
-- **THEN** it gives a picture without the Chinese text and without failing, and the fixtures README says so
+- **THEN** it gives a picture without failing, and the fixtures README records whether the Chinese is drawn, as the known gap, until the owner answers the character-map question
+
+#### Scenario: The character map is asked for in memory only
+
+- **WHEN** PDF.js draws `chinese-unembedded.pdf` and `multilingual.pdf` in a unit test whose PDF.js records every call to its data factory
+- **THEN** the unembedded file asks the factory for the `cMapUrl` kind with the name `UniGB-UCS2-H`, which is refused, and `multilingual.pdf` asks for no character map
 
 #### Scenario: No request for a character map
 
-- **WHEN** a visitor picks `chinese-unembedded.pdf` or `multilingual.pdf` on `/pdf-to-jpg` and runs the job
-- **THEN** the site files requested after the pick and after the main button are the same as for `text.pdf`, and no other request is made
+- **WHEN** a visitor picks `chinese-unembedded.pdf` or `multilingual.pdf` on `/pdf-to-jpg` and runs the job, which must reach the done heading
+- **THEN** the site's own host records the same requests after the pick and after the main button as for `text.pdf`, and no request to another origin is made, as any blocked by the Content Security Policy fails the test
