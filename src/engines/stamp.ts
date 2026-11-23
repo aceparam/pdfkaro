@@ -149,8 +149,8 @@ export type PageRead = {
   place: PagePlace;
   /**
    * Asked for with `{ pictures: true }` (Crop PDF): the most pixels (width × height) of any picture the page draws
-   * through its resources' XObjects, forms included to a depth limit; Infinity when that limit is passed or the forms
-   * loop back on themselves.
+   * through its resources' XObjects, forms included, exactly even where forms share resources or loop; Infinity when
+   * the walk passes the tree depth limit.
    */
   largestPicture?: number;
 };
@@ -218,18 +218,16 @@ export async function readPages(tools: EngineTools, plain: Uint8Array, options: 
     }
     return undefined;
   };
-  // The largest picture each resources dictionary reaches, kept by that dictionary, so pages that share their
-  // resources are walked once.
+  // The largest picture each resources dictionary reaches through its form XObjects. Resources dictionaries joined
+  // by forms make a graph that may hold cycles (one dictionary shared by a page and its forms, or by every page and
+  // form): a cycle is not a drawing loop, so its value is exact, the largest picture over its strongly connected
+  // component and everything that component reaches. Found with an iterative Tarjan walk, memoised per component,
+  // so the work over every page is linear in the dictionaries and their forms. A walk deeper than the tree depth
+  // limit gives Infinity (the page is left as it is), and no recursion is used, so a hostile chain cannot overflow.
   const picturesOf = new WeakMap<Dict, number>();
-  const largestPicture = (resources: Dict | undefined, depth = 0): number => {
-    if (!resources) return 0;
-    const known = picturesOf.get(resources);
-    if (known !== undefined) return known;
-    if (depth > treeDepthLimit) return Infinity;
-    // Counted as without limit while it is walked: a form that draws itself, or a loop of forms, ends the walk, and
-    // every page that reaches the loop is left as it is, never measured as if part of the loop held no picture.
-    picturesOf.set(resources, Infinity);
-    let largest = 0;
+  const edgesOf = (resources: Dict): { pictures: number; children: Dict[] } => {
+    let pictures = 0;
+    const children: Dict[] = [];
     const xobjects = resolve(resources['/XObject']);
     if (isDict(xobjects)) {
       for (const value of Object.values(xobjects)) {
@@ -239,15 +237,78 @@ export async function readPages(tools: EngineTools, plain: Uint8Array, options: 
         const dict = entry.stream.dict;
         if (dict['/Subtype'] === '/Image') {
           const [width, height] = [resolve(dict['/Width']), resolve(dict['/Height'])];
-          if (typeof width === 'number' && typeof height === 'number') largest = Math.max(largest, width * height);
+          if (typeof width === 'number' && typeof height === 'number') pictures = Math.max(pictures, width * height);
         } else if (dict['/Subtype'] === '/Form') {
           const own = resolve(dict['/Resources']);
-          if (isDict(own)) largest = Math.max(largest, largestPicture(own, depth + 1));
+          if (isDict(own)) children.push(own);
         }
       }
     }
-    picturesOf.set(resources, largest);
-    return largest;
+    return { pictures, children };
+  };
+  const largestPicture = (start: Dict | undefined): number => {
+    if (!start) return 0;
+    const known = picturesOf.get(start);
+    if (known !== undefined) return known;
+    const index = new Map<Dict, number>();
+    const low = new Map<Dict, number>();
+    const best = new Map<Dict, number>();
+    const stack: Dict[] = [];
+    const onStack = new Set<Dict>();
+    const frames: { node: Dict; children: Dict[]; next: number }[] = [];
+    let counter = 0;
+    const enter = (node: Dict): boolean => {
+      if (frames.length >= treeDepthLimit) return false;
+      index.set(node, counter);
+      low.set(node, counter);
+      counter++;
+      stack.push(node);
+      onStack.add(node);
+      const { pictures, children } = edgesOf(node);
+      best.set(node, pictures);
+      frames.push({ node, children, next: 0 });
+      return true;
+    };
+    enter(start);
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1]!;
+      if (frame.next < frame.children.length) {
+        const child = frame.children[frame.next++]!;
+        const done = picturesOf.get(child);
+        if (done !== undefined) {
+          best.set(frame.node, Math.max(best.get(frame.node)!, done));
+        } else if (!index.has(child)) {
+          if (!enter(child)) {
+            // Deeper than the limit: every dictionary on the path reaches past it, so each is left as it is.
+            for (const each of frames) picturesOf.set(each.node, Infinity);
+            return Infinity;
+          }
+        } else if (onStack.has(child)) {
+          low.set(frame.node, Math.min(low.get(frame.node)!, index.get(child)!));
+        }
+        continue;
+      }
+      frames.pop();
+      const parent = frames[frames.length - 1];
+      if (low.get(frame.node) === index.get(frame.node)) {
+        // The root of a component: its members share the largest picture any of them reaches.
+        const members: Dict[] = [];
+        let largest = 0;
+        let member: Dict;
+        do {
+          member = stack.pop()!;
+          onStack.delete(member);
+          members.push(member);
+          largest = Math.max(largest, best.get(member)!);
+        } while (member !== frame.node);
+        for (const each of members) picturesOf.set(each, largest);
+        if (parent) best.set(parent.node, Math.max(best.get(parent.node)!, largest));
+      } else if (parent) {
+        low.set(parent.node, Math.min(low.get(parent.node)!, low.get(frame.node)!));
+        best.set(parent.node, Math.max(best.get(parent.node)!, best.get(frame.node)!));
+      }
+    }
+    return picturesOf.get(start) ?? Infinity;
   };
   const pages = order.map(({ id, contents }): PageRead => {
     const dict = resolve(id);

@@ -287,34 +287,65 @@ describe('what a cropped file keeps', () => {
     expect((await readPages(tools, bytes)).pages.every((page) => page.largestPicture === undefined)).toBe(true);
   });
 
-  it('treats a loop of forms as without limit, so no page that reaches it is cut, whichever page is read first', async () => {
+  it('reads a loop of forms exactly: a large picture in either form leaves both pages, a self-drawing form alone is cropped', async () => {
     const bytes = await build((doc) => {
       const context = doc.context;
       const huge = context.register(context.flateStream(new Uint8Array(4), { Type: 'XObject', Subtype: 'Image', Width: 5000, Height: 4000, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }));
-      // Form A holds the large picture and draws form B; form B draws form A; form C draws itself.
+      // Form A holds the large picture and draws form B; form B draws form A; form C draws itself and holds no picture.
       const a = context.nextRef();
       const b = context.nextRef();
       const c = context.nextRef();
       context.assign(a, context.flateStream('/Im1 Do /FmB Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { Im1: huge, FmB: b } } }));
       context.assign(b, context.flateStream('/FmA Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { FmA: a } } }));
-      context.assign(c, context.flateStream('/FmC Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { FmC: c } } }));
-      const first = doc.addPage([595, 842]);
-      first.node.normalizedEntries().XObject.set(PDFName.of('FmA'), a);
-      // A mark, so the page would be cut if its pictures were not looked at.
-      first.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
-      const second = doc.addPage([595, 842]);
-      second.node.normalizedEntries().XObject.set(PDFName.of('FmB'), b);
-      // A mark, so the page would be cut if its pictures were not looked at.
-      second.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
-      const third = doc.addPage([595, 842]);
-      third.node.normalizedEntries().XObject.set(PDFName.of('FmC'), c);
-      // A mark, so the page would be cut if its pictures were not looked at.
-      third.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+      context.assign(c, context.flateStream('0 g 0 0 1 1 re f /FmC Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { FmC: c } } }));
+      for (const form of [a, b, c]) {
+        const page = doc.addPage([595, 842]);
+        page.node.normalizedEntries().XObject.set(PDFName.of('Fm'), form);
+        // A mark, so the page would be cut if its pictures were not looked at. The forms are named, not drawn.
+        page.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+      }
     });
     const { pages } = await readPages(tools, bytes, { pictures: true });
-    expect(pages.map((page) => page.largestPicture)).toEqual([Infinity, Infinity, Infinity]);
-    // So Crop leaves every one of them as it is, and gives no file.
-    expect((await crop(bytes)).outputs).toEqual([]);
+    // B reaches A's picture through the loop, so page 2 is left as page 1 is. C's loop holds no picture: PDF.js skips
+    // a form that draws itself again ("ignoring circular reference") and draws the rest, so page 3 can be cropped.
+    expect(pages.map((page) => page.largestPicture)).toEqual([20_000_000, 20_000_000, 0]);
+    const values = await pageValues((await crop(bytes)).output!);
+    expect(values.map((page) => Array.isArray(page['/CropBox']))).toEqual([false, false, true]);
+  });
+
+  it('crops pages whose resources one of their forms shares, or that share one resources dictionary with every page and form', async () => {
+    for (const everyPage of [false, true]) {
+      const bytes = await build((doc) => {
+        const context = doc.context;
+        const small = context.register(context.flateStream(new Uint8Array(100 * 100).fill(0), { Type: 'XObject', Subtype: 'Image', Width: 100, Height: 100, ColorSpace: 'DeviceGray', BitsPerComponent: 8 }));
+        const shared = context.nextRef();
+        const form = context.register(context.flateStream('0 g 0 0 1 1 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: shared }));
+        context.assign(shared, context.obj({ XObject: { Fm1: form, Im1: small } }));
+        for (let number = 0; number < 3; number++) {
+          const page = doc.addPage([595, 842]);
+          if (everyPage || number === 0) page.node.set(PDFName.of('Resources'), shared);
+          page.drawRectangle({ x: 250, y: 400, width: 100, height: 40, color: rgb(0, 0, 0) });
+        }
+      });
+      const { pages } = await readPages(tools, bytes, { pictures: true });
+      expect(pages[0]!.largestPicture).toBe(10_000);
+      const values = await pageValues((await crop(bytes)).output!);
+      expect(values.every((page) => Array.isArray(page['/CropBox'])), `every page shares: ${everyPage}`).toBe(true);
+    }
+  });
+
+  it('gives Infinity for a chain of forms deeper than the limit, without running out of stack', async () => {
+    const bytes = await build((doc) => {
+      const context = doc.context;
+      let next = context.register(context.flateStream('0 g 0 0 1 1 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1] }));
+      for (let level = 0; level < 20_000; level++) {
+        next = context.register(context.flateStream('/Fm Do', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1], Resources: { XObject: { Fm: next } } }));
+      }
+      doc.addPage([595, 842]).node.normalizedEntries().XObject.set(PDFName.of('Fm'), next);
+      doc.addPage([595, 842]);
+    });
+    const { pages } = await readPages(tools, bytes, { pictures: true });
+    expect(pages.map((page) => page.largestPicture)).toEqual([Infinity, 0]);
   });
 
   it('leaves chinese-unembedded.pdf as it is, giving no file', async () => {
