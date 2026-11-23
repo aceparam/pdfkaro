@@ -71,3 +71,25 @@ export async function look(png: Uint8Array) {
   return { width: image.width, height: image.height, ink: dark / (image.width * image.height) };
 }
 
+
+/**
+ * A stand-in for PDF.js's own worker, for the loader's tests: it posts "ready" as the real one does once its script
+ * has loaded: just after the loader starts listening, unless `held`, and then only when `ready()` is called.
+ */
+export function nestedWorker(options: { held?: boolean; terminate?: () => void } = {}) {
+  const listeners = new Set<() => void>();
+  const worker = {
+    onerror: null as ((event: { preventDefault(): void }) => void) | null,
+    terminate: options.terminate ?? (() => {}),
+    addEventListener: (_type: 'message', listener: () => void) => {
+      listeners.add(listener);
+      if (!options.held) queueMicrotask(() => worker.ready());
+    },
+    removeEventListener: (_type: 'message', listener: () => void) => void listeners.delete(listener),
+    ready: () => {
+      for (const listener of [...listeners]) listener();
+    },
+    listening: () => listeners.size,
+  };
+  return worker;
+}

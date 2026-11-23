@@ -54,6 +54,9 @@ import { passwordFrom, plainCopy } from '../plain';
 import { OutputLimit, pdfNumber, stampPages } from '../stamp';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf', 'fflate'], job: ['qpdf', 'fflate', 'pdflib'] };
+
 type Lib = typeof PdfLib;
 
 type Options = { passwords?: unknown; source?: unknown; page?: unknown; position?: unknown; name?: unknown; drawing?: unknown; picture?: unknown };

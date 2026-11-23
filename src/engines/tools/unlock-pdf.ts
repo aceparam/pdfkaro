@@ -25,8 +25,11 @@ import { readPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
 import { cappedWrite, finished, saidInvalidPassword, type Qpdf } from '../qpdf';
 import { isDict, passwordArgsFor } from '../qpdf-json';
-import type { Engine, EngineTools, Inspector } from '../types';
+import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 import { outOfMemory } from '../../widget/memory';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf'] };
 
 type Options = { passwords?: unknown };
 

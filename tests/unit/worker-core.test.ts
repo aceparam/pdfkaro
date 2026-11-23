@@ -5,21 +5,33 @@ import { createHandler, failureKind, ownBuffers } from '../../src/workers/worker
 
 const blob = (text: string) => new Blob([text]);
 
-function setup(engine: EngineModule | undefined | 'throws') {
+/** A made-up engine; one that declares no libraries loads none. */
+type TestEngine = Omit<EngineModule, 'loads'> & { loads?: EngineModule['loads'] };
+const none: EngineModule['loads'] = { read: [], job: [] };
+const withLoads = (engine: TestEngine): EngineModule => ({ loads: none, ...engine });
+
+/** The replies other than the one `prepared` each reading worker posts once its pick set has settled. */
+function replies<T extends { message: FromWorker } | FromWorker>(posted: T[]): T[] {
+  return posted.filter((entry) => ('message' in entry ? (entry as { message: FromWorker }).message : (entry as FromWorker)).type !== 'prepared');
+}
+
+function setup(engine: TestEngine | undefined | 'throws') {
   const posted: { message: FromWorker; transfer?: Transferable[] }[] = [];
   const handle = createHandler({
     loadEngine: async () => {
       if (engine === 'throws') throw new Error('network');
-      return engine;
+      return engine && withLoads(engine);
     },
+    libraries: {},
     tools: {},
     post: (message, transfer) => posted.push({ message, transfer }),
+    settleHoldMs: 50,
   });
-  return { handle, posted };
+  return { handle, posted: posted as typeof posted, replies: () => replies(posted) };
 }
 
 // A made-up engine that joins its inputs and reports progress.
-const joiner: EngineModule = {
+const joiner: TestEngine = {
   run: async (files, options, onProgress) => {
     files.forEach((_, index) => onProgress({ stage: 'reading', unit: 'file', done: index + 1, total: files.length }));
     const passwords = (options as { passwords?: unknown[] }).passwords;
@@ -46,7 +58,7 @@ describe('the tool worker', () => {
     const { handle, posted } = setup(joiner);
     await handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: blob('abc') });
     await handle({ type: 'inspect', requestId: 2, toolId: 'merge-pdf', file: blob('abc'), password: 'wrong' });
-    expect(posted.map(({ message }) => message)).toEqual([
+    expect(replies(posted).map(({ message }) => message)).toEqual([
       { type: 'inspected', requestId: 1, outcome: { kind: 'ready', pages: 3 } },
       { type: 'inspected', requestId: 2, outcome: { kind: 'needs-password' } },
     ]);
@@ -56,7 +68,7 @@ describe('the tool worker', () => {
     for (const engine of [undefined, 'throws'] as const) {
       const { handle, posted } = setup(engine);
       await handle({ type: 'inspect', requestId: 3, toolId: 'merge-pdf', file: blob('a') });
-      expect(posted).toEqual([{ message: { type: 'failed', requestId: 3, kind: 'engine-load' }, transfer: undefined }]);
+      expect(replies(posted)).toEqual([{ message: { type: 'failed', requestId: 3, kind: 'engine-load' }, transfer: undefined }]);
     }
   });
 
@@ -165,6 +177,7 @@ describe('several outputs, zipped in the worker', async () => {
   const { unzipSync, zipSync } = await import('fflate');
   // A made-up engine that gives back as many files as its first input says.
   const splitter: EngineModule = {
+    loads: { read: [], job: ['fflate'] },
     run: async (files) => {
       const count = Number(new TextDecoder().decode(files[0]));
       return Array.from({ length: count }, (_, index) => new TextEncoder().encode(`part ${index + 1}`));
@@ -178,12 +191,14 @@ describe('several outputs, zipped in the worker', async () => {
         log.push('engine');
         return splitter;
       },
+      libraries: {
+        fflate: async () => {
+          log.push('fflate');
+          return { zipSync };
+        },
+      },
       tools: {},
       post: (message, transfer) => posted.push({ message, transfer }),
-      loadZip: async () => {
-        log.push('fflate');
-        return zipSync;
-      },
     });
     return { handle, posted, log };
   }
@@ -192,7 +207,7 @@ describe('several outputs, zipped in the worker', async () => {
   it('gives three files back as one zip, numbered so they sort, with how many it holds', async () => {
     const { handle, posted, log } = zipSetup();
     await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('3')], passwords: [undefined], options: {}, zip });
-    expect(log).toEqual(['fflate', 'engine']);
+    expect(log).toEqual(['engine', 'fflate']);
     const done = posted.at(-1)!;
     if (done.message.type !== 'done') throw new Error(`expected done, got ${done.message.type}`);
     expect(done.message.parts).toBe(3);
@@ -233,31 +248,45 @@ describe('several outputs, zipped in the worker', async () => {
   it('loads fflate even when the run gives one file, and gives that file back as it is', async () => {
     const { handle, posted, log } = zipSetup();
     await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('1')], passwords: [undefined], options: {}, zip });
-    expect(log).toEqual(['fflate', 'engine']);
+    expect(log).toEqual(['engine', 'fflate']);
     const done = posted.at(-1)!;
     if (done.message.type !== 'done') throw new Error('expected done');
     expect(done.message.parts).toBeUndefined();
     expect(new TextDecoder().decode(done.message.outputs[0])).toBe('part 1');
   });
 
-  it('does not load fflate for a run with no zip naming', async () => {
+  it('loads fflate for every job of a tool that declares it, zip naming or not, so the files fetched never follow the job', async () => {
     const { handle, posted, log } = zipSetup();
     await handle({ type: 'run', requestId: 1, toolId: 'split-pdf', files: [blob('2')], passwords: [undefined], options: {} });
-    expect(log).toEqual(['engine']);
+    expect(log).toEqual(['engine', 'fflate']);
     const done = posted.at(-1)!;
     if (done.message.type !== 'done') throw new Error('expected done');
     expect(done.message.outputs).toHaveLength(2);
+  });
+
+  it('fails a zip run as engine-load when the tool does not declare fflate for its job', async () => {
+    const posted: FromWorker[] = [];
+    const handle = createHandler({
+      loadEngine: async () => ({ ...splitter, loads: none }),
+      libraries: { fflate: async () => ({ zipSync }) },
+      tools: {},
+      post: (message) => posted.push(message),
+    });
+    await handle({ type: 'run', requestId: 4, toolId: 'split-pdf', files: [blob('3')], passwords: [undefined], options: {}, zip });
+    expect(posted).toEqual([{ type: 'failed', requestId: 4, kind: 'engine-load' }]);
   });
 
   it('says the tool could not be loaded when fflate fails to load', async () => {
     const posted: FromWorker[] = [];
     const handle = createHandler({
       loadEngine: async () => splitter,
+      libraries: {
+        fflate: async () => {
+          throw new Error('network');
+        },
+      },
       tools: {},
       post: (message) => posted.push(message),
-      loadZip: async () => {
-        throw new Error('network');
-      },
     });
     await handle({ type: 'run', requestId: 4, toolId: 'split-pdf', files: [blob('3')], passwords: [undefined], options: {}, zip });
     expect(posted).toEqual([{ type: 'failed', requestId: 4, kind: 'engine-load' }]);
@@ -266,10 +295,10 @@ describe('several outputs, zipped in the worker', async () => {
 
 describe('putting several files into one zip, as the worker does it', async () => {
   const { zipSync } = await import('fflate');
-  const engine = (count: number, size = 1): EngineModule => ({ run: async () => Array.from({ length: count }, () => new Uint8Array(size)) });
+  const engine = (count: number, size = 1): EngineModule => ({ loads: { read: [], job: ['fflate'] }, run: async () => Array.from({ length: count }, () => new Uint8Array(size)) });
   const handler = (count: number) => {
     const posted: FromWorker[] = [];
-    const handle = createHandler({ loadEngine: async () => engine(count), tools: {}, post: (message) => posted.push(message), loadZip: async () => zipSync });
+    const handle = createHandler({ loadEngine: async () => engine(count), libraries: { fflate: async () => ({ zipSync }) }, tools: {}, post: (message) => posted.push(message) });
     return { handle, posted };
   };
   const zip = { stem: 'report', partSuffix: 'part' };
@@ -294,11 +323,12 @@ describe('putting several files into one zip, as the worker does it', async () =
 describe('how a tool draws its thumbnails', () => {
   const box = { width: 104, height: 136 };
   const thumb = (toolId: string, documentKey = 'f1') => ({ type: 'thumbnail', requestId: 1, toolId, file: blob('x'), page: 1, box, documentKey });
-  function drawing(engines: Record<string, EngineModule>) {
+  function drawing(engines: Record<string, TestEngine>) {
     const kinds: unknown[] = [];
     const posted: FromWorker[] = [];
     const handle = createHandler({
-      loadEngine: async (toolId) => engines[toolId],
+      loadEngine: async (toolId) => (engines[toolId] ? withLoads(engines[toolId]) : undefined),
+      libraries: {},
       tools: {},
       post: (message) => posted.push(message),
       openDocument: async (_file, _password, _tools, kind) => {
@@ -321,7 +351,7 @@ describe('how a tool draws its thumbnails', () => {
     const { handle, kinds, posted } = drawing({});
     await handle(thumb('images-to-pdf'));
     expect(kinds).toEqual([]);
-    expect(posted).toEqual([{ type: 'thumbnail', requestId: 1, image: null }]);
+    expect(replies(posted)).toEqual([{ type: 'thumbnail', requestId: 1, image: null }]);
   });
 });
 
@@ -377,20 +407,20 @@ describe('a picture chosen for an option, in the worker', () => {
     });
     await handle({ type: 'inspect-picture', requestId: 3, toolId: 'test-picture', key: 'picture', file: picture });
     expect(seen).toEqual([['picture', 'PIC']]);
-    expect(posted.map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 3, outcome: { kind: 'ready', pixels: 42 } }]);
-    expect(isFromWorker(posted[0]?.message)).toBe(true);
+    expect(replies(posted).map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 3, outcome: { kind: 'ready', pixels: 42 } }]);
+    expect(isFromWorker(replies(posted)[0]?.message)).toBe(true);
   });
 
   it('calls a picture damaged for an engine with no picture reader, so nothing unread is ever ready', async () => {
     const { handle, posted } = setup(joiner);
     await handle({ type: 'inspect-picture', requestId: 4, toolId: 'merge-pdf', key: 'picture', file: picture });
-    expect(posted.map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 4, outcome: { kind: 'damaged' } }]);
+    expect(replies(posted).map(({ message }) => message)).toEqual([{ type: 'picture-inspected', requestId: 4, outcome: { kind: 'damaged' } }]);
   });
 
   it("says the engine could not be loaded when reading a picture, as for a file", async () => {
     const { handle, posted } = setup(undefined);
     await handle({ type: 'inspect-picture', requestId: 5, toolId: 'test-picture', key: 'picture', file: picture });
-    expect(posted.map(({ message }) => message)).toEqual([{ type: 'failed', requestId: 5, kind: 'engine-load' }]);
+    expect(replies(posted).map(({ message }) => message)).toEqual([{ type: 'failed', requestId: 5, kind: 'engine-load' }]);
   });
 
   it("hands each picture's bytes to the engine under its key, beside the page's options, with the passwords last", async () => {
@@ -452,5 +482,365 @@ describe('a picture chosen for an option, in the worker', () => {
     const { handle, posted } = setup(joiner);
     await handle({ type: 'run', requestId: 9, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {}, pictures: { picture: 'bytes' } });
     expect(posted).toEqual([]);
+  });
+});
+
+describe('loading one fixed set before any file is read', () => {
+  /** A file that writes to the log when the worker copies it. */
+  const loggedFile = (log: string[], text = 'abc') =>
+    new (class extends Blob {
+      override arrayBuffer() {
+        log.push('file read');
+        return super.arrayBuffer();
+      }
+    })([text]);
+
+  /** Libraries that write to the log when started and when loaded, each held until `release` is called for it. */
+  function heldLibraries(log: string[], fail: string[] = []) {
+    const releases = new Map<string, () => void>();
+    const make = (name: string) => () => {
+      log.push(`start ${name}`);
+      return new Promise<unknown>((resolve, reject) => {
+        releases.set(name, () => {
+          log.push(`loaded ${name}`);
+          if (fail.includes(name)) reject(new Error('network'));
+          else resolve({ name, zipSync: (entries: Record<string, Uint8Array>) => new Uint8Array(Object.keys(entries).length) });
+        });
+      });
+    };
+    const libraries = { qpdf: make('qpdf'), fflate: make('fflate'), pdflib: make('pdflib'), pdfjs: make('pdfjs'), pictureThumbnail: make('pictureThumbnail') };
+    const release = async (...names: string[]) => {
+      for (const name of names) {
+        releases.get(name)?.();
+        await new Promise((done) => setTimeout(done, 0));
+      }
+    };
+    return { libraries, release };
+  }
+
+  function harness(engine: EngineModule, options: { fail?: string[]; open?: () => Promise<{ render(): Promise<Uint8Array>; close(): Promise<void> }> } = {}) {
+    const log: string[] = [];
+    const posted: FromWorker[] = [];
+    const { libraries, release } = heldLibraries(log, options.fail);
+    const handle = createHandler({
+      loadEngine: async () => {
+        log.push('engine');
+        return engine;
+      },
+      libraries,
+      tools: {
+        qpdf: async () => 'qpdf instance',
+        fflate: async () => 'fflate module',
+        pdflib: async () => 'pdf-lib',
+        canvas: async () => 'canvas',
+      },
+      post: (message) => {
+        if (message.type === 'prepared') log.push('prepared');
+        posted.push(message);
+      },
+      openDocument: async () => {
+        log.push('open');
+        return options.open ? options.open() : { render: async () => new Uint8Array([1]), close: async () => {} };
+      },
+      settleHoldMs: 200,
+    });
+    return { log, posted, handle, release };
+  }
+
+  const tick = () => new Promise((done) => setTimeout(done, 0));
+
+  for (const outcome of [{ kind: 'ready', pages: 2 }, { kind: 'damaged' }, { kind: 'needs-password' }] as const) {
+    it(`loads the engine, then its reading set in order, starts the thumbnail code, and only then reads the file (${outcome.kind})`, async () => {
+      const engine: EngineModule = {
+        loads: { read: ['fflate', 'qpdf'], job: ['qpdf'] },
+        run: async () => [],
+        inspect: async () => outcome,
+      };
+      const { log, posted, handle, release } = harness(engine);
+      const reading = handle({ type: 'inspect', requestId: 1, toolId: 'sign-pdf', file: loggedFile(log) });
+      await tick();
+      // Both reading libraries are started together, in the one order, before either has loaded.
+      expect(log).toEqual(['engine', 'start qpdf', 'start fflate']);
+      await release('qpdf', 'fflate');
+      await reading;
+      expect(log).toEqual(['engine', 'start qpdf', 'start fflate', 'loaded qpdf', 'loaded fflate', 'start pdfjs', 'file read']);
+      expect(replies(posted)).toEqual([{ type: 'inspected', requestId: 1, outcome }]);
+      // `prepared` waits for the thumbnail code, posted once.
+      await release('pdfjs');
+      await handle({ type: 'inspect', requestId: 2, toolId: 'sign-pdf', file: loggedFile(log) });
+      expect(posted.filter((message) => message.type === 'prepared')).toEqual([{ type: 'prepared', requestId: 0 }]);
+      expect(log.filter((line) => line.startsWith('start'))).toEqual(['start qpdf', 'start fflate', 'start pdfjs']);
+    });
+  }
+
+  it('starts the picture thumbnail step for a tool whose thumbnails are pictures, and never PDF.js', async () => {
+    const engine: EngineModule = { loads: { read: ['fflate'], job: ['fflate', 'pdflib'] }, thumbnails: 'picture', run: async () => [], inspect: async () => ({ kind: 'damaged' }) };
+    const { log, handle, release } = harness(engine);
+    const reading = handle({ type: 'inspect', requestId: 1, toolId: 'images-to-pdf', file: loggedFile(log) });
+    await tick();
+    await release('fflate');
+    await reading;
+    expect(log).toEqual(['engine', 'start fflate', 'loaded fflate', 'start pictureThumbnail', 'file read']);
+  });
+
+  it('loads the same set for a prepare message, which carries no file', async () => {
+    const engine: EngineModule = { loads: { read: ['qpdf'], job: ['qpdf'] }, run: async () => [], inspect: async () => ({ kind: 'ready', pages: 1 }) };
+    const { log, posted, handle, release } = harness(engine);
+    const preparing = handle({ type: 'prepare', requestId: 1, toolId: 'merge-pdf' });
+    await tick();
+    await release('qpdf');
+    await preparing;
+    await release('pdfjs');
+    expect(log).toEqual(['engine', 'start qpdf', 'loaded qpdf', 'start pdfjs', 'loaded pdfjs', 'prepared']);
+    expect(posted).toEqual([{ type: 'prepared', requestId: 0 }]);
+  });
+
+  it('does not fail a read when the thumbnail code fails, and still settles', async () => {
+    const engine: EngineModule = { loads: { read: ['qpdf'], job: ['qpdf'] }, run: async () => [], inspect: async () => ({ kind: 'ready', pages: 3 }) };
+    const { log, posted, handle, release } = harness(engine, { fail: ['pdfjs'] });
+    const reading = handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: loggedFile(log) });
+    await tick();
+    await release('qpdf');
+    await reading;
+    await release('pdfjs');
+    expect(posted).toEqual([
+      { type: 'inspected', requestId: 1, outcome: { kind: 'ready', pages: 3 } },
+      { type: 'prepared', requestId: 0 },
+    ]);
+  });
+
+  it('posts a reading failure only once the set has settled', async () => {
+    const engine: EngineModule = {
+      loads: { read: ['qpdf'], job: ['qpdf'] },
+      run: async () => [],
+      inspect: async () => {
+        throw new RangeError('Array buffer allocation failed');
+      },
+    };
+    const { posted, handle, release, log } = harness(engine);
+    const reading = handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: loggedFile(log) });
+    await tick();
+    await release('qpdf');
+    await tick();
+    await tick();
+    // The read has failed, but the thumbnail code is still arriving: nothing is posted yet.
+    expect(posted).toEqual([]);
+    await release('pdfjs');
+    await reading;
+    expect(posted).toEqual([
+      { type: 'prepared', requestId: 0 },
+      { type: 'failed', requestId: 1, kind: 'memory' },
+    ]);
+  });
+
+  it('holds a reading failure for the set at most the hold, so a stalled network cannot keep it back', async () => {
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async () => [],
+      inspect: async () => {
+        throw new RangeError('Array buffer allocation failed');
+      },
+    };
+    const { posted, handle } = harness(engine);
+    const started = Date.now();
+    // PDF.js never arrives.
+    await handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: blob('a') });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
+    expect(posted).toEqual([{ type: 'failed', requestId: 1, kind: 'memory' }]);
+  });
+
+  it('settles at once when the reading set fails, and says the tool could not be loaded', async () => {
+    const engine: EngineModule = { loads: { read: ['qpdf'], job: ['qpdf'] }, run: async () => [], inspect: async () => ({ kind: 'ready', pages: 1 }) };
+    const { log, posted, handle, release } = harness(engine, { fail: ['qpdf'] });
+    const reading = handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: loggedFile(log) });
+    await tick();
+    await release('qpdf');
+    await reading;
+    expect(log).not.toContain('file read');
+    expect(log).not.toContain('start pdfjs');
+    expect(posted).toEqual([
+      { type: 'prepared', requestId: 0 },
+      { type: 'failed', requestId: 1, kind: 'engine-load' },
+    ]);
+  });
+
+  for (const ending of ['gives a file', 'gives no file', 'throws at once'] as const) {
+    it(`loads every job library, the zip step included, before the engine runs, when the job ${ending}`, async () => {
+      const engine: EngineModule = {
+        loads: { read: ['qpdf'], job: ['pdflib', 'qpdf', 'fflate'] },
+        run: async (files) => {
+          log.push('run');
+          if (ending === 'throws at once') throw new Error('damaged');
+          return ending === 'gives a file' ? [new Uint8Array(files.length)] : [];
+        },
+      };
+      const { log, posted, handle, release } = harness(engine);
+      const running = handle({ type: 'run', requestId: 3, toolId: 'sign-pdf', files: [loggedFile(log)], passwords: [undefined], options: {}, zip: { stem: 'report', partSuffix: 'part' } });
+      await tick();
+      expect(log).toEqual(['engine', 'start qpdf', 'start fflate', 'start pdflib']);
+      await release('qpdf', 'fflate', 'pdflib');
+      await running;
+      expect(log).toEqual(['engine', 'start qpdf', 'start fflate', 'start pdflib', 'loaded qpdf', 'loaded fflate', 'loaded pdflib', 'file read', 'run']);
+      // A job starts no thumbnail code and posts no `prepared`.
+      expect(posted.some((message) => message.type === 'prepared')).toBe(false);
+      expect(posted.at(-1)?.type).toBe(ending === 'throws at once' ? 'failed' : 'done');
+    });
+  }
+
+  it('refuses a library the engine did not declare for the step, fetching nothing, and fails as engine-load', async () => {
+    const asked: string[] = [];
+    const engine: EngineModule = {
+      loads: { read: ['qpdf'], job: ['qpdf'] },
+      // Asks for pdf-lib, then swallows the refusal; the step still fails.
+      run: async (_files, _options, _progress, tools) => {
+        await tools.pdflib!().catch(() => asked.push('pdflib refused'));
+        return [new Uint8Array([1])];
+      },
+      inspect: async (_file, _password, tools) => {
+        await tools.fflate!();
+        return { kind: 'ready', pages: 1 };
+      },
+    };
+    const { log, posted, handle, release } = harness(engine);
+    const running = handle({ type: 'run', requestId: 1, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    await tick();
+    await release('qpdf');
+    await running;
+    expect(asked).toEqual(['pdflib refused']);
+    expect(posted).toEqual([{ type: 'failed', requestId: 1, kind: 'engine-load' }]);
+    const reading = handle({ type: 'inspect', requestId: 2, toolId: 'merge-pdf', file: blob('a') });
+    await tick();
+    await release('qpdf', 'pdfjs');
+    await reading;
+    expect(replies(posted).at(-1)).toEqual({ type: 'failed', requestId: 2, kind: 'engine-load' });
+    expect(log.filter((line) => line.startsWith('start'))).not.toContain('start pdflib');
+    expect(log.filter((line) => line.startsWith('start'))).not.toContain('start fflate');
+  });
+
+  it('gives an engine the keys that fetch nothing in every step', async () => {
+    let canvas: unknown;
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async (_files, _options, _progress, tools) => {
+        canvas = await tools.canvas!();
+        return [new Uint8Array([1])];
+      },
+    };
+    const { posted, handle } = harness(engine);
+    await handle({ type: 'run', requestId: 1, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(canvas).toBe('canvas');
+    expect(posted.at(-1)?.type).toBe('done');
+  });
+});
+
+describe('a thumbnail asked for before the set settles', () => {
+  function harness() {
+    const opened: string[] = [];
+    const posted: FromWorker[] = [];
+    let releasePdfjs: () => void = () => {};
+    const handle = createHandler({
+      loadEngine: async () => withLoads({ run: async () => [] }),
+      libraries: {
+        pdfjs: () =>
+          new Promise((resolve) => {
+            releasePdfjs = () => resolve('pdfjs');
+          }),
+      },
+      tools: {},
+      post: (message) => posted.push(message),
+      openDocument: async () => {
+        opened.push('open');
+        return { render: async () => new Uint8Array([1]), close: async () => {} };
+      },
+    });
+    return { opened, posted, handle, release: () => releasePdfjs() };
+  }
+  const box = { width: 104, height: 136 };
+  const thumb = (requestId: number) => ({ type: 'thumbnail', requestId, toolId: 'merge-pdf', file: blob('x'), page: 1, box, documentKey: 'f1' });
+  const tick = () => new Promise((done) => setTimeout(done, 0));
+
+  it('waits for the thumbnail code, then draws', async () => {
+    const { opened, posted, handle, release } = harness();
+    const drawing = handle(thumb(5));
+    await tick();
+    expect(opened).toEqual([]);
+    release();
+    await drawing;
+    expect(opened).toEqual(['open']);
+    expect(posted.map((message) => message.type)).toEqual(['prepared', 'thumbnail']);
+  });
+
+  it('is answered with no picture when dropped, and never opens its document afterwards', async () => {
+    const { opened, posted, handle, release } = harness();
+    const drawing = handle(thumb(5));
+    await tick();
+    // Dropped while its library is still loading.
+    await handle({ type: 'drop-thumbnail', requestId: 5, toolId: 'merge-pdf' });
+    expect(posted).toEqual([{ type: 'thumbnail', requestId: 5, image: null }]);
+    release();
+    await drawing;
+    expect(opened).toEqual([]);
+    // Answered once, before `prepared`, so the page knows the drop was in time.
+    expect(posted).toEqual([
+      { type: 'thumbnail', requestId: 5, image: null },
+      { type: 'prepared', requestId: 0 },
+    ]);
+  });
+
+  it('is not dropped once the set has settled: `prepared` comes first, so the page knows it was too late', async () => {
+    const { opened, posted, handle, release } = harness();
+    const drawing = handle(thumb(6));
+    await tick();
+    release();
+    await drawing;
+    await handle({ type: 'drop-thumbnail', requestId: 6, toolId: 'merge-pdf' });
+    expect(opened).toEqual(['open']);
+    expect(posted.map((message) => message.type)).toEqual(['prepared', 'thumbnail']);
+  });
+});
+
+describe('libraries refused in a read', () => {
+  it('fail a read and a picture read as engine-load even when the engine catches the refusal', async () => {
+    const posted: FromWorker[] = [];
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async () => [],
+      inspect: async (_file, _password, tools) => {
+        try {
+          await tools.pdflib!();
+        } catch {
+          throw new Error('damaged, says the engine');
+        }
+        return { kind: 'ready', pages: 1 };
+      },
+      inspectPicture: async (_key, _bytes, tools) => {
+        await tools.fflate!().catch(() => {});
+        return { kind: 'ready', pixels: 1 };
+      },
+    };
+    const handle = createHandler({ loadEngine: async () => engine, libraries: {}, tools: { pdflib: async () => 'x', fflate: async () => 'y' }, post: (message) => posted.push(message), settleHoldMs: 10 });
+    await handle({ type: 'inspect', requestId: 1, toolId: 'merge-pdf', file: blob('a') });
+    await handle({ type: 'inspect-picture', requestId: 2, toolId: 'sign-pdf', key: 'picture', file: blob('b') });
+    expect(replies(posted)).toEqual([
+      { type: 'failed', requestId: 1, kind: 'engine-load' },
+      { type: 'failed', requestId: 2, kind: 'engine-load' },
+    ]);
+  });
+
+  it('are handed in a `tools` that is not thenable, so awaiting it asks for nothing', async () => {
+    let seen: unknown = 'unset';
+    const engine: EngineModule = {
+      loads: { read: [], job: [] },
+      run: async (_files, _options, _progress, tools) => {
+        seen = (tools as unknown as { then?: unknown }).then;
+        await (tools as unknown as Promise<unknown>);
+        return [new Uint8Array([1])];
+      },
+    };
+    const posted: FromWorker[] = [];
+    const handle = createHandler({ loadEngine: async () => engine, libraries: {}, tools: {}, post: (message) => posted.push(message) });
+    await handle({ type: 'run', requestId: 1, toolId: 'merge-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(seen).toBeUndefined();
+    expect(posted.at(-1)?.type).toBe('done');
   });
 });

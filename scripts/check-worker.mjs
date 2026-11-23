@@ -197,7 +197,51 @@ const helperIn = (pattern) => helperFiles.filter((name) => pattern.test(name)).l
 if (helperIn(/^ToolWorkspace\.[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the page's ToolWorkspace chunk, found ${helperIn(/^ToolWorkspace\./)}.`);
 if (helperIn(/^tool\.worker-[A-Za-z0-9_-]{8}\.js$/) !== 1) problems.push(`Expected one blob: worker start in the tool worker file, found ${helperIn(/^tool\.worker-/)}.`);
 
+// The thumbnail code a pick starts after its reading libraries (worker-core's draw set) may statically import only
+// files the worker and the tool's engine already load. Otherwise starting it would bring a further request that
+// waits on the worker's own event loop, which a long qpdf call holds, so its timing could follow the file.
+const staticImports = (name) =>
+  [...readFileSync(join(assets, name), 'utf8').matchAll(/(?:from|import)\s*["'`]\.\/([^"'`]+)["'`]/g)].map((match) => match[1]);
+function staticClosure(name) {
+  const seen = new Set([name]);
+  const queue = [name];
+  while (queue.length > 0) {
+    for (const next of staticImports(queue.shift())) {
+      if (seen.has(next) || !files.includes(next)) continue;
+      seen.add(next);
+      queue.push(next);
+    }
+  }
+  return seen;
+}
+const oneFile = (pattern) => files.filter((name) => pattern.test(name));
+const drawChunks = {
+  pdf: [...pdfjsDisplay, ...pdfjsData, ...oneFile(/^thumbnail-[A-Za-z0-9_-]{8}\.js$/)],
+  picture: oneFile(/^picture-thumbnail-[A-Za-z0-9_-]{8}\.js$/),
+};
+if (drawChunks.pdf.length !== 3) problems.push(`Expected PDF.js, its data and the thumbnail step as three files, found ${drawChunks.pdf.length}.`);
+if (drawChunks.picture.length !== 1) problems.push(`Expected the picture thumbnail step as one file, found ${drawChunks.picture.length}.`);
+const workerLoads = staticClosure(workers[0]);
+for (const id of engineIds) {
+  const chunk = files.find((name) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(name));
+  if (!chunk) continue;
+  // How the engine draws its thumbnails: `export const thumbnails = 'picture'`, with or without a type. Any other
+  // mention of `thumbnails` as an export is a form this check does not know, so it fails rather than guess.
+  const source = readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8');
+  const declared = /export\s+const\s+thumbnails\s*(?::\s*[^=;]+)?=\s*(['"])picture\1\s*(?:as\s+const\s*)?;/.test(source);
+  if (!declared && /export\s+(?:const|let|var|function|\{[^}]*\bthumbnails\b)[^;]*\bthumbnails\b/.test(source)) {
+    problems.push(`The ${id} engine exports thumbnails in a form check-worker.mjs cannot read.`);
+  }
+  const kind = declared ? 'picture' : 'pdf';
+  const already = new Set([...workerLoads, ...staticClosure(chunk)]);
+  for (const draw of drawChunks[kind]) {
+    for (const brought of staticClosure(draw)) {
+      if (brought !== draw && !already.has(brought)) problems.push(`${draw}, started for ${id}'s thumbnails, imports ${brought}, which neither the worker nor the ${id} engine loads.`);
+    }
+  }
+}
+
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address; the thumbnail code imports nothing the worker and engine do not already load.`,
 );

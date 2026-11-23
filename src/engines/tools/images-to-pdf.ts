@@ -13,7 +13,10 @@
 
 import type * as PdfLib from '@cantoo/pdf-lib';
 import { isHuge, jpegForPdf, orientedMatrix, pngDataFits, pngForPdf, pngProfile, profileColourOnly, readPicture, shownSize, type InflateClass, type Matrix, type Orientation } from '../picture';
-import type { Engine, EngineTools, Inspector } from '../types';
+import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['fflate'], job: ['fflate', 'pdflib'] };
 
 /** An A4 page, upright, in points. */
 export const a4 = { width: 595.28, height: 841.89 } as const;

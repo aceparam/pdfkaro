@@ -1,12 +1,13 @@
 // What the tool worker does with each message, kept apart from the worker's
 // own globals so that it can be tested in Node with a made-up engine.
 
-import type { EngineModule, EngineTools } from '../engines/types';
+import type { EngineModule, EngineTools, LibraryName } from '../engines/types';
 import type { FailureKind } from '../widget/state';
 import { partName } from '../widget/format';
 import { outOfMemory } from '../widget/memory';
 import { fitsInOneZip, TooBigForZip } from '../widget/zip-limits';
-import { isToWorker, type FromWorker, type ThumbnailBox } from './messages';
+import { drawSet, inOrder, libraryOf } from './libraries';
+import { isToWorker, settleHoldMs, type FromWorker, type ThumbnailBox } from './messages';
 
 /** A document kept open so that several pages can be drawn without reading the file again. */
 export type KeptDocument = {
@@ -20,6 +21,13 @@ export type ZipSync = (entries: Record<string, Uint8Array>, options: { level: 0 
 export type WorkerDeps = {
   /** Loads a tool's engine by its id, or gives undefined when there is none. */
   loadEngine(toolId: string): Promise<EngineModule | undefined>;
+  /**
+   * Loads each library by name, fetching its files, before any file is read: `qpdf` makes the spare qpdf,
+   * `fflate` gives the module with `zipSync`, `pdfjs` starts PDF.js, its worker, its data and the thumbnail
+   * step together. A library with no loader here counts as one that failed to load.
+   */
+  libraries: Partial<Record<LibraryName, () => Promise<unknown>>>;
+  /** Every key a library gives an engine; each step's engine sees only the keys its declared set allows. */
   tools: EngineTools;
   post(message: FromWorker, transfer?: Transferable[]): void;
   /**
@@ -28,9 +36,10 @@ export type WorkerDeps = {
    * drawn by the browser's image decoder. It comes from the tool, never from the file.
    */
   openDocument?(file: Uint8Array, password: string | undefined, tools: EngineTools, kind: EngineModule['thumbnails']): Promise<KeptDocument>;
-  /** Loads fflate's zipSync. Loaded late by the worker, at the start of every run that may give several files. */
-  loadZip?(): Promise<ZipSync>;
+  /** How long a reading failure waits for the pick set to settle before it is posted. Tests make it short. */
+  settleHoldMs?: number;
 };
+
 
 class EngineLoadError extends Error {}
 
@@ -96,14 +105,112 @@ export function createHandler(deps: WorkerDeps) {
     return engine;
   }
 
-  async function zipFor(): Promise<ZipSync> {
-    if (!deps.loadZip) throw new EngineLoadError();
+  // What each library gave once loaded, by name: the fflate module's zipSync is taken from here.
+  const loaded = new Map<LibraryName, unknown>();
+  const loading = new Map<LibraryName, Promise<unknown>>();
+  function load(name: LibraryName): Promise<unknown> {
+    let started = loading.get(name);
+    if (!started) {
+      const loader = deps.libraries[name];
+      started = (loader ? loader() : Promise.reject(new Error(`No loader for ${name}.`))).then((value) => {
+        loaded.set(name, value);
+        return value;
+      });
+      started.catch(() => {});
+      loading.set(name, started);
+    }
+    return started;
+  }
+  /** Starts every library of `names`, in the one order, in one synchronous step, and waits for them all. */
+  async function loadAll(names: readonly LibraryName[]): Promise<void> {
+    const started = inOrder(names).map(load);
     try {
-      return await deps.loadZip();
+      await Promise.all(started);
     } catch {
       throw new EngineLoadError();
     }
   }
+
+  // The pick set has settled once the thumbnail code has loaded or failed, or the reading set failed.
+  // `prepared` is posted then, once for this worker.
+  let settle: () => void = () => {};
+  const settled = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  let postedPrepared = false;
+  void settled.then(() => {
+    postedPrepared = true;
+    deps.post({ type: 'prepared', requestId: 0 });
+  });
+  const hold = deps.settleHoldMs ?? settleHoldMs;
+  /** Waits until the set has settled, or `hold` has passed, whichever is first. */
+  function settledOrHeld(): Promise<void> {
+    if (postedPrepared) return Promise.resolve();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([settled, new Promise<void>((resolve) => (timer = setTimeout(resolve, hold)))]).finally(() => clearTimeout(timer));
+  }
+
+  type Phase = 'read' | 'job';
+  // By phase and tool: one page's worker serves one tool, but nothing of one tool is ever used for another.
+  const readies = new Map<string, Promise<EngineModule>>();
+  /**
+   * Loads, for one phase, the engine, then every library its declared set names, in the one order, all before
+   * any file is read. The read phase then starts the thumbnail code and does not wait for it. Memoised: every
+   * message of the phase waits for the same step, so the files fetched are the same whatever the message.
+   */
+  function ready(phase: Phase, toolId: string): Promise<EngineModule> {
+    let step = readies.get(`${phase} ${toolId}`);
+    if (!step) {
+      step = (async () => {
+        let engine: EngineModule;
+        try {
+          engine = await engineFor(toolId);
+          if (!engine.loads) throw new EngineLoadError();
+          await loadAll(engine.loads[phase]);
+        } catch (error) {
+          if (phase === 'read') settle();
+          throw error;
+        }
+        if (phase === 'read') {
+          // Started now, after the reading set, so it does not share the connection with qpdf, and never waited for:
+          // a missing PDF.js means blank boxes, as before, and the main button never waits for a thumbnail.
+          void Promise.allSettled(inOrder(drawSet(engine)).map(load)).then(() => settle());
+        }
+        return engine;
+      })();
+      step.catch(() => {});
+      readies.set(`${phase} ${toolId}`, step);
+    }
+    return step;
+  }
+
+  /**
+   * The libraries an engine may reach in one step: the keys whose library the step allows, and the keys marked
+   * `'always'`, which fetch nothing. Any other key is refused, fetches nothing, and marks the step, which then
+   * fails as `engine-load` whatever the engine did with the refusal.
+   */
+  function gated(allowed: readonly LibraryName[]): { tools: EngineTools; refused: () => boolean } {
+    let refused = false;
+    const tools = new Proxy(deps.tools, {
+      get(target, key) {
+        // Not thenable: awaiting the tools themselves must not ask for a library called `then`.
+        if (typeof key !== 'string' || key === 'then') return undefined;
+        const library = libraryOf(key);
+        const make = Object.hasOwn(target, key) ? target[key] : undefined;
+        if (make && (library === 'always' || (library !== undefined && allowed.includes(library)))) return make;
+        return () => {
+          refused = true;
+          return Promise.reject(new EngineLoadError());
+        };
+      },
+    });
+    return { tools, refused: () => refused };
+  }
+
+  // Thumbnails still waiting for the set, and those the page dropped. A dropped thumbnail is answered with no
+  // picture at once and never opens its document, so a file that stalls PDF.js can never hold the next read.
+  const waitingThumbnails = new Set<number>();
+  const droppedThumbnails = new Set<number>();
 
   // At most one document is kept open, for drawing thumbnails of one file's pages.
   let kept: { key: string; doc: Promise<KeptDocument> } | null = null;
@@ -132,18 +239,35 @@ export function createHandler(deps: WorkerDeps) {
       await closeKept();
       return;
     }
+    if (data.type === 'prepare') {
+      // The pick set and nothing else; a failure shows when a file is read.
+      await ready('read', data.toolId).catch(() => {});
+      return;
+    }
+    if (data.type === 'drop-thumbnail') {
+      // Only a thumbnail still waiting is dropped. One already past the wait has posted `prepared` first, in the same
+      // turn, so the page knows from the order of replies that the drop came too late.
+      droppedThumbnails.add(requestId);
+      if (waitingThumbnails.delete(requestId)) deps.post({ type: 'thumbnail', requestId, image: null });
+      return;
+    }
     if (data.type === 'thumbnail') {
       // A thumbnail never fails the tool: any problem gives no picture.
       let image: Uint8Array | null = null;
+      waitingThumbnails.add(requestId);
       try {
-        if (deps.openDocument) {
+        // The read set, then the thumbnail code, have settled before anything is opened.
+        const engine = await ready('read', data.toolId).catch(() => undefined);
+        await settled;
+        if (droppedThumbnails.has(requestId)) return;
+        waitingThumbnails.delete(requestId);
+        if (engine && deps.openDocument) {
+          const { tools, refused } = gated([...engine.loads.read, ...drawSet(engine)]);
           if (kept?.key !== data.documentKey) {
-            // The tool's engine says how its files are drawn; it is already loaded by the read before. It is asked
-            // before the close, so the wait between closing the last document and keeping the new one is no longer
-            // than before. The page asks for one thumbnail at a time, so no second request lands in that wait.
-            const kind = (await engineFor(data.toolId)).thumbnails;
+            // The engine's `thumbnails` says how its files are drawn. The page asks for one thumbnail at a time, so no
+            // second request lands between closing the last document and keeping the new one.
             await closeKept();
-            const opening = deps.openDocument(await bytesOf(data.file), data.password, deps.tools, kind);
+            const opening = deps.openDocument(await bytesOf(data.file), data.password, tools, engine.thumbnails);
             kept = { key: data.documentKey, doc: opening };
             // A file that cannot be opened is not kept, so it is tried afresh if asked for again.
             opening.catch(() => {
@@ -152,9 +276,12 @@ export function createHandler(deps: WorkerDeps) {
           }
           const current = kept;
           if (current) image = await (await current.doc).render(data.page, data.box);
+          if (refused()) image = null;
         }
       } catch {
         image = null;
+      } finally {
+        waitingThumbnails.delete(requestId);
       }
       if (!image) {
         deps.post({ type: 'thumbnail', requestId, image: null });
@@ -164,16 +291,29 @@ export function createHandler(deps: WorkerDeps) {
       deps.post({ type: 'thumbnail', requestId, image: moved.outputs[0]! }, moved.transfer);
       return;
     }
-    // A job or a read never runs beside a kept copy of a file.
-    await closeKept();
+    const phase = data.type === 'run' ? 'job' : 'read';
     try {
-      // For a tool that can give several files, the zip code is fetched before the engine has given anything,
-      // so the request is the same whatever the file gives.
-      const zipSync = data.type === 'run' && data.zip ? await zipFor() : undefined;
-      const engine = await engineFor(data.toolId);
+      // Every library of the phase is loaded before any file is touched, whatever the file or how the step ends.
+      const engine = await ready(phase, data.toolId);
+      // A job or a read never runs beside a kept copy of a file.
+      await closeKept();
+      const { tools, refused } = gated(engine.loads[phase]);
+      const checked = <T>(value: T): T => {
+        if (refused()) throw new EngineLoadError();
+        return value;
+      };
+      // A refused library fails the step as engine-load even when the engine caught the refusal and threw something else.
+      const guarded = async <T>(step: () => Promise<T>): Promise<T> => {
+        try {
+          return checked(await step());
+        } catch (error) {
+          throw refused() ? new EngineLoadError() : error;
+        }
+      };
       if (data.type === 'inspect-picture') {
         // A tool with no picture reader calls every picture damaged, so nothing unread is ever called ready.
-        const outcome = engine.inspectPicture ? await engine.inspectPicture(data.key, await bytesOf(data.file), deps.tools) : { kind: 'damaged' as const };
+        const inspectPicture = engine.inspectPicture;
+        const outcome = inspectPicture ? await guarded(async () => inspectPicture(data.key, await bytesOf(data.file), tools)) : { kind: 'damaged' as const };
         deps.post({ type: 'picture-inspected', requestId, outcome });
         return;
       }
@@ -182,26 +322,35 @@ export function createHandler(deps: WorkerDeps) {
           deps.post({ type: 'inspected', requestId, outcome: { kind: 'ready', pages: 0 } });
           return;
         }
-        const outcome = await engine.inspect(await bytesOf(data.file), data.password, deps.tools);
+        const inspect = engine.inspect;
+        const outcome = await guarded(async () => inspect(await bytesOf(data.file), data.password, tools));
         deps.post({ type: 'inspected', requestId, outcome });
         return;
       }
+      // The zip step comes from the fflate library, loaded with the job's set; a zip run without it is a mistake.
+      const zipSync = data.zip ? (loaded.get('fflate') as { zipSync?: ZipSync } | undefined)?.zipSync : undefined;
+      if (data.zip && !zipSync) throw new EngineLoadError();
       const files: Uint8Array[] = [];
       for (const file of data.files) files.push(await bytesOf(file));
       // Each picture's bytes, under its option's key, beside the page's options; the passwords last, so no key replaces them.
       const pictureBytes: Record<string, Uint8Array> = {};
       for (const [key, picture] of Object.entries(data.pictures ?? {})) pictureBytes[key] = await bytesOf(picture);
-      const outputs = await engine.run(
-        files,
-        { ...data.options, ...pictureBytes, passwords: data.passwords },
-        (progress) => deps.post({ type: 'progress', requestId, progress }),
-        deps.tools,
-      );
+      let outputs: Uint8Array[];
+      try {
+        outputs = await engine.run(
+          files,
+          { ...data.options, ...pictureBytes, passwords: data.passwords },
+          (progress) => deps.post({ type: 'progress', requestId, progress }),
+          tools,
+        );
+      } catch (error) {
+        throw refused() ? new EngineLoadError() : error;
+      }
+      checked(outputs);
       // The worker's copies of the inputs are dropped here; only the results go back, moved, not copied.
       files.length = 0;
-      const zip = data.type === 'run' ? data.zip : undefined;
-      if (outputs.length > 1 && zip) {
-        if (!zipSync) throw new EngineLoadError();
+      const zip = data.zip;
+      if (outputs.length > 1 && zip && zipSync) {
         const total = outputs.length;
         // The engine has finished; say the files are being put together, so the line does not sit on the last file.
         deps.post({ type: 'progress', requestId, progress: { stage: 'writing', percent: 100 } });
@@ -224,6 +373,9 @@ export function createHandler(deps: WorkerDeps) {
       const moved = ownBuffers(outputs);
       deps.post({ type: 'done', requestId, outputs: moved.outputs }, moved.transfer);
     } catch (error) {
+      // A reading failure is posted only once the pick set has settled (held to a limit), so the page never ends a
+      // worker for it while the set's files are still arriving.
+      if (phase === 'read') await settledOrHeld();
       deps.post({ type: 'failed', requestId, kind: failureKind(error) });
     }
   };

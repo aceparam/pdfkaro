@@ -13,7 +13,8 @@ import { type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -268,7 +269,7 @@ test.describe('problems with the file', () => {
     await context.route(/\/_astro\/compress-pdf-[A-Za-z0-9_-]{8}\.js$/, (route) =>
       route.fulfill({
         contentType: 'text/javascript',
-        body: "export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { throw new RangeError('Array buffer allocation failed'); };",
+        body: "export const loads = { read: ['qpdf'], job: ['qpdf', 'fflate'] }; export const inspect = async () => ({ kind: 'ready', pages: 3 }); export const run = async () => { throw new RangeError('Array buffer allocation failed'); };",
       }),
     );
     await open(page);
@@ -294,11 +295,8 @@ test.describe('problems with the file', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** Compress PDF's own files that may load after a pick, by exact name, read from the build. No pdf-lib. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|compress-pdf-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|picture-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js|fflate-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** Compress PDF's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts). No pdf-lib. */
+const filesAfterPick = () => toolFiles('compress-pdf').all;
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))];
 const built = (path: string) => readFileSync(join(here, '../../dist', path), 'utf8');
 /** The built file, among those fetched, that holds a sentence from a source file, so code the bundler moved into another chunk is still found. */

@@ -15,7 +15,8 @@ import { expect, test } from './fixtures';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { certificatePdf } from '../unit/unlock-helpers';
-import { builtFiles, headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { headersRead, traces, violations, watch, type Seen } from './no-upload';
+import { toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -191,7 +192,7 @@ const engineFile = /\/_astro\/unlock-pdf-[A-Za-z0-9_-]{8}\.js$/;
  * otherwise; any other file is ready) and then does what `run` says, with `options` the job's options.
  */
 const fakeEngine = (run: string) =>
-  `export const inspect = async (file, password) => file.length !== ${readFileSync(fixture('password.pdf')).length} ? { kind: 'ready', pages: 3 } : password === undefined ? { kind: 'needs-password' } : password === '${open}' ? { kind: 'ready', pages: 3 } : { kind: 'wrong-password' };
+  `export const loads = { read: ['qpdf'], job: ['qpdf'] }; export const inspect = async (file, password) => file.length !== ${readFileSync(fixture('password.pdf')).length} ? { kind: 'ready', pages: 3 } : password === undefined ? { kind: 'needs-password' } : password === '${open}' ? { kind: 'ready', pages: 3 } : { kind: 'wrong-password' };
    export const run = async (files, options) => { ${run} };`;
 /** A fake run that gives a small file only when sent open-sesame, so a result proves the password was kept. */
 const givesWithPassword = `if (options.passwords?.[0] !== '${open}') throw new Error('x'); return [new Uint8Array([37, 80, 68, 70, 45])];`;
@@ -331,7 +332,7 @@ test.describe('removing the protection', () => {
   test('a wrong password still being tried, then the right one: the later answer wins, and the main button stays', async ({ page, context }) => {
     // The wrong try's answer is held back until the right one has been answered, so it arrives last, as it can when
     // the worker reads two tries at once.
-    const slowWrong = `export const inspect = async (file, password) => { if (password === undefined) return { kind: 'needs-password' }; if (password === '${open}') return { kind: 'ready', pages: 3 }; await new Promise((resolve) => setTimeout(resolve, 1500)); return { kind: 'wrong-password' }; };
+    const slowWrong = `export const loads = { read: ['qpdf'], job: ['qpdf'] }; export const inspect = async (file, password) => { if (password === undefined) return { kind: 'needs-password' }; if (password === '${open}') return { kind: 'ready', pages: 3 }; await new Promise((resolve) => setTimeout(resolve, 1500)); return { kind: 'wrong-password' }; };
       export const run = async () => [new Uint8Array([37, 80, 68, 70, 45])];`;
     await context.route(engineFile, (route) => route.fulfill({ contentType: 'text/javascript', body: slowWrong }));
     await openPage(page);
@@ -588,11 +589,8 @@ test.describe('the words below the tool', () => {
 // ---------------------------------------------------------------------------
 // Nothing is uploaded.
 
-/** This tool's own files that may load after a pick, by exact name, read from the build: no option values, drawing step, pdf-lib or fflate. */
-const filesAfterPick = () =>
-  builtFiles(
-    /^(ToolWorkspace\.[A-Za-z0-9_-]{8}\.js|FilePicker\.[A-Za-z0-9_-]{8}\.css|tool\.worker-[A-Za-z0-9_-]{8}\.js|unlock-pdf-[A-Za-z0-9_-]{8}\.js|plain-[A-Za-z0-9_-]{8}\.js|inspect-[A-Za-z0-9_-]{8}\.js|qpdf-[A-Za-z0-9_-]{8}\.(js|wasm)|thumbnail-[A-Za-z0-9_-]{8}\.js|pdf-[A-Za-z0-9_-]{8}\.js|pdf\.worker\.min-[A-Za-z0-9_-]{8}\.mjs|pdfjs-data-[A-Za-z0-9_-]{8}\.js)$/,
-  );
+/** This tool's own files that may load after a pick, by exact name, built from its engine's declared libraries (tool-files.ts): no option values, drawing step, pdf-lib or fflate. */
+const filesAfterPick = () => toolFiles('unlock-pdf').all;
 const fetchedPaths = (seen: Seen[]) => [...new Set(seen.filter((request) => !request.url.startsWith('blob:')).map((request) => new URL(request.url).pathname))];
 
 /** Every console message of the page and of each of its workers, as its text and its arguments, and every page error. */

@@ -9,7 +9,10 @@
 
 import { inspectPdf } from '../inspect';
 import { finished, qpdfFrom, saidInvalidPassword } from '../qpdf';
-import type { Engine, Inspector } from '../types';
+import type { Engine, EngineModule, Inspector } from '../types';
+
+/** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */
+export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf'] };
 
 type Options = { passwords?: (string | undefined)[] };
 

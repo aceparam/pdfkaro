@@ -105,6 +105,8 @@ describe('the tool client', () => {
   it('ends a worker whose engine could not be fetched, so the next try starts afresh', async () => {
     const { client, workers } = setup();
     const first = client.inspect(file);
+    // As the worker does: a reading failure comes once its set has settled.
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
     workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine-load' });
     await expect(first).rejects.toEqual(new ToolError('engine-load'));
     expect(workers[0]!.ended).toBe(true);
@@ -164,8 +166,9 @@ describe('a picture chosen for an option', () => {
     );
     const asked = client.inspectPicture(picture, 'picture');
     asked.catch(() => {});
-    // A thumbnail asked for meanwhile runs out of time and ends the worker, read and all.
+    // A thumbnail asked for meanwhile runs out of time, once the set has settled, and ends the worker, read and all.
     const drawn = client.thumbnail(file, undefined, 1, { width: 100, height: 100 }, 'f1');
+    workers[0]?.reply({ type: 'prepared', requestId: 0 });
     await expect(drawn).resolves.toBeNull();
     await expect(asked).rejects.toEqual(new ToolError('cancelled'));
     expect(workers[0]?.ended).toBe(true);
@@ -211,5 +214,246 @@ describe('Cancel while a picture is being read', () => {
     const sent = workers[1]?.sent[0];
     workers[1]?.reply({ type: 'picture-inspected', requestId: sent?.requestId, outcome: { kind: 'ready', pixels: 4 } });
     await expect(again).resolves.toEqual({ kind: 'ready', pixels: 4 });
+  });
+});
+
+describe('a worker whose set is still loading', () => {
+  const box = { width: 104, height: 136 };
+  function timed(limitMs = 20, holdMs = 200) {
+    const workers: FakeWorker[] = [];
+    const client = new ToolClient(
+      'merge-pdf',
+      () => {
+        const worker = new FakeWorker();
+        workers.push(worker);
+        return worker;
+      },
+      limitMs,
+      holdMs,
+    );
+    return { client, workers };
+  }
+  const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+  it('is prepared with no file, and the wait ends on `prepared`', async () => {
+    const { client, workers } = timed();
+    const preparing = client.prepare();
+    expect(workers).toHaveLength(1);
+    expect(workers[0]!.sent).toEqual([{ type: 'prepare', requestId: 1, toolId: 'merge-pdf' }]);
+    expect(client.settled).toBe(false);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await expect(preparing).resolves.toBe('settled');
+    expect(client.settled).toBe(true);
+    // Prepared again, the same worker answers at once.
+    await expect(client.prepare()).resolves.toBe('settled');
+    expect(workers).toHaveLength(1);
+  });
+
+  it('ends a prepare wait at once when the worker is ended or fails', async () => {
+    const { client, workers } = timed();
+    const ended = client.prepare();
+    client.end();
+    await expect(ended).resolves.toBe('ended');
+    const failed = client.prepare();
+    workers[1]!.onerror?.({});
+    await expect(failed).resolves.toBe('ended');
+  });
+
+  it('does not end the worker for a thumbnail that waits longer than the limit before the set settles, and does after', async () => {
+    const { client, workers } = timed(20, 1000);
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    await wait(60);
+    expect(workers[0]!.ended).toBe(false);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await expect(drawn).resolves.toBeNull();
+    expect(workers[0]!.ended).toBe(true);
+  });
+
+  it('waits for the set at most the hold, then drops the thumbnail by message and keeps the worker', async () => {
+    const { client, workers } = timed(20, 50);
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    const thumbRequest = workers[0]!.sent[0]!.requestId;
+    await wait(80);
+    expect(workers[0]!.sent.at(-1)).toEqual({ type: 'drop-thumbnail', requestId: thumbRequest, toolId: 'merge-pdf' });
+    workers[0]!.reply({ type: 'thumbnail', requestId: thumbRequest, image: null });
+    await expect(drawn).resolves.toBeNull();
+    expect(workers[0]!.ended).toBe(false);
+    // The set settles later: nothing ends the worker for it.
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await wait(40);
+    expect(workers[0]!.ended).toBe(false);
+  });
+
+  it('gives a thumbnail the usual limit when its drop past the hold comes too late, as the set has just settled', async () => {
+    const { client, workers } = timed(30, 50);
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    await wait(70);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await expect(drawn).resolves.toBeNull();
+    expect(workers[0]!.ended).toBe(true);
+  });
+
+  it('leaves the worker running when a prepare wait passes the hold', async () => {
+    const { client, workers } = timed(20, 30);
+    await expect(client.prepare(30)).resolves.toBe('timeout');
+    expect(workers[0]!.ended).toBe(false);
+    expect(client.running).toBe(true);
+  });
+
+  it('drops a waiting thumbnail by message, keeping the worker, when the worker answers it first', async () => {
+    const { client, workers } = timed(20, 1000);
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    const thumbRequest = workers[0]!.sent[0]!.requestId;
+    const dropping = client.dropThumbnail();
+    expect(workers[0]!.sent[1]).toEqual({ type: 'drop-thumbnail', requestId: thumbRequest, toolId: 'merge-pdf' });
+    workers[0]!.reply({ type: 'thumbnail', requestId: thumbRequest, image: null });
+    await expect(dropping).resolves.toBe('dropped');
+    await expect(drawn).resolves.toBeNull();
+    expect(workers[0]!.ended).toBe(false);
+    // The read that follows goes to the same worker.
+    void client.inspect(file);
+    expect(workers).toHaveLength(1);
+  });
+
+  it('says a drop came too late when `prepared` arrives while the thumbnail is still waiting', async () => {
+    const { client, workers } = timed(1000, 1000);
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    const dropping = client.dropThumbnail();
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await expect(dropping).resolves.toBe('too-late');
+    client.end();
+    await expect(drawn).resolves.toBeNull();
+  });
+
+  it('has nothing to drop with no thumbnail waiting, and is too late once settled', async () => {
+    const { client, workers } = timed(1000, 1000);
+    await expect(client.dropThumbnail()).resolves.toBe('none');
+    const drawn = client.thumbnail(file, undefined, 1, box, 'f1');
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await expect(client.dropThumbnail()).resolves.toBe('too-late');
+    client.end();
+    await drawn;
+  });
+
+  it('ends a worker once its set has settled within the hold, for endWhenSettled (a replaced picture read)', async () => {
+    const { client, workers } = timed(20, 1000);
+    void client.prepare();
+    let done = false;
+    const ending = client.endWhenSettled().then(() => (done = true));
+    await wait(30);
+    expect(done).toBe(false);
+    expect(workers[0]!.ended).toBe(false);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    await ending;
+    expect(workers[0]!.ended).toBe(true);
+    expect(client.lingering).toBe(false);
+  });
+
+  it('ends that worker when the hold passes too, rather than leaving it beside the next, and the next read starts afresh', async () => {
+    const { client, workers } = timed(20, 40);
+    void client.inspectPicture(file, 'picture').catch(() => {});
+    await client.endWhenSettled();
+    expect(workers[0]!.ended).toBe(true);
+    expect(client.lingering).toBe(false);
+    void client.inspect(file);
+    expect(workers).toHaveLength(2);
+  });
+
+  it('ends a retired worker on its `prepared`, reading nothing else from it, while the next read runs on a fresh one', () => {
+    const { client, workers } = timed(20, 10_000);
+    void client.prepare();
+    client.retire();
+    expect(client.lingering).toBe(true);
+    void client.inspect(file);
+    expect(workers).toHaveLength(2);
+    workers[0]!.reply({ type: 'inspected', requestId: 1, outcome: { kind: 'ready', pages: 1 } });
+    expect(workers[0]!.ended).toBe(false);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    expect(workers[0]!.ended).toBe(true);
+    expect(client.lingering).toBe(false);
+    expect(workers[1]!.ended).toBe(false);
+  });
+
+  it("ends every worker, retired ones included, at once on the visitor's own end; endCurrent leaves retired ones", async () => {
+    const { client, workers } = timed(20, 10_000);
+    void client.prepare();
+    client.retire();
+    void client.prepare();
+    client.endCurrent('cancelled');
+    expect(workers[0]!.ended).toBe(false);
+    expect(workers[1]!.ended).toBe(true);
+    void client.prepare();
+    const ending = client.endWhenSettled();
+    client.end();
+    await ending;
+    expect(workers.map((worker) => worker.ended)).toEqual([true, true, true]);
+    expect(client.lingering).toBe(false);
+  });
+
+  it('on unmount, ends every retired worker that was sent a file, and leaves only one never sent a file to finish', () => {
+    const { client, workers } = timed(20, 10_000);
+    // A reading worker that failed before its set settled: it was sent a file, so it goes with the workspace.
+    const read = client.inspect(file);
+    read.catch(() => {});
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine-load' });
+    expect(workers[0]!.ended).toBe(false);
+    // A worker for a wrong-kind pick: prepared only, never sent a file.
+    void client.prepare();
+    client.retire();
+    expect(workers[1]!.ended).toBe(false);
+    expect(client.releaseOnUnmount()).toBe(true);
+    expect(workers[0]!.ended).toBe(true);
+    expect(workers[1]!.ended).toBe(false);
+    // Only a file-sent retired worker: nothing is left.
+    const again = timed(20, 10_000);
+    void again.client.thumbnail(file, undefined, 1, box, 'f1');
+    again.client.retire();
+    expect(again.client.releaseOnUnmount()).toBe(false);
+    expect(again.workers[0]!.ended).toBe(true);
+  });
+
+  it('retires a reading worker that fails before its set has settled, answering the read at once, and ends it on `prepared`', async () => {
+    const { client, workers } = timed(20, 10_000);
+    const read = client.inspect(file);
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine-load' });
+    await expect(read).rejects.toEqual(new ToolError('engine-load'));
+    expect(workers[0]!.ended).toBe(false);
+    expect(client.running).toBe(false);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    expect(workers[0]!.ended).toBe(true);
+  });
+
+  it('ends a reading worker that ran out of memory at once, as a crash, even before its set has settled', async () => {
+    const { client, workers } = timed(20, 10_000);
+    const read = client.inspect(file);
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'memory' });
+    await expect(read).rejects.toEqual(new ToolError('memory'));
+    expect(workers[0]!.ended).toBe(true);
+    expect(client.lingering).toBe(false);
+  });
+
+  it('ends a reading worker that fails once its set has settled, and a job worker that fails, at once', async () => {
+    const { client, workers } = timed(20, 10_000);
+    const read = client.inspect(file);
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'engine-load' });
+    await expect(read).rejects.toEqual(new ToolError('engine-load'));
+    expect(workers[0]!.ended).toBe(true);
+    const job = client.run([file], [undefined], {}, () => {});
+    workers[1]!.reply({ type: 'failed', requestId: workers[1]!.sent[0]!.requestId, kind: 'memory' });
+    await expect(job).rejects.toEqual(new ToolError('memory'));
+    expect(workers[1]!.ended).toBe(true);
+    expect(client.lingering).toBe(false);
+  });
+
+  it('starts each new worker unsettled', async () => {
+    const { client, workers } = timed();
+    void client.prepare();
+    workers[0]!.reply({ type: 'prepared', requestId: 0 });
+    expect(client.settled).toBe(true);
+    client.end();
+    expect(client.settled).toBe(false);
+    void client.prepare();
+    expect(client.settled).toBe(false);
   });
 });

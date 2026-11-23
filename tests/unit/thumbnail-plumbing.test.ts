@@ -8,6 +8,7 @@ import { isFromWorker, isToWorker } from '../../src/workers/messages';
 import { createHandler } from '../../src/workers/worker-core';
 import { ToolClient, type WorkerLike } from '../../src/workers/client';
 import { createPdfjsLoader, type NestedWorker } from '../../src/workers/pdfjs-loader';
+import { nestedWorker } from './thumbnail-helpers';
 
 const file = new Blob(['%PDF-1.7']);
 const box = { width: 104, height: 136 };
@@ -58,41 +59,42 @@ describe('the worker handling a thumbnail', () => {
     const posted: { message: FromWorker; transfer?: Transferable[] }[] = [];
     const handle = createHandler({
       // The engine is asked only how its files are drawn (Image to PDF's design); a PDF tool's says nothing.
-      loadEngine: async () => ({ run: async () => [] }),
+      loadEngine: async () => ({ loads: { read: [], job: [] }, run: async () => [] }),
+      libraries: {},
       tools: {},
       post: (message, transfer) => posted.push({ message, transfer }),
       openDocument: renderPage
         ? async (_file, password) => ({ render: (page, given) => renderPage(page, given, password), close: async () => {} })
         : undefined,
     });
-    return { handle, posted };
+    return { handle, posted: posted as typeof posted, replies: () => posted.filter(({ message }) => message.type !== 'prepared') };
   }
   const request: ToWorker = { type: 'thumbnail', requestId: 7, toolId: 'merge-pdf', file, password: 'pw', page: 1, box, documentKey: 'f1' };
 
   it('sends the picture back, moved', async () => {
     const seen: unknown[] = [];
-    const { handle, posted } = setup(async (...args) => {
+    const { handle, replies } = setup(async (...args) => {
       seen.push(args);
       return new Uint8Array([137, 80]);
     });
     await handle(request);
     expect(seen).toEqual([[1, box, 'pw']]);
-    expect(posted[0]!.message).toEqual({ type: 'thumbnail', requestId: 7, image: new Uint8Array([137, 80]) });
-    expect(posted[0]!.transfer).toHaveLength(1);
+    expect(replies()[0]!.message).toEqual({ type: 'thumbnail', requestId: 7, image: new Uint8Array([137, 80]) });
+    expect(replies()[0]!.transfer).toHaveLength(1);
   });
 
   it('turns a drawing error into no picture, never a failure', async () => {
-    const { handle, posted } = setup(async () => {
+    const { handle, replies } = setup(async () => {
       throw new RangeError('Array buffer allocation failed');
     });
     await handle(request);
-    expect(posted).toEqual([{ message: { type: 'thumbnail', requestId: 7, image: null }, transfer: undefined }]);
+    expect(replies()).toEqual([{ message: { type: 'thumbnail', requestId: 7, image: null }, transfer: undefined }]);
   });
 
   it('gives no picture when it has nothing to draw with', async () => {
-    const { handle, posted } = setup(undefined);
+    const { handle, replies } = setup(undefined);
     await handle(request);
-    expect(posted[0]!.message).toEqual({ type: 'thumbnail', requestId: 7, image: null });
+    expect(replies()[0]!.message).toEqual({ type: 'thumbnail', requestId: 7, image: null });
   });
 });
 
@@ -137,12 +139,13 @@ describe('the client asking for a thumbnail', () => {
     expect(workers[0]!.ended).toBe(false);
   });
 
-  it('ends the worker and gives null when drawing takes too long', async () => {
+  it('ends the worker and gives null when drawing takes too long once the set has settled', async () => {
     vi.useFakeTimers();
     try {
       const { tool, workers } = client(50);
       const asked = tool.thumbnail(file, undefined, 1, box, 'f1');
-      vi.advanceTimersByTime(60);
+      workers[0]!.reply({ type: 'prepared', requestId: 0 });
+      await vi.advanceTimersByTimeAsync(60);
       await expect(asked).resolves.toBeNull();
       expect(workers[0]!.ended).toBe(true);
       // The next request starts a fresh worker.
@@ -202,6 +205,7 @@ describe('the one document kept open in the worker', () => {
     const posted: FromWorker[] = [];
     const handle = createHandler({
       loadEngine: async () => ({
+        loads: { read: [], job: [] },
         inspect: async () => {
           log.push('inspect');
           return { kind: 'ready', pages: 2 };
@@ -211,6 +215,7 @@ describe('the one document kept open in the worker', () => {
           return [new Uint8Array([1])];
         },
       }),
+      libraries: {},
       tools: {},
       post: (message) => posted.push(message),
       openDocument: async (bytes) => {
@@ -276,7 +281,7 @@ describe('the one document kept open in the worker', () => {
     await handle(thumb('f1', 1));
     await handle(thumb('f1', 2));
     expect(log).toEqual(['open 1 (8 bytes)', 'open 2 (8 bytes)']);
-    expect(posted).toEqual([
+    expect(posted.filter((message) => message.type !== 'prepared')).toEqual([
       { type: 'thumbnail', requestId: 1, image: null },
       { type: 'thumbnail', requestId: 2, image: null },
     ]);
@@ -290,7 +295,7 @@ describe('the PDF.js loader', () => {
     const loader = createPdfjsLoader(
       async () => pdfjs,
       () => {
-        const nested: NestedWorker = { onerror: null };
+        const nested: NestedWorker = nestedWorker();
         started.push(nested);
         return nested;
       },
@@ -316,6 +321,84 @@ describe('the PDF.js loader', () => {
     await expect(loader.load()).rejects.toThrow(/unavailable/);
     expect(started).toHaveLength(1);
   });
+
+  // PDF.js's worker starts in the same step as the import, so its request never waits on the tool worker's event loop.
+  function held() {
+    const log: string[] = [];
+    let resolveImport: (value: { GlobalWorkerOptions: { workerPort: unknown } }) => void = () => {};
+    let rejectImport: (reason: Error) => void = () => {};
+    const pdfjs = { GlobalWorkerOptions: { workerPort: null as unknown } };
+    const nested = nestedWorker({ held: true, terminate: () => log.push('terminated') });
+    const loader = createPdfjsLoader(
+      () => {
+        log.push('import');
+        return new Promise((resolve, reject) => {
+          resolveImport = resolve;
+          rejectImport = reject;
+        });
+      },
+      () => {
+        log.push('worker');
+        return nested;
+      },
+    );
+    return { log, loader, nested, pdfjs, resolve: () => resolveImport(pdfjs), reject: () => rejectImport(new Error('network')), ready: () => nested.ready() };
+  }
+
+  it("starts PDF.js's worker before the import resolves, and hands it over once it does", async () => {
+    const { log, loader, nested, pdfjs, resolve, ready } = held();
+    const loading = loader.load();
+    expect(log).toEqual(['import', 'worker']);
+    expect(nested.onerror).not.toBeNull();
+    expect(pdfjs.GlobalWorkerOptions.workerPort).toBeNull();
+    resolve();
+    ready();
+    await loading;
+    expect(pdfjs.GlobalWorkerOptions.workerPort).toBe(nested);
+  });
+
+  it("counts PDF.js as loaded only once its worker has said ready, so its script is always asked for first", async () => {
+    const { loader, nested, resolve, ready } = held();
+    let loaded = false;
+    const loading = loader.load().then(() => (loaded = true));
+    resolve();
+    await new Promise((done) => setTimeout(done, 10));
+    expect(loaded).toBe(false);
+    ready();
+    await loading;
+    expect(loaded).toBe(true);
+    // The loader stops listening once it has heard, and takes nothing from PDF.js, which listens on its own.
+    expect(nested.listening()).toBe(0);
+  });
+
+  it('leaves PDF.js failed when its worker fails before the import resolves', async () => {
+    const { loader, nested, resolve } = held();
+    const loading = loader.load();
+    const preventDefault = vi.fn();
+    nested.onerror!({ preventDefault });
+    expect(preventDefault).toHaveBeenCalled();
+    resolve();
+    await expect(loading).rejects.toThrow(/stopped/);
+    await expect(loader.load()).rejects.toThrow(/unavailable/);
+  });
+
+  it('ends the nested worker when it fails after saying ready but before the import resolves', async () => {
+    const { log, loader, nested, resolve, ready } = held();
+    const loading = loader.load();
+    ready();
+    nested.onerror!({ preventDefault() {} });
+    resolve();
+    await expect(loading).rejects.toThrow(/stopped|unavailable/);
+    expect(log).toContain('terminated');
+  });
+
+  it('ends the nested worker when the import fails', async () => {
+    const { log, loader, reject } = held();
+    const loading = loader.load();
+    reject();
+    await expect(loading).rejects.toThrow(/network/);
+    expect(log).toEqual(['import', 'worker', 'terminated']);
+  });
 });
 
 describe('closing and opening documents in the worker', () => {
@@ -324,7 +407,8 @@ describe('closing and opening documents in the worker', () => {
     let closing = 0;
     let overlapped = false;
     const handle = createHandler({
-      loadEngine: async () => ({ run: async () => [] }),
+      loadEngine: async () => ({ loads: { read: [], job: [] }, run: async () => [] }),
+      libraries: {},
       tools: {},
       post: () => {},
       openDocument: async () => {
