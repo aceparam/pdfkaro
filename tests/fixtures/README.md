@@ -1,6 +1,6 @@
 # The shared test set
 
-Every tool is run against every file here. `make.mjs` makes them, with `@cantoo/pdf-lib` and qpdf, and the files are committed so that tests do not depend on the script. To make them again, run this from the repo root:
+Every tool is run against every file here. `make.mjs` makes them, with `@cantoo/pdf-lib` and qpdf, and the files are committed so that tests do not depend on the script. `multilingual.pdf` is made by `make-multilingual.mjs` instead (see below). To make them again, run this from the repo root:
 
 ```bash
 node tests/fixtures/make.mjs
@@ -26,6 +26,8 @@ The encrypted files (`password.pdf`, `restricted.pdf`, `compress-password.pdf`) 
 | `rich.pdf` | Two bookmarks, a link and an attached file `note.txt` | 2 |
 | `images.pdf` | A JPEG 2000 image and text and shapes in CMYK colour, for PDF.js's decoders. The JPEG 2000 bytes were made once with Pillow and are kept in `make.mjs` | 1 |
 | `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field, a note and a web link that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
+| `multilingual.pdf` | Text in Hindi, Telugu, Arabic and Chinese (Simplified), one page each, and a page with all four and English. Every font an embedded Noto subset with a Unicode map; made by `make-multilingual.mjs` | 5 |
+| `chinese-unembedded.pdf` | Chinese text in `STSong-Light`, not embedded, through the named character map `UniGB-UCS2-H`, as older Asian-language PDFs are | 1 |
 
 ### For Compress PDF
 
@@ -119,7 +121,27 @@ b.save('scan-g4.tif', 'TIFF', compression='group4')
 
 **Missing:** a file with a JBIG2 image, as no JBIG2 encoder runs on the build machine. PDF.js's JBIG2 decoder is in the same fixed helper data as the JPEG 2000 one, which `images.pdf` tests.
 
-**Missing:** a file with text in Hindi, Telugu, Arabic and Chinese, which `SPEC.md` lists. Making it needs fonts for those scripts, and none are on the build machine or in the repo. It is to be added with the first tool that reads or changes text.
+## The multilingual files
+
+`multilingual.pdf` holds the text in Hindi, Telugu, Arabic and Chinese that `SPEC.md` lists. Its words are in `multilingual-text.json`, plain sentences about the file itself, not yet checked by a reader of each script (issue #7). `make-multilingual.mjs` makes it, and needs the npm registry:
+
+```bash
+node tests/fixtures/make-multilingual.mjs
+```
+
+It fetches `@fontsource/noto-sans-devanagari` 5.3.0, `@fontsource/noto-sans-telugu` 5.3.0, `@fontsource/noto-naskh-arabic` 5.3.0 and `@fontsource/noto-sans-sc` 5.3.1 (all SIL Open Font Licence 1.1) with `npm pack --ignore-scripts` into a new temporary folder, checks each tarball's SHA-512 before unpacking it, reads only the named regular-weight `woff2` files (each script's own piece and its Latin piece; for Chinese the single `chinese-simplified` piece), and deletes the folder at the end. No font is committed or shipped; the PDF holds only the subsets Chromium embeds. Chromium (Playwright 1.63, Chromium 153.0.8010.12, `Skia/PDF m153`) prints an HTML page built from the JSON, with JavaScript off, offline, and only the temporary folder reachable; it shapes the text with HarfBuzz. pdf-lib then sets the title, creator, fixed dates and a fixed `/ID`, keeping Chromium's producer line. The script refuses to write the file unless `qpdf --check` passes, it has five pages, every font is an embedded Type 0 Noto subset with a Unicode map, the document information holds only its five keys, and neither the file nor qpdf's uncompressed copy holds a `file:` address or this machine's temporary or home folder. Two runs give the same bytes (48,414). A later Chromium may give different bytes; make it again only when the words change.
+
+What readers on the build machine make of it (23 Nov 2026):
+
+| Reader | Result |
+| --- | --- |
+| Poppler `pdffonts` | Seven fonts, every one `CID TrueType`, `Identity-H`, embedded, subset, with a Unicode map; no Type 3 font |
+| Poppler `pdftotext` | Hindi, Telugu, Chinese and English read back as written, except a space poppler adds inside three Hindi and Telugu words (`कृ पया`, `వ్రా సిన`, `ద్రా క్ష`); Arabic in the right letters with spaces poppler adds inside words, as it does with right-to-left text |
+| PDF.js `getTextContent` (6.5.438) | Chinese read back exactly. Hindi, Telugu and Arabic come back in part: `U+0000` where a glyph maps only through an actual-text span, and Arabic in presentation forms, reversed. PDF.js does not read the `/ActualText` spans Chromium writes for shaped letter groups (114 in the file) |
+
+So the tests compare PDF.js's reading of a page before and after a tool, never with the written words (except the Chinese page), and also compare each page's decoded content streams byte for byte, which covers the actual-text spans.
+
+`chinese-unembedded.pdf` comes from `make.mjs`, section 16: a Type 0 font `STSong-Light-UniGB-UCS2-H` with the encoding `UniGB-UCS2-H` and a `CIDFontType0` descendant (`Adobe`, `GB1`, 4) whose descriptor has no font file, and one A4 page showing the Chinese heading and first line of `multilingual-text.json` as UCS-2 codes. It needs no font and no network. PDF.js asks its data factory once per document for `UniGB-UCS2-H.bcmap`; the owner's fixed helper data (11 Nov 2026) holds no character maps, so the request is refused in memory, PDF.js reads and draws none of its text, and no request leaves the page. Poppler without its language pack reads none either. Adobe Reader may offer to download its Asian font pack for this file itself.
 
 **Not committed:** the file over 100 MB. `make-large.mjs` writes one outside the repo when it is needed:
 
@@ -145,6 +167,8 @@ node tests/fixtures/make-large.mjs
 | `form.pdf` | Ready, 1 page |
 | `mixed.pdf` | Ready, 4 pages |
 | `rich.pdf` | Ready, 2 pages |
+| `multilingual.pdf` | Ready, 5 pages |
+| `chinese-unembedded.pdf` | Ready, 1 page |
 
 ### Merge PDF (`src/engines/tools/merge-pdf.ts`)
 
@@ -164,6 +188,8 @@ Each readable file was merged both before and after `text.pdf`. Each result pass
 | `form.pdf` | Merged; both fields are kept, whether the form is first or later |
 | `mixed.pdf` | Merged; each page keeps its size and rotation, in order |
 | `rich.pdf` | First: its bookmarks, link and attachment are kept. Later: its pages and link are kept, but its bookmarks and attachment are not, by the owner's decision of 11 Nov 2026 |
+| `multilingual.pdf` | Merged, 8 pages with `text.pdf` after it; pages 1 to 5 read the same text through PDF.js and hold the same decoded content streams as before (`tests/unit/multilingual.test.ts`) |
+| `chinese-unembedded.pdf` | Merged; its text operators and its font reference (`STSong-Light-UniGB-UCS2-H`) kept |
 
 ### Split PDF (`src/engines/tools/split-pdf.ts`)
 
@@ -184,6 +210,8 @@ Each file was split in Node with the same qpdf the browser uses (`tests/unit/spl
 | `mixed.pdf` | Each part keeps its page's size and rotation |
 | `rich.pdf` | Part 1 keeps "Chapter one", the link and `note.txt`. Part 2 keeps "Chapter two", and holds neither the attached file's bytes, nor `/EmbeddedFile`, nor `/AF` |
 | `images.pdf` | Split; its JPEG 2000 image is kept as it was |
+| `multilingual.pdf` | No cuts: five parts; part *n* reads the text and holds the content streams of page *n* |
+| `chinese-unembedded.pdf` | One page, so one part; its text operators and font reference kept |
 
 Files made in the test, for shapes the shared set lacks (`tests/unit/outline-fixtures.ts`):
 
@@ -212,6 +240,8 @@ Each file was extracted in Node with the same qpdf the browser uses (`tests/unit
 | `rich.pdf` | Page 2 keeps "Chapter two" and `note.txt`; no bookmark points nowhere |
 | `images.pdf` | Taken; its JPEG 2000 image is kept as it was |
 | `tagged.pdf` | Page 1 taken: page 2's text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
+| `multilingual.pdf` | Pages 2 and 4 taken: each reads its text and holds its content streams as before |
+| `chinese-unembedded.pdf` | Its page taken; text operators and font reference kept |
 
 Files made in the test: a nested outline keeps the bookmarks of chosen pages, moved up past dropped parents, and a file of 3,000 bookmarks keeps the 1,500 of the chosen page. The file over 100 MB from `make-large.mjs` (one page, 110 MB) was run by hand in Node on 13 Nov 2026: its page was taken and the result written. It is not run in CI.
 
@@ -232,10 +262,12 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/delet
 | `mixed.pdf` | Pages 1 and 4 deleted: pages 2 and 3 keep their size and rotation |
 | `rich.pdf` | Page 1 deleted: "Chapter two" and `note.txt` kept, the link went with page 1, no bookmark points nowhere. Page 2 deleted: page 1 keeps its link |
 | `tagged.pdf` | Page 2 deleted: its text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
+| `multilingual.pdf` | Page 1 deleted: pages 2 to 5 left, each with its text and content streams as before |
+| `chinese-unembedded.pdf` | One page, so deleting it would leave none: refused |
 
 Files made in the test: a nested outline keeps the bookmarks of the pages left, moved up past dropped parents; a 500-page file with 3,000 bookmarks keeps the 2,970 of the 495 pages left; and a two-page file of 3,000 bookmarks keeps the 1,500 of the page left.
 
-The file over 100 MB from `make-large.mjs` has one page, so Delete refuses it and it was not run, as it refuses any one-page file; Extract's hand run covers reading that file. The 120,000-page file from `make-many-pages.mjs` with every other page marked, a page list of about 400 KB, did not finish within 10 minutes in Node when the security reviewer ran it at stage 1: the list reaches qpdf, but qpdf selects pages slowly from a file that large. The page warns above 20,000 pages, and Cancel ends the job. The multilingual file is still missing.
+The file over 100 MB from `make-large.mjs` has one page, so Delete refuses it and it was not run, as it refuses any one-page file; Extract's hand run covers reading that file. The 120,000-page file from `make-many-pages.mjs` with every other page marked, a page list of about 400 KB, did not finish within 10 minutes in Node when the security reviewer ran it at stage 1: the list reaches qpdf, but qpdf selects pages slowly from a file that large. The page warns above 20,000 pages, and Cancel ends the job.
 
 ### Reorder pages (`src/engines/tools/rearrange-pdf-pages.ts`)
 
@@ -253,10 +285,12 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/rearr
 | `mixed.pdf` | Reversed: each page keeps its size and rotation in its new place |
 | `rich.pdf` | Swapped: "Chapter one" points to its page, now second, and "Chapter two" to the first; the outline keeps its order; `note.txt` and the link are kept |
 | `tagged.pdf` | Swapped: everything is kept, page 2's text now first |
+| `multilingual.pdf` | Reversed: each page reads its text and holds its content streams in its new place |
+| `chinese-unembedded.pdf` | Its one order: text operators and font reference kept |
 
 Files made in the test: a nested outline keeps every bookmark, each pointing to its page in its new place; a heading that points to no page is kept with its child; an outline 100 levels deep keeps every level; and an outline item that points back at the catalog is not dropped. Orders that leave out, repeat or add a page are refused.
 
-The file over 100 MB from `make-large.mjs` has one page, so its only order is the one it has; Extract's hand run covers reading it. The multilingual file is still missing.
+The file over 100 MB from `make-large.mjs` has one page, so its only order is the one it has; Extract's hand run covers reading it.
 
 ### Rotate PDF (`src/engines/tools/rotate-pdf.ts`)
 
@@ -274,10 +308,12 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/rotat
 | `mixed.pdf` | A turn adds to the one each page already has: every page right gives 90, 90, 180, 270; page 4 half round brings it upright |
 | `rich.pdf` | Page 1 turned: bookmarks, link and `note.txt` kept |
 | `tagged.pdf` | Every page half round: everything kept |
+| `multilingual.pdf` | Every page a quarter turn: text and content streams kept |
+| `chinese-unembedded.pdf` | Turned a quarter: text operators and font reference kept |
 
 Files made in the test, for turns already in a file (the security reviewer, stage 1): pages whose `/Rotate` is 45, -90, 450 and 135 read as 0, 270, 90 and 0, as PDF.js draws them, and turned right give 90, 0, 180 and 90; a turn inherited from the page tree is added to. Each result matches the turned thumbnail. Turns that are not valid are refused.
 
-The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was turned a quarter by hand in Node on 14 Nov 2026: 110,124,059 bytes out, in about 2.2 seconds. The multilingual file is still missing.
+The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was turned a quarter by hand in Node on 14 Nov 2026: 110,124,059 bytes out, in about 2.2 seconds.
 
 ### Page thumbnails (`src/engines/thumbnail.ts`)
 
@@ -298,6 +334,8 @@ Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 1
 | `mixed.pdf` | Page 1 drawn upright; page 2, on its side, drawn wide |
 | `rich.pdf` | Drawn |
 | `images.pdf` | Drawn. PDF.js takes `openjpeg.wasm` from the fixed helper data for the JPEG 2000 image |
+| `multilingual.pdf` | Every page drawn with its text in every script, from the embedded fonts, with no character map asked for (`tests/unit/multilingual.test.ts`: at least 29 to 65 grey pixels a page, about half what was measured) |
+| `chinese-unembedded.pdf` | Drawn without failing, as a blank page: no Chinese is drawn, the character-map gap of the owner's 11 Nov 2026 decision. PDF.js asks its data factory for `UniGB-UCS2-H.bcmap`, which is refused in memory |
 
 ### One open document across pages (`openDocument` in `src/engines/thumbnail.ts`)
 
@@ -318,6 +356,8 @@ Each file was opened once, then its first, second and last pages were drawn from
 | `mixed.pdf` | Opened, 4 pages; page 1 drawn upright, page 2 on its side drawn wide (104 by 80), page 4 drawn |
 | `rich.pdf` | Opened, 2 pages drawn |
 | `images.pdf` | Opened, 1 page drawn, with the JPEG 2000 image |
+| `multilingual.pdf` | Opened, 5 pages drawn from the one document (`tests/unit/multilingual.test.ts`) |
+| `chinese-unembedded.pdf` | Opened, 1 page drawn, blank: no character map |
 
 ### Image to PDF (`src/engines/tools/images-to-pdf.ts`)
 
@@ -346,7 +386,7 @@ Each picture was converted in Node with the same pdf-lib the browser gets (`test
 | `broken.jpg`, `broken.png`, `zero-size.png` | Damaged before the job; the job fails if it is run |
 | Every PDF in the test set | Damaged if read; on the page each is turned away by its first bytes before that ("… is not a JPG or PNG picture") |
 
-The multilingual file does not apply: pictures carry no text the tool reads.
+`multilingual.pdf` and `chinese-unembedded.pdf`, as every PDF, are not pictures: read as damaged, and turned away on the page by their first bytes.
 
 ### A picture chosen for an option (`pictureOutcome` in `src/engines/picture.ts`)
 
@@ -416,8 +456,10 @@ Each file was compressed in Node with the same qpdf the browser uses (`tests/uni
 | `compress-jpeg-mismatch.pdf` | 15,014 | 14,774 | Neither JPG is decoded; both byte for byte. The 20,000 by 20,000 frame made in the test is never decoded either, and that job fails at `qpdf --check`, which the file itself fails |
 | `compress-json-bomb.pdf` | 140,759 | none | qpdf's JSON of dictionaries is refused at 64 MB while it is written, so qpdf stops there, nothing is parsed and the pictures step is skipped (its picture stays 400 by 400); the file is still written again, in about 17 seconds in Node, and is not smaller |
 | `compress-password.pdf` | 36,730 | 12,707 | With its password: the photo scaled to 600 by 600 (150 to the inch across 4 inches), and the result asks for the same password with the same encryption and restrictions. Without it, the job fails |
+| `multilingual.pdf` | 48,414 | 37,027 | No pictures; written again with objects packed. Every page reads its text and holds its decoded content streams as before |
+| `chinese-unembedded.pdf` | 1,693 | 1,147 | Written again with objects packed; text kept |
 
-The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI. The multilingual file is still missing.
+The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI.
 
 ### PDF to JPG and PDF to PNG (`src/engines/tools/pdf-to-images.ts`)
 
@@ -445,6 +487,8 @@ Each file was converted in Node through the real PDF.js and the same fixed helpe
 | `compress-jpeg-mismatch.pdf` | 2, 75 by 75 | 4,385 | 4,127 | Drawn |
 | `compress-json-bomb.pdf` | 1, 150 by 150 | 2,253 | 8,998 | Drawn in under 0.1 seconds |
 | `compress-password.pdf` | 1, 600 by 600 | 35,946 | 16,263 | Drawn with `open-sesame` |
+| `multilingual.pdf` | 5, 1239 by 1754 (Chromium's A4 is 594.96 points wide) | 216,348 | 173,636 | Every page drawn with its text in every script; each picture holds at least half the dark pixels measured, and on the mixed page each script's line shows ink in its own band |
+| `chinese-unembedded.pdf` | 1, A4 | 12,322 | 13,628 | Drawn without failing, blank: no Chinese drawn (no character map). The fixed data's refusal is in memory; on `/pdf-to-jpg` the end-to-end test finds the same requests as for `text.pdf` |
 
 Files made in the test:
 
@@ -460,7 +504,7 @@ Files made in the test:
 
 The file over 100 MB from `make-large.mjs` (one page, 110,124,572 bytes) was converted by hand in Node on 16 Nov 2026: one picture, 26,341 bytes as PNG and 23,552 as JPG, in under half a second each. It is not run in CI.
 
-The multilingual file is still missing, so Chinese, Japanese and Korean text cannot be checked against the test set. PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data holds no character maps; the page text says such text may be missing.
+PDF.js draws none of the text in a font whose named character map it cannot load, whether or not the font is embedded, and the fixed helper data holds no character maps; the page text says such text may be missing. The test set now shows both sides: `multilingual.pdf`'s Chinese, in an embedded font with `Identity-H`, needs no character map and is drawn; `chinese-unembedded.pdf`'s, through `UniGB-UCS2-H`, is not. That stays so until the owner answers the character-map question in `CLAUDE.md`.
 
 ### Add page numbers (`src/engines/tools/add-page-numbers.ts`, with `src/engines/stamp.ts`)
 
@@ -479,6 +523,8 @@ Each file was numbered in Node with the same qpdf and pdf-lib the browser gets (
 | `rich.pdf` | 2,064 | 2,628 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
 | `images.pdf` | 1,642 | 2,168 | Numbered; the JPEG 2000 picture kept |
 | `tagged.pdf` | 5,118 | 3,456 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the number is in an `/Artifact`, in no tag |
+| `multilingual.pdf` | 48,414 | 39,248 | Numbered; each page reads its text as before followed by its number, and its own content streams are unchanged between the added `q` and `Q` |
+| `chinese-unembedded.pdf` | 1,693 | 1,796 | Numbered; its text operators and font reference kept |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Numbered; pictures are not read. `compress-text.pdf` (21,019 to 3,694) and `compress-small-jpg.pdf` (12,852 to 9,404) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,480 | Numbered in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,569 | With `open-sesame`: numbered, with no password |
@@ -506,7 +552,7 @@ Measured with the memory order of the design's section 6: the reading qpdf let g
 | 120,000 pages sharing one content stream (`make-many-pages.mjs`) | 16.6 MB | 40.7 MB | 54.2 s (14.1, 16.9, 23.2) | 0.95 GB | 50.3 s, 1.46 GB | 38.6 s | 0.77 GB |
 | `make-large.mjs`'s file | 110.1 MB | 110.1 MB | 1.7 s (1.1, 0.0, 0.6) | 1.19 GB (0.97 GB without loading first) | 1.4 s, 0.92 GB | 2.3 s | 1.36 GB |
 
-In Node the draw time includes qpdf reading the 68 MB update before it writes. The 120,000-page file reads more slowly than in the experiment (14.1 s against 8.3 s), as the pages and the dictionaries are read by two capped qpdf runs and the plain copy counts its pages, where the experiment read both in one run; it needs a third less memory. The 110 MB file's peak is above the experiment's (Node 1.19 GB, or 0.97 GB without loading qpdf and pdf-lib first, against 0.92 GB; Chromium 1.36 GB over its baseline): `plainCopy`, shared with the page tools, makes a second qpdf only to count the pages, so one job makes four qpdf instances (opening, counting, reading, stamping), each holding a copy of the file until it is let go. Both differences are accepted for now (task 3.2); the later fix is to take the page count from `readPages` and skip the counting instance. The multilingual file is still missing.
+In Node the draw time includes qpdf reading the 68 MB update before it writes. The 120,000-page file reads more slowly than in the experiment (14.1 s against 8.3 s), as the pages and the dictionaries are read by two capped qpdf runs and the plain copy counts its pages, where the experiment read both in one run; it needs a third less memory. The 110 MB file's peak is above the experiment's (Node 1.19 GB, or 0.97 GB without loading qpdf and pdf-lib first, against 0.92 GB; Chromium 1.36 GB over its baseline): `plainCopy`, shared with the page tools, makes a second qpdf only to count the pages, so one job makes four qpdf instances (opening, counting, reading, stamping), each holding a copy of the file until it is let go. Both differences are accepted for now (task 3.2); the later fix is to take the page count from `readPages` and skip the counting instance.
 
 ### Watermark (`src/engines/tools/watermark-pdf.ts`, with `src/engines/stamp.ts`)
 
@@ -525,6 +571,8 @@ Each file was watermarked in Node with the same qpdf and pdf-lib the browser get
 | `rich.pdf` | 2,064 | 2,868 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
 | `images.pdf` | 1,642 | 2,292 | Watermarked; the JPEG 2000 picture kept |
 | `tagged.pdf` | 5,118 | 3,699 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the watermark is the page's last marked content, an `/Artifact` with no marked-content id, in no tag. Its tags point to objects and name no `/MCID`, so a page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1` is checked beside it: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags, with no watermark words in them |
+| `multilingual.pdf` | 48,414 | 39,843 | Watermarked; each page's text as before followed by the watermark, its own content streams unchanged |
+| `chinese-unembedded.pdf` | 1,693 | 1,919 | Watermarked; its text operators and font reference kept |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Watermarked; pictures are not read. `compress-text.pdf` (21,019 to 4,056) and `compress-small-jpg.pdf` (12,852 to 9,529) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,606 | Watermarked in about 0.2 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,695 | With `open-sesame`: watermarked, with no password |
@@ -546,7 +594,7 @@ Measured as for Add page numbers, with a 50-character text: in Node, each file i
 | 120,000 pages sharing one content stream (`make-many-pages.mjs`) | 16.6 MB | 61.1 MB (40.7) | 64.6 s (54.2): 13.8, 15.4, 35.4 | 1.05 GB (0.95) | 45.2 s (38.6) | 0.81 GB (0.77) |
 | `make-large.mjs`'s file | 110.1 MB | 110.1 MB (110.1) | 1.8 s (1.7): 1.2, 0.0, 0.5 | 1.16 GB (1.19) | 2.4 s (2.3) | 1.32 GB (1.36) |
 
-The bytes added per page differ between the tables because the text and the files differ: about 300 a page on `pages-500.pdf` with 50 characters, about 500 on the 6,000-page file made in the test, whose pages hold almost nothing else, so each page's own layer form is most of what qpdf writes for it, and about 370 on the 120,000-page file, whose object streams pack the changed page dictionaries more tightly. Every time and peak is within 20% of Add page numbers' (the largest gap is the 120,000-page file: 19% in Node, 17% in Chromium, 11% and 5% in memory). The output of the 120,000-page file is 50% larger: each page's layer holds the text, so the file grows by about 370 bytes a page (61,050,227 bytes against 16,578,179), against about 200 for a page number, and the extra time is mostly qpdf writing those bytes. It stays far inside the size budget, which is over 262 MB for this file (2 KB a page and 16 MB, before twice the plain copy is added). Sharing one form among pages of the same size could cut it (design, section 3); left for a later change if a real file shows the need. The multilingual file is still missing; Watermark leaves existing text alone, so it would change nothing there.
+The bytes added per page differ between the tables because the text and the files differ: about 300 a page on `pages-500.pdf` with 50 characters, about 500 on the 6,000-page file made in the test, whose pages hold almost nothing else, so each page's own layer form is most of what qpdf writes for it, and about 370 on the 120,000-page file, whose object streams pack the changed page dictionaries more tightly. Every time and peak is within 20% of Add page numbers' (the largest gap is the 120,000-page file: 19% in Node, 17% in Chromium, 11% and 5% in memory). The output of the 120,000-page file is 50% larger: each page's layer holds the text, so the file grows by about 370 bytes a page (61,050,227 bytes against 16,578,179), against about 200 for a page number, and the extra time is mostly qpdf writing those bytes. It stays far inside the size budget, which is over 262 MB for this file (2 KB a page and 16 MB, before twice the plain copy is added). Sharing one form among pages of the same size could cut it (design, section 3); left for a later change if a real file shows the need.
 
 ### Sign PDF (`src/engines/tools/sign-pdf.ts`, with `src/engines/stamp.ts`)
 
@@ -565,6 +613,8 @@ Each file was signed in Node with the same qpdf and pdf-lib the browser gets (`t
 | `rich.pdf` | 2,064 | 2,472 | 2,431 | 5,574 | 2,715 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` kept |
 | `images.pdf` | 1,642 | 2,345 | 2,298 | 5,442 | 2,345 | Signed; the JPEG 2000 picture kept |
 | `tagged.pdf` | 5,118 | 3,310 | 3,266 | 6,410 | 3,543 | Tags, destination, thread, the tagged field and its value, note and link kept, with the same kinds of tag; the signature is in no tag. A page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1`: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags |
+| `multilingual.pdf` | 48,414 | 38,049 | 38,006 | 41,154 | 39,092 | Signed; every page's text as before, the name after the last page's, and each page's own content streams unchanged |
+| `chinese-unembedded.pdf` | 1,693 | 1,947 | 1,908 | 5,044 | 1,947 | Signed; its text operators and font reference kept |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | | | | Signed on the last page; pictures are not read. `compress-text.pdf` (21,019 to 3,209) and `compress-small-jpg.pdf` (12,852 to 9,582) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,654 | 1,045,613 | 1,048,758 | 1,045,654 | Signed in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,730 | 36,669 | 39,809 | 36,730 | With `open-sesame`: signed, with no password |
@@ -624,7 +674,7 @@ The two 8 MB picture, every page rows were measured again after the stage 2 revi
 
 On the last page, each file grows by under 1 KB over the plain copy written with object streams, as the design asks. Every page stays inside the size budget; the update carries the picture once, as base64. Two every-page figures are more than 20% worse than Watermark's, both on small and medium files: `pages-500.pdf` (2.2 s against 0.44 s in Node, 2.3 s against 0.9 s in Chromium, and 0.35 GB against 0.17 GB) and `make-large.mjs`'s file (3.0 s against 1.8 s, 3.4 s against 2.4 s). The difference is reading the 8 MB picture once: pdf-lib decodes the PNG and compresses its pixels again (about 1.4 s in Node for this picture), which no Watermark job does; the pages themselves take what Watermark's take. On the 120,000-page file Sign PDF is faster than Watermark and its file 35% smaller, as each page's layer only places the one shared signature form. A grainy 16-million-pixel photo compresses to 21 MB, past the budget of any file under about 2.5 MB or a few thousand pages, so the job stops with the picture's own sentence after the picture is read (4 s in Node, 11 s in Chromium, where reading it before the job also takes time), and never writes the file; on a long file it fits and is written once.
 
-The multilingual file is still missing; Sign PDF leaves existing text alone, so it would change nothing there.
+The sizes for `multilingual.pdf` and `chinese-unembedded.pdf` are from a run on 23 Nov 2026.
 
 ### Protect with a password (`src/engines/tools/protect-pdf.ts`)
 
@@ -643,6 +693,8 @@ Each file was protected in Node with the same qpdf the browser uses, with the ne
 | `rich.pdf` | 2,064 | 2,757 | Bookmarks "Chapter one" and "Chapter two" pointing to their pages, the link and `note.txt` with its contents kept. The attachment's name, dates and contents are not readable; its type (`/Subtype /text#2fplain`) and size are |
 | `images.pdf` | 1,642 | 2,290 | Protected; the JPEG 2000 picture's dictionary (`/Width`, format) stays readable |
 | `tagged.pdf` | 5,118 | 3,400 | Tags, destination, thread, the tagged field and its value, note and link kept. Every `SECRET-` marker held in a string or a stream is gone from the bytes, the field's hex strings too; `SECRET-DEST-NAME`, a name in the catalog's old-style `/Dests`, stays readable, as the format leaves names |
+| `multilingual.pdf` | 48,414 | 38,566 | Protected; with the password every page reads its text and holds its decoded content streams as before. Protected and then given back by Remove a password with the same password, every page is as before (`tests/unit/multilingual.test.ts`) |
+| `chinese-unembedded.pdf` | 1,693 | 1,864 | Protected; with the password its text operators and font reference are kept |
 | `compress-scans.pdf` | 634,679 | 635,113 | Protected; each picture stored as it was, encrypted |
 | `compress-lossless.pdf` | 16,884 | 17,572 | Protected |
 | `compress-small-jpg.pdf` | 12,852 | 9,531 | Protected; its uncompressed text stream is compressed, as qpdf does by default when it writes, so smaller |
@@ -681,7 +733,7 @@ The input is let go before the output is read: in Node, with the 100 MB file wri
 
 What stays readable without the password, because PDF encryption covers strings and streams only and the format never puts a stream's own dictionary in an object stream: the file's name, which is outside the file; whether it holds bookmarks, attached files or a form (the catalog's keys); roughly how large its parts are; each picture's pixel size, bits, colour space and format; each attached file's type and size; font names named in appearance streams; each drawn part's box (a form XObject's `/BBox`), such as a form field's appearance (`/BBox` on `form.pdf`'s result) and, in a file that carries a layer of Add page numbers, Watermark or Sign PDF, each page's size; and names in the catalog, such as old-style destination names. What is hidden: its pages and the sizes their dictionaries give, its text, the pictures' data, bookmarks' titles, attached files' names, dates and contents, and its title and XMP details.
 
-The multilingual file is still missing. Protect leaves text as it is, but the test set needs the file, so Protect is not done until it exists and Protect has been run on it.
+Every readable file's pages are also checked to hold, read with the password, the same decoded content streams as before (added with `multilingual.pdf`). Protect has now been run on the multilingual file; opening its result in the readers by hand is still owed (issue #7).
 
 ### Remove a password (Unlock PDF) (`src/engines/tools/unlock-pdf.ts`)
 
@@ -692,7 +744,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/unloc
 | `password.pdf` | 7,178 | 6,183 | Given back, opened with `open-sesame` or with `owner-secret`. Without a password, or with `open-sesam`: "A password did not open the file.", with no other password tried. Progress "Reading the file", then writing up to 50%, then 55 and 100 as each check of the result passes |
 | `restricted.pdf` | 7,181 | 6,183 | Given back with no password typed; every permission allowed |
 | `compress-password.pdf` | 36,730 | 36,088 | Given back, opened with `open-sesame` |
-| `text.pdf`, `warning.pdf`, `pages-500.pdf`, `scanned.pdf`, `form.pdf`, `mixed.pdf`, `rich.pdf`, `images.pdf`, `tagged.pdf` | | | Nothing to remove: no file. qpdf's warning on `warning.pdf` does not stop the reading |
+| `text.pdf`, `warning.pdf`, `pages-500.pdf`, `scanned.pdf`, `form.pdf`, `mixed.pdf`, `rich.pdf`, `images.pdf`, `tagged.pdf`, `multilingual.pdf`, `chinese-unembedded.pdf` | | | Nothing to remove: no file. qpdf's warning on `warning.pdf` does not stop the reading |
 | Every other `compress-*.pdf` | | | Nothing to remove: no file, in at most about 0.1 seconds; the bombs are never inflated, as only the encryption is read |
 | `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not read the file." and hands back nothing |
 
@@ -720,4 +772,4 @@ Measured on 22 Nov 2026 as Protect's were: in Node, each case in a process of it
 
 The reading of the result and its `--check` share one fresh qpdf, as the stage 1 review allowed if memory showed it: on the 100 MB file the Node peak fell from 1.19 GB, with a fresh qpdf for each, to 1.09 GB, in three runs each; on the 120,000-page file both gave 0.35 GB, with the shared one about a second slower, within this machine's spread. The reading of the input stays on a fresh qpdf of its own: reading it on the writer's qpdf before the write gave the same 1.09 GB on the 100 MB file and 0.50 GB on the 120,000-page file. On the 120,000-page file the check takes about half the time, as qpdf's `--check` reads every page; on the 100 MB file, whose size is one picture, the write takes most of it. No genuine file comes near the cap of twice the file and 16 MB: every file shrinks.
 
-The multilingual file is still missing. Remove a password leaves text as it is, but the test set needs the file, so the tool is not done until it exists and it has been run on it.
+`multilingual.pdf` has neither a password nor restrictions, so on its own it gives no file. Protected with a password and then given back with it, every page reads its text and holds its decoded content streams as before (`tests/unit/multilingual.test.ts`). Opening that result in the readers by hand is still owed (issue #7).
