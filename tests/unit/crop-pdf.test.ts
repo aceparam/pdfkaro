@@ -401,7 +401,12 @@ describe('croppedDict', () => {
 });
 
 describe('runs, refusals, progress and limits', () => {
-  /** A file of `count` pages, each with a mark; page `chinese` (1-based) also holds unembedded Chinese text. */
+  /**
+   * A file of `count` small pages, each nearly filled by a mark; page `chinese` (1-based) also holds unembedded
+   * Chinese text. Small and nearly full, so measuring reads few pixels: @napi-rs/canvas 1.1.0 keeps the memory of
+   * every getImageData call (about 2.3 MB for each A4 page read in full, also outside the test runner), which only
+   * the Node tests' canvas maker uses.
+   */
   async function long(count: number, chinese?: number) {
     return build((doc) => {
       const context = doc.context;
@@ -409,10 +414,10 @@ describe('runs, refusals, progress and limits', () => {
         context.obj({ Type: 'Font', Subtype: 'CIDFontType0', BaseFont: 'STSong-Light', CIDSystemInfo: { Registry: PDFString.of('Adobe'), Ordering: PDFString.of('GB1'), Supplement: 4 }, DW: 1000 }),
       );
       const song = context.register(context.obj({ Type: 'Font', Subtype: 'Type0', BaseFont: 'STSong-Light-UniGB-UCS2-H', Encoding: 'UniGB-UCS2-H', DescendantFonts: [cidFont] }));
-      const mark = context.register(context.stream('0 g 250 400 100 40 re f'));
-      const chineseText = context.register(context.stream('0 g 250 400 100 40 re f BT /F9 24 Tf 60 100 Td <4E2D6587> Tj ET'));
+      const mark = context.register(context.stream('0 g 20 20 250 250 re f'));
+      const chineseText = context.register(context.stream('0 g 20 20 250 250 re f BT /F9 24 Tf 30 30 Td <4E2D6587> Tj ET'));
       for (let page = 1; page <= count; page++) {
-        const added = doc.addPage([595, 842]);
+        const added = doc.addPage([290, 290]);
         if (page === chinese) {
           added.node.setFontDictionary(PDFName.of('F9'), song);
           added.node.set(PDFName.of('Contents'), chineseText);
