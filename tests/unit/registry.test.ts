@@ -327,7 +327,7 @@ describe('Crop PDF', () => {
     expect(tool.widget?.options).toBeUndefined();
   });
 
-  it('has the widget words of the design, with words for no page cut and four notes', () => {
+  it('has the widget words of the design, with words for no page cut and three notes', () => {
     expect(tool.widget).toMatchObject({
       items: 'files',
       itemControls: false,
@@ -342,12 +342,13 @@ describe('Crop PDF', () => {
     });
     expect(tool.widget!.noSmaller!.advice).toMatch(/cannot be sure where everything on it is/);
     const notes = tool.widget!.resultNotes;
-    expect(notes).toHaveLength(4);
+    expect(notes).toHaveLength(3);
     expect(notes[0]).toMatch(/pages the tool cannot measure safely are left as they are/);
     expect(notes[1]).toMatch(/still in the file/);
-    expect(notes[1]).toMatch(/some programs can still find, copy or read aloud its text/);
+    expect(notes[1]).toMatch(/some programs can still find, copy or read aloud the text in it/);
     expect(notes[1]).toMatch(/not a way to hide something private/);
-    expect(notes[3]).toMatch(/no password and no restrictions/);
+    expect(notes[2]).toMatch(/notes, bookmarks/);
+    expect(notes[2]).toMatch(/no password and no restrictions/);
     for (const text of [...notes, ...Object.values(tool.widget!.noSmaller!)]) expect(text).not.toContain('!');
   });
 });

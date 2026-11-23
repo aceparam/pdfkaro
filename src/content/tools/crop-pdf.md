@@ -5,22 +5,22 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 ## How to crop the margins of a PDF
 
 1. Choose the PDF file. You can also drop it anywhere on this page, or paste it.
-2. Press “Crop and download”. Each page is cut to what is drawn on it.
+2. Press “Crop and download”.
 3. When the new file is ready, press Download.
 
 ## Questions
 
 ### Is my file uploaded?
 
-No. The file is read and the new file is made in your browser, on your device. Nothing is sent anywhere. When you press Start again or leave the page, the page forgets the file and the result.
+No. The file is read and the new file is made in your browser, on your device. Nothing is sent anywhere. Once you choose a file, the page loads only the parts of this site it needs to do the work, and they carry nothing from your file. When you press Start again or leave the page, the page forgets the file and the result.
 
 ### How does it decide where to cut?
 
-Anything on the page that is not white counts, even a light grey line or an empty form box. About 5 mm is left around it on an A4 page. Each page is cut on its own.
+Anything on the page that is not white counts, even a light grey line or an empty form box. About 5 mm is left around it on an A4 page.
 
 ### Why are my pages different sizes now?
 
-Each page is cut to what is on it, so a page with a short note becomes smaller than a full page. Your reader may show them at different sizes.
+Each page is cut to what is on it, so a page with a short note becomes smaller than a full page.
 
 ### Why was a page, or my scan, not cut?
 
@@ -28,7 +28,7 @@ A blank page is left as it is, and so is a page whose content already reaches it
 
 ### Is what I cut off gone?
 
-No. It is hidden, but it is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private. This site has no tool yet that removes it for good.
+No. It is hidden, but it is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private. This site has no tool yet that removes it for good.
 
 ### Can I choose how much to cut?
 

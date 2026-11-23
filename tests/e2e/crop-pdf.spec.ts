@@ -29,9 +29,8 @@ const noneAdvice =
   'No new file was made. This tool cuts only white margins, and leaves a page as it is when it cannot be sure where everything on it is. Pages with grey or dark edges, such as many scans, are left too. You can use your file as it is.';
 const resultNotes = [
   'Each page is cut to what is drawn on it, with a small margin left. Blank pages, pages with no white margin, and pages the tool cannot measure safely are left as they are.',
-  'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private.',
-  "Pages, text, links, form fields, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
-  'The new file has no password and no restrictions, even if the file you chose had them.',
+  'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private.',
+  "Pages, text, links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
 ];
 
 const picker = (page: Page) => page.locator('input[type=file]').first();
@@ -267,7 +266,7 @@ test.describe('choosing a file', () => {
 });
 
 test.describe('cropping', () => {
-  test('text.pdf: "Page N of 3", then writing, with a bar that never goes back; the four notes; text-cropped.pdf with new crop boxes, the same paper and the same text', async ({ page }) => {
+  test('text.pdf: "Page N of 3", then writing, with a bar that never goes back; the three notes; text-cropped.pdf with new crop boxes, the same paper and the same text', async ({ page }) => {
     test.setTimeout(120_000);
     await openPage(page);
     await pickReady(page, 'text.pdf');
@@ -434,7 +433,7 @@ test.describe('the words below the tool', () => {
       'Anything on the page that is not white counts, even a light grey line or an empty form box. About 5 mm is left around it on an A4 page.',
       'Why are my pages different sizes now?',
       'Is what I cut off gone?',
-      'Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text.',
+      'Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it.',
       'Cropping is not a way to hide something private.',
       'Can I choose how much to cut?',
       'report-cropped.pdf',

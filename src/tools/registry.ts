@@ -718,9 +718,8 @@ export const tools: Tool[] = [
       // Passwords are dropped, as for every page tool (the owner's decision of 13 Nov 2026, extended to Crop by default).
       resultNotes: [
         'Each page is cut to what is drawn on it, with a small margin left. Blank pages, pages with no white margin, and pages the tool cannot measure safely are left as they are.',
-        'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private.',
-        "Pages, text, links, form fields, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
-        'The new file has no password and no restrictions, even if the file you chose had them.',
+        'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private.',
+        "Pages, text, links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
       ],
     },
   },
