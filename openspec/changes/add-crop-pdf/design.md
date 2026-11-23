@@ -24,7 +24,7 @@ See `proposal.md` for why Crop PDF is first and why it crops by itself. What exi
 **Goals:**
 - Cut white margins off every page with no option to set, never cutting anything a reader would show, including fields and links with no ink.
 - Change only `/CropBox` (and cut back a page's own bleed, trim and art boxes); never rewrite content, `/MediaBox`, `/Rotate` or `/UserUnit`.
-- Memory that does not grow with the page count, and at most two full copies of the file alive at once.
+- Memory bounded by runs of 2,000 pages, and at most two full copies of the file alive at once besides the worker's own input copy. Measured: Chromium memory rose 0.11 GB over the 120,000-page job (peak 0.72 GB over baseline); the cause was not found (see "Found while building").
 - No dependency, no new shared component, no change to how any other tool draws or writes.
 
 **Non-Goals:**
@@ -54,6 +54,7 @@ The owner chose "Automatic only" and "Each page on its own" (`CLAUDE.md`, owner 
 - **Reading pixels:** the canvas maker gains an optional `pixels(canvas, x, y, width, height): Uint8ClampedArray` (RGBA of that rectangle). The worker's maker reads `getImageData` from its `OffscreenCanvas` 2D context (already made with `willReadFrequently: true`); the Node test's maker reads `@napi-rs/canvas`'s `getImageData`. `measure` throws if the maker has none (only Crop calls it). A pixel is **ink** when any of R, G, B is below 240 (`whiteFrom = 240`). The scan reads strips of 16 rows from the top down until a row holds ink, then from the bottom up, then strips of 16 columns from each side inward between those rows, so a page with wide margins reads only its margins and a strip of content. The pixel box is grown by one pixel on each side (anti-aliasing, rounding), clamped to the canvas, then its four corners go through `viewport.convertToPdfPoint` and are normalised to a box in user space.
 - **Annotations:** `page.getAnnotations({ intent: 'display' })`. Every annotation except `Popup`, and except those whose flags say hidden (bit 2) or no-view (bit 6), adds its normalised `rect` after clipping to `page.view`; a rect that is not four finite numbers, or has no area after clipping, is dropped. So an empty borderless field, a link over white space and a note's icon are kept inside the cut. More than 10,000 annotations on one page makes it `unsafe`.
 - **Blank:** no ink and no annotation box → `blank`.
+- **Per-page errors, as built:** reading the page (`getPage`) is inside the same try as the drawing, so an ordinary error on one page leaves that page as it is. More than 10,000 annotations is checked straight after they are read, before drawing. A drawn box whose corners are not finite numbers is `unsafe`.
 - **Unsafe, as built:** a drawing that throws gives `unsafe` with the error attached; the engine, not the shared step, ends the job when that error is the browser running out of memory or PDF.js's own worker stopping (`outOfMemory` lives in `src/widget/memory.ts`, which the shared drawing file does not import, so no new shared chunk is made).
 - **Unsafe:** the factory counts every refused helper-data request (`BinaryDataFactory.fetch` with nothing to give). If the count is above 0 after a page is drawn, that page and every later page are `unsafe` (decision 3). A drawing that throws (other than the guard's "PDF.js stopped", which ends the job) makes the page `unsafe`.
 
@@ -98,7 +99,7 @@ The cut is in default user space, so `/Rotate` and `/UserUnit` stay as they were
 4. For each page: `measure`, then `cutBox`; progress `{ stage: 'working', unit: 'page', done, total, writesAfter: true }`, so "Page N of M" fills the bar to 0.8 and writing takes the rest, as Add page numbers does.
 5. If no page is cut, `[]`. Otherwise decision 5, with writing progress from `cappedWrite`.
 
-At most two full copies of the file are alive at once: the plain copy and one PDF.js copy while measuring; the plain copy, then qpdf's, while writing. Errors are fixed sentences; no page text, name or password goes into one. No option other than `passwords` is read.
+Besides the worker's own copy of the input, at most two full copies of the file are alive at once: the plain copy and one PDF.js copy while measuring; the plain copy, then qpdf's, while writing. Errors are fixed sentences; no page text, name or password goes into one. No option other than `passwords` is read.
 
 ### 7. The registry entry (words a draft for the owner's review)
 
@@ -123,9 +124,8 @@ At most two full copies of the file are alive at once: the plain copy and one PD
                          advice: 'No new file was made. This tool cuts only white margins, and leaves a page as it is when it cannot be sure where everything on it is. Pages with grey or dark edges, such as many scans, are left too. You can use your file as it is.' },
             resultNotes: [
               'Each page is cut to what is drawn on it, with a small margin left. Blank pages, pages with no white margin, and pages the tool cannot measure safely are left as they are.',
-              'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private.',
-              "Pages, text, links, form fields, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
-              'The new file has no password and no restrictions, even if the file you chose had them.' ] } }
+              'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private.',
+              "Pages, text, links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them." ] } }
 ```
 
 - Placed right after `rotate-pdf` and before `images-to-pdf` in the array. The registry test's catalogue-order check sorts tools by their row in `SPEC.md`'s whole catalogue and counts Image to PDF at `/image2pdf`, the last row of "Organise pages", so `/crop-pdf` must come before it. Home and hub lists follow array order, so Crop is listed seventh, after Rotate.
@@ -142,7 +142,7 @@ Three steps (choose the file; press "Crop and download"; download), then questio
 - How does it decide where to cut? ("Anything on the page that is not white counts, even a light grey line or an empty form box. About 5 mm is left around it on an A4 page.")
 - Why was a page, or my scan, not cut? (blank pages, pages with no white margin, pages the tool cannot be sure about, grey or dark edges)
 - Why are my pages different sizes now? (each page is cut to what is on it)
-- Is what I cut off gone? (No: it is still in the file; anyone who has the file can get it back, and some programs can still find, copy or read aloud its text; cropping is not a way to hide something private, and this site has no tool yet that removes it for good)
+- Is what I cut off gone? (No: it is still in the file; anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it; cropping is not a way to hide something private, and this site has no tool yet that removes it for good)
 - Can I choose how much to cut? (not yet)
 - Do links, forms and bookmarks still work? (and the signature)
 - What happens to a password? Is my original changed?
@@ -151,7 +151,7 @@ Three steps (choose the file; press "Crop and download"; download), then questio
 
 ### 9. The Privacy page draft
 
-One sentence added to "What happens to your file", after the paragraph on what a new PDF can carry: "Crop PDF does not remove what it cuts off. It stays in the new file, where anyone who has the file can get it back, and some programs can still find, copy or read aloud its text." It stays a draft for the owner, under the existing `noindex`. The page's other claims cover Crop as built (the tool's worker and the PDF.js worker get the file; in the job PDF.js gets the decrypted copy, which the page's sentence "Both workers get the file's password" still covers for reading and thumbnails).
+One sentence added to "What happens to your file", after the paragraph on what a new PDF can carry: "Crop PDF does not remove what it cuts off. It stays in the new file, where anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it." It stays a draft for the owner, under the existing `noindex`. The page's other claims cover Crop as built (the tool's worker and the PDF.js worker get the file; in the job PDF.js gets the decrypted copy, which the page's sentence "Both workers get the file's password" still covers for reading and thumbnails).
 
 ## Effect on page weight and on when WebAssembly is fetched
 
@@ -163,11 +163,11 @@ One sentence added to "What happens to your file", after the paragraph on what a
 
 - **A hostile PDF:** PDF.js runs in its own worker with the safe options (no eval, no fonts installed, no fetch, `maxImageSize`), every drawing races `pdfjsGuard`, and every canvas is held by the document's canvas budget; `measure` draws at most 4 million pixels and calls a page whose drawing does not cover the whole viewport `unsafe`. qpdf reads only capped JSON (`maxPagesJson`, `maxDictionaryJson`); the update and the output are capped by `sizeLimit` (`OutputLimit`). Object ids are taken only as `N G R`.
 - **Crafted page boxes and user units:** `pageBox` stops the job on a page under 1 point or over 10^8 points, or a user unit over 10^6 (decision 4, deliberate). A box PDF.js and qpdf read differently, a cut box that is not four finite, ordered numbers inside the old box, or annotation rects that are not finite leave the page as it is or are dropped. The new box is always inside the old shown box, so a crop never shows anything that was hidden. A shared bleed, trim or art box object is never written; the page gets its own direct array.
-- **Many pages or annotations:** measured in runs of 2,000 pages, each run's document closed before the next, so PDF.js's page caches do not grow with the page count; more than 10,000 annotations on one page leaves it as it is. Task 3.4 measures time and checks that peak memory on the 120,000-page file does not grow with the page count. If cropping the 120,000-page file in Chromium takes more than 15 minutes on the test machine, the change is updated before the pull request: either measuring at a lower scale (36 pixels to the inch) for files over 20,000 pages, or a sentence beside the 20,000-page notice saying Crop draws every page and takes longest, as the reviewers prefer. **Measured at build (task 3.4):** 1,495 s (12.5 ms a page) in Chromium, over the 15 minutes. A lower scale does not help: 1,000 of its pages drawn at half the scale took 15.2 s against 16.1 s, as the time is PDF.js's work for each page, not its pixels. Only the sentence is left; it needs a per-tool notice in the shared widget, so it is not built in this change and waits for the reviewers' and the owner's word.
-- **An oversized file:** no fixed limit; the 100 MB notice; at most two full copies alive at once (decision 6). Task 3.4 records the 100 MB peak against Add page numbers' (1.19 GB in Node, 1.36 GB in Chromium).
+- **Many pages or annotations:** measured in runs of 2,000 pages, each run's document closed before the next, so PDF.js's page caches do not grow with the page count; more than 10,000 annotations on one page leaves it as it is. Task 3.4 measures time and checks that peak memory on the 120,000-page file does not grow with the page count. If cropping the 120,000-page file in Chromium takes more than 15 minutes on the test machine, the change is updated before the pull request: either measuring at a lower scale (36 pixels to the inch) for files over 20,000 pages, or a sentence beside the 20,000-page notice saying Crop draws every page and takes longest, as the reviewers prefer. **Measured at build (task 3.4):** 1,495 s (12.5 ms a page) in Chromium, over the 15 minutes. A lower scale does not help: 1,000 of its pages drawn at half the scale took 15.2 s against 16.1 s, as the time is PDF.js's work for each page, not its pixels. **Decided at stage 2 (program manager, architect, code reviewer):** the existing shared 20,000-page notice ("The job may take a long time. You can still go ahead.") and the sentence under the tool ("every page is looked at, so a long file takes a while") are the response for now. A Crop-specific sentence would need its own shared change first and is an owner question.
+- **An oversized file:** no fixed limit; the 100 MB notice; at most two full copies alive at once besides the worker's input copy (decision 6). Task 3.4 records the 100 MB peak against Add page numbers' (1.19 GB in Node, 1.36 GB in Chromium).
 - **A hostile file name:** the engine never sees it; the page builds `-cropped` names as every tool does.
 - **Text or values leaking:** no page text, bookmark title, field value or password goes into an error, a progress report, a message or the console; the no-upload test watches for marked strings, including text in the cut-off margin and a form value.
-- **Hiding is mistaken for removing:** the result, the questions and the Privacy draft say the cut-off part stays in the file, can be got back by anyone who has it, and some programs can still find, copy or read aloud its text. This is the one privacy risk the tool itself adds.
+- **Hiding is mistaken for removing:** the result, the questions and the Privacy draft say the cut-off part stays in the file, can be got back by anyone who has it, and some programs can still find, copy or read aloud the text in it. This is the one privacy risk the tool itself adds.
 
 No server is involved, so SSRF and macros do not apply.
 
@@ -183,7 +183,8 @@ No server is involved, so SSRF and macros do not apply.
 
 ## Risks / Trade-offs
 
-- **Content PDF.js does not draw and does not report** (a picture whose decoder falls back outside the factory, content skipped after a parse error, an unsupported blend) can be cut off. → Crop only hides it, so nothing is lost from the file; the questions say to check the new file; the fixture runs and the hand checks in readers look for it. Not fully closed.
+- **A picture over PDF.js's size limit** (`maxImageSize`, 16,777,216 pixels: a 600 dpi scan, a 48-megapixel photo) is left out of PDF.js's drawing with only a warning, so a page holding one and a page number would be cut to the page number (found at stage 2 by the code reviewer, reproduced as `bigPicturePage` in `tests/unit/crop-helpers.ts`). → `readPages(…, { pictures: true })` gives each page's largest picture, through its resources' XObjects and forms to a depth limit, read from the same capped dictionary JSON; a page whose largest picture is over the limit is left as it is, before it is drawn. Opening PDF.js with `stopAtErrors` was tried first and does not work: PDF.js resolves the drawing once it has started, leaving the rest out, so the page read as blank or partial. Not covered: an inline picture over the limit, and pictures drawn only by annotations, patterns or Type 3 glyphs.
+- **Content PDF.js does not draw and does not report** (a picture whose decoder falls back outside the factory or whose data is broken, content skipped after a parse error, an unsupported blend) can be cut off. → Crop only hides it, so nothing is lost from the file; the questions say to check the new file; the fixture runs and the hand checks in readers look for it. Not fully closed.
 - **Scans on grey paper, with dark scanner edges or with speckle are not cut.** → The page says so in the no-new-file words and the questions. Typed margins, a possible later change (not for now, by the owner's decision of 23 Nov 2026), would answer it.
 - **Each page cut to its own content gives pages of different sizes** (a book's pages will not line up). → Decided by the owner, 23 Nov 2026 ("Each page on its own"); the questions explain it.
 - **The job is slower than other page tools,** as every page is drawn. → Progress per page and Cancel; measured on `pages-500.pdf`, the 100 MB and the 120,000-page files in task 3.4, with the response above if the largest is too slow.
@@ -194,9 +195,12 @@ No server is involved, so SSRF and macros do not apply.
 
 ## Found while building
 
-- **PDF.js leaves text outside the shown box out of the text it reads,** so the words first approved ("its text can still be found by searching, copied or read aloud") were true only for some programs. The result note, the questions, the Privacy draft and the specs now say "some programs can still find, copy or read aloud its text". The unit test checks that cut-off words stay in the page's content stream instead of in PDF.js's text.
+- **PDF.js leaves text outside the shown box out of the text it reads,** so the words first approved ("its text can still be found by searching, copied or read aloud") were true only for some programs. The result note, the questions, the Privacy draft and the specs now say "some programs can still find, copy or read aloud the text in it". The unit test checks that cut-off words stay in the page's content stream instead of in PDF.js's text.
 - **`@napi-rs/canvas` 1.1.0 keeps the memory of every `getImageData` call** (about 2.3 MB for each A4 page read in full), in Node only. Node's memory figures for Crop are therefore not the browser's, and the unit tests' files of 2,003 pages use small, nearly full pages. The worker's `OffscreenCanvas` does not do this (Chromium figures in the fixtures README).
 - **The uniform-requests test** gained `expect: 'no-file'`, for a job that must end with the tool's no-new-file words (Crop PDF on `chinese-unembedded.pdf`).
+- **Memory rose 0.11 GB over the 120,000-page job in Chromium** (0.29 GB in the second tenth, 0.40 GB in the ninth, peak 0.72 GB), though PDF.js's caches are let go every 2,000 pages. The cause was not found; left for later.
+- **The page boxes held in other objects are read by fresh qpdf instances** (`readValues`); reusing `readPages`' resolver instead is left for later, with the carried "read pages and dictionaries in one qpdf call" item.
+- **Three result notes, not four:** the password sentence joined the note on what is kept, which now names notes too, as the questions do (UX, stage 2).
 - **`makeRun({ sizeLimit })`** lets the unit test reach the output cap with a small budget, as PDF to JPG's `makeRun` does.
 
 ## Migration Plan

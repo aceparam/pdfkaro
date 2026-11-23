@@ -113,6 +113,11 @@ Each page SHALL be cut to its content plus a margin of one fortieth of its short
 - **WHEN** a file with a blank page between two text pages is cropped
 - **THEN** the blank page is left as it was, and the text pages are cut
 
+#### Scenario: A picture too large for the drawing step
+
+- **WHEN** an A4 page holds a 5,000 by 4,000 picture across most of it and a small "Page 1" at the bottom
+- **THEN** the page is left as it was, never cut to the page number
+
 #### Scenario: A page drawn to its edges
 
 - **WHEN** a page whose picture fills it to every edge is cropped
@@ -184,21 +189,21 @@ Pressing "Crop and download" SHALL write one PDF in which each cut page's only c
 #### Scenario: The result's notes
 
 - **WHEN** a job finishes
-- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages, pages with no white margin and pages the tool cannot measure safely are left as they are, that what was cut off is still in the file and can be got back and its text found by some programs, that pages, text, links, form fields, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions
+- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages, pages with no white margin and pages the tool cannot measure safely are left as they are, that what was cut off is still in the file and can be got back and its text found by some programs, that pages, text, links, form fields, notes, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions, in three notes
 
 ### Requirement: The cut-off part stays in the file
 
-The result, the text below the tool and the Privacy page draft SHALL say that what was cut off is still in the file: anyone who has the file can get it back, with no special editor, and some programs can still find, copy or read aloud its text, so cropping is not a way to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
+The result, the text below the tool and the Privacy page draft SHALL say that what was cut off is still in the file: anyone who has the file can get it back, with no special editor, and some programs can still find, copy or read aloud the text in it, so cropping is not a way to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
 
 #### Scenario: The result says so
 
 - **WHEN** a job finishes
-- **THEN** the result's notes include "What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private."
+- **THEN** the result's notes include "What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private."
 
 #### Scenario: The text below the tool and the Privacy draft say so
 
 - **WHEN** the built `/crop-pdf` and `/privacy` pages are fetched without running scripts
-- **THEN** each says that what Crop PDF cuts off stays in the file, that anyone who has the file can get it back, and that some programs can still find, copy or read aloud its text
+- **THEN** each says that what Crop PDF cuts off stays in the file, that anyone who has the file can get it back, and that some programs can still find, copy or read aloud the text in it
 
 #### Scenario: The text is still in the file
 
