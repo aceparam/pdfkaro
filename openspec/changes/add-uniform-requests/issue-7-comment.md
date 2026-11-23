@@ -15,7 +15,7 @@ At the end of "Who serves the site":
 Three questions go with them, each with the default that is built:
 
 1. Keep the last two sentences ("Your browser may ask for a program more than once …")? Default: yes.
-2. Accept, for now, the rare cases where a program is asked for again and how often can depend on the file: no usable browser cache; copies older than about 10 minutes; a page of the file slow to draw; the main button pressed while PDF.js's files are still arriving; a worker crash; a job longer than 10 minutes. The Privacy page does not claim them closed. Default: yes.
+2. Accept, for now, the rare cases where a program is asked for again and how often can depend on the file: no usable browser cache; copies older than about 10 minutes; a page of the file slow to draw; the main button pressed while PDF.js's files are still arriving; a worker crash or running out of memory; a replaced signature picture still being read after a minute; a job longer than 10 minutes. The Privacy page does not claim them closed. Default: yes.
 3. When several files of the wrong kind are picked, keep a Remove button on the "Getting ready" line (read out as "Remove 2 files")? Default: yes.
 
 Please do not approve the sentence "Which programs the page fetches does not depend on what your file holds…" until the Firefox and Safari release check below has passed: the automated test runs in Chromium only.

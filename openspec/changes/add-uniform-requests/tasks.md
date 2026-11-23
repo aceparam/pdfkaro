@@ -132,11 +132,11 @@
 ## 9. Checks and review
 
 - [x] 9.1 Run `npm run lint`, `npm run check`, `npm test`, `npm run build`, `npm run weigh`, `npm run check:worker`, `npm run check:base`, `npm run check:csp`, `npm run check:seo`, `npm run e2e -- --trace off` and `npm run spec`. Verify each passes, and paste the real output in the pull request.
-- [ ] 9.2 Draft the hand and release checks for issue #7, and verify the draft is in the pull request description:
+- [x] 9.2 Draft the hand and release checks for issue #7, and verify the draft is in the pull request description:
   - the host's record for `text.pdf` against `damaged-xref.pdf` on one PDF page in Firefox and in Safari;
   - the live host's `Cache-Control` against the 10 minutes the Privacy sentences rely on;
   - a phone on a slow connection: a wrong-kind pick shows "Getting ready" with Remove, then the sentence, read out by the screen reader (R16).
-- [ ] 9.3 Run the review panel, stage 2 (`.claude/skills/review-panel/SKILL.md`), and resolve every must-fix finding. Verify the panel's verdicts are in the pull request description, using `.github/pull_request_template.md`.
+- [x] 9.3 Run the review panel, stage 2 (`.claude/skills/review-panel/SKILL.md`), and resolve every must-fix finding. Verify the panel's verdicts are in the pull request description, using `.github/pull_request_template.md`.
 
 ## 10. Stage 2 fixes
 
