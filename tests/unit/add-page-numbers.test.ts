@@ -5,12 +5,13 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument, StandardFonts } from '@cantoo/pdf-lib';
+import { plainCopy } from '../../src/engines/plain';
 import { describe, expect, it } from 'vitest';
 import { digitHeight, inspect, numberPlace, run, type Position } from '../../src/engines/tools/add-page-numbers';
 import { failureKind } from '../../src/workers/worker-core';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { optionValues } from '../../src/widget/option-values';
-import { fixture, jsonOf, lastTextPlaces, password, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
+import { fixture, jsonOf, lastTextPlaces, password, pageStreams, qpdfOn, storedPlaces, streamText, texts, tools } from './stamp-helpers';
 
 const positions = optionValues['add-page-numbers']!.position as readonly Position[];
 
@@ -109,12 +110,17 @@ async function expectNumbered(input: Uint8Array, output: Uint8Array, given?: str
   const pages = Number((await qpdfOn(input, [...(given ? [`--password=${given}`] : []), '--show-npages'])).out.trim());
   expect((await qpdfOn(output, ['--show-npages'])).out.trim()).toBe(String(pages));
   expect(await encryption(output)).toMatch(/File is not encrypted/);
-  const before = given ? null : await texts(input);
+  // Compared with the plain copy the engine starts from, so a file that needs a password is compared too.
+  const plain = (await plainCopy(tools, input, given)).plain;
+  const before = await texts(plain);
   const after = await texts(output);
   after.forEach((items, index) => {
     expect(items.at(-1), `page ${index + 1}`).toBe(String(index + 1));
-    if (before) expect(items.slice(0, -1), `page ${index + 1}`).toEqual(before[index]);
+    expect(items.slice(0, -1), `page ${index + 1}`).toEqual(before[index]);
   });
+  // Each page's own streams are unchanged, between the added q and Q.
+  const streamsBefore = await pageStreams(plain);
+  (await pageStreams(output)).forEach((streams, index) => expect(streams.slice(1, -2), `page ${index + 1}`).toEqual(streamsBefore[index]));
 }
 
 // Real runs through qpdf, pdf-lib and PDF.js: slow on a busy machine, so each test has a minute.
@@ -255,6 +261,7 @@ describe('numbering the shared test set', { timeout: 60_000 }, () => {
     const covered = new Set(['text.pdf', 'mixed.pdf', 'pages-500.pdf', 'scanned.pdf', 'warning.pdf', 'images.pdf', 'password.pdf', 'restricted.pdf', 'rich.pdf', 'form.pdf', 'tagged.pdf', 'damaged-xref.pdf', 'damaged-cut.pdf', 'not-a-pdf.pdf']);
     const others = readdirSync(join(__dirname, '../fixtures')).filter((name) => name.endsWith('.pdf') && !covered.has(name));
     expect(others.sort()).toEqual([
+      'chinese-unembedded.pdf',
       'compress-bomb-attachment.pdf',
       'compress-flate-bomb.pdf',
       'compress-jpeg-mismatch.pdf',
@@ -266,6 +273,7 @@ describe('numbering the shared test set', { timeout: 60_000 }, () => {
       'compress-scans.pdf',
       'compress-small-jpg.pdf',
       'compress-text.pdf',
+      'multilingual.pdf',
     ]);
     for (const name of others) {
       const input = fixture(name);
