@@ -155,6 +155,15 @@
 - [x] 10.13 (security) The gated `tools` is not thenable.
 - [x] 10.14 Re-run every check and the full end-to-end suite on both projects.
 
+## 11. Stage 2 re-review fixes
+
+- [x] 11.1 (must-fix) Removing the last file ends every worker; on unmount, `releaseOnUnmount` ends every retired worker that was sent a file, a password or a picture. Verify with a `client.test.ts` test.
+- [x] 11.2 (security) A reading worker that runs out of memory is ended at once.
+- [x] 11.3 (security) A replaced picture read's worker is ended after the hold, not retired; named in Risks.
+- [x] 11.4 (privacy N2) design.md says a repeat beside a retired worker is not free of the file, covered by Open question 2.
+- [x] 11.5 (code) A comment that the lingering pagehide listener must run after ToolWidget's.
+- [x] 11.6 Re-run lint, check, test, build, weigh, check:worker, check:csp, check:seo, spec, and the touched e2e specs with uniform-requests, host-log, thumbnails and sign-pdf on both projects.
+
 ## Workflow follow-up
 
 - After the pull request is merged, archive with `/opsx:archive`.

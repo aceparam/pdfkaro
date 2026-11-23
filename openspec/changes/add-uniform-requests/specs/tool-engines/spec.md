@@ -56,7 +56,7 @@ Until a reading worker's pick set, thumbnail code included, has loaded or failed
 #### Scenario: A signature picture chosen again while the set loads
 
 - **WHEN** a Sign PDF picture is chosen again while the set is still loading and the earlier picture is still being read
-- **THEN** the old worker is ended once its set has settled and the new read starts after that; if the set has not settled within 60 seconds, the new read starts on a fresh worker and the old one is ended only once its set has settled
+- **THEN** the old worker is ended once its set has settled, or after 60 seconds, and the new read starts after that on a fresh worker
 
 #### Scenario: A reading failure while the set loads
 
@@ -67,6 +67,11 @@ Until a reading worker's pick set, thumbnail code included, has loaded or failed
 
 - **WHEN** a thumbnail has waited 60 seconds for a set that has not settled
 - **THEN** it gives no picture and is dropped by message, and the worker is kept until its set settles
+
+#### Scenario: Removing the last file
+
+- **WHEN** the visitor removes the last file while any worker of the page is still finishing its set
+- **THEN** every worker of the page is ended at once, and none that was given a file, a password or a picture outlives the working area
 
 #### Scenario: The visitor's own actions
 

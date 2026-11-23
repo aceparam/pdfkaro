@@ -57,6 +57,9 @@ export class ToolClient {
   private jobWorker = false;
   // Workers no longer used, each left to finish loading its set and then ended.
   private readonly retired = new Set<WorkerLike>();
+  // Workers that were ever sent a file, a password or a picture (a read, a picture read, a thumbnail or a job). Such a
+  // worker is never left behind when the workspace goes: it holds what the visitor gave it.
+  private readonly carried = new WeakSet<WorkerLike>();
 
   constructor(
     private readonly toolId: string,
@@ -106,15 +109,32 @@ export class ToolClient {
   }
 
   /**
-   * Stops using the current worker once its set has settled, or once the hold has passed: settled, it is ended;
-   * otherwise it is retired, and ends itself when its set settles. Either way the next request starts a fresh
-   * worker. The visitor's own `end()` ends it at once, and this then returns.
+   * Ends the current worker once its set has settled, or once the hold has passed, whichever is first; the next
+   * request starts a fresh worker. Used for a picture read replaced by a new pick: that worker holds the old picture
+   * and may be busy with it for minutes, so it is ended rather than left beside the next (stage 2 re-review,
+   * security; past the hold this can cut its files short, a named exception in design.md Risks). The visitor's own
+   * `end()` ends it at once, and this then returns.
    */
-  async retireWhenSettled(): Promise<void> {
+  async endWhenSettled(): Promise<void> {
     const worker = this.worker;
     if (!worker) return;
     await this.whenSettled(this.holdMs);
-    if (this.worker === worker) this.retire('cancelled');
+    if (this.worker === worker) this.endCurrent('cancelled');
+  }
+
+  /**
+   * For a workspace that is going away without the visitor ending anything (the picker came back after a wrong-kind
+   * pick): ends the current worker and every retired worker that was ever sent a file, a password or a picture, and
+   * leaves only file-less retired workers to finish their sets. Says whether any is left.
+   */
+  releaseOnUnmount(): boolean {
+    this.endCurrent('cancelled');
+    for (const worker of [...this.retired]) {
+      if (!this.carried.has(worker)) continue;
+      this.retired.delete(worker);
+      worker.terminate();
+    }
+    return this.retired.size > 0;
   }
 
   /**
@@ -264,6 +284,7 @@ export class ToolClient {
   private send<T>(message: ToWorker, onProgress?: (progress: Progress) => void): Promise<T> {
     const worker = this.ensureWorker();
     if (message.type === 'run') this.jobWorker = true;
+    if (message.type === 'inspect' || message.type === 'inspect-picture' || message.type === 'thumbnail' || message.type === 'run') this.carried.add(worker);
     const requestId = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject, onProgress });
@@ -338,7 +359,9 @@ export class ToolClient {
         // keeps its memory. Stop using it, so that the next try starts a fresh
         // one; a reading worker whose set is still arriving is retired, not
         // ended, so its files are never cut short for a file's sake.
-        if (data.kind !== 'engine') this.retire(data.kind);
+        // A worker that ran out of memory is ended at once, as a crash is (a named exception in design.md Risks).
+        if (data.kind === 'memory') this.endCurrent('memory');
+        else if (data.kind !== 'engine') this.retire(data.kind);
         return;
     }
   }

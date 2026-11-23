@@ -21,7 +21,9 @@ function endLingering(): void {
   for (const each of lingering) each.end();
   lingering.clear();
 }
-// Registered when this file is first loaded, so it runs on leaving even after the workspace has unmounted.
+// Registered when this file is first loaded, so it runs on leaving even after the workspace has unmounted. It must
+// run after ToolWidget's own pagehide listener, which unmounts the workspace and so may add a client to `lingering`:
+// listeners run in the order they were added, ToolWidget's at hydration, before this file (loaded at the first pick).
 if (typeof window !== 'undefined') window.addEventListener('pagehide', endLingering);
 import { runJob } from './run-job';
 
@@ -300,10 +302,12 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       files.current.delete(id);
       passwords.current.delete(id);
       inspectTickets.current.delete(id);
-      // Removing the last file ends the working area and resets the state, so the pictures and new passwords go with it.
+      // Removing the last file ends the working area and resets the state, so the pictures and new passwords go with it,
+      // and every worker of the page, retired ones included: the visitor's own action.
       if (files.current.size === 0) {
         pictures.current.clear();
         forgetNewPasswords();
+        client.current?.end();
       }
       forgetThumbnails(id);
       dispatch({ type: 'removed', id });
@@ -424,7 +428,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       if (inFlight === undefined || pictures.current.get(key) === inFlight.file) return;
       picturesInFlight.current.delete(key);
       await stopThumbnail();
-      await client.current?.retireWhenSettled();
+      await client.current?.endWhenSettled();
     },
     [stopThumbnail],
   );
@@ -595,10 +599,9 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
     if (drawing.current) drawing.current.stopped = true;
     drawing.current = null;
     keptFile.current = null;
-    if (how === 'unmount' && client.current?.lingering) {
-      client.current.endCurrent('cancelled');
-      lingering.add(client.current);
-    } else client.current?.end();
+    // On unmount alone, only a retired worker never sent a file (a wrong-kind pick) is left to finish its set.
+    if (how === 'unmount' && client.current?.releaseOnUnmount()) lingering.add(client.current);
+    else client.current?.end();
     client.current = null;
     files.current.clear();
     passwords.current.clear();
