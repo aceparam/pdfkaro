@@ -152,6 +152,16 @@ describe('the Privacy page', () => {
     });
   });
 
+  describe('Crop PDF guard', () => {
+    it('says that what Crop PDF cuts off stays in the file, as the tool page and its result say', () => {
+      const sentence = 'Crop PDF does not remove what it cuts off. It stays in the new file, where anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it.';
+      expect(section('What happens to your file').text).toContain(sentence);
+      const toolText = readFileSync(new URL('../../src/content/tools/crop-pdf.md', import.meta.url), 'utf8');
+      for (const words of ['still in the file', 'Anyone who has the file can get it back', 'some programs can still find, copy or read aloud the text in it', 'not a way to hide something private'])
+        expect(toolText).toContain(words);
+    });
+  });
+
   describe('policy guard', () => {
     const policy = section('What the page may load and send');
 

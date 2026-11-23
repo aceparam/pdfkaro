@@ -232,13 +232,14 @@ describe('Rotate PDF', () => {
 describe('Images to PDF', () => {
   const tool = tools.find((each) => each.id === 'images-to-pdf')!;
 
-  it('is one tool with three pages under Convert to PDF, taking JPG and PNG, after Rotate', () => {
+  it('is one tool with three pages under Convert to PDF, taking JPG and PNG, after Crop PDF', () => {
     expect(tool).toMatchObject({ group: 'to-pdf', runsIn: 'browser', phase: 1, accepts: ['image/jpeg', 'image/png'] });
     expect(tool.pages.map((page) => page.slug)).toEqual(['jpg-to-pdf', 'png-to-pdf', 'image-to-pdf']);
     expect(tool.pages.map((page) => page.name)).toEqual(['JPG to PDF', 'PNG to PDF', 'Image to PDF']);
     for (const page of tool.pages) expect(page.accepts).toBeUndefined();
     const ids = tools.map((each) => each.id);
-    expect(ids.indexOf('images-to-pdf')).toBe(ids.indexOf('rotate-pdf') + 1);
+    // At /image2pdf's catalogue row, the last of "Organise pages", so after Crop PDF (/crop-pdf).
+    expect(ids.indexOf('images-to-pdf')).toBe(ids.indexOf('crop-pdf') + 1);
     expect(tool.related).toEqual(['merge-pdf', 'compress-pdf', 'pdf-to-jpg', 'rotate-pdf', 'rearrange-pdf-pages']);
   });
 
@@ -304,6 +305,54 @@ describe('Images to PDF', () => {
   });
 });
 
+describe('Crop PDF', () => {
+  const tool = tools.find((each) => each.id === 'crop-pdf')!;
+
+  it('is the first Phase 2 tool, right after Rotate PDF under "Organise pages", taking one PDF with no options', () => {
+    expect(tool).toMatchObject({ group: 'organise', runsIn: 'browser', phase: 2, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['rotate-pdf', 'resize-pdf', 'split-pdf', 'compress-pdf', 'pdf-to-jpg', 'merge-pdf']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('crop-pdf')).toBe(ids.indexOf('rotate-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'crop-pdf',
+        name: 'Crop PDF',
+        summary: 'Cut the white margins off the pages of a PDF.',
+        title: 'Crop PDF margins in your browser - PDFkaro',
+        description: 'Cut the white margins off the pages of a PDF. The file stays on your device and is not uploaded.',
+        heading: 'Crop PDF margins',
+        sentence: 'Cut the white margins off the pages of a PDF. Your file stays on your device.',
+      },
+    ]);
+    expect(tool.widget?.options).toBeUndefined();
+  });
+
+  it('has the widget words of the design, with words for no page cut and three notes', () => {
+    expect(tool.widget).toMatchObject({
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      outputSuffix: 'cropped',
+      outputs: 'one',
+      resultPages: 'input',
+      actionLabel: 'Crop and download',
+      failedHeading: 'The pages were not cropped.',
+      noSmaller: { heading: 'No pages were cropped.' },
+    });
+    expect(tool.widget!.noSmaller!.advice).toMatch(/cannot be sure where everything on it is/);
+    const notes = tool.widget!.resultNotes;
+    expect(notes).toHaveLength(3);
+    expect(notes[0]).toMatch(/pages the tool cannot measure safely are left as they are/);
+    expect(notes[1]).toMatch(/still in the file/);
+    expect(notes[1]).toMatch(/some programs can still find, copy or read aloud the text in it/);
+    expect(notes[1]).toMatch(/not a way to hide something private/);
+    expect(notes[2]).toMatch(/notes, bookmarks/);
+    expect(notes[2]).toMatch(/no password and no restrictions/);
+    for (const text of [...notes, ...Object.values(tool.widget!.noSmaller!)]) expect(text).not.toContain('!');
+  });
+});
+
 describe('Compress PDF', () => {
   const tool = tools.find((each) => each.id === 'compress-pdf')!;
 
@@ -363,7 +412,8 @@ describe('Compress PDF', () => {
       if (each.id === 'compress-pdf') continue;
       expect(each.widget?.resultWas).toBeUndefined();
       // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
-      if (each.id !== 'unlock-pdf') expect(each.widget?.noSmaller).toBeUndefined();
+      // Crop PDF gives no new file when no page is cut.
+      if (each.id !== 'unlock-pdf' && each.id !== 'crop-pdf') expect(each.widget?.noSmaller).toBeUndefined();
     }
   });
 });

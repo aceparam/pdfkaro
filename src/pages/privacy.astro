@@ -37,6 +37,10 @@ import { draftSentence, footerPage, siteName } from '../site';
     A new PDF can carry the old file’s title, author and other details, its accessibility tags and its attached files. The tags can bring along what was typed in form fields on pages you left out. In
     Merge PDF, the title, author, other details and attached files come from the first file.
   </p>
+  {/* Draft words for the owner (add-crop-pdf): tied to its design, section 9, and to tests/unit/crop-pdf.test.ts. */}
+  <p>
+    Crop PDF does not remove what it cuts off. It stays in the new file, where anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it.
+  </p>
   <p>
     Pictures from PDF to JPG and PDF to PNG hold only the drawn page, with what was typed in its form fields as the page shows it, and no title, author or date. Image to PDF copies no details of your
     pictures, such as the camera, date or place, into the PDF.

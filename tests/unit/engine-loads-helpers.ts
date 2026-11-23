@@ -58,6 +58,7 @@ export const options: Record<string, (pages: number) => Record<string, unknown>>
   'delete-pdf-pages': () => ({ pages: [1] }),
   'rearrange-pdf-pages': (pages) => ({ order: Array.from({ length: pages }, (_, index) => pages - index) }),
   'rotate-pdf': () => ({ turns: { all: 1, pages: [] } }),
+  'crop-pdf': () => ({}),
   'compress-pdf': () => ({}),
   'pdf-to-images': () => ({ format: 'jpg' }),
   'add-page-numbers': () => ({ position: 'bottom-centre' }),

@@ -774,3 +774,45 @@ Measured on 22 Nov 2026 as Protect's were: in Node, each case in a process of it
 The reading of the result and its `--check` share one fresh qpdf, as the stage 1 review allowed if memory showed it: on the 100 MB file the Node peak fell from 1.19 GB, with a fresh qpdf for each, to 1.09 GB, in three runs each; on the 120,000-page file both gave 0.35 GB, with the shared one about a second slower, within this machine's spread. The reading of the input stays on a fresh qpdf of its own: reading it on the writer's qpdf before the write gave the same 1.09 GB on the 100 MB file and 0.50 GB on the 120,000-page file. On the 120,000-page file the check takes about half the time, as qpdf's `--check` reads every page; on the 100 MB file, whose size is one picture, the write takes most of it. No genuine file comes near the cap of twice the file and 16 MB: every file shrinks.
 
 `multilingual.pdf` has neither a password nor restrictions, so on its own it gives no file. Protected with a password and then given back with it, every page reads its text and holds its decoded content streams as before (`tests/unit/multilingual.test.ts`). Opening that result in the readers by hand is still owed (issue #7).
+
+### Crop PDF (`src/engines/tools/crop-pdf.ts`, with `measure` in `src/engines/thumbnail.ts`)
+
+Each file was run in Node with the same qpdf, PDF.js and helper data the browser uses, and `@napi-rs/canvas` in place of the worker's `OffscreenCanvas` (`tests/unit/crop-pdf.test.ts`), the encrypted ones with `open-sesame`. Every file given back passes `qpdf --check`, is not encrypted, holds each page's decoded content streams byte for byte as before, keeps each page's paper box, turn, user unit and number of annotations, and its new crop boxes hold all the ink PDF.js draws for the original page. A page is counted as cut when it has a crop box of its own. Sizes in bytes, from a run on 23 Nov 2026.
+
+| File | Before | After | Pages cut | Outcome |
+| --- | --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 3,566 | 3 of 3 | Cut. qpdf's warning on `warning.pdf` does not stop the job |
+| `pages-500.pdf` | 198,025 | 101,925 | 500 of 500 | Cut, in about 4 seconds |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | 7,178 and 7,181 | 3,604 | 3 of 3 | Cut; no password and no restrictions |
+| `form.pdf` | 3,189 | 2,662 | 1 of 1 | Cut; both fields and the value `Sample text` kept, inside the new box |
+| `mixed.pdf` | 2,257 | 1,646 | 4 of 4 | Cut; each page's paper box and turn as before |
+| `rich.pdf` | 2,064 | 1,706 | 2 of 2 | Cut; bookmarks, the link (inside the new box) and `note.txt` kept |
+| `tagged.pdf` | 5,118 | 2,537 | 2 of 2 | Cut; tags, named destination, reading thread, note, link and fields kept, every annotation inside its page's box |
+| `images.pdf` | 1,642 | 1,562 | 1 of 1 | Cut; the JPEG 2000 picture and the CMYK shapes are inside |
+| `multilingual.pdf` | 48,414 | 37,264 | 5 of 5 | Cut; every page's text read by PDF.js as before, and its ink inside the new boxes |
+| `compress-bomb-attachment.pdf` | 1,045,278 | 1,044,877 | 1 of 1 | Cut; the attachment is never inflated |
+| `compress-lossless.pdf`, `compress-packed.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf` | | | every page | Cut |
+| `chinese-unembedded.pdf` | | | 0 | No page cut, so no file ("No pages were cropped."): PDF.js is refused the character map `UniGB-UCS2-H`, so the page is not measured, though its text is not drawn. It is the one page left as it is only because a helper-data request was refused |
+| `scanned.pdf`, `compress-kinds.pdf`, `compress-jpeg-mismatch.pdf`, `compress-password.pdf` (with `open-sesame`) | | | 0 | No page cut: their pictures reach the edges of each page |
+| `compress-scans.pdf` | | | 0 | No page cut: the grey scan's paper is grey 236, under the white of 240, and the other two pages are filled to their edges |
+| `compress-flate-bomb.pdf` | | | 0 | No page cut: the picture whose data inflates to 100 MB is not drawn, so the page is blank to PDF.js and left as it is |
+
+After the stage 2 fix for pictures over PDF.js's size limit (a page whose largest picture is over 16,777,216 pixels is left as it is, before drawing), every file above gave the same outcome: no page changed from cut to uncut. The code reviewer's file (`bigPicturePage` in `tests/unit/crop-helpers.ts`: an A4 page with a 5,000 by 4,000 picture and "Page 1") gives no file, where it was cut to the page number before.
+| `compress-json-bomb.pdf` | | | | Fails with "The pages could not be read.", after about 15 seconds: its JSON of dictionaries passes the page-reading cap. The page gives the shared failure |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | | Read as damaged before any job; a run fails with "qpdf could not read the file." |
+
+Files made in the tests (`tests/unit/crop-pdf.test.ts`, `tests/unit/content-box.test.ts`): turned pages (90, 180, 270), offset and reversed paper boxes, a user unit of 2 and of 1,000, an inherited crop box, a poster of 14,400 points, a page of 1 by 100,000,000 points (not measured: the drawing cannot cover it), a page of 200 by 100 points (drawn 288 pixels wide), blank pages, grey 236 and 240 paper, light and hairline lines, an empty borderless field and a link over white space (kept inside), hidden, popup, empty and outside annotations (left out), own and shared bleed, trim and art boxes (cut back as the page's own arrays; a shared box object unchanged; an unreadable one removed), white text `SECRET-margin` in a cut-off margin (still in the content), and files of 2,003 pages, measured in two documents of up to 2,000 pages each, one with unembedded Chinese on page 3, after which no page is measured.
+
+Measured on 23 Nov 2026. In Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, with the resident memory of every browser process added up and sampled every 0.2 seconds, over its level just before the press; the "tenths" are the average over the second and the ninth tenth of the job, to see whether memory grows with the pages measured. In Node, under the test runner, peak the process's highest resident memory, the runner's own included.
+
+| File | In | Out | Chromium: time | Chromium: peak over baseline | Chromium: second and ninth tenth | Node: time | Node: peak |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf` | 198,025 bytes | 101,925 bytes | 4.4 s | 0.18 GB | 0.07 and 0.09 GB | 4.9 s (pages 4.1 s) | see below |
+| `make-large.mjs`'s file (one page) | 110.1 MB | 110.1 MB | 2.4 s | 0.53 GB | | 2.5 s | 0.93 GB |
+| 120,000 pages (`make-many-pages.mjs`) | 16.6 MB | 1.1 MB | 1,495 s (about 25 minutes, 12.5 ms a page) | 0.72 GB | 0.29 and 0.40 GB | not measured | see below |
+
+- **Against Add page numbers** on the 100 MB file (1.19 GB in Node, 1.36 GB in Chromium): Crop peaks at 0.93 GB in Node and 0.53 GB over baseline in Chromium.
+- **Memory with the page count:** in Chromium, memory rose by about 0.11 GB between the second and the ninth tenth of the 120,000-page job, against 0.72 GB at its peak. PDF.js's page caches are let go every 2,000 pages; what is left rising was not found.
+- **Node's memory is not the browser's:** `@napi-rs/canvas` 1.1.0, which only the Node tests use, keeps the memory of every `getImageData` call (about 2.3 MB for an A4 page read in full, with or without garbage collection, outside the test runner too). So `pages-500.pdf` peaks at 1.29 GB in Node, growing by the same amount each page, and the 120,000-page file runs Node out of memory. The worker's `OffscreenCanvas` does not do this, as the Chromium figures show.
+- **Time on the 120,000-page file is over the 15 minutes the design set.** Measuring at a lower scale does not help: drawing 1,000 of its pages at half the scale took 15.2 s against 16.1 s, as the time goes to PDF.js's work for each page, not to its pixels. So of the design's two responses, only a sentence beside the 20,000-page notice is left, which needs a per-tool notice in the shared widget; it is not built here and is named in the pull request.
+- **Known, not fixed here:** "Page N of M" has no thousands separator (`src/widget/format.ts`), so this file shows "Page 1 of 120000", as on every page tool.

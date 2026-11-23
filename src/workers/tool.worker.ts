@@ -70,6 +70,9 @@ const tools = {
     // A JPG at `quality` from 0 to 1, for an engine that saves pictures again (Compress PDF).
     jpeg: async (canvas: unknown, quality: number) =>
       new Uint8Array(await (await (canvas as OffscreenCanvas).convertToBlob({ type: 'image/jpeg', quality })).arrayBuffer()),
+    // The pixels of a rectangle, for an engine that measures where a page's content is (Crop PDF).
+    pixels: (canvas: unknown, x: number, y: number, width: number, height: number) =>
+      (canvas as OffscreenCanvas).getContext('2d', { willReadFrequently: true })!.getImageData(x, y, width, height).data,
   }),
   // PDF.js's fonts and decoders: one fixed set, loaded late, never statically.
   pdfjsData: async () => (await import('./pdfjs-data')).pdfjsData,

@@ -1,5 +1,7 @@
 // Draws the pages of a PDF: as small pictures, for the thumbnails in the list
-// of files, and whole, as JPG or PNG pictures (PDF to JPG and PDF to PNG).
+// of files, and whole, as JPG or PNG pictures (PDF to JPG and PDF to PNG); and
+// measures where a page's content is, for Crop PDF (`measure`). All three draw
+// through one paint step, so the canvas budget and cleanup rules exist once.
 // Shared by every tool, like inspect.ts. It keeps the engine rules: PDF.js, a
 // canvas maker, PDF.js's helper data and the guard against a stopped PDF.js
 // worker all come in through `tools`, so it uses no page and makes no request,
@@ -20,6 +22,8 @@ export type CanvasMaker = {
   png(canvas: unknown): Promise<Uint8Array>;
   /** Encodes the canvas as JPG bytes at `quality`, from 0 to 1. The worker's maker has it; a tool that saves JPGs needs it. */
   jpeg?(canvas: unknown, quality: number): Promise<Uint8Array>;
+  /** The RGBA pixels of a rectangle of the canvas. The worker's maker has it; measuring a page (Crop PDF) needs it. */
+  pixels?(canvas: unknown, x: number, y: number, width: number, height: number): Uint8ClampedArray;
 };
 
 /** A canvas maker that can encode JPGs, as the worker gives it (Compress PDF, PDF to JPG). */
@@ -34,16 +38,25 @@ export type HelperData = {
   decoder(name: string): Uint8Array | undefined;
 };
 
+/** A page's viewport: its size at a scale, turned, and the way back from its pixels to the page's own units. */
+export type PdfjsViewport = { width: number; height: number; convertToPdfPoint?(x: number, y: number): number[] };
+
 /** The parts of PDF.js used here. Exported for the tests' stand-ins. */
 export type PdfjsModule = {
   getDocument(options: Record<string, unknown>): {
     promise: Promise<{
       numPages: number;
       getPage(page: number): Promise<{
-        getViewport(options: { scale: number }): { width: number; height: number };
+        getViewport(options: { scale: number }): PdfjsViewport;
         render(options: Record<string, unknown>): { promise: Promise<void> };
         /** Lets go of the page's decoded pictures and drawing steps once nothing is drawing it. */
         cleanup(): boolean;
+        /** The box shown, its turn and its user unit, as PDF.js reads them. Measuring a page needs them; the tests' stand-ins may leave them out. */
+        view?: number[];
+        rotate?: number;
+        userUnit?: number;
+        /** The page's annotations, each with its box in the page's units and its flags. Measuring a page needs it. */
+        getAnnotations?(options: { intent: string }): Promise<{ subtype?: unknown; rect?: unknown; annotationFlags?: unknown }[]>;
       }>;
     }>;
     destroy(): Promise<void>;
@@ -85,6 +98,38 @@ async function need<T>(tools: EngineTools, name: string): Promise<T> {
   return (await make()) as T;
 }
 
+/** The most pixels a page is drawn at to measure it (Crop PDF). */
+export const measurePixels = 4_000_000;
+
+/** A page whose longer shown side is under this many points is measured at this many pixels on that side, not one a point. */
+export const smallPageSide = 288;
+
+/** A pixel is ink when any of its red, green and blue is below this, of 255. */
+export const whiteFrom = 240;
+
+/** Rows or columns read at once while looking inward from an edge for ink. */
+export const measureStrip = 16;
+
+/** More annotations than this on one page, and it is not measured. */
+export const maxMeasuredAnnotations = 10_000;
+
+/** A box in a page's own units, normalised: [left, bottom, right, top]. */
+export type Box = [number, number, number, number];
+
+/** What PDF.js reads of where a page is shown: its box, its turn and its user unit. */
+export type Shown = { view: Box; rotate: number; userUnit: number };
+
+/**
+ * Where a page's content is, in the page's own unturned units (before its user unit): a box with what PDF.js
+ * read of where the page is shown; blank, with nothing drawn and no annotation a reader shows; or not safe to
+ * measure, with the error when its drawing threw (the caller decides whether that error ends the job).
+ */
+export type Measured =
+  | { kind: 'box'; box: Box; shown: Shown }
+  | { kind: 'blank'; shown: Shown }
+  /** `refused`: a helper-data request of this document has been refused, so no later page is safe either. */
+  | { kind: 'unsafe'; refused?: true; error?: unknown };
+
 /** How to draw a whole page: at `scale` (1 is 72 pixels to the inch), at most `maxPixels`, as JPG or PNG. */
 export type DrawOptions = { scale: number; maxPixels: number; format: 'jpg' | 'png'; quality?: number };
 
@@ -101,6 +146,13 @@ export type OpenDocument = {
    * with form fields drawn with their values and other annotations as their appearances show them.
    */
   draw(page: number, options: DrawOptions): Promise<Drawn>;
+  /**
+   * Where page `page` (1-based)'s content is: what is drawn and not white, as a reader shows it, with form values,
+   * and the boxes of the annotations a reader shows. Unsafe from the first refused helper-data request of this
+   * document on (text PDF.js could not draw must never be cut off), when the drawing does not cover the whole page,
+   * when it has too many annotations, and when its drawing throws. Needs the canvas maker's `pixels`.
+   */
+  measure(page: number): Promise<Measured>;
   /** Closes the document and lets go of its copy of the file. Safe to call twice. */
   close(): Promise<void>;
 };
@@ -192,6 +244,8 @@ export async function openDocument(file: Uint8Array, password: string | undefine
   // Every live canvas of this document, PDF.js's own temporary ones for transparency and soft masks
   // included, and each drawing's own picture: so one page can never take gigabytes.
   const budget = canvasBudget();
+  // Every helper-data request refused (a character map, which is never shipped, or anything else not in the set).
+  let refused = 0;
 
   // PDF.js makes these with `new`, with options it chooses; ours ignore them.
   class CanvasFactory {
@@ -272,7 +326,10 @@ export async function openDocument(file: Uint8Array, password: string | undefine
   class BinaryDataFactory {
     async fetch({ kind, filename }: { kind: string; filename: string }): Promise<Uint8Array> {
       const found = kind === 'standardFontDataUrl' ? data.font(filename) : kind === 'wasmUrl' ? data.decoder(filename) : undefined;
-      if (!found) throw new Error(`No ${kind} data for this file.`);
+      if (!found) {
+        refused++;
+        throw new Error(`No ${kind} data for this file.`);
+      }
       return found;
     }
   }
@@ -308,11 +365,18 @@ export async function openDocument(file: Uint8Array, password: string | undefine
     return guard(doc.getPage(page));
   };
 
-  async function drawPage(
+  /**
+   * The one paint step: draws the page at `scale`, held to `maxPixels`, on white, onto a canvas counted by the
+   * budget, hands it to `take`, and then lets go of the canvas, every canvas counted for this drawing and the page's
+   * decoded pictures and drawing steps, whatever happens.
+   */
+  async function paint<T>(
     pdfPage: Awaited<ReturnType<typeof pageOf>>,
     scale: number,
-    { maxPixels, format, quality, annotationMode }: Omit<DrawOptions, 'scale'> & { annotationMode: number },
-  ): Promise<Drawn> {
+    maxPixels: number,
+    annotationMode: number,
+    take: (made: CanvasAndContext, size: { width: number; height: number }, viewport: PdfjsViewport) => Promise<T>,
+  ): Promise<T> {
     if (!Number.isInteger(maxPixels) || maxPixels < 1) throw new Error('The picture has no size.');
     const asked = pdfPage.getViewport({ scale });
     const size = pictureSize(asked.width, asked.height, maxPixels);
@@ -326,11 +390,7 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       budget.take(own, size.width * size.height);
       made = canvases.create(size.width, size.height);
       await guard(pdfPage.render({ canvas: made.canvas, canvasContext: made.context, viewport, background: '#ffffff', annotationMode }).promise);
-      let bytes: Uint8Array;
-      if (format === 'png') bytes = await canvases.png(made.canvas);
-      else if (canvases.jpeg) bytes = await canvases.jpeg(made.canvas, quality ?? 0.85);
-      else throw new Error('No JPG encoder was given.');
-      return { bytes, width: size.width, height: size.height };
+      return await take(made, { width: size.width, height: size.height }, viewport);
     } finally {
       // The picture's canvas is let go, then the page's decoded pictures and drawing steps, before the next page.
       // Every canvas counted for this drawing is forgotten, PDF.js's cached masks and a failed drawing's leftovers
@@ -340,6 +400,91 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       budget.forgetAll();
       pdfPage.cleanup();
     }
+  }
+
+  function drawPage(
+    pdfPage: Awaited<ReturnType<typeof pageOf>>,
+    scale: number,
+    { maxPixels, format, quality, annotationMode }: Omit<DrawOptions, 'scale'> & { annotationMode: number },
+  ): Promise<Drawn> {
+    return paint(pdfPage, scale, maxPixels, annotationMode, async (made, size) => {
+      let bytes: Uint8Array;
+      if (format === 'png') bytes = await canvases.png(made.canvas);
+      else if (canvases.jpeg) bytes = await canvases.jpeg(made.canvas, quality ?? 0.85);
+      else throw new Error('No JPG encoder was given.');
+      return { bytes, width: size.width, height: size.height };
+    });
+  }
+
+  /** What PDF.js reads of where the page is shown, or null when it gives no usable box, turn or user unit. */
+  function shownOf(pdfPage: Awaited<ReturnType<typeof pageOf>>): Shown | null {
+    const view = boxFrom(pdfPage.view);
+    const rotate = pdfPage.rotate;
+    const userUnit = pdfPage.userUnit ?? 1;
+    if (!view || typeof rotate !== 'number' || !Number.isFinite(rotate) || !(userUnit > 0) || !Number.isFinite(userUnit)) return null;
+    return { view, rotate, userUnit };
+  }
+
+  async function measurePage(page: number): Promise<Measured> {
+    const pixels = canvases.pixels;
+    if (!pixels) throw new Error('No pixel reader was given.');
+    // From the first refusal on, a font or map PDF.js could not load may be used on any later page, undrawn.
+    if (refused > 0) return { kind: 'unsafe', refused: true };
+    let pdfPage: Awaited<ReturnType<typeof pageOf>> | undefined;
+    let ink: Box | null | 'unsafe';
+    let annotations: Awaited<ReturnType<NonNullable<NonNullable<typeof pdfPage>['getAnnotations']>>>;
+    let shown: Shown | null;
+    // Everything that reads the page is inside the try: an error on one page leaves that page as it is. The caller
+    // decides whether the error ends the job (PDF.js stopping, memory running out).
+    try {
+      pdfPage = await pageOf(page);
+      shown = shownOf(pdfPage);
+      if (!shown || !pdfPage.getAnnotations) {
+        pdfPage.cleanup();
+        return { kind: 'unsafe' };
+      }
+      annotations = await guard(pdfPage.getAnnotations({ intent: 'display' }));
+      // Too many to count: not drawn at all.
+      if (annotations.length > maxMeasuredAnnotations) {
+        pdfPage.cleanup();
+        return { kind: 'unsafe' };
+      }
+      const natural = pdfPage.getViewport({ scale: 1 });
+      const longer = Math.max(natural.width, natural.height);
+      const scale = longer > 0 && longer < smallPageSide ? smallPageSide / longer : 1;
+      ink = await paint(pdfPage, scale, measurePixels, pdfjs.AnnotationMode.ENABLE_STORAGE, async (made, size, viewport) => {
+        // A page so thin that the picture gave way at the cap does not show all of the page: not measured.
+        if (Math.abs(viewport.width - size.width) > 1 || Math.abs(viewport.height - size.height) > 1) return 'unsafe' as const;
+        if (!viewport.convertToPdfPoint) return 'unsafe' as const;
+        const found = inkPixels(size.width, size.height, (x, y, w, h) => pixels(made.canvas, x, y, w, h));
+        if (!found) return null;
+        const corners = [
+          [found[0], found[1]],
+          [found[2], found[1]],
+          [found[0], found[3]],
+          [found[2], found[3]],
+        ].map(([x, y]) => viewport.convertToPdfPoint!(x!, y!));
+        return boxAround(corners) ?? ('unsafe' as const);
+      });
+    } catch (error) {
+      pdfPage?.cleanup();
+      return { kind: 'unsafe', error };
+    }
+    // Counted after the drawing: a request refused while drawing this page makes this page unsafe too.
+    if (refused > 0) return { kind: 'unsafe', refused: true };
+    if (ink === 'unsafe') return { kind: 'unsafe' };
+    let box: Box | null = ink;
+    for (const annotation of annotations) {
+      if (annotation.subtype === 'Popup') continue;
+      const flags = typeof annotation.annotationFlags === 'number' ? annotation.annotationFlags : 0;
+      // Hidden (bit 2) or no-view (bit 6): a reader does not show it.
+      if (flags & 2 || flags & 32) continue;
+      const rect = boxFrom(annotation.rect);
+      const clipped = rect ? intersect(rect, shown.view) : null;
+      if (clipped) box = box ? union(box, clipped) : clipped;
+    }
+    if (!box) return { kind: 'blank', shown };
+    return { kind: 'box', box, shown };
   }
 
   return {
@@ -359,7 +504,79 @@ export async function openDocument(file: Uint8Array, password: string | undefine
       // Form fields with their values, from the document's own storage, and other annotations as their appearances show them.
       return drawPage(pdfPage, options.scale, { ...options, annotationMode: pdfjs.AnnotationMode.ENABLE_STORAGE });
     },
+    measure: measurePage,
   };
+}
+
+/** Four finite numbers, normalised, with an area; else null. */
+export function boxFrom(value: unknown): Box | null {
+  if (!Array.isArray(value) || value.length !== 4 || !value.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+  const [a, b, c, d] = value as number[];
+  const box: Box = [Math.min(a!, c!), Math.min(b!, d!), Math.max(a!, c!), Math.max(b!, d!)];
+  return box[2] > box[0] && box[3] > box[1] ? box : null;
+}
+
+/** Where two boxes overlap, or null when they do not overlap with an area. */
+export function intersect(a: Box, b: Box): Box | null {
+  const box: Box = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+  return box[2] > box[0] && box[3] > box[1] ? box : null;
+}
+
+function union(a: Box, b: Box): Box {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+}
+
+/** The box around these points, or null when any is not two finite numbers. */
+function boxAround(points: number[][]): Box | null {
+  if (!points.every((point) => point.length >= 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]))) return null;
+  const xs = points.map((point) => point[0]!);
+  const ys = points.map((point) => point[1]!);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/**
+ * The pixel box of what is not white on a `width` by `height` picture, as [left, top, right, bottom] edges (right
+ * and bottom past the last ink pixel), grown by one pixel on each side and kept inside the picture; null when
+ * nothing is ink. It reads strips inward from each edge, so a page with wide margins reads its margins and one
+ * strip of content on each side. Exported for the unit test.
+ */
+export function inkPixels(width: number, height: number, read: (x: number, y: number, w: number, h: number) => Uint8ClampedArray): [number, number, number, number] | null {
+  const inkAt = (data: Uint8ClampedArray, i: number) => data[i]! < whiteFrom || data[i + 1]! < whiteFrom || data[i + 2]! < whiteFrom;
+  /** The first row holding ink between columns x0 and x1, from the top or from the bottom; -1 when none does. */
+  const findRow = (fromTop: boolean, x0: number, x1: number): number => {
+    const w = x1 - x0;
+    for (let edge = 0; edge < height; edge += measureStrip) {
+      const h = Math.min(measureStrip, height - edge);
+      const y = fromTop ? edge : height - edge - h;
+      const data = read(x0, y, w, h);
+      for (let r = 0; r < h; r++) {
+        const row = fromTop ? r : h - 1 - r;
+        for (let c = 0; c < w; c++) if (inkAt(data, (row * w + c) * 4)) return y + row;
+      }
+    }
+    return -1;
+  };
+  /** The first column holding ink between rows y0 and y1, from the left or from the right; -1 when none does. */
+  const findColumn = (fromLeft: boolean, y0: number, y1: number): number => {
+    const h = y1 - y0;
+    for (let edge = 0; edge < width; edge += measureStrip) {
+      const w = Math.min(measureStrip, width - edge);
+      const x = fromLeft ? edge : width - edge - w;
+      const data = read(x, y0, w, h);
+      for (let k = 0; k < w; k++) {
+        const column = fromLeft ? k : w - 1 - k;
+        for (let r = 0; r < h; r++) if (inkAt(data, (r * w + column) * 4)) return x + column;
+      }
+    }
+    return -1;
+  };
+  if (!(width > 0) || !(height > 0)) return null;
+  const top = findRow(true, 0, width);
+  if (top < 0) return null;
+  const bottom = findRow(false, 0, width);
+  const left = findColumn(true, top, bottom + 1);
+  const right = findColumn(false, top, bottom + 1);
+  return [Math.max(0, left - 1), Math.max(0, top - 1), Math.min(width, right + 2), Math.min(height, bottom + 2)];
 }
 
 /**

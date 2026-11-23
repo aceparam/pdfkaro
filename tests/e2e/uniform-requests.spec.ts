@@ -42,8 +42,11 @@ type Input = {
   /** Sign PDF: the way the signature is given for the job. */
   sign?: 'type' | 'draw' | 'picture';
   job: boolean;
-  /** How the job must end: `'done'` refuses the failed heading, so a failed job cannot pass as the same requests. */
-  expect?: 'done';
+  /**
+   * How the job must end: `'done'` refuses the failed heading, so a failed job cannot pass as the same requests;
+   * `'no-file'` wants the tool's words for no new file (Crop PDF with no page cropped), and refuses the others.
+   */
+  expect?: 'done' | 'no-file';
 };
 
 const pdfPicks: Input[] = [
@@ -75,6 +78,16 @@ const inputs: Record<string, Input[]> = {
   '/delete-pdf-pages': [...pdfPicks, ...pdfJobs],
   '/rearrange-pdf-pages': [...pdfPicks, ...pdfJobs],
   '/rotate-pdf': [...pdfPicks, ...pdfJobs],
+  // Crop draws every page in its job: a form with values, every script, a character map asked for and refused (the
+  // job finishes with no page cropped), and a file whose job fails at the page-reading cap, as on the stamp pages.
+  '/crop-pdf': [
+    ...pdfPicks,
+    ...pdfJobs,
+    failingJob,
+    { label: 'form.pdf', files: ['form.pdf'], job: true },
+    { label: 'multilingual.pdf', files: ['multilingual.pdf'], job: true, expect: 'done' },
+    { label: 'chinese-unembedded.pdf (a character map asked for; no page cropped)', files: ['chinese-unembedded.pdf'], job: true, expect: 'no-file' },
+  ],
   '/compress-pdf': [
     ...pdfPicks,
     ...pdfJobs,
@@ -256,7 +269,12 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
       await expect(main).not.toHaveAttribute('aria-disabled', 'true', { timeout: limit });
       from = begin();
       await main.click();
-      const endings = input.expect === 'done' ? [words.doneHeading] : [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
+      const endings =
+        input.expect === 'done'
+          ? [words.doneHeading]
+          : input.expect === 'no-file'
+            ? [words.noSmaller!.heading]
+            : [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
       await expect(page.getByRole('heading').filter({ hasText: new RegExp(`^(${endings.map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`) })).toBeVisible({ timeout: 120_000 });
       await end('the main button', from, files.job);
     }
