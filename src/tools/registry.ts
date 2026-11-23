@@ -337,8 +337,8 @@ export const groups: Group[] = [
     slug: 'organise-pages',
     title: 'Organise PDF pages - PDFkaro',
     description:
-      'Combine, split, copy out, remove, reorder and turn the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
-    sentence: 'Tools that combine, split and reorder the pages of a PDF.',
+      'Combine, split, copy out, remove, reorder, turn and crop the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
+    sentence: 'Tools that combine, split, reorder and crop the pages of a PDF.',
     claimsDevice: true,
   },
   {
@@ -665,6 +665,61 @@ export const tools: Tool[] = [
       // The owner's decision of 13 Nov 2026 on passwords; only each page's turn changes.
       resultNotes: [
         "Pages, text, links, form fields, bookmarks, attached files, hidden text and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
+        'The new file has no password and no restrictions, even if the file you chose had them.',
+      ],
+    },
+  },
+  {
+    // The first Phase 2 tool, built before the Phase 1 gate by the owner's decision of 23 Nov 2026. It cuts white
+    // margins by itself, each page to its own content (the owner's decisions of 23 Nov 2026): no options. Only each
+    // cut page's /CropBox changes (src/engines/tools/crop-pdf.ts).
+    id: 'crop-pdf',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 2,
+    accepts: ['application/pdf'],
+    // Resize pages is linked once it is published.
+    related: ['rotate-pdf', 'resize-pdf', 'split-pdf', 'compress-pdf', 'pdf-to-jpg', 'merge-pdf'],
+    pages: [
+      {
+        slug: 'crop-pdf',
+        name: 'Crop PDF',
+        summary: 'Cut the white margins off the pages of a PDF.',
+        title: 'Crop PDF margins in your browser - PDFkaro',
+        description: 'Cut the white margins off the pages of a PDF. The file stays on your device and is not uploaded.',
+        heading: 'Crop PDF margins',
+        sentence: 'Cut the white margins off the pages of a PDF. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Crop and download',
+      writingLabel: 'Writing the cropped file',
+      doneHeading: 'Your cropped file is ready',
+      failedHeading: 'The pages were not cropped.',
+      tooFewFiles: 'Choose a PDF file to crop its pages.',
+      outputSuffix: 'cropped',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and crop the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // Page text, a draft for the owner's review like the result notes. No page cut, for whatever reason, gives no file.
+      noSmaller: {
+        heading: 'No pages were cropped.',
+        advice:
+          'No new file was made. This tool cuts only white margins, and leaves a page as it is when it cannot be sure where everything on it is. Pages with grey or dark edges, such as many scans, are left too. You can use your file as it is.',
+      },
+      // Passwords are dropped, as for every page tool (the owner's decision of 13 Nov 2026, extended to Crop by default).
+      resultNotes: [
+        'Each page is cut to what is drawn on it, with a small margin left. Blank pages, pages with no white margin, and pages the tool cannot measure safely are left as they are.',
+        'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud its text. Cropping is not a way to hide something private.',
+        "Pages, text, links, form fields, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.",
         'The new file has no password and no restrictions, even if the file you chose had them.',
       ],
     },
