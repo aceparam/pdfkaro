@@ -24,6 +24,11 @@ The shared drawing step SHALL also say, for one page of an open PDF, where its c
 - **WHEN** a poster-sized page or a page with a user unit of 1000 is measured
 - **THEN** it is drawn at no more than the fixed number of pixels, and the canvas budget of the drawing step applies as for every drawing
 
+#### Scenario: A page too thin to draw whole
+
+- **WHEN** a page of 1 by 100,000,000 points is measured, so its drawing at the pixel cap cannot cover the whole page
+- **THEN** it is called unsafe to measure
+
 #### Scenario: A drawing that fails
 
 - **WHEN** drawing a page throws an error other than PDF.js stopping

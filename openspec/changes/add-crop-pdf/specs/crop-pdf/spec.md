@@ -2,7 +2,7 @@
 
 ### Requirement: The page
 
-The tool SHALL be served at `/crop-pdf` with the title tag "Crop PDF margins in your browser - PDFkaro", the heading "Crop the margins of a PDF" and the sentence "Cut the white margins off the pages of a PDF. Your file stays on your device." Its meta description SHALL say the file stays on the device and is not uploaded. It SHALL be listed seventh under "Organise pages". Its words are drafts for the owner. (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; SEO)
+The tool SHALL be served at `/crop-pdf` with the title tag "Crop PDF margins in your browser - PDFkaro", the heading "Crop PDF margins" and the sentence "Cut the white margins off the pages of a PDF. Your file stays on your device." Its meta description SHALL say the file stays on the device and is not uploaded. It SHALL be listed seventh under "Organise pages". Its words are drafts for the owner. (SPEC.md: Tool catalogue; Tool page anatomy, 1 and 2; SEO)
 
 #### Scenario: The page is opened
 
@@ -98,7 +98,7 @@ A page's content SHALL be what a reader draws for it that is not white, with the
 
 Each page SHALL be cut to its content plus a margin of one fortieth of its shorter shown side, never past where it was shown before. A page with no content, a page whose cut would move no edge by 1 point or more, and a page that cannot be measured safely SHALL be left as it was. From the first page for which the drawing step was refused data it needed, every page SHALL be left as it was. (SPEC.md: What we are building, rule 4; Definition of done)
 
-#### Scenario: Each page to its own content
+#### Scenario: Each page to its own content (the owner's decision of 23 Nov 2026)
 
 - **WHEN** a file whose page 1 has text in its top half and page 2 has a small chart in its middle is cropped
 - **THEN** page 1 is cut to the text and page 2 to the chart, each with its margin, and the two pages now differ in size
@@ -147,6 +147,15 @@ Pressing "Crop and download" SHALL write one PDF in which each cut page's only c
 - **WHEN** a page with a trim box and a bleed box larger than its content, and an art box wholly inside the margin, is cropped
 - **THEN** the trim and bleed boxes equal their overlap with the new crop box, the art box is removed, and a page that had none has none
 
+#### Scenario: A box shared by several pages
+
+- **WHEN** two pages share one trim box object and one of them is cut
+- **THEN** the shared object is unchanged, the other page still uses it, and the cut page holds its own cut-back trim box
+
+#### Scenario: A box that cannot be written safely
+
+- **WHEN** a page's measured content would give a crop box that is not four finite numbers in order inside the page's old shown box
+- **THEN** that page is left as it was
 #### Scenario: Everything else stays
 
 - **WHEN** `rich.pdf`, `form.pdf` and `tagged.pdf` are cropped
@@ -175,30 +184,40 @@ Pressing "Crop and download" SHALL write one PDF in which each cut page's only c
 #### Scenario: The result's notes
 
 - **WHEN** a job finishes
-- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages and pages with no white margin are left as they are, that what was cut off is hidden and not removed, that pages, text, links, form fields, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions
+- **THEN** the notes say that each page is cut to what is drawn on it with a small margin, that blank pages, pages with no white margin and pages the tool cannot measure safely are left as they are, that what was cut off is still in the file and can be got back and found by searching, that pages, text, links, form fields, bookmarks, attached files and details are kept but earlier saved versions and a valid signature are not, and that the file has no password or restrictions
 
-### Requirement: Cropping hides, it does not remove
+### Requirement: The cut-off part stays in the file
 
-The page SHALL say, in the result and in the text below the tool, that what was cut off is hidden, not removed: it is still in the file and a PDF editor can show it again, so cropping must not be used to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
+The result, the text below the tool and the Privacy page draft SHALL say that what was cut off is still in the file: anyone who has the file can get it back, with no special editor, and its text can still be found by searching, copied or read aloud, so cropping is not a way to hide something private. (SPEC.md: What we are building, rule 4, "Honest about limits"; Privacy, limits and security)
 
 #### Scenario: The result says so
 
 - **WHEN** a job finishes
-- **THEN** the result's notes include "What was cut off is hidden, not removed. It is still in the file, and a PDF editor can show it again. Do not crop a file to hide something private."
+- **THEN** the result's notes include "What was cut off is still in the file. Anyone who has the file can get it back, and its text can still be found by searching, copied or read aloud. Cropping is not a way to hide something private."
+
+#### Scenario: The text below the tool and the Privacy draft say so
+
+- **WHEN** the built `/crop-pdf` and `/privacy` pages are fetched without running scripts
+- **THEN** each says that what Crop PDF cuts off stays in the file, that anyone who has the file can get it back, and that its text can still be found by searching, copied or read aloud
 
 #### Scenario: The text is still in the file
 
 - **WHEN** a page whose margin holds the words `SECRET-margin` drawn in white, which no reader shows, is cropped so that the words lie outside the new crop box
 - **THEN** PDF.js's text of the new file still holds `SECRET-margin`, as the page says
 
-### Requirement: A file with nothing to cut
+### Requirement: A file where no page is cut
 
-When no page of the file would change, the job SHALL end with no new file, and the page SHALL say "There were no white margins to cut." and "No new file was made. Pages with grey or dark edges, such as many scans, cannot be cropped by this tool yet. You can use your file as it is.", with "Start again" and no Download. It MUST NOT be called damaged or a failure. (SPEC.md: What we are building, rule 4; Definition of done, "a clear message saying why it cannot")
+When no page of the file would change, for whatever reason, the job SHALL end with no new file, and the page SHALL say "No pages were cropped." with why pages are left and that the file can be used as it is, with "Start again" and no Download. It MUST NOT be called damaged or a failure. (SPEC.md: What we are building, rule 4; Definition of done)
 
 #### Scenario: A file with no margins
 
 - **WHEN** a file whose every page is filled to its edges is cropped
-- **THEN** the page shows the heading and its words, focus moves to the heading, nothing downloads, and "Start again" empties the page
+- **THEN** the page shows "No pages were cropped." and "No new file was made. This tool cuts only white margins, and leaves a page as it is when it cannot be sure where everything on it is. Pages with grey or dark edges, such as many scans, are left too. You can use your file as it is.", focus moves to the heading, nothing downloads, and "Start again" empties the page
+
+#### Scenario: A file the tool cannot measure safely
+
+- **WHEN** `chinese-unembedded.pdf`, whose text PDF.js cannot draw, is cropped
+- **THEN** the page shows "No pages were cropped." and the same words, and does not claim the file has no white margins
 
 ### Requirement: Progress and cancel
 
@@ -216,7 +235,7 @@ While the job runs the page SHALL show progress in real units, "Page N of M" whi
 
 ### Requirement: The result
 
-When the job is done the page SHALL show the result's name, size and page count, a Download button, the notes and "Start again". Nothing SHALL download until Download is pressed. The notes SHALL say how pages are cut and which are left, that cropping hides and does not remove, what is kept and what is not, and that the file has no password or restrictions. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When the job is done the page SHALL show the result's name, size and page count, a Download button, the notes and "Start again". Nothing SHALL download until Download is pressed. The notes SHALL say how pages are cut and which are left, that the cut-off part stays in the file, what is kept and what is not, and that the file has no password or restrictions. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A job finishes
 
@@ -263,18 +282,23 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, crops it and downloads the result, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, including the Crop engine and PDF.js and with no `fflate`, pdf-lib or other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password or the file's text; and storage, the title, the address and the console hold none of them
+- **THEN** after the pick only an exact list of the site's own files is requested, including the Crop engine and PDF.js and with no `fflate`, pdf-lib or other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, the file's text, the `SECRET-margin` words drawn in white in a margin the crop cuts off, or the form value `SECRET-field`; and storage, the title, the address and the console hold none of them
 
 #### Scenario: The same files for any file
 
-- **WHEN** the uniform-requests test picks, on `/crop-pdf`, an ordinary file, a protected file, a damaged file and a file that is not a PDF, and runs a job on the ordinary one
-- **THEN** the site's files requested after each pick are the same, and those of the job are the tool's job set
+- **WHEN** the uniform-requests test, on `/crop-pdf`, picks a damaged file, a protected file, a file that is not a PDF and `scanned.pdf`, and runs jobs on `text.pdf`, `rich.pdf`, the protected file with its password, `form.pdf`, `compress-json-bomb.pdf` (whose job fails at the page-reading cap), `multilingual.pdf` (which must finish) and `chinese-unembedded.pdf` (which must finish, with no page cropped)
+- **THEN** the site's files requested after each pick are the same, and those of every job are the tool's job set, however the job ends
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/tools/crop-pdf.md`, marked as a draft until the owner reviews them, with nothing from "Banned patterns". The questions SHALL cover uploading, where the cut goes, why a page was not cut, hidden not removed, choosing margins, what is kept, passwords and the original file. (SPEC.md: Tool page anatomy, 7; How the words should read; SEO)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/tools/crop-pdf.md`, marked as a draft until the owner reviews them, with nothing from "Banned patterns". The questions SHALL cover uploading, where the cut goes, why a page was not cut, why pages differ in size, that the cut-off part stays in the file, choosing margins, what is kept, passwords and the original file. (SPEC.md: Tool page anatomy, 7; How the words should read; SEO)
 
 #### Scenario: The text is in the served page
 
 - **WHEN** the built `/crop-pdf` page is fetched without running scripts
 - **THEN** its heading, sentence, steps and questions are in the HTML, between 250 and 500 words, with no exclamation mark and none of the banned words
+
+#### Scenario: Pages of different sizes are explained
+
+- **WHEN** the questions are read
+- **THEN** one asks "Why are my pages different sizes now?" and answers that each page is cut to what is on it, and the answer on where the cut goes uses plain words, with no colour values or fractions
