@@ -70,7 +70,7 @@ The registry SHALL place every tool in exactly one of seven groups: Organise pag
 #### Scenario: The hub page's parts
 
 - **WHEN** the "Organise pages" hub page is built
-- **THEN** it has one `h1` "Organise pages", the group's sentence, and its seven published tools' pages in registry order (Merge PDF, Split PDF, Extract pages, Delete pages, Reorder pages, Rotate PDF, Crop PDF), each a link with its summary, in the served HTML, with no script, and nothing else between the header and the footer
+- **THEN** it has one `h1` "Organise pages", the group's sentence, and its eight published tools' pages in registry order (Merge PDF, Split PDF, Extract pages, Delete pages, Reorder pages, Rotate PDF, Crop PDF, Resize pages to A4 or Letter), each a link with its summary, in the served HTML, with no script, and nothing else between the header and the footer
 
 #### Scenario: A group with no published tool
 
