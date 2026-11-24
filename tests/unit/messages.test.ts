@@ -72,6 +72,7 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'memory' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'too-many-pictures' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'output-limit' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'unsafe-page' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'text-refused' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'drawing-refused' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'password-refused' })).toBe(true);

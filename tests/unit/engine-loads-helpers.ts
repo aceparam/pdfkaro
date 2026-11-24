@@ -59,6 +59,7 @@ export const options: Record<string, (pages: number) => Record<string, unknown>>
   'rearrange-pdf-pages': (pages) => ({ order: Array.from({ length: pages }, (_, index) => pages - index) }),
   'rotate-pdf': () => ({ turns: { all: 1, pages: [] } }),
   'crop-pdf': () => ({}),
+  'resize-pdf': () => ({ paper: 'letter' }),
   'compress-pdf': () => ({}),
   'pdf-to-images': () => ({ format: 'jpg' }),
   'add-page-numbers': () => ({ position: 'bottom-centre' }),

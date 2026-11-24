@@ -41,6 +41,14 @@ describe('the sentence for a new file far larger than expected', () => {
   });
 });
 
+describe('the sentence for a page that could not be placed safely', () => {
+  it("says what happened and its own advice, whatever the tool's memory advice", () => {
+    const sentence = 'A page of this file could not be resized safely, so no new file was made. The file may be damaged. Try another copy of it.';
+    expect(failureSentence('unsafe-page', {})).toBe(sentence);
+    expect(failureSentence('unsafe-page', { memoryAdvice: 'Try on a computer, or split the file first and resize the parts.' })).toBe(sentence);
+  });
+});
+
 describe('the line above the bar', () => {
   it('says Starting for a tool that gives several files, then the files as they come, then the writing label', () => {
     const words = { writingLabel: 'Putting the files into one zip', outputs: 'several' as const };

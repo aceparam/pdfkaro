@@ -122,7 +122,28 @@ export type PageRead = {
   largestPicture?: number;
 };
 
-export type PagesRead = { max: number; pages: PageRead[] };
+export type PagesRead = {
+  max: number;
+  pages: PageRead[];
+  /**
+   * Asked for with `{ objects: true }` (Resize pages): every object's dictionary that was read, by id (`N G R`), with
+   * no stream data, so a tool can find annotations, beads and destinations without a second qpdf read.
+   */
+  objects?: ReadonlyMap<string, ObjectEntry>;
+};
+
+/**
+ * A page could not be placed on its new paper safely: a number that places it could not be written closely
+ * enough, or is far too large (only a crafted page has one). Known to the worker by its name (`unsafe-page`),
+ * as `OutputLimit` is, so the page can say so in its own sentence. Named for the cause, so a later tool that
+ * places pages can raise it too. Its message holds nothing of the file.
+ */
+export class UnsafePage extends Error {
+  override name = 'UnsafePage';
+  constructor() {
+    super('A page could not be placed safely.');
+  }
+}
 
 /** The pages in order, each with its content streams, from a qpdf holding the file as /in.pdf; null when over the cap or unreadable. */
 function pageOrder(qpdf: Qpdf): { id: string; contents: string[] }[] | null {
@@ -156,9 +177,10 @@ async function readJson(tools: EngineTools, plain: Uint8Array) {
  * /XObject, and where it is shown, from a fresh qpdf holding the plain copy,
  * made and let go here. Inherited values are found up /Parent with a depth
  * limit and a set of visited nodes, so a loop in the page tree ends. Over a
- * cap or unreadable, it throws (the engine's failure).
+ * cap or unreadable, it throws (the engine's failure). With `{ objects: true }`
+ * it also gives every object it read; without it, that map is let go here.
  */
-export async function readPages(tools: EngineTools, plain: Uint8Array, options: { pictures?: true } = {}): Promise<PagesRead> {
+export async function readPages(tools: EngineTools, plain: Uint8Array, options: { pictures?: true; objects?: true } = {}): Promise<PagesRead> {
   // The reading qpdf lives only inside readJson, so it is let go before the pages are worked out.
   const { order, dictionaries } = await readJson(tools, plain);
   if (!order || !dictionaries || order.length === 0) throw new Error('The pages could not be read.');
@@ -299,7 +321,7 @@ export async function readPages(tools: EngineTools, plain: Uint8Array, options: 
       ...(options.pictures ? { largestPicture: largestPicture(own) } : {}),
     };
   });
-  return { max: dictionaries.max, pages };
+  return options.objects ? { max: dictionaries.max, pages, objects } : { max: dictionaries.max, pages };
 }
 
 // ---------------------------------------------------------------------------

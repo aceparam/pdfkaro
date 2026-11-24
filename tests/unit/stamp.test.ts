@@ -1,12 +1,12 @@
-// The drawing step (src/engines/stamp.ts) and the page reading it uses (src/engines/pages.ts): where a page is shown, the matrix,
-// pdf-lib objects into qpdf's JSON, and real runs with the same qpdf and
-// pdf-lib the browser gets, each result drawn by PDF.js to find the mark.
+// The drawing step (src/engines/stamp.ts): the matrix, pdf-lib objects into qpdf's JSON, and real runs with the same
+// qpdf and pdf-lib the browser gets, each result drawn by PDF.js to find the mark. The page reading it uses
+// (src/engines/pages.ts) is tested in pages.test.ts.
 
 import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFNumber, PDFOperator, rgb } from '@cantoo/pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { plainCopy } from '../../src/engines/plain';
-import { pageBox, pdfNumber, sizeLimit, writePageUpdate } from '../../src/engines/pages';
+import { pageBox, sizeLimit } from '../../src/engines/pages';
 import { OutputLimit, fromPdfLib, layerMatrix, pageEstimate, sharedText, stampPages, type NewObjects, type StampSteps } from '../../src/engines/stamp';
 import { failureKind } from '../../src/workers/worker-core';
 import { fixture, jsonOf, makeQpdf, marks, open, qpdfOn, storedPlaces, streamText, tools } from './stamp-helpers';
@@ -26,51 +26,6 @@ async function stamp(bytes: Uint8Array, draw: FontSteps['draw'] = redMark, extra
   return stampPages(tools, copy, { prepare: helvetica, draw, ...extra });
 }
 
-describe('where a page is shown', () => {
-  const a4 = [0, 0, 595, 842];
-  it('takes a turn that is a multiple of 90, modulo 360, and any other as 0', () => {
-    const turn = (rotate: unknown) => pageBox({ rotate, mediaBox: a4, cropBox: undefined, userUnit: undefined }).turn;
-    expect([0, 90, 180, 270, -90, 450, 720, -450, 45, 135, 90.5, '90', null, undefined].map(turn)).toEqual([0, 90, 180, 270, 270, 90, 0, 270, 0, 0, 0, 0, 0, 0]);
-  });
-
-  it('takes the paper box when it has an area, normalised, else Letter', () => {
-    const box = (mediaBox: unknown) => pageBox({ rotate: 0, mediaBox, cropBox: undefined, userUnit: undefined }).box;
-    expect(box([100, 200, 712, 992])).toEqual([100, 200, 712, 992]);
-    expect(box([612, 792, 0, 0])).toEqual([0, 0, 612, 792]);
-    for (const bad of [undefined, [0, 0, 0, 100], [0, 0, 100], [0, 0, 'a', 100], [0, 0, Number.NaN, 100], [0, 0, Number.POSITIVE_INFINITY, 100], 'box']) expect(box(bad)).toEqual([0, 0, 612, 792]);
-  });
-
-  it('takes the crop box inside the paper, else the paper box', () => {
-    const box = (cropBox: unknown) => pageBox({ rotate: 0, mediaBox: [0, 0, 612, 792], cropBox, userUnit: undefined }).box;
-    expect(box([50, 50, 562, 742])).toEqual([50, 50, 562, 742]);
-    expect(box([-100, -100, 300, 300])).toEqual([0, 0, 300, 300]);
-    expect(box([0, 0, 0, 0])).toEqual([0, 0, 612, 792]);
-    expect(box([1000, 1000, 1200, 1200])).toEqual([0, 0, 612, 792]);
-  });
-
-  it('takes the user unit when above 0, else 1, and sizes the layer upright in points', () => {
-    const place = (userUnit: unknown, rotate = 0) => pageBox({ rotate, mediaBox: [0, 0, 300, 400], cropBox: undefined, userUnit });
-    expect(place(2)).toMatchObject({ unit: 2, width: 600, height: 800 });
-    expect(place(0)).toMatchObject({ unit: 1, width: 300, height: 400 });
-    expect(place(-2)).toMatchObject({ unit: 1, width: 300, height: 400 });
-    expect(place('2')).toMatchObject({ unit: 1 });
-    expect(place(2, 90)).toMatchObject({ width: 800, height: 600 });
-    expect(place(1, 270)).toMatchObject({ width: 400, height: 300 });
-  });
-
-  it('stops at a side under 1 point or over 10^8 points', () => {
-    const place = (mediaBox: number[], userUnit?: number) => () => pageBox({ rotate: 0, mediaBox, cropBox: undefined, userUnit });
-    expect(place([0, 0, 0.5, 100])).toThrow(/too small or too large/);
-    expect(place([0, 0, 100, 100], 0.001)).toThrow(/too small or too large/);
-    expect(place([0, 0, 2e8, 100])).toThrow(/too small or too large/);
-    expect(place([0, 0, 1e5, 100], 1e4)).toThrow(/too small or too large/);
-    expect(place([0, 0, 1, 1e8])()).toMatchObject({ width: 1, height: 1e8 });
-    // A user unit over a million would make the matrix scale by less than a millionth, even when the sides fit.
-    expect(place([0, 0, 1e-5, 1e-5], 1e7)).toThrow(/too small or too large/);
-    expect(place([0, 0, 0.001, 0.001], 1e6)()).toMatchObject({ unit: 1e6, width: 1000 });
-  });
-});
-
 describe('the matrix', () => {
   const box: [number, number, number, number] = [10, 20, 310, 420];
   it('takes the upright layer onto the page for each turn and user unit', () => {
@@ -82,10 +37,6 @@ describe('the matrix', () => {
     expect(layerMatrix({ turn: 90, box, unit: 4 })).toEqual([0, 0.25, -0.25, 0, 310, 20]);
   });
 
-  it('writes numbers with at most 6 decimals and never in exponent form', () => {
-    expect([1, 0.5, 1 / 3, -0, -0.0000001, 1e-7, 123456.7, 2e20, -3e16].map(pdfNumber)).toEqual(['1', '0.5', '0.333333', '0', '0', '0', '123456.7', '200000000000000000000', '-30000000000000000']);
-    expect(() => pdfNumber(Number.NaN)).toThrow();
-  });
 });
 
 describe('pdf-lib objects into qpdf JSON', () => {
@@ -472,19 +423,6 @@ describe('large and hostile files', { timeout: 60_000 }, () => {
     expect(large - small).toBeGreaterThanOrEqual(JSON.stringify(xobjects).length);
   });
 
-  it('the cap on the new file stops a write that would pass it', async () => {
-    const plain = (await plainCopy(tools, fixture('pages-500.pdf'), undefined)).plain;
-    const qpdf = await makeQpdf();
-    qpdf.write('/in.pdf', plain);
-    qpdf.append('/update.json', new TextEncoder().encode('{"qpdf":[{"jsonversion":2,"pushedinheritedpageresources":false,"calledgetallpages":false,"maxobjectid":1},'));
-    qpdf.append('/update.json', new TextEncoder().encode('{}]}'));
-    expect(() => writePageUpdate(qpdf, 20_000)).toThrow(OutputLimit);
-    expect(qpdf.size('/out.pdf')).toBeLessThanOrEqual(20_000);
-  });
-
-  it('the budget is twice the plain copy, 2 KB a page and 16 MB', () => {
-    expect(sizeLimit(1000, 10)).toBe(2000 + 20480 + 16 * 1024 * 1024);
-  });
 });
 
 // ---------------------------------------------------------------------------

@@ -155,9 +155,10 @@ describe('a test entry with a choice', () => {
 describe('the accepted values of an option', () => {
   const values = { 'test-options': { position: ['bottom-centre', 'bottom-right', 'top-right'] } };
 
-  it("lists Add page numbers' six places and Sign PDF's three choices, and no other tool", () => {
+  it("lists Resize pages' two papers, Add page numbers' six places and Sign PDF's three choices, and no other tool", () => {
     const six = ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'];
     expect(optionValues).toEqual({
+      'resize-pdf': { paper: ['a4', 'letter'] },
       'add-page-numbers': { position: six },
       'sign-pdf': { source: ['type', 'draw', 'picture'], page: ['last', 'first', 'every'], position: six },
     });
@@ -166,6 +167,8 @@ describe('the accepted values of an option', () => {
     expect(acceptedValue('add-page-numbers', 'position', 'top-left')).toBe('top-left');
     expect(acceptedValue('add-page-numbers', 'position', 'Top left')).toBeUndefined();
     expect(acceptedValue('test-options', 'position', 'top-right')).toBeUndefined();
+    expect(acceptedValue('resize-pdf', 'paper', 'letter')).toBe('letter');
+    expect(acceptedValue('resize-pdf', 'paper', 'Letter')).toBeUndefined();
   });
 
   it('takes a listed value', () => {
