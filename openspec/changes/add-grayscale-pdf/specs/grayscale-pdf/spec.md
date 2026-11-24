@@ -108,6 +108,16 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 - **WHEN** a stream selects `/DeviceRGB` by `cs`, or selects by name an entry that now points at the RGB stand-in where the name's meaning is certain
 - **THEN** the result reads `/GreyRGB cs 0 0 0 scn`, or the name followed by `0 0 0 scn`, so text drawn with no colour set stays black
 
+#### Scenario: A left stream selects a name
+
+- **WHEN** a stream left because of doubt does `/CS0 cs` and paints with no colour set, and `/CS0` is an ICC RGB space
+- **THEN** `/CS0` is left unchanged in every dictionary that holds it, so that text stays black, while CMYK, indexed and pattern entries in the same dictionaries are still repointed
+
+#### Scenario: A compressed colour profile
+
+- **WHEN** a page fills a shape in an ICC RGB space whose profile, larger than 128 bytes, is Flate-compressed
+- **THEN** its header is read from the start of the profile and the shape is drawn grey
+
 #### Scenario: Callers disagree on a name
 
 - **WHEN** a form with no resources of its own selects `/CS0` by `cs`, and one page's resources map `/CS0` to an ICC RGB space and another's to a Separation space
@@ -188,7 +198,7 @@ The tool SHALL leave exactly as they were the kinds of colour it cannot convert 
 
 ### Requirement: Drawing instructions are decoded within limits
 
-Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A drawing stream, or a page's content, that decodes past 64 MiB SHALL stop the job with the shared `output-limit` failure, as SHALL decoded and edited bytes past the job's content budget. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
+Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A drawing stream, or a page's content, that decodes past 64 MiB SHALL stop the job with the `page-too-large` failure; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
 
 #### Scenario: A filter the reader does not decode
 
@@ -198,7 +208,7 @@ Drawing streams SHALL be decoded by the engine from raw data qpdf read with no d
 #### Scenario: A decode bomb
 
 - **WHEN** one content stream inflates to 1 GB
-- **THEN** decoding stops at 64 MiB and the job stops under "The file was not converted.", with "The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it." and "Go back to your file", before qpdf writes or checks a file
+- **THEN** decoding stops at 64 MiB and the job stops under "The file was not converted.", with "A page of this file has too much drawing on it to convert here, so no new file was made. Split the file, or delete that page, and convert the rest." and "Go back to your file", before qpdf writes or checks a file
 
 #### Scenario: A page of several large streams
 
@@ -207,12 +217,12 @@ Drawing streams SHALL be decoded by the engine from raw data qpdf read with no d
 
 #### Scenario: Many streams under the cap
 
-- **WHEN** a file under 600 KB holds 12 streams of 60 MiB each
-- **THEN** the job stops the same way when the decoded bytes pass the content budget, `min(2 GiB, 512 MiB + 200 × the plain copy's length)`
+- **WHEN** a file holds enough streams of 60 MiB each, worked out from its plain copy's real length, to pass its content budget, `min(2 GiB, 512 MiB + 200 × the plain copy's length)`
+- **THEN** the job stops when the decoded bytes pass the budget, with the shared `output-limit` words "The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it."
 
 ### Requirement: Drawing instructions are read with certainty or left
 
-Streams SHALL be read in one bounded pass by strict rules, building no token list, with an edited copy whose length is known before it is allocated. Any doubt SHALL leave the whole stream, or for a page's contents every stream of that page, byte for byte as it was, in every context it is used. Every byte outside an edit SHALL be unchanged. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
+Streams SHALL be read in two bounded passes by strict rules, building no token list, with an edited copy whose length is known before it is allocated. Any doubt SHALL leave the whole stream, or for a page's contents every stream of that page, byte for byte as it was, in every context it is used. Every byte outside an edit SHALL be unchanged. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
 
 #### Scenario: What is doubt
 
@@ -232,7 +242,7 @@ Streams SHALL be read in one bounded pass by strict rules, building no token lis
 #### Scenario: Only the edits change
 
 - **WHEN** any result is compared with its input
-- **THEN** every decoded drawing stream holds the same tokens in the same order outside the edited operators, PDF.js's operator list for every page is the same apart from colour values, and PDF.js reads the same text at the same places on every page
+- **THEN** every decoded drawing stream holds the same tokens in the same order outside the edited operators, PDF.js's operator list for every page is the same once every colour-setting operation is removed, and PDF.js reads the same text at the same places on every page
 
 ### Requirement: What the new file keeps
 
@@ -245,8 +255,8 @@ The new file SHALL keep every page, its searchable text, links, form fields and 
 
 #### Scenario: Print shops
 
-- **WHEN** the text below the tool speaks of printing
-- **THEN** it claims grey on screens and office printers only, and says a print shop's tools may list three or four extra inks
+- **WHEN** the result notes or the text below the tool speak of printing
+- **THEN** they claim grey on screens and office printers only (the first note reads "Text, shapes and pictures now show in grey, and print in grey on office printers. The text can still be searched.…"), and the text below the tool says a print shop's tools may list three or four extra inks
 
 #### Scenario: A file with bookmarks, a link and an attachment
 
@@ -260,12 +270,12 @@ The new file SHALL keep every page, its searchable text, links, form fields and 
 
 ### Requirement: A file with nothing to turn grey
 
-When nothing in the file would be turned grey (a `/Thumb` alone does not count), the engine SHALL give no file and the page SHALL show the heading "Nothing in this file was turned grey." with advice naming the kinds of colour left alone, focus on the heading, no Download and "Start again". Black set as RGB counts as a change. (SPEC.md: States every tool handles, Done)
+When nothing in the file would be turned grey (a `/Thumb`, and a picture reached only through one, do not count), the engine SHALL give no file and the page SHALL show the heading "Nothing in this file was turned grey." with advice naming the kinds of colour left alone, focus on the heading, no Download and "Start again". Black set as RGB counts as a change. (SPEC.md: States every tool handles, Done)
 
 #### Scenario: The grey-only test file
 
-- **WHEN** `grey-only.pdf`, drawn only in grey with a page `/Group /CS /DeviceRGB` and an RGB output intent, is converted
-- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures. You can use your file as it is."
+- **WHEN** `grey-only.pdf`, drawn only in grey with a page `/Group /CS /DeviceRGB`, an RGB output intent and a page whose stored thumbnail is an RGB picture, is converted
+- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures."
 
 ### Requirement: Working, done and failed
 
@@ -312,7 +322,7 @@ Which of the site's own files the page fetches SHALL depend on the tool only: th
 #### Scenario: The qpdf instance count is named
 
 - **WHEN** the pull request is opened
-- **THEN** it says that a job makes one qpdf instance per raw batch (at most 2,000 drawing streams or 32 MB of their data) besides a fixed few, and a writer only when a file is written, so under the no-cache exception the number of WebAssembly requests depends on the file, with the count measured on the 20,000-page file
+- **THEN** it says that a job makes one qpdf instance per raw batch (at most 2,000 drawing streams and colour profiles, or 32 MB of their data) besides a fixed few, and a writer only when a file is written, so under the no-cache exception the number of WebAssembly requests depends on the file, with the count measured on the 20,000-page file
 
 ### Requirement: Keyboard and screen reader
 
@@ -335,7 +345,7 @@ The text below the tool SHALL be 250 to 500 words of steps and real questions, m
 #### Scenario: The text is built
 
 - **WHEN** the page is built with scripts off
-- **THEN** the steps and questions are in the served HTML, including "Will this make my file smaller?" and "What stays in colour?", saying what stays in colour, that the colours stay stored underneath, that the file stays about the same size, and that the text stays searchable
+- **THEN** the steps and questions are in the served HTML, including "Will this make my file smaller?" and "What stays in colour?", saying what stays in colour, that the colours stay stored underneath, that the file stays about the same size, that the text stays searchable, and that a page with very large drawing instructions cannot be converted
 
 #### Scenario: The Privacy draft
 
