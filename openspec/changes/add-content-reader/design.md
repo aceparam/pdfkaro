@@ -9,7 +9,7 @@ What exists and is reused:
 - **`plainCopy`** (`src/engines/plain.ts`): the input decrypted once with `--object-streams=disable`, written at qpdf's default decode level (`generalized`) with `--compress-streams=y`. Every page tool reads from it, so what it does to filters decides what reaches the reader (decision 2).
 - **Raw stream data in batches** (`rawBatches`, `readRawStreams` in `qpdf-json.ts`, `--decode-level=none`): how an engine gets a stream's bytes and dictionary without qpdf decoding them. Unchanged here.
 - **fflate's streaming inflater and deflater**, given to engines through `tools` (`need(tools, 'fflate')`), never imported as a value by an engine file.
-- **The helpers to move:** `zlibDeflate`, `DeflateClass`, `Fflate`, `need` and the private `adler32` and `isZlib` in `shrink.ts`; `inflateLimited` and `InflateClass` in `picture.ts`. Importers: `shrink.ts`, `picture.ts`, the engines `compress-pdf`, `compress-to-target`, `images-to-pdf` and `sign-pdf` (types or values), and the tests `compress-pdf.test.ts`, `picture.test.ts`, `target-helpers.ts`. Four engine files keep private copies of `need` (`thumbnail.ts`, `picture-thumbnail.ts`, `sign-pdf.ts`, `images-to-pdf.ts`); they stay as they are (Left for later).
+- **The helpers to move:** `zlibDeflate`, `DeflateClass`, `Fflate` and the private `adler32` and `isZlib` in `shrink.ts`; `inflateLimited` and `InflateClass` in `picture.ts`. Importers: `shrink.ts`, `picture.ts`, the engines `compress-pdf`, `compress-to-target`, `images-to-pdf` and `sign-pdf` (types or values), and the tests `compress-pdf.test.ts`, `picture.test.ts`, `target-helpers.ts`. Four engine files keep private copies of `need` (`thumbnail.ts`, `picture-thumbnail.ts`, `sign-pdf.ts`, `images-to-pdf.ts`); they stay as they are (Left for later).
 - **`scripts/check-worker.mjs`**: `lateSources` takes each file's quoted sentences of 16 characters or more starting with a capital (no `$`) and fails if the worker file holds one; a file with none fails the check.
 - **Lint**: every file under `src/engines/` is closed to components, hooks, pages and layouts (value imports and `import()`), and engine files may not touch the page or the network.
 
@@ -230,9 +230,9 @@ Known to the worker by its name, as `OutputLimit` is; the message is fixed, neut
 
 **Every error `content.ts` and `zlib.ts` throw has a fixed sentence**, listed once in the tests (`PageTooLarge`'s, the page-number refusal, the two editor programming errors, `inflatePrefix`'s), holding nothing from the stream; a test throws each and compares its message with the list.
 
-### 9. `zlib.ts`, `tools-given.ts`, and the built files
+### 9. `zlib.ts`, `need`, and the built files
 
-`src/engines/zlib.ts` holds, moved with no change in behaviour: `InflateClass`, `DeflateClass`, `Fflate`, `adler32` (private), `isZlib` (now exported, used by `shrink.ts`, `inflatePrefix` and `content.ts`), `zlibDeflate`, and `inflateLimited` with its private `TooLong` (`picture.ts` keeps its own for `pngDataFits`). **`need` moves to its own neutral file, `src/engines/tools-given.ts`**, as it names an engine's tools and has nothing to do with zlib; only `shrink.ts` and the two compress engines import it now (the four private copies are Left for later). It has no fixed sentence, so it is not in `lateSources`; the bundler is expected to put it in `shrink-*.js` (task 4.1 confirms). Importers change their import lines; `shrink.ts` and `picture.ts` do not re-export. New:
+`src/engines/zlib.ts` holds, moved with no change in behaviour: `InflateClass`, `DeflateClass`, `Fflate`, `adler32` (private), `isZlib` (now exported, used by `shrink.ts`, `inflatePrefix` and `content.ts`), `zlibDeflate`, and `inflateLimited` with its private `TooLong` (`picture.ts` keeps its own for `pngDataFits`). **`need` stays in `shrink.ts`: moved to its own file, `tools-given.ts`, it became a built file of its own, `tools-given-*.js`, fetched by Compress PDF's and Compress to a target size's jobs (task 4.1), as only the two compress engines import it and `shrink.ts` itself never used it.** The plan expected the bundler to put it in `shrink-*.js`, on the belief that `shrink.ts` imported it; that would have added a file to two tools' fetched files, which this change must not do, so it was put back where it was, unchanged, and the two engines import it from `shrink.ts` as before (the four private copies are Left for later). Importers change their import lines; `shrink.ts` and `picture.ts` do not re-export. New:
 
 ```ts
 /** The first `bytes` bytes of zlib data, inflated; stops as a success once they are made. */
@@ -294,13 +294,13 @@ For `add-grayscale-pdf` task 0.2 to copy back, in its design decision 4, spec an
 9. **Flate:** a valid zlib header with no preset dictionary, and data reaching its final block; the Adler-32 checksum is not compared. **ASCII85:** NUL and FF in the data are `not-decoded`.
 10. **New limits:** chains of at most four steps; predictors 1, 2 (at 8 bits) and 10 to 15 (at 1, 2, 4, 8 or 16 bits), `Colors` 1 to 32, `Columns` 1 to 2²⁴, `Colors × BPC × Columns` at most 2³¹ − 1, rows refused when longer than the input; the LZW rules of decision 3.
 11. **`PageTooLarge`'s message** is the fixed, neutral "A page has too much drawing on it to work on here."; the page's own sentence with its number stays in grayscale's `failures.ts`.
-12. **Files:** `isZlib` moves to `zlib.ts` too; `need` moves to `tools-given.ts`, not `zlib.ts`; `inflatePrefix` ignores predictors, so the ICC header read refuses `/DecodeParms`, `/DP`, `/F` and any filter but a lone Flate.
+12. **Files:** `isZlib` moves to `zlib.ts` too; `need` stays in `shrink.ts` (a file of its own would be a new built file); `inflatePrefix` ignores predictors, so the ICC header read refuses `/DecodeParms`, `/DP`, `/F` and any filter but a lone Flate.
 13. **Found while building (tasks 3.1 and 3.2):** an empty Flate stream decodes to nothing; `/DecodeParms` keys a step does not take are `not-decoded`; `BI`, `ID` and `EI` are not offered to the editor, and operands before `BI` are doubt; an inline picture's dictionary has at most 32 keys and no comment, and no string, hex string or `null` nested in it.
 14. **The built files:** `zlib.ts` is inside `picture-*.js` after this change; grayscale's import will likely split it out, and if it does not, grayscale stops at its task 4.1 (decision 9).
 
 ## Effect on page weight and on when WebAssembly is fetched
 
-None. No island, component or page imports any of the new modules. No engine imports `content.ts` yet, so it is in no built file. `zlib.ts` lands in `picture-*.js` and `tools-given.ts` in `shrink-*.js`, fetched only by the tools that already fetch them, at the pick or the job as before. WebAssembly is fetched exactly as before.
+None. No island, component or page imports any of the new modules. No engine imports `content.ts` yet, so it is in no built file. `zlib.ts` lands in `picture-*.js` (measured at task 4.1), fetched only by the tools that already fetch them, at the pick or the job as before. WebAssembly is fetched exactly as before.
 
 ## Threats considered
 
@@ -329,7 +329,7 @@ None. New files, helpers moved with byte-identical output, a check extended. Rol
 ## Left for later
 
 - **The plain copy's `/DP` bug** (found at stage 1 by the code and security reviewers, confirmed here): `plainCopy` turns an unfiltered content stream that has `/DP` into Flate with `/DP` kept, so PDF.js applies the predictor and draws nothing, after every page tool. It needs its own fix and change; the reader leaves such a stream (`/DP` is `not-decoded`).
-- **The four private copies of `need`** (`thumbnail.ts`, `picture-thumbnail.ts`, `sign-pdf.ts`, `images-to-pdf.ts`) could import `tools-given.ts`; not done here, as it would change those engines' built files.
+- **The four private copies of `need`** (`thumbnail.ts`, `picture-thumbnail.ts`, `sign-pdf.ts`, `images-to-pdf.ts`) and the one in `shrink.ts` could share one neutral file; not done here, as it would change built files (a lone `need` file is its own chunk, measured at task 4.1).
 
 ## Open Questions
 

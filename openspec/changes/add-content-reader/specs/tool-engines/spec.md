@@ -255,7 +255,7 @@ Every error the content reader and the shared zlib steps throw SHALL have a fixe
 
 ### Requirement: Shared zlib steps
 
-Deflating and inflating with a cap SHALL live in one shared engine file, and naming an engine's tools in another, behaving exactly as before they moved. A new step SHALL give back the first bytes of zlib data and stop there as a success, however large the data, and give nothing for data without a zlib header or with fewer bytes; it SHALL ignore predictors, which its caller must refuse. (SPEC.md: Rules for the code, 2; Repo layout)
+Deflating and inflating with a cap SHALL live in one shared engine file, behaving exactly as before they moved. A new step SHALL give back the first bytes of zlib data and stop there as a success, however large the data, and give nothing for data without a zlib header or with fewer bytes; it SHALL ignore predictors, which its caller must refuse. (SPEC.md: Rules for the code, 2; Repo layout)
 
 #### Scenario: The tools that use them give the same files
 
@@ -283,5 +283,5 @@ The content reader and the shared zlib steps SHALL never be in the worker's own 
 
 #### Scenario: A component imports the reader
 
-- **WHEN** a file under `src/components/`, `src/hooks/`, `src/pages/` or `src/layouts/` imports a value from `src/engines/content`, `src/engines/zlib` or `src/engines/tools-given`, or loads one with `import()`
+- **WHEN** a file under `src/components/`, `src/hooks/`, `src/pages/` or `src/layouts/` imports a value from `src/engines/content` or `src/engines/zlib`, or loads one with `import()`
 - **THEN** lint fails, by the rules that already cover every file under `src/engines/`

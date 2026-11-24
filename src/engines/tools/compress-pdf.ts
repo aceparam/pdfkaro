@@ -28,6 +28,7 @@ import {
   keepBelow,
   listCandidates,
   losslessOptions,
+  need,
   pictureContext,
   pixelLimit,
   shrinkJpeg,
@@ -36,7 +37,6 @@ import {
   type PictureDecoder,
 } from '../shrink';
 import type { JpegCanvasMaker } from '../thumbnail';
-import { need } from '../tools-given';
 import type { Engine, EngineModule, Inspector } from '../types';
 import type { Fflate } from '../zlib';
 

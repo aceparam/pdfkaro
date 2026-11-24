@@ -13,6 +13,7 @@ import { jpegForPdf, walkJpeg } from './picture';
 import { isDict, isRef, type Dict, type ObjectEntry, type StreamReplacement } from './qpdf-json';
 import { fittedSize, scaleDown, unpredict } from './resample';
 import type { JpegCanvasMaker } from './thumbnail';
+import type { EngineTools } from './types';
 import { inflateLimited, isZlib, zlibDeflate, type DeflateClass, type Fflate, type InflateClass } from './zlib';
 
 /** How sharp a picture may be, in pixels to the inch across the file's largest page. */
@@ -206,6 +207,13 @@ export type Decoded = { image: unknown; close(): void };
 /** The browser's image decoder, at `width` by `height`, with colours left as they are. */
 export type PictureDecoder = { decode(bytes: Uint8Array, width: number, height: number, options?: { colours?: 'none' }): Promise<Decoded> };
 type DrawingContext = { drawImage(image: unknown, x: number, y: number, width: number, height: number): void; imageSmoothingQuality?: string };
+
+/** A tool from the worker or a test, by name; throws when it was not given. */
+export async function need<T>(tools: EngineTools, name: string): Promise<T> {
+  const make = tools[name];
+  if (!make) throw new Error(`${name} was not given to the engine.`);
+  return (await make()) as T;
+}
 
 /** The sentence thrown when a picture step is asked to do what it cannot. */
 const cannotRedo = 'A picture step was given a picture it cannot redo.';
