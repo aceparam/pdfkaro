@@ -25,7 +25,7 @@ import { inspectPdf } from '../inspect';
 import { passwordFrom, freshQpdf, plainCopy } from '../plain';
 import { callWithArgumentFile, isRef, objectArg, objectsPerCall, updateJson, type Dict } from '../qpdf-json';
 import { finished, OutputLimit } from '../qpdf';
-import { readPages, runPages, sizeLimit, writeUpdate, type PagePlace, type PlainSource } from '../stamp';
+import { readPages, runPages, sizeLimit, writePageUpdate, type PagePlace, type PlainSource } from '../pages';
 import { boxFrom, intersect, maxImagePixels, openDocument, type Box, type Measured } from '../thumbnail';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 import { outOfMemory } from '../../widget/memory';
@@ -209,7 +209,7 @@ export function makeRun(limits: Partial<Limits> = {}): Engine<Options> {
     delete source.plain;
     qpdf.write('/update.json', text);
     // The pages fill the bar to 0.8; qpdf's write is reported from 75% and held at 95% until the check is done.
-    const output = writeUpdate(qpdf, limit, (percent) => onProgress({ stage: 'writing', percent: Math.min(75 + percent / 5, 95) }));
+    const output = writePageUpdate(qpdf, limit, (percent) => onProgress({ stage: 'writing', percent: Math.min(75 + percent / 5, 95) }));
     onProgress({ stage: 'writing', percent: 100 });
     return [output];
   };

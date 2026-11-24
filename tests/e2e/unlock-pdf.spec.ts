@@ -671,7 +671,7 @@ test.describe('nothing is uploaded', () => {
     const fetched = fetchedPaths(seen);
     // The engine was fetched, and nothing of the option values, drawing step, pdf-lib, fflate or another tool.
     for (const name of [/\/unlock-pdf-/, /\/qpdf-/, /\/inspect-/, /\/plain-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/option-values-/, /\/stamp-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/merge-pdf-/, /\/split-pdf-/, /\/sign-pdf-/]) {
+    for (const other of [/\/option-values-/, /\/stamp-/, /\/pages-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/merge-pdf-/, /\/split-pdf-/, /\/sign-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, heard.said);

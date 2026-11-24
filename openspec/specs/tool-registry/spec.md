@@ -70,7 +70,7 @@ The registry SHALL place every tool in exactly one of seven groups: Organise pag
 #### Scenario: The hub page's parts
 
 - **WHEN** the "Organise pages" hub page is built
-- **THEN** it has one `h1` "Organise pages", the group's sentence, and its six published tools' pages in registry order, each a link with its summary, in the served HTML, with no script, and nothing else between the header and the footer
+- **THEN** it has one `h1` "Organise pages", the group's sentence, and its seven published tools' pages in registry order (Merge PDF, Split PDF, Extract pages, Delete pages, Reorder pages, Rotate PDF, Crop PDF), each a link with its summary, in the served HTML, with no script, and nothing else between the header and the footer
 
 #### Scenario: A group with no published tool
 
@@ -127,12 +127,22 @@ Each registry entry SHALL name four to six related tools, chosen from the catalo
 
 ### Requirement: Tools ship in phase and catalogue order
 
-Tools SHALL be built in catalogue order within a phase, and no tool from a phase SHALL be built before the phase before it passes its gate. Merge PDF SHALL be the first tool. (SPEC.md: Build phases)
+Tools SHALL be built in catalogue order within a phase, Merge PDF first. No phase's tools SHALL be built before the phase before it passes its gate, except that Phase 2 browser tools MAY be built, in catalogue order, before the Phase 1 gate (owner, 23 Nov 2026); a Phase 2 server tool SHALL wait for the owner's server host and budget decision. Launch still needs the Phase 1 gate. (SPEC.md: Build phases; CLAUDE.md: Owner decisions, 23 Nov 2026)
 
 #### Scenario: A later-phase tool is proposed early
 
-- **WHEN** a change proposes a phase 2 tool before the phase 1 gate has passed
+- **WHEN** a change proposes a phase 3 tool before the phase 2 gate has passed
 - **THEN** the change is blocked until the gate passes
+
+#### Scenario: The first Phase 2 tool
+
+- **WHEN** a change proposes Crop PDF, the first Phase 2 browser tool in catalogue order, while the Phase 1 gate is still open
+- **THEN** the change is not blocked by the gate, and the Phase 1 gate's open items stay open
+
+#### Scenario: A Phase 2 server tool
+
+- **WHEN** a change proposes a Phase 2 server tool before the owner has decided the server host and budget
+- **THEN** the change is blocked until the owner decides
 
 ### Requirement: Images to PDF is one tool with three pages
 

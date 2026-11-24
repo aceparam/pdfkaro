@@ -1,10 +1,11 @@
 // Reading and writing a PDF through qpdf's JSON (version 2), shared by the
 // engines. The general helpers (`json`, `objects`, `objectArg`,
 // `objectsPerCall`, `updateJson`, `callWithArgumentFile`) came here unchanged
-// from outline.ts and plain.ts. The steps after them are for an engine that
-// replaces streams (Compress PDF): reading every object's dictionary without
-// stream data, reading chosen streams' raw data in batches, and writing
-// replaced streams back with `--update-from-json`.
+// from outline.ts and plain.ts; `opening` and `entryText`, which write an
+// update's header and its objects, came from stamp.ts. The steps after them
+// are for an engine that replaces streams (Compress PDF): reading every
+// object's dictionary without stream data, reading chosen streams' raw data in
+// batches, and writing replaced streams back with `--update-from-json`.
 //
 // Only qpdf's own output is parsed, from a file whose size is checked first.
 // Object keys are taken only in the form `obj:N G R`. A password goes only
@@ -53,21 +54,24 @@ export function objects(qpdf: Qpdf, passwordArgs: string[], ids: string[]): { ma
 /** How many objects one qpdf call is asked for: each is an argument, and qpdf's arguments sit on its small stack. */
 export const objectsPerCall = 200;
 
+/** One object in an --update-from-json file: a value, or a stream with its data as base64. */
+export type QpdfEntry = { value: unknown } | { stream: { dict: Dict; data: string } };
+
+/**
+ * The start of an --update-from-json file, up to and including the brace that opens its objects: the one place its
+ * header is written. Entries (`entryText`, joined by commas) and `}]}` complete it.
+ */
+export const opening = (max: number) =>
+  `{"qpdf":[${JSON.stringify({ jsonversion: 2, pushedinheritedpageresources: false, calledgetallpages: false, maxobjectid: max })},{`;
+
+/** One object of an --update-from-json file, as its key and its entry. Moved here from stamp.ts. */
+export const entryText = (id: string, entry: unknown) => `${JSON.stringify(`obj:${id}`)}:${JSON.stringify(entry)}`;
+
 /** The text of qpdf's --update-from-json file, always built from objects. */
 export function updateJson(maxObjectId: number, update: Map<string, Dict>): string {
-  const objects: Record<string, { value: Dict }> = {};
-  for (const [id, value] of update) objects[`obj:${id}`] = { value };
-  return JSON.stringify({
-    qpdf: [
-      {
-        jsonversion: 2,
-        pushedinheritedpageresources: false,
-        calledgetallpages: false,
-        maxobjectid: maxObjectId,
-      },
-      objects,
-    ],
-  });
+  const entries: string[] = [];
+  for (const [id, value] of update) entries.push(entryText(id, { value }));
+  return `${opening(maxObjectId)}${entries.join(',')}}]}`;
 }
 
 /**
@@ -254,14 +258,12 @@ export type StreamReplacement = { dict: Dict; data: Uint8Array };
 
 /** The text of an --update-from-json file that replaces streams, each with its data in a file under `/upd/`. */
 export function streamUpdateJson(maxObjectId: number, streams: ReadonlyMap<string, { dict: Dict; datafile: string }>): string {
-  const objects: Record<string, { stream: { dict: Dict; datafile: string } }> = {};
+  const entries: string[] = [];
   for (const [id, { dict, datafile }] of streams) {
     if (!isRef(id)) throw new Error('An object id was not valid.');
-    objects[`obj:${id}`] = { stream: { dict, datafile } };
+    entries.push(entryText(id, { stream: { dict, datafile } }));
   }
-  return JSON.stringify({
-    qpdf: [{ jsonversion: 2, pushedinheritedpageresources: false, calledgetallpages: false, maxobjectid: maxObjectId }, objects],
-  });
+  return `${opening(maxObjectId)}${entries.join(',')}}]}`;
 }
 
 /**

@@ -532,9 +532,9 @@ test.describe('nothing is uploaded', () => {
     await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
-    // The engine was fetched with PDF.js, and nothing of the option values, pdf-lib, fflate or another tool.
-    for (const name of [/\/crop-pdf-/, /\/qpdf-/, /\/inspect-/, /\/plain-/, /\/stamp-/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/option-values-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/]) {
+    // The engine was fetched with PDF.js and the page reading, and nothing of the drawing step, the option values, pdf-lib, fflate or another tool.
+    for (const name of [/\/crop-pdf-/, /\/qpdf-/, /\/inspect-/, /\/plain-/, /\/pages-[A-Za-z0-9_-]{8}\.js$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
+    for (const other of [/\/stamp-/, /\/option-values-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, heard.said);

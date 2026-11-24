@@ -11,7 +11,7 @@ import { createQpdf } from '../../src/engines/qpdf';
 import { OutputLimit } from '../../src/engines/qpdf';
 import { cutBox, croppedDict, makeRun, marginFraction, run } from '../../src/engines/tools/crop-pdf';
 import { maxImagePixels, type Box, type Measured } from '../../src/engines/thumbnail';
-import { readPages } from '../../src/engines/stamp';
+import { readPages } from '../../src/engines/pages';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { pageStreams, texts } from './stamp-helpers';
 import { fixture, tools as drawTools } from './thumbnail-helpers';
