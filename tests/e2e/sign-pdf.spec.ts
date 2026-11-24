@@ -1089,7 +1089,7 @@ test.describe('nothing is uploaded', () => {
       expect(seen.filter((request) => request.body !== null && request.body !== ''), how).toEqual([]);
       const fetched = fetchedPaths(seen);
       for (const name of [/\/sign-pdf-/, /\/stamp-/, /\/picture-/, /\/pdflib-/, /\/fflate-/]) expect(fetched.some((path) => name.test(path)), `${how}: ${name}`).toBe(true);
-      for (const other of [/\/add-page-numbers-/, /\/watermark-pdf-/, /\/compress-pdf-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-thumbnail-/]) {
+      for (const other of [/\/add-page-numbers-/, /\/watermark-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-thumbnail-/]) {
         expect(fetched.some((path) => other.test(path)), `${how}: ${other}`).toBe(false);
       }
       fetchedByWay[how] = fetched;
