@@ -36,6 +36,35 @@ export function acceptedValue(
 }
 
 // ---------------------------------------------------------------------------
+// Size targets. A page of a tool whose words declare a size target (`sizeTarget` in the registry) sets one of
+// these through its preset, `{ target: '<key>' }`: never a choice on the page. A target counts in thousands, so
+// "200 KB" is 200,000 bytes, which fits a form that counts either way. `binary` is the label counted in 1024s, read
+// only by the byte rule in src/widget/target.ts. The engine reads its target through `acceptedTarget`.
+
+export type SizeTargetKey = '100kb' | '200kb' | '500kb' | '1mb' | '2mb';
+
+/** One target: its bytes, its label as the page names it, and the label counted in 1024s. */
+export type SizeTarget = { bytes: number; label: string; binary: number };
+
+/** Every target, in size order. */
+export const sizeTargets: Readonly<Record<SizeTargetKey, SizeTarget>> = {
+  '100kb': { bytes: 100_000, label: '100 KB', binary: 100 * 1024 },
+  '200kb': { bytes: 200_000, label: '200 KB', binary: 200 * 1024 },
+  '500kb': { bytes: 500_000, label: '500 KB', binary: 500 * 1024 },
+  '1mb': { bytes: 1_000_000, label: '1 MB', binary: 1024 * 1024 },
+  '2mb': { bytes: 2_000_000, label: '2 MB', binary: 2 * 1024 * 1024 },
+};
+
+/**
+ * The target a page or a job names, when it is one of `sizeTargets`' own keys; else `undefined`, which the engine
+ * refuses before it reads the file. Only own keys count, so `__proto__` or `toString` is never taken for a target.
+ */
+export function acceptedTarget(value: unknown): SizeTarget | undefined {
+  if (typeof value !== 'string' || !Object.hasOwn(sizeTargets, value)) return undefined;
+  return sizeTargets[value as SizeTargetKey];
+}
+
+// ---------------------------------------------------------------------------
 // Texts. Each tool's typed texts, written once like the values above: the most
 // characters and the character rule, by tool id and key. The registry holds only
 // a text's words; its test checks each text has its line here and the reverse.

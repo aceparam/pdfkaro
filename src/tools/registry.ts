@@ -284,6 +284,13 @@ export type ToolWidgetWords = {
    * the heading shown in place of the result, and the one thing to try. Without it, no file is the engine's failure.
    */
   noSmaller?: { heading: string; advice: string };
+  /**
+   * For a tool whose every page sets a size the result must fit (Compress to a target size): the page's preset key
+   * is always `target`, naming one of `sizeTargets` in src/widget/option-values.ts. A file already at or under it is
+   * held from the pick, and the result is measured against it (src/widget/target.ts). `overAdvice` is the one thing
+   * to try when the smallest file made is still over the target.
+   */
+  sizeTarget?: { overAdvice: string };
   /** Plain notes shown with the result, such as what was not carried over. */
   resultNotes: string[];
   /** The options the working area shows, in order. Left out, none. */
@@ -346,8 +353,9 @@ export const groups: Group[] = [
     name: 'Make smaller and fix',
     slug: 'make-smaller-and-fix',
     title: 'Make a PDF smaller - PDFkaro',
-    description: 'Make a PDF file smaller by shrinking its pictures, in your browser. The file stays on your device and is not uploaded.',
-    sentence: 'Tools that make a PDF file smaller.',
+    description:
+      'Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that make a PDF file smaller, or small enough for an upload limit.',
     claimsDevice: true,
   },
   {
@@ -859,7 +867,7 @@ export const tools: Tool[] = [
     runsIn: 'browser',
     phase: 1,
     accepts: ['application/pdf'],
-    related: ['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg'],
+    related: ['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg', 'compress-pdf-to-200kb'],
     pages: [
       {
         slug: 'compress-pdf',
@@ -899,6 +907,119 @@ export const tools: Tool[] = [
       resultNotes: [
         'Pictures that were made smaller can look slightly less sharp up close.',
         'Pages, text, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+        'If the file had a password or restrictions, it still has them.',
+      ],
+    },
+  },
+  {
+    // The second row of "Make smaller and fix", a Phase 2 tool: one tool with five pages, each page setting its target
+    // through its preset (SPEC.md, "one tool with preset pages"), by the agent's choice, as PDF to JPG and PNG set their
+    // format. Pictures only, the smallest file given and said, lossless pictures kept lossless (owner, 24 Nov 2026).
+    id: 'compress-to-target',
+    group: 'smaller',
+    runsIn: 'browser',
+    phase: 2,
+    accepts: ['application/pdf'],
+    // Each page links to the others listed here but never to itself (relatedItems in queries.ts).
+    related: ['compress-pdf-to-200kb', 'compress-pdf-to-500kb', 'compress-pdf-to-1mb', 'compress-pdf', 'delete-pdf-pages', 'split-pdf'],
+    pages: [
+      {
+        slug: 'compress-pdf-to-100kb',
+        name: 'Compress PDF to 100 KB',
+        summary: 'Make a PDF 100 KB or smaller.',
+        title: 'Compress a PDF to 100 KB in your browser - PDFkaro',
+        description:
+          'Make a PDF 100 KB or smaller for a strict upload limit, by shrinking its pictures step by step. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF to 100 KB',
+        sentence: 'Make a PDF 100 KB or smaller. Your file stays on your device.',
+        preset: { target: '100kb' },
+        words: { actionLabel: 'Compress to 100 KB and download' },
+      },
+      {
+        slug: 'compress-pdf-to-200kb',
+        name: 'Compress PDF to 200 KB',
+        summary: 'Make a PDF 200 KB or smaller.',
+        title: 'Compress a PDF to 200 KB in your browser - PDFkaro',
+        description:
+          'Get a scanned PDF down to 200 KB or smaller for an online form, by shrinking its pictures. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF to 200 KB',
+        sentence: 'Make a PDF 200 KB or smaller. Your file stays on your device.',
+        preset: { target: '200kb' },
+        words: { actionLabel: 'Compress to 200 KB and download' },
+      },
+      {
+        slug: 'compress-pdf-to-500kb',
+        name: 'Compress PDF to 500 KB',
+        summary: 'Make a PDF 500 KB or smaller.',
+        title: 'Compress a PDF to 500 KB in your browser - PDFkaro',
+        description:
+          'Make a PDF 500 KB or smaller, shrinking only its pictures and keeping text and drawings as they are. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF to 500 KB',
+        sentence: 'Make a PDF 500 KB or smaller. Your file stays on your device.',
+        preset: { target: '500kb' },
+        words: { actionLabel: 'Compress to 500 KB and download' },
+      },
+      {
+        slug: 'compress-pdf-to-1mb',
+        name: 'Compress PDF to 1 MB',
+        summary: 'Make a PDF 1 MB or smaller.',
+        title: 'Compress a PDF to 1 MB in your browser - PDFkaro',
+        description:
+          'Bring a PDF of photos or scans to 1 MB or smaller by shrinking its pictures until it fits. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF to 1 MB',
+        sentence: 'Make a PDF 1 MB or smaller. Your file stays on your device.',
+        preset: { target: '1mb' },
+        words: { actionLabel: 'Compress to 1 MB and download' },
+      },
+      {
+        slug: 'compress-pdf-to-2mb',
+        name: 'Compress PDF to 2 MB',
+        summary: 'Make a PDF 2 MB or smaller.',
+        title: 'Compress a PDF to 2 MB in your browser - PDFkaro',
+        description:
+          'Make a large PDF 2 MB or smaller, with pictures kept as sharp as the size allows. The file stays on your device and is not uploaded.',
+        heading: 'Compress a PDF to 2 MB',
+        sentence: 'Make a PDF 2 MB or smaller. Your file stays on your device.',
+        preset: { target: '2mb' },
+        words: { actionLabel: 'Compress to 2 MB and download' },
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      // Each page names its own button, with its own size, above.
+      actionLabel: 'Compress and download',
+      writingLabel: 'Writing the compressed file',
+      // Never shown: every page has a target, and the result's heading is measured against it (src/widget/target.ts).
+      doneHeading: 'Your compressed file is ready',
+      failedHeading: 'The compression did not finish.',
+      tooFewFiles: 'Choose a PDF file to compress.',
+      // A name with the size would be false over the target.
+      outputSuffix: 'compressed',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and compress the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      resultWas: true,
+      // Page text, a draft for the owner's review like the result notes.
+      sizeTarget: {
+        overAdvice:
+          'Pictures this tool can change were made as small as they can go while staying readable. Some kinds of picture are left as they are; the questions below say which. To get under the limit, remove pages you do not need, or split the file and send it in parts.',
+      },
+      noSmaller: {
+        heading: 'This file could not be made smaller.',
+        advice:
+          'Its pictures are already small, or of a kind this tool leaves alone, and text, drawings and fonts keep their quality, so they cannot be made much smaller. To get under the limit, remove pages you do not need, or split the file and send it in parts.',
+      },
+      // Passwords are kept, as Compress PDF keeps them (open owner question "Compress PDF keeps passwords").
+      resultNotes: [
+        'Pictures were made smaller, so they can look less sharp up close. Text, drawings and fonts keep their quality.',
+        'Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'If the file had a password or restrictions, it still has them.',
       ],
     },
