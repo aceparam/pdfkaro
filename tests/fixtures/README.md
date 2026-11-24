@@ -932,3 +932,36 @@ Measured on 24 Nov 2026, as Crop PDF's above: in Node under the test runner, one
 - **Memory with the page count:** in Node, the heap was 0.42 GB once the pages were read and each page's working copy made, and 0.42 then 0.43 GB at the second and ninth tenth of the per-page loop, so nothing beyond the working copies grows with the pages. The Chromium tenths (0.16 then 0.64 GB) follow the job's phases, not the pages: reading first, then the read objects and the copies held together until the read is let go before writing.
 - **The objects file** (every one of 220,000 objects changed by the destination walk) is the worst case for the working copies: 1.08 GB in Node, 0.76 GB over baseline in Chromium, under the ceiling.
 - **Known, not fixed here:** "Page N of M" has no thousands separator, as on every page tool.
+
+### Content reader (`src/engines/content.ts`, no tool yet)
+
+Each file was put through the real plain copy (`plainCopy`, the encrypted ones with `open-sesame`), then every page's content streams and every form XObject were read raw with `readRawStreams`, decoded with `decodeContent` and read with `editContent` and the test-only editor (`tests/unit/content.test.ts`, "every fixture through the reader"; a page's streams as `not-last` and `last`, forms `alone`, a shared stream once at its strictest place), with a budget that records. The test asserts each file's counts below, and fails for a fixture with none, so a new fixture must be given them. No run made a request, passed the 64 MiB cap or threw. From a run on 24 Nov 2026.
+
+No stream of any fixture is left as "not decoded" or "too large", and none is doubt. "Edited" means the test-only editor found one of its operators (`w` after one number, `re`, `cm`, `cs`, `d0`); "unchanged" means it found none.
+
+| File | Pages | Forms | Streams read | Edited | Unchanged | Not decoded | Doubt |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `chinese-unembedded.pdf` | 1 | 0 | 1 | 0 | 1 | 0 | 0 |
+| `compress-bomb-attachment.pdf` | 1 | 0 | 1 | 0 | 1 | 0 | 0 |
+| `compress-flate-bomb.pdf` | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| `compress-jpeg-mismatch.pdf` | 2 | 0 | 2 | 2 | 0 | 0 | 0 |
+| `compress-kinds.pdf` | 7 | 0 | 7 | 7 | 0 | 0 | 0 |
+| `compress-lossless.pdf` | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| `compress-packed.pdf` | 3 | 0 | 3 | 0 | 3 | 0 | 0 |
+| `compress-password.pdf` (with `open-sesame`) | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| `compress-scans.pdf` | 3 | 0 | 3 | 3 | 0 | 0 | 0 |
+| `compress-small-jpg.pdf` (two content streams on its page) | 1 | 0 | 2 | 1 | 1 | 0 | 0 |
+| `compress-text.pdf` | 3 | 0 | 3 | 0 | 3 | 0 | 0 |
+| `form.pdf` (the forms are its fields' appearance streams) | 1 | 5 | 6 | 5 | 1 | 0 | 0 |
+| `images.pdf` | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| `mixed.pdf` | 4 | 0 | 4 | 0 | 4 | 0 | 0 |
+| `multilingual.pdf` | 5 | 0 | 5 | 5 | 0 | 0 | 0 |
+| `pages-500.pdf` | 500 | 0 | 500 | 0 | 500 | 0 | 0 |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | 3 | 0 | 3 | 0 | 3 | 0 | 0 |
+| `rich.pdf` | 2 | 0 | 2 | 0 | 2 | 0 | 0 |
+| `scanned.pdf` | 2 | 0 | 2 | 2 | 0 | 0 | 0 |
+| `tagged.pdf` | 2 | 2 | 4 | 2 | 2 | 0 | 0 |
+| `text.pdf`, `warning.pdf` | 3 | 0 | 3 | 0 | 3 | 0 | 0 |
+| `compress-json-bomb.pdf` | Its JSON of dictionaries passes `readDictionaries`' 64 MB cap, so no stream is read (an engine skips or fails there before the reader) | | | | | | |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | The plain copy's own failure, "qpdf could not read the file." | | | | | | |
+| `password.pdf`, `compress-password.pdf` without the password | The plain copy's own failure, "A password did not open the file." | | | | | | |
