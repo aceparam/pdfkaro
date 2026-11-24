@@ -169,9 +169,10 @@ export function placement(place: Pick<PagePlace, 'turn' | 'box' | 'unit' | 'widt
 
 /**
  * The moved numbers counted against the new file's size budget while the working copies are made. Each moved
- * number is counted as at least 2 bytes of the update (a digit and a separator) before its array is built, so a
- * crafted file whose one indirect array is named by many annotations, or whose /InkList repeats one stroke,
- * stops with `OutputLimit` before memory holds the copies, not after.
+ * number is counted as at least 2 bytes of the update (a digit and a separator) as its array is resolved, before
+ * its length or items are checked, well formed or not, so a crafted file whose one indirect array is named by many
+ * annotations, or whose /InkList repeats one stroke, stops with `OutputLimit` before memory holds the copies or
+ * the time goes to reading the same array again and again.
  */
 export type Tally = { used: number; limit: number };
 
@@ -183,11 +184,21 @@ export function spend(tally: Tally, count: number): void {
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const numbers = (value: unknown, count?: (n: number) => boolean): value is number[] =>
-  Array.isArray(value) && value.every(isNumber) && (count === undefined || count(value.length));
+  Array.isArray(value) && (count === undefined || count(value.length)) && value.every(isNumber);
+
+/**
+ * Whether a resolved value is an array of numbers of a length `count` accepts, after counting its whole length in
+ * the tally, well formed or not, and checking its length before its items. So a crafted array named many times,
+ * of the right length or the wrong one, is paid for each time it is named, before any of its items is read.
+ */
+function counted(value: unknown, tally: Tally, count: (n: number) => boolean): value is number[] {
+  if (!Array.isArray(value)) return false;
+  spend(tally, value.length);
+  return numbers(value, count);
+}
 
 /** Each (x, y) pair through M, written with at most 6 decimals; null when any is 10^9 or more in size. */
-function points(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
-  spend(tally, values.length);
+function points(values: readonly number[], m: Matrix): number[] | null {
   const out: number[] = [];
   for (let at = 0; at < values.length; at += 2) {
     const x = moved(m.k * values[at]! + m.tx);
@@ -199,16 +210,15 @@ function points(values: readonly number[], m: Matrix, tally: Tally): number[] | 
 }
 
 /** A rectangle's two corners through M, normalised. */
-function rectangle(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
-  const moved4 = points(values, m, tally);
+function rectangle(values: readonly number[], m: Matrix): number[] | null {
+  const moved4 = points(values, m);
   if (!moved4) return null;
   const [a, b, c, d] = moved4 as [number, number, number, number];
   return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
 }
 
 /** Each value times k, written with at most 6 decimals; null when any is 10^9 or more in size. */
-function scaled(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
-  spend(tally, values.length);
+function scaled(values: readonly number[], m: Matrix): number[] | null {
   const out: number[] = [];
   for (const value of values) {
     const next = moved(value * m.k);
@@ -234,35 +244,49 @@ export function moveAnnotation(annotation: Dict, m: Matrix, old: readonly number
   const set = (key: string, value: unknown[] | number | null) => {
     if (value !== null) annotation[key] = value;
   };
+  // Each array is counted in the tally as it is resolved (`counted`), before its items are read.
   const rect = read('/Rect');
-  const oldRect = numbers(rect, (n) => n === 4) ? [Math.min(rect[0]!, rect[2]!), Math.min(rect[1]!, rect[3]!), Math.max(rect[0]!, rect[2]!), Math.max(rect[1]!, rect[3]!)] : null;
-  if (oldRect) set('/Rect', rectangle(oldRect, m, tally));
+  const oldRect = counted(rect, tally, (n) => n === 4) ? [Math.min(rect[0]!, rect[2]!), Math.min(rect[1]!, rect[3]!), Math.max(rect[0]!, rect[2]!), Math.max(rect[1]!, rect[3]!)] : null;
+  if (oldRect) set('/Rect', rectangle(oldRect, m));
   const quad = read('/QuadPoints');
-  if (numbers(quad, (n) => n > 0 && n % 8 === 0)) set('/QuadPoints', points(quad, m, tally));
+  if (counted(quad, tally, (n) => n > 0 && n % 8 === 0)) set('/QuadPoints', points(quad, m));
   const ink = read('/InkList');
   if (Array.isArray(ink) && ink.length > 0) {
-    const strokes = ink.map(resolve);
-    if (strokes.every((stroke) => numbers(stroke, (n) => n % 2 === 0))) {
-      const next = (strokes as number[][]).map((stroke) => points(stroke, m, tally));
+    spend(tally, ink.length);
+    const strokes: number[][] = [];
+    // Stops at the first stroke that is not well formed, every stroke before it counted.
+    for (const item of ink) {
+      const stroke = resolve(item);
+      if (!counted(stroke, tally, (n) => n % 2 === 0)) break;
+      strokes.push(stroke);
+    }
+    if (strokes.length === ink.length) {
+      const next = strokes.map((stroke) => points(stroke, m));
       if (next.every((stroke) => stroke !== null)) annotation['/InkList'] = next;
     }
   }
   const vertices = read('/Vertices');
-  if (numbers(vertices, (n) => n > 0 && n % 2 === 0)) set('/Vertices', points(vertices, m, tally));
+  if (counted(vertices, tally, (n) => n > 0 && n % 2 === 0)) set('/Vertices', points(vertices, m));
   const line = read('/L');
-  if (numbers(line, (n) => n === 4)) set('/L', points(line, m, tally));
+  if (counted(line, tally, (n) => n === 4)) set('/L', points(line, m));
   const callout = read('/CL');
-  if (numbers(callout, (n) => n === 4 || n === 6)) set('/CL', points(callout, m, tally));
+  if (counted(callout, tally, (n) => n === 4 || n === 6)) set('/CL', points(callout, m));
   const path = read('/Path');
   if (Array.isArray(path) && path.length > 0) {
-    const parts = path.map(resolve);
-    if (parts.every((part) => numbers(part, (n) => n === 2 || n === 6))) {
-      const next = (parts as number[][]).map((part) => points(part, m, tally));
+    spend(tally, path.length);
+    const parts: number[][] = [];
+    for (const item of path) {
+      const part = resolve(item);
+      if (!counted(part, tally, (n) => n === 2 || n === 6)) break;
+      parts.push(part);
+    }
+    if (parts.length === path.length) {
+      const next = parts.map((part) => points(part, m));
       if (next.every((part) => part !== null)) annotation['/Path'] = next;
     }
   }
   const differences = read('/RD');
-  if (numbers(differences, (n) => n === 4) && differences.every((n) => n >= 0)) set('/RD', scaled(differences, m, tally));
+  if (counted(differences, tally, (n) => n === 4) && differences.every((n) => n >= 0)) set('/RD', scaled(differences, m));
   for (const key of ['/LL', '/LLE', '/LLO']) {
     const value = read(key);
     if (!isNumber(value)) continue;
@@ -477,8 +501,8 @@ async function changesFor(
         } else if (isDict(item)) bead = item;
         else continue;
         const rect = resolve(bead['/R']);
-        if (numbers(rect, (n) => n === 4)) {
-          const next4 = rectangle(rect, m, tally);
+        if (counted(rect, tally, (n) => n === 4)) {
+          const next4 = rectangle(rect, m);
           if (next4) bead['/R'] = next4;
         }
       }

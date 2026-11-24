@@ -936,10 +936,26 @@ describe('progress, the cap and errors', { timeout: 120_000 }, () => {
 
   it('one indirect array of 40,000 numbers named by 2,000 annotations stops with OutputLimit quickly, before memory fills', async () => {
     const bytes = sharedValue(40_000, (index) => `<< /Type /Annot /Subtype /Highlight /Rect [10 ${index % 700} 100 ${(index % 700) + 10}] /QuadPoints 5 0 R >>`, 2_000);
-    const { error, seconds, heapGrowth, peakGrowth } = await stopped(bytes);
-    console.log(`shared /QuadPoints: ${bytes.length} bytes, OutputLimit after ${seconds.toFixed(2)} s, heap +${heapGrowth.toFixed(0)} MB, peak resident memory +${peakGrowth.toFixed(0)} MB`);
+    const { error, seconds, heapGrowth } = await stopped(bytes);
     expect(error).toBeInstanceOf(OutputLimit);
     expect(failureKind(error)).toBe('output-limit');
+    expect(seconds).toBeLessThan(20);
+    expect(heapGrowth).toBeLessThan(400);
+  });
+
+  it('one stroke of 400,000 numbers named 200,000 times in one /InkList stops with OutputLimit quickly: each stroke is counted before its numbers are read', async () => {
+    const strokes = Array.from({ length: 200_000 }, () => '5 0 R').join(' ');
+    const bytes = sharedValue(400_000, () => `<< /Type /Annot /Subtype /Ink /Rect [10 10 600 700] /InkList [${strokes}] >>`, 1);
+    const { error, seconds, heapGrowth } = await stopped(bytes);
+    expect(error).toBeInstanceOf(OutputLimit);
+    expect(seconds).toBeLessThan(20);
+    expect(heapGrowth).toBeLessThan(400);
+  });
+
+  it('one array of the wrong length (400,001 numbers) named as /QuadPoints by 20,000 annotations stops with OutputLimit: it is counted each time it is named, though never moved', async () => {
+    const bytes = sharedValue(400_001, (index) => `<< /Type /Annot /Subtype /Highlight /Rect [10 ${index % 700} 100 ${(index % 700) + 10}] /QuadPoints 5 0 R >>`, 20_000);
+    const { error, seconds, heapGrowth } = await stopped(bytes);
+    expect(error).toBeInstanceOf(OutputLimit);
     expect(seconds).toBeLessThan(20);
     expect(heapGrowth).toBeLessThan(400);
   });
@@ -947,8 +963,7 @@ describe('progress, the cap and errors', { timeout: 120_000 }, () => {
   it('one stroke of 40,000 numbers repeated 2,000 times in one /InkList stops with OutputLimit quickly, before memory fills', async () => {
     const strokes = Array.from({ length: 2_000 }, () => '5 0 R').join(' ');
     const bytes = sharedValue(40_000, () => `<< /Type /Annot /Subtype /Ink /Rect [10 10 600 700] /InkList [${strokes}] >>`, 1);
-    const { error, seconds, heapGrowth, peakGrowth } = await stopped(bytes);
-    console.log(`repeated stroke: ${bytes.length} bytes, OutputLimit after ${seconds.toFixed(2)} s, heap +${heapGrowth.toFixed(0)} MB, peak resident memory +${peakGrowth.toFixed(0)} MB`);
+    const { error, seconds, heapGrowth } = await stopped(bytes);
     expect(error).toBeInstanceOf(OutputLimit);
     expect(failureKind(error)).toBe('output-limit');
     expect(seconds).toBeLessThan(20);
