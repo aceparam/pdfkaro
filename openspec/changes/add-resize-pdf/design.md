@@ -270,6 +270,18 @@ Expected numbers in the unit tests are hand-computed literals, or derived throug
 - **Signatures and earlier saved versions** are lost, as for every page tool. → Said on the page.
 - **"Page 1 of 120000" has no thousands separator.** → Known since Crop; not fixed here.
 
+## Found while building
+
+- **`related` takes page slugs, not tool ids.** Decision 8 lists `'add-page-numbers'`, the tool id; the type check refused it. The entry names `'add-page-numbers-to-pdf'`, the page's slug. Same link, no change in meaning.
+- **Room for rounding in the 1-point rules.** `596.276 − 595.276` is a hair over 1 in floating point, so "exactly 1 point off is left" and "`w = h + 1` is upright" would have failed on real numbers. The comparisons allow 10^-9 point (`slack` in the engine); 1.01 points still counts as off.
+- **The clip's size is rounded to the nearest, not up.** Decision 2.8 rounds the corners outward and writes the size `x1' − x0'` with `fixed`. Rounding the size up as well picked up the float noise of the subtraction (`0.000001000000001` for a 10^-6 box). The size is written to the nearest; the 0.01-point check holds the far edge, and the outward error is at most one unit in the tenth significant digit.
+- **A page object listed twice in the page tree.** qpdf, writing the plain copy, makes the second listing an object of its own, so the engine never sees one id twice from the plain copy. Each listing is wrapped once, which the test checks; the engine's first-listing rule stays as a guard.
+- **The shared failure kind's words.** `unsafe-page` has one sentence in `src/widget/failures.ts` (`unsafePageSentence`), naming resizing, since Resize is the only tool that raises it. A later tool that places pages gives its own words then (a registry word, or a second sentence).
+- **`check:worker` gained a rule:** Crop's and Resize's engine files import the page-reading file and not the drawing step's (task 4.1 asked `check:worker` to show Resize's job imports no `stamp` chunk; no rule did). Built, Resize's engine imports `inspect`, `option-values`, `pages`, `plain` and `qpdf` (3.4 KB gzip); the `qpdf-json` steps sit inside those shared chunks, not a file of their own.
+- **Two spec scenarios corrected to the shared widget,** with no change to it: while a file is read the main button is shown but cannot be used (as on every tool), and Tab from the chosen paper reaches "Choose another file" before "Resize and download" (every tool's actions row).
+- **The broken page, recorded:** PDF.js pops the prefix's save at the extra `Q` and draws what follows at its old place, unscaled and unclipped (tests/fixtures/README.md).
+- **Measured (task 3.3):** every file under the ceiling; the 100 MB file in Node is closest (1.14 GB against 1.19). The 120,000-page file takes 16 s in Chromium. Figures in tests/fixtures/README.md.
+
 ## Migration Plan
 
 None. A new page and registry entry; no existing page, address or stored data changes. Rolling back is removing the entry, its `option-values` line and the files. The page-reading move is its own pull request and is not rolled back with this one.
