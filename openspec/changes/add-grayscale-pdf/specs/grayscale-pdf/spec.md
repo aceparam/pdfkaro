@@ -118,6 +118,11 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 - **WHEN** a page fills a shape in an ICC RGB space whose profile, larger than 128 bytes, is Flate-compressed
 - **THEN** its header is read from the start of the profile and the shape is drawn grey
 
+#### Scenario: An appearance stream's resources are in force too
+
+- **WHEN** a form with no own resources is drawn from a page whose `/CS0` is ICC RGB and from an appearance stream whose own `/CS0` is a Separation space
+- **THEN** `/CS0` is not eligible for the starting black, no `0 0 0 scn` is written after it, and it is left in every dictionary
+
 #### Scenario: Callers disagree on a name
 
 - **WHEN** a form with no resources of its own selects `/CS0` by `cs`, and one page's resources map `/CS0` to an ICC RGB space and another's to a Separation space
@@ -198,7 +203,7 @@ The tool SHALL leave exactly as they were the kinds of colour it cannot convert 
 
 ### Requirement: Drawing instructions are decoded within limits
 
-Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A drawing stream, or a page's content, that decodes past 64 MiB SHALL stop the job with the `page-too-large` failure; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
+Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A stream reached from a page, or a page's content, decoding past 64 MiB SHALL stop the job with `page-too-large`; one no page reaches SHALL be left; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
 
 #### Scenario: A filter the reader does not decode
 
@@ -209,6 +214,11 @@ Drawing streams SHALL be decoded by the engine from raw data qpdf read with no d
 
 - **WHEN** one content stream inflates to 1 GB
 - **THEN** decoding stops at 64 MiB and, if that stream is on page 14, the job stops under "The file was not converted.", with "Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest." and "Go back to your file", before qpdf writes or checks a file; the sentence holds the page number and nothing else from the file
+
+#### Scenario: A large stream that no page draws
+
+- **WHEN** an appearance stream whose widget is on no page, or an unused form in the AcroForm `/DR`, decodes past 64 MiB
+- **THEN** it is left exactly as it was and the job goes on, the colour space entries it can draw with are not repointed, and its decoded bytes count against the content budget
 
 #### Scenario: A page of several large streams
 
