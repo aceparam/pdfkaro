@@ -2,28 +2,34 @@
 
 ## Context
 
-See `proposal.md` for why Resize pages is next and what the owner decided on 24 Nov 2026. What exists and is reused:
+See `proposal.md` for why Resize pages is next and what the owner decided on 24 Nov 2026.
+
+**Order (decided at stage 1 by the program manager and the architect):** page reading moves out of `src/engines/stamp.ts` first, in its own pull request with no change in behaviour, into `src/engines/pages.ts`: `readPages`, `pageBox`, the place types (`RawPlace`, `PagePlace`, `PageRead`, `PagesRead`), the limits (`maxPagesJson`, `runPages`, `treeDepthLimit`, `smallestSide`, `largestSide`, `smallestScale`), `pdfNumber`, `sizeLimit`, `PlainSource`, and stamp's update writer renamed `writePageUpdate`. `opening` and `entryText` move into `src/engines/qpdf-json.ts` and are exported there. Resize is built after that pull request is merged, imports from `pages.ts` and `qpdf-json.ts`, and exports nothing from `stamp.ts`, so its job does not fetch the stamp step's file. Its only shared change is `readPages(…, { objects: true })` (decision 5). Called "the page-reading move" below; tasks.md checks it is merged before task 2.
+
+What exists and is reused:
 
 - **The one-file tool flow** with an option, as Add page numbers has it: the row with the first page's thumbnail, no summary line, `ChoiceGroup` after the row with focus on the chosen option once the file is read, the password field, the damaged and not-a-PDF states, the 100 MB and 20,000-page notices, Cancel, "Go back to your file", the result block with static `resultNotes`. Choices are kept through Cancel, a failure and "Choose another file" (`add-tool-options`).
 - **The "no new file" outcome** (`noSmaller` in the registry; `[]` from the engine), built for Compress PDF and reused by Remove a password and Crop PDF. No tool has yet combined it with an option; task 4.1 checks the widget does.
 - **`plainCopy`** (`src/engines/plain.ts`): the input decrypted once, with no object streams, so qpdf's JSON update reaches every object; page tools drop passwords this way.
-- **`readPages`** (`src/engines/stamp.ts`): each page's object id, own dictionary, content streams and where it is shown, read from capped qpdf JSON, with inherited `/Rotate`, `/MediaBox` and `/CropBox` found up the page tree (depth-limited, loop-safe) and `pageBox` applying PDF.js's rules (turn modulo 360, crop ∩ paper, user unit; a page under 1 point or over 10^8 points as shown, or a user unit over 10^6, stops the job). Internally it holds every object's dictionary (`readDictionaries`), which Resize needs too (decision 5).
-- **The stamp tools' wrap** (`stampPages`): a page's `/Contents` becomes `[q, its own streams as they were, Q, draw]`, with the `q` and `Q` streams written once per job; tags, `/StructParents` and shared content stay as they were. Resize uses the same wrap with a different first stream.
-- **The update written in pieces** (`opening`, `entryText`, `PlainSource`, `writeUpdate`, `sizeLimit`, `pdfNumber`, `OutputLimit`, `cappedWrite`): how the stamp tools and Crop write a capped JSON update with qpdf and check the result.
-- **`acceptedValue`** and `optionValues` (`src/widget/option-values.ts`): a choice's accepted values written once, checked by the engine before it reads the file.
+- **`readPages`** (`pages.ts` after the move): each page's object id, own dictionary, content streams and where it is shown, read from capped qpdf JSON, with inherited `/Rotate`, `/MediaBox` and `/CropBox` found up the page tree (depth-limited, loop-safe) and `pageBox` applying PDF.js's rules (a turn that is a multiple of 90 taken modulo 360, else 0; crop ∩ paper; user unit; a page under 1 point or over 10^8 points as shown, or a user unit over 10^6, stops the job). Internally it holds every object's dictionary (`readDictionaries`), which Resize needs too (decision 5).
+- **The stamp tools' wrap**: a page's `/Contents` becomes `[q, its own streams as they were, Q, draw]`; tags, `/StructParents` and shared content stay as they were. Resize uses the same idea, with the depth of `q` worked out per page (decision 3).
+- **The update written in pieces** (`opening`, `entryText` in `qpdf-json.ts`; `PlainSource`, `writePageUpdate`, `sizeLimit`, `pdfNumber` in `pages.ts`; `OutputLimit`, `cappedWrite` in `qpdf.ts`).
+- **Bounded batches of stream data** read by fresh qpdf instances, as Compress PDF reads candidate pictures (`readRawStreams`) and Crop reads boxes (`readValues`), each instance serving a bounded number of calls.
+- **`acceptedValue`** and `optionValues` (`src/widget/option-values.ts`).
 - **`loads`** per engine and the uniform request sets (`add-uniform-requests`).
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Every page A4 or Letter, the same way round as shown, its content scaled by one factor to fit, centred, nothing cut off (the owner's decisions of 24 Nov 2026).
-- Never rewrite a page's own content; change only what places the page on its paper, and move what is stored in page coordinates (annotations, destinations, beads) with it, so links, fields, notes and bookmarks line up.
+- Never rewrite a page's own content; change only what places the page on its paper, and move what is stored in page coordinates (annotations, destinations, beads) with it, using one rounded matrix per page.
+- **What was hidden stays hidden:** content outside a page's old shown box is never drawn on the new page, even when the page's own content restores more than it saves; annotations wholly outside it are marked hidden.
 - A page already the chosen size is left byte for byte as it was; a file where every page is gives no file.
-- qpdf only in the job: no PDF.js, no pdf-lib, no drawing. Memory bounded as for the stamp tools (at most two full copies alive at once besides the worker's input copy).
-- No dependency, no new shared component, no change to how any other tool reads or writes.
+- qpdf only in the job: no PDF.js, no pdf-lib, no drawing. Memory bounded: the objects read are let go before the writing qpdf is made; peak no higher than Add page numbers' on the 100 MB file.
+- No dependency, no new shared component.
 
 **Non-Goals:**
-- Other paper sizes, a margin, one orientation for every page, choosing pages, scaling a form field's typed-text size, a preview, next steps after the result.
+- Other paper sizes, a margin, one orientation for every page, choosing pages, scaling a form field's typed-text size, a preview, next steps after the result, fixing the stamp tools' own exposure to a stray `Q` (left for later, decision 3).
 
 ## Decisions
 
@@ -31,90 +37,121 @@ See `proposal.md` for why Resize pages is next and what the owner decided on 24 
 
 The alternatives the owner was shown, and why they are not built:
 
-- **Change the paper only** (content kept at its size, centred on the new paper): a Letter page on A4 loses about 8 points off each side, a small page sits in a sea of white. Rejected by the owner for "scale to fit".
-- **Fill the paper and cut what overflows:** cuts content off; rejected by the owner ("nothing cut off").
-- **More sizes** (A3, A5, Legal, the page's own): the owner chose A4 and Letter only, matching the catalogue row.
-- **One orientation for every page:** the owner chose each page's own, so a landscape slide stays landscape.
+- **Change the paper only** (content kept at its size, centred): a Letter page on A4 loses about 8 points off each side, a small page sits in a sea of white. Rejected by the owner for "scale to fit".
+- **Fill the paper and cut what overflows:** cuts content off; rejected ("nothing cut off").
+- **More sizes** (A3, A5, Legal, the page's own): the owner chose A4 and Letter only.
+- **One orientation for every page:** the owner chose each page's own.
 
-**Square pages** (shown width equal to height within 1 point) become upright paper: the plainer choice, a default the owner may overturn.
+**Square pages** (shown width within 1 point of the height, decision 2.2) become upright paper: the plainer choice, a default the owner may overturn.
 
-### 2. How a page is scaled without rewriting it
+### 2. The page's placement and its one rounded matrix
 
-For a page with shown box `B = [x0, y0, x1, y1]` (default user space, the crop box within the paper box as `pageBox` reads it), turn `t` and user unit `u`, and the chosen paper `P` (A4 `595.276 × 841.89` points, 210 × 297 mm to within 0.01 mm; Letter `612 × 792`):
+For a page with shown box `B = [x0, y0, x1, y1]` (default user space, crop ∩ paper as `pageBox` reads it), turn `t` (`pageBox`'s: `/Rotate -90` is 270, `/Rotate 45` is 0, as PDF.js reads them) and user unit `u`, and the chosen paper `P` (A4 `595.276 × 841.89` points, 210 × 297 mm to within 0.01 mm; Letter `612 × 792`):
 
 1. The page's shown size in points: `w = (x1 − x0)·u`, `h = (y1 − y0)·u`, swapped when `t` is 90 or 270.
-2. The paper the same way round as shown: on its side when `w > h + 1`, otherwise upright. Call it `(TW, TH)`.
-3. **Already that size:** when `|w − TW| ≤ 1` and `|h − TH| ≤ 1`, the page is left exactly as it is (decision 6). This catches the many A4 files written as `595 × 842` and Chromium's `594.96` wide A4 (`multilingual.pdf`).
+2. The paper the same way round as shown: on its side when `w > h + 1`, otherwise upright. So `w = h + 1` is upright and `w = h + 1.01` is on its side. Call it `(TW, TH)`.
+3. **Already that size:** when `u` is exactly 1, `|w − TW| ≤ 1` and `|h − TH| ≤ 1`, the page is left exactly as it is (decision 6). So 1.0 point off is left and 1.01 points off is resized; an A4 page stored on its side with `/Rotate 90` is shown upright A4 and is left with A4 chosen. A page with any other user unit is always resized, since readers that ignore the unit show it at another size.
 4. The new paper box, unturned: `(MW, MH) = (TW, TH)`, swapped when `t` is 90 or 270, so that with the same `/Rotate` the page shows `(TW, TH)`.
-5. The factor: `f = min(MW / ((x1 − x0)·u), MH / ((y1 − y0)·u))`, the largest at which the whole shown page fits. The matrix scale in user units is `k = f·u`. Centred: `tx = (MW − k·(x1 − x0)) / 2 − k·x0`, `ty = (MH − k·(y1 − y0)) / 2 − k·y0`. The matrix `M = [k 0 0 k tx ty]` is a scale and a move only, never a turn, because `/Rotate` is kept.
-6. **Checked before it is used (security):** `k`, `tx`, `ty` finite, `k > 0`, `|tx|`, `|ty|` under 10^9 so `pdfNumber` writes them in fixed form. `pageBox` already stops the job on a crafted page out of range (as for Crop and the stamp tools, deliberately); anything else failing the check stops the job with a fixed sentence, since every page must be resized.
+5. **The factor, rounded first.** The exact scale in user units is `k* = min(MW / (x1 − x0), MH / (y1 − y0))` (the shown fit factor times `u`). It is written as `k = fixed(k*)`: fixed form, never an exponent, at most 10 significant digits and at most 20 decimals. `k` is the number used everywhere after this.
+6. **Centring from the rounded `k`:** `tx = round6((MW − k·(x1 − x0)) / 2 − k·x0)`, `ty = round6((MH − k·(y1 − y0)) / 2 − k·y0)`, with `round6` as `pdfNumber` writes (6 decimals). The page's one matrix is `M = [k 0 0 k tx ty]`, exactly the numbers written. It is a scale and a move only, never a turn, because `/Rotate` is kept. The same `M` moves content, annotations, destinations and beads, so they cannot disagree by rounding.
+7. **Checked before it is used (security):** the job stops with the fixed sentence "A page could not be resized safely, so the file was not changed." when the written `k` is 0, or differs from `k*` by more than 1e-4 of `k*`, or `|tx|` or `|ty|` is 10^9 or more, or any of `x0, y0, x1 − x0, y1 − y0` written into the clip is 10^9 or more in size (only crafted pages: a `/UserUnit 0.001` page with a box of 10^10 units reaches it). `pageBox` already stops the job on a page out of its range. Every page must be resized, so a failed check never leaves one page as it was.
 
-Examples: a Letter page on A4: `f = 0.9727`, content 595.28 by 770.36 points, 35.77 points of white at top and bottom. An A4 page on Letter: `f = 0.9407`, 26.0 points at each side. An A5 page turned a quarter (`mixed.pdf` page 3) on A4: shown on its side, enlarged by `√2`, filling A4 on its side.
+Examples: a Letter page on A4: `k = 0.9726732026`, content 595.28 by 770.36 points, 35.77 points of white at top and bottom. An A4 page on Letter: `k = 0.9407404768`, 26.0 points at each side. An A5 page turned a quarter (`mixed.pdf` page 3) on A4: shown on its side, enlarged by `√2`.
 
-**What is written on the page:**
+**What is written on the page** (one wrap per page object, decision 4):
 
-- `/Contents`: `[prefix, its own content streams as they were, restore]`. `prefix` holds `q k 0 0 k tx ty cm x0 y0 (x1−x0) (y1−y0) re W n` with every number through `pdfNumber`; `restore` holds `\nQ\n` and is one stream for the whole job, as the stamp tools' `Q`. Prefixes with the same text share one stream, so a file of 120,000 Letter pages gets one prefix. The clip keeps hidden what the old crop box hid (Crop PDF's cut-off margins among them); without it, content outside the old shown box would appear in the new white space.
-- `/MediaBox [0 0 MW MH]` and `/CropBox [0 0 MW MH]`, direct arrays on the page. Both are inheritable, so both are written: removing `/CropBox` would let the page inherit one from the page tree.
-- **Removed:** `/UserUnit` (the matrix includes it; with no user unit, readers that ignore it, which are many, show the right size); `/BleedBox`, `/TrimBox`, `/ArtBox` (not inheritable, so only a page's own; the new paper is the finished size; scaling them instead is a default the owner may overturn); `/Thumb` (a thumbnail of the old layout, which Adobe Reader would show in its page panel); `/VP` (viewports whose measuring scale would be wrong after scaling).
-- **Kept as they were:** `/Rotate` (own or inherited), `/Resources`, `/Annots` (the array; its annotations change, decision 3), `/StructParents`, `/Group`, `/Tabs`, `/AA` and every other key.
+- `/Contents`: `[prefix, its own content streams as they were, restore]`. `prefix` is `q\nk 0 0 k tx ty cm\nx0 y0 (x1−x0) (y1−y0) re W n\n` followed by `n` more `q\n`, and `restore` is `\n` followed by `n + 1` lines `Q\n`, where `n` is how far the page's own content falls below its starting depth (decision 3). The prefix ends with a newline, so an own stream starting with no whitespace still begins a new token. Prefixes and restores with the same text share one stream each, so a file of 120,000 balanced Letter pages gets one prefix and one restore. Numbers in the clip are rounded outward to 3 decimals (lower left down, size up), so nothing shown before is clipped.
+- `/MediaBox [0 0 MW MH]` and `/CropBox [0 0 MW MH]`, direct arrays on the page. Both are inheritable, so both are written; the page tree's values are not changed, so a page left as it is still inherits them.
+- **Removed:** `/UserUnit` (the matrix includes it; readers that ignore it, which are many, show the right size); `/BleedBox`, `/TrimBox`, `/ArtBox` (not inheritable, so only a page's own; the new paper is the finished size; Crop cuts these back, Resize removes them, a default the owner may overturn); `/Thumb` (a thumbnail of the old layout); `/VP` (viewports whose measuring scale would be wrong).
+- **Kept as they were:** `/Rotate` (own or inherited, as stored, `-90` and `45` included), `/Resources`, `/StructParents`, `/Group`, `/Tabs`, `/AA` and every other key. `/Annots` is kept, its annotations changed (decision 4).
 
 **Alternatives rejected:**
 
-- **Turn the page's content into a form XObject** and draw it scaled: copies every page's content into a new stream and moves marked content into a form, so the structure tree's marked-content references (which name the page) no longer reach their text, breaking tags, which the owner decided are kept whole (13 Nov 2026).
-- **Draw each page into a new document with pdf-lib** (`embedPage`): copies content, loses annotations, tags, bookmarks and form fields, and loads pdf-lib.
-- **Set `/UserUnit`** to scale: changes the paper size only in readers that honour it, and printing would disagree with the screen.
-- **Write `/Rotate 0` and turn the content** (flattening the turn): changes more than needed; keeping `/Rotate` keeps the matrix a pure scale, which makes moving annotations exact.
+- **Turn the page's content into a form XObject:** a form keeps its own graphics state, so a stray `Q` inside it could not undo the scale, but it copies every page's content and moves marked content into a form, so the structure tree's marked-content references no longer reach their text, breaking the tags the owner decided are kept whole (13 Nov 2026).
+- **Draw each page into a new document with pdf-lib** (`embedPage`): copies content, loses annotations, tags, bookmarks and fields, and loads pdf-lib.
+- **Set `/UserUnit`** to scale: changes the size only in readers that honour it.
+- **Write `/Rotate 0` and turn the content:** changes more than needed and would turn the matrix.
+- **Round with `pdfNumber`'s 6 decimals only:** on a crafted page with a tiny `k` it loses most of the factor; computing `tx, ty` before rounding lets the content and the annotations disagree.
 
-### 3. Annotations move and scale with the page
+### 3. A stray `Q` cannot undo the clip
 
-Annotations are stored in the page's default user space, outside the content streams, so the wrap does not move them. For each annotation listed in a resized page's `/Annots` (resolved through the objects read, decision 5):
+A content stream that restores more than it saves (`Q` with no matching `q`) would pop the prefix's `q`, so the rest of the page would draw at the old size and **outside the clip**, showing content the old crop box hid. Readers pop a `Q` while anything is saved. So the depth is measured per page and the prefix saves that much more.
 
-- `/Rect` → `M·Rect`, normalised. A reader draws an annotation's appearance stream by fitting its bounding box, through its `/Matrix`, into `/Rect` (ISO 32000-2, 12.5.5), so scaling `/Rect` scales the drawn look exactly, borders and text included.
-- The other places an annotation stores, when present and well formed (an even number of finite numbers): `/QuadPoints` (links, highlights), `/InkList` (each list), `/Vertices`, `/L`, `/CL` go through `M`; `/RD` (four distances) is multiplied by `k`. A key that is not well formed is left as it was.
-- `/Popup` annotations are annotations of the same page and are moved the same way. Annotations with the no-zoom flag keep their icon size by the reader's own rule; their place moves.
-- Results are checked as in decision 2.6; a non-finite result leaves that key as it was.
-- **Shared annotations:** one annotation object listed on more than one page (crafted, or a broken file) is changed once, with the matrix of the first resized page that lists it; listed only on pages left as they are, it is not changed. Direct annotation dictionaries inside `/Annots` are rewritten inside the page's array; an indirect `/Annots` array shared by pages is written once.
+**The tokenizer** (in `resize-pdf.ts`, a plain function, iterative, no regular expressions over the whole stream): it reads a decoded content stream as PDF tokens: whitespace and delimiters, `%` comments to the end of the line, literal strings `( … )` with nesting and backslash escapes, hex strings `< … >`, dictionaries `<< … >>`, arrays, names, numbers, and operators. An operator token exactly `q` adds one to the depth, exactly `Q` takes one away. Inline images: after `BI`, its dictionary up to `ID`, one whitespace byte, then the data up to the first `EI` with whitespace (or a delimiter) before it and whitespace, a delimiter or the stream's end after it, as qpdf and PDF.js read them; with a stated `/L` or `/Length` (PDF 2.0), that many bytes are skipped first. For each stream it gives `(net, lowest)`: the depth at its end and the lowest depth reached, both from 0 at its start.
 
-**What cannot follow exactly, said under Risks and in the questions:** when a reader draws a form field afresh (the file asks it to, or the visitor types into it), it uses the font size in the field's `/DA`, which is in points and not scaled, so typed text on a page made much smaller can look large for its box; border widths in `/BS` and `/Border` are used only when a reader draws an annotation with no appearance stream. These are left as they were: rewriting `/DA` text, which a field shares across pages that may have different factors, is more than this change should do.
+**Per page:** the own streams are joined in order (a page's streams are one content stream by the standard), so the page's lowest depth is the lowest running sum; `n = max(0, −lowest)`. Results are kept per stream id, so a stream shared by many pages is read once.
 
-### 4. Destinations and threads follow
+**When the tokenizer cannot tell, or past a bound, the job stops** with "A page could not be resized safely, so the file was not changed.": an unterminated literal or hex string or dictionary at a stream's end, an inline image with no ending `EI`, `n` over 256, a stream qpdf cannot decode (an unknown filter, a broken one), a decoded stream over the batch cap, or the decoded data budget for the job used up. Stopping is chosen over leaving a page as it was because every page must be resized, and over guessing because guessing could show hidden content.
 
-A destination names a page and, for most kinds, a place on it in that page's default user space. For every object read (values only; stream dictionaries hold none of these), the engine walks its value, without recursion and at most 32 levels deep, and for every array `[page, kind, …]` whose first item is a resized page's id and whose kind and length match one of `/XYZ left top zoom`, `/FitH top`, `/FitBH top`, `/FitV left`, `/FitBV left`, `/FitR left bottom right top`, `/Fit`, `/FitB`:
+**Fetching the data (cost):** each resized page's own content streams are read decoded by qpdf, in bounded batches like Compress PDF's: ids grouped into calls of `objectsPerCall`, each call `--json=2 --json-key=qpdf --json-stream-data=inline --decode-level=generalized` with `--json-object` per id into an output file capped at 64 MB (`capFile`), each fresh qpdf instance serving at most 50 calls, and every stream let go once tokenized. A decoded-data budget for the job (`2 × plain + 64 MB`) bounds a flate bomb across batches; `compress-flate-bomb.pdf` is in the fixture runs. Pages left as they are, and streams already read, are not fetched. Progress counts pages ("Page N of M") while this runs. Task 3.3 measures the time and peak memory on `pages-500.pdf`, the 100 MB file and the 120,000-page file.
 
-- each coordinate that is a number goes through `M` (`left` and `right` by `x`, `top` and `bottom` by `y`), and `null` stays `null`;
-- `zoom` is kept as it was;
-- an object holding a changed destination is written in the update with the change, together with any annotation change to the same object.
+**The test is the attack:** a page whose content draws text, then has an extra `Q`, then draws `SECRET-hidden` outside the old crop box; after resizing Letter to A4, PDF.js draws nothing in the white bands and `SECRET-hidden` is not drawn (its bytes stay in the file, as Crop's do).
 
-This covers bookmarks (`/Dest`, or a GoTo action's `/D`), link annotations, named destinations in `/Dests` or the `/Names` tree, the catalog's `/OpenAction` and action chains (`/Next`), wherever they sit, because the walk does not depend on where an array is. Destinations into other files name a page number, not an id, and are not touched.
+**Left for later:** the stamp tools (Add page numbers, Watermark, Sign PDF) wrap with one `q … Q`, so a stray `Q` in a page's own content pops theirs and their drawing is placed in whatever state the page left; it shows nothing hidden, as they set no clip, but it can move or style their layer. Not fixed here; named in the pull request and the change's follow-up.
 
-**Beads** (`/B` on a page, the reading threads the owner decided are kept whole, 13 Nov 2026): each bead dictionary in a resized page's `/B` has its `/R` rectangle put through `M`.
+### 4. One working copy per object; what moves with the page
 
-**Not followed, said under Risks:** a structure element's layout `/BBox` attribute (rare; used for reflow), positions inside JavaScript, and an XFA form's own layout.
+Annotations, beads and destinations live outside the content streams, so the wrap does not move them. All changes go into **one map of working copies by object id**. Each object is copied from the objects read the first time any step changes it; every later step reads and changes that copy; each object is written once.
 
-Alternative, leaving destinations as they were: a bookmark would still open the right page but land a little off, or at the wrong zoom for `/FitR`; `SPEC.md` asks that bookmarks stay intact. Rejected.
+**Order:**
+
+1. **Pages**, in page-tree order. A page object listed twice in the page tree has one dictionary: the first listing decides its placement and gets the one wrap; later listings change nothing (as Crop). The page's working copy gets decision 2's keys.
+2. **Annotations** of each resized page, in `/Annots` order, then each one's `/Popup`, all through one visited set for the job: an annotation reached a second time, from another page, from its parent's `/Popup` or from `/Annots` again, is not changed again (the first page that reaches it gives the matrix). An annotation reached only from pages left as they are is not changed. A direct annotation dictionary inside `/Annots` is changed inside the page's working copy. An indirect `/Annots` array is resolved and its direct items changed in that array's working copy, once.
+3. **Beads:** each bead dictionary in a resized page's own `/B` array has its `/R` moved, through the same visited set.
+4. **Destinations**, last: the walk (below) runs over the working copy of every object that has one, and over the read value of every other object, so a link whose `/Rect` was moved by its own page's `M` in step 2 has its `/Dest` moved by its **target** page's `M` in the same copy.
+
+**Annotation keys, well formed by exact counts** (finite numbers only; a key not well formed is left as it was, the rest of the annotation still moved):
+
+- `/Rect`: 4 numbers → its two corners through `M`, normalised.
+- `/QuadPoints`: a multiple of 8 numbers → each point through `M`.
+- `/InkList`: an array of arrays, each of an even count → each point through `M`.
+- `/Vertices`: an even count → each point through `M`.
+- `/L`: 4 numbers → both points through `M`.
+- `/CL`: 4 or 6 numbers → each point through `M`.
+- `/Path` (PDF 2.0): an array of arrays of 2 or 6 numbers → each point through `M`.
+- `/RD`: 4 numbers, none below 0 → each times `k`.
+- `/LL`, `/LLE`, `/LLO` (lines' leader lines): a number → times `k` (`/LLO` kept not below 0).
+- `/Measure`: removed, as `/VP` on the page.
+
+An indirect value for any of these keys is resolved through the objects read; the moved value is written as a direct value on the annotation, and the indirect object is left unchanged, so an array shared with anything else is never moved twice. Every moved number is rounded to 3 decimals in fixed form (never an exponent), as Crop writes boxes; a result of 10^9 or more in size leaves that key as it was.
+
+A reader draws an annotation's appearance stream by fitting its bounding box, through its `/Matrix`, into `/Rect` (ISO 32000-2, 12.5.5), so scaling `/Rect` scales the look exactly. No-zoom notes keep their icon size by the reader's own rule; their place moves.
+
+**Hidden stays hidden for annotations:** after moving, an annotation whose old `/Rect` and the page's old shown box `B` have no area in common (apart, or meeting only at an edge) gets the Hidden bit (2) set in `/F`, its other bits kept (an absent or non-integer `/F` is read as 0). Before resizing a reader showed it nowhere, as the crop box clips annotations; after resizing it would land in the new white space. An annotation that **partly** overlaps `B` is moved and stays visible, the part that lay outside `B` now showing in the white space: said plainly in the spec, the questions and Risks. Owner question 7, default keep.
+
+**Destinations:** for every object, the walk visits its value iteratively with an explicit stack, at most 32 levels deep (deeper parts are not visited, never a stack overflow), and for every array `[page, kind, …]` whose first item is a resized page's id and whose kind and length match one of `/XYZ left top zoom`, `/FitH top`, `/FitBH top`, `/FitV left`, `/FitBV left`, `/FitR left bottom right top`, `/Fit`, `/FitB`: each coordinate that is a number goes through that page's `M` (`left`, `right` by `x`; `top`, `bottom` by `y`), rounded to 3 decimals; `null` stays `null`; `zoom` is kept. This covers bookmarks, link annotations, GoTo actions, named destinations in `/Dests` and the `/Names` tree, the catalog's `/OpenAction` and action chains, wherever they sit. Destinations into other files name a page number, not an id, and are not touched. Stream dictionaries are not walked.
+
+**What cannot follow exactly, said under Risks and in the questions:** when a reader draws a form field afresh (the file asks it to, or the visitor types into it), it uses the font size in `/DA`, which is not scaled, so typed text on a page made much smaller can look large for its box (owner question 6); `/BS` and `/Border` widths, used only for annotations with no appearance stream.
+
+**Not followed** (listed in Risks): a structure element's layout `/BBox` attribute, positions inside JavaScript, an XFA form's own layout, and an indirect `/Annots` array shared by two pages of different shapes beyond the first page that reaches each annotation.
+
+Alternative, leaving destinations as they were: a bookmark would open the right page but land a little off, or at the wrong zoom for `/FitR`; `SPEC.md` asks that bookmarks stay intact. Rejected.
 
 ### 5. Reading every object once (`readPages`, shared)
 
-`readPages(tools, plain, { objects: true })` gives, besides the pages, the map of every object's dictionary it already read (`objects: ReadonlyMap<string, ObjectEntry>`), so annotations, beads and destinations are found without a second qpdf read. Without the option it gives what it gives now, so the stamp tools and Crop are unchanged. The map is let go once the update is appended (decision 7). `opening` and `entryText`, today private to `stamp.ts`, are exported so Resize appends its update in pieces in the same JSON form, with stream entries for the new prefix streams.
+`readPages(tools, plain, { objects: true })` (in `pages.ts`) gives, besides the pages, the map of every object's dictionary it already read (`objects: ReadonlyMap<string, ObjectEntry>`), so annotations, beads and destinations are found without a second qpdf read. Without the option it gives what it gives now, so the stamp tools and Crop are unchanged. This is the one shared piece riding along with Resize (owner question "Shared pieces in tool pull requests").
+
+**Memory:** the engine keeps only the change map, the prefix and restore texts and the stream depth results. The `readPages` result and the objects map are let go (no reference held) before the writing qpdf is made. Task 3.3 records the peak in Node and Chromium during the destination walk and overall, against a ceiling of Add page numbers' peak on the 100 MB file (1.19 GB in Node, 1.36 GB in Chromium), and also on a file made in the test whose dictionary JSON is near `maxDictionaryJson` (64 MB).
 
 ### 6. A page already the chosen size; a file with nothing to change
 
-A page whose shown size is the chosen paper the same way round, within 1 point on each side (decision 2.3), gets no entry in the update: its dictionary, content, annotations and destinations stay exactly as in the plain copy. Resizing it anyway would move its content by under a point and rewrite it for nothing. When no page needs a change, the engine gives `[]` and the page shows the no-new-file words: "Every page is already that size." and "No new file was made. Every page of this file is already the paper size you chose. You can use your file as it is." The words do not name A4 or Letter, because `noSmaller` is one fixed text per tool; "the paper size you chose" covers both without a shared change.
+A page that is already the chosen paper (decision 2.3) gets no entry in the update: its dictionary, content, annotations and destinations stay exactly as in the plain copy. When no page needs a change, the engine gives `[]` and the page shows: heading "Every page is already the paper size you chose." and advice "No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size." The words name no paper, because `noSmaller` is one fixed text per tool.
 
-The tolerance of 1 point cannot confuse A4 and Letter (their sides differ by 16.7 and 49.9 points).
+The 1-point tolerance cannot confuse A4 and Letter (their sides differ by 16.7 and 49.9 points).
 
 ### 7. The engine (`src/engines/tools/resize-pdf.ts`)
 
-`loads = { read: ['qpdf'], job: ['qpdf'] }`; `inspect = inspectPdf`.
+`loads = { read: ['qpdf'], job: ['qpdf'] }`; `inspect = inspectPdf`. Imports from `plain`, `inspect`, `pages`, `qpdf-json`, `qpdf` and `option-values`; none from `stamp`.
 
-1. `acceptedValue('resize-pdf', 'paper', options.paper)`; anything else is refused before the file is read, as Add page numbers refuses an unknown place.
-2. One file only; `plainCopy(tools, file, passwordFrom(options))` into a `PlainSource`; the input is not used again. Progress `{ stage: 'reading', unit: 'file', done: 0, total: 1 }` ("Reading the file").
+1. `acceptedValue('resize-pdf', 'paper', options.paper)`; anything else is refused before the file is read.
+2. One file only; `plainCopy` into a `PlainSource`; the input is not used again. "Reading the file".
 3. `readPages(tools, plain, { objects: true })`.
-4. For each page, decision 2: left as it is, or `M`. If none changes, `[]`.
-5. The changes are worked out page by page (page dictionaries, prefix streams by text, annotations, beads), then the destination walk over every object, merging into one map of changed objects by id. Progress `{ stage: 'working', unit: 'page', done, total, writesAfter: true }` ("Page N of M", filling the bar to 0.8).
-6. A fresh qpdf takes the plain copy from the `PlainSource`, which drops its reference. The update is appended to `/update.json` in pieces (`opening(max)`, the restore and prefix streams as stream entries with new ids above the file's highest, then each changed object), each piece counted against `sizeLimit(plain, pages)`; past it the job stops with `OutputLimit` (the existing `output-limit` failure). The objects map is let go. Then `writeUpdate` (`--update-from-json`, `--object-streams=generate`, capped by `cappedWrite`, then `qpdf --check`), with writing progress from 80 to 100.
+4. Placement per page (decision 2), first listing of each page object only. If none changes, `[]`.
+5. Depths (decision 3): the resized pages' own streams read decoded in bounded batches and tokenized, "Page N of M" (`writesAfter`).
+6. Working copies (decision 4): pages, annotations and popups, beads, then destinations.
+7. The `readPages` result and the objects map are let go. A fresh qpdf takes the plain copy from the `PlainSource`, which drops its reference. The update is appended to `/update.json` in pieces (`opening(max)`, the restore and prefix streams as stream entries with new ids above the file's highest, then each working copy), each piece counted against `sizeLimit(plain, pages)`; past it, `OutputLimit`. Then `writePageUpdate` (`--update-from-json`, `--object-streams=generate`, capped by `cappedWrite`, `qpdf --check`), writing progress from 80 to 100.
 
-Besides the worker's input copy, at most two full copies of the file are alive at once: the plain copy and the reading qpdf's, then the plain copy and the writing qpdf's. Errors are fixed sentences; no page text, bookmark title, field value, name or password goes into one. Only `paper` and `passwords` are read from the options.
+Errors are fixed sentences; no page text, bookmark title, field value, name or password goes into one. Only `paper` and `passwords` are read from the options.
 
 ### 8. The registry entry (words a draft for the owner's review)
 
@@ -138,15 +175,15 @@ Besides the worker's input copy, at most two full copies of the file are alive a
             options: [{ kind: 'choice', key: 'paper', legend: 'Paper size', initial: 'a4',
                         choices: [{ value: 'a4', label: 'A4, 210 by 297 mm' },
                                   { value: 'letter', label: 'Letter, 8.5 by 11 inches' }] }],
-            noSmaller: { heading: 'Every page is already that size.',
-                         advice: 'No new file was made. Every page of this file is already the paper size you chose. You can use your file as it is.' },
+            noSmaller: { heading: 'Every page is already the paper size you chose.',
+                         advice: 'No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size.' },
             resultNotes: [
               'Each page is now the paper size you chose, the same way round as before. What is on it is made smaller or larger to fit, keeping its shape, and centred, so a page of another shape has white space at two edges. Pages that were already that size are left as they are.',
               "Text, links, form fields, notes, bookmarks, attached files and the document's details are kept, and links, fields and notes move with the page. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them." ] } }
 ```
 
-- Placed right after `crop-pdf` and before `images-to-pdf`, which sits at `/image2pdf`'s place, the last row of "Organise pages" (the registry test's catalogue-order check). Home and hub lists follow array order, so Resize is listed eighth, after Crop.
-- Title 58 characters, description 121. `option-values.ts` gains `'resize-pdf': { paper: ['a4', 'letter'] }`; the registry test compares it with the choices.
+- Placed right after `crop-pdf` and before `images-to-pdf` (`/image2pdf`'s place, the last row of "Organise pages"). Home and hub lists follow array order, so Resize is listed eighth.
+- Title 58 characters, description 121. `option-values.ts` gains `'resize-pdf': { paper: ['a4', 'letter'] }`.
 - Crop's `related` already names `resize-pdf`; its comment "Resize pages is linked once it is published" is removed.
 - The registry test's lists of tools allowed `noSmaller` gain `resize-pdf`.
 - **Hub words** ("Organise pages"): description "Combine, split, copy out, remove, reorder, turn, crop and resize the pages of a PDF, in your browser. Files stay on your device and are not uploaded." (149 characters); sentence "Tools that combine, split, reorder, crop and resize the pages of a PDF." Both drafts; `claimsDevice` stays true.
@@ -156,73 +193,81 @@ Besides the worker's input copy, at most two full copies of the file are alive a
 Three steps (choose the file; choose A4 or Letter; press "Resize and download" and download), then questions in plain words:
 
 - Is my file uploaded?
-- What happens to a page of another shape? (it is made to fit and centred, with white space at two edges; nothing is cut off)
+- What happens to a page of another shape? (made to fit and centred, white space at two edges, nothing cut off; if part of the page was hidden before, by cropping for example, it stays hidden and stays in the file, and a note or link that was entirely out of view is hidden too, while one partly out of view now shows whole)
 - Will a small page be made larger? (yes, to fill the paper; a small scan may print less sharp)
 - Which way round will my pages be? (each the same way round as before; a square page upright)
-- Why did I get no new file? (every page was already that size; choose the other size or use the file as it is)
-- Do links, forms and bookmarks still work? (they move with the page; text typed into a form field afterwards may look larger on a page that was made much smaller; signature no longer valid)
-- What if part of a page was hidden before? (it stays hidden, and stays in the file, as Crop PDF's page says)
+- Why did I get no new file? (every page was already that size; start again and pick the other size, or use the file as it is)
+- Do links, forms and bookmarks still work? (they move with the page; text typed into a form field afterwards may look larger on a page made much smaller; signature no longer valid)
+- What is removed? (each resized page's bleed, trim and art boxes, used by print shops; its stored thumbnail; and measuring scales used by some drawing programs)
+- Will this make my file smaller? (no; Compress PDF does that)
 - What happens to a password? Is my original changed?
 
 250 to 500 words, marked as a draft, no banned word, no question restating the title, no claim the tool does not keep (no "exactly as before" for fields).
 
 ### 10. The Privacy page draft
 
-No change. Resize hides nothing new (what an earlier crop hid stays as it was), sends nothing, and the page's existing sentences on workers, passwords and new files cover it. The privacy reviewer confirms at stage 1.
+No change. Resize hides nothing new and shows nothing that was hidden (decisions 3 and 4), sends nothing, and the page's existing sentences on workers, passwords and new files cover it.
 
 ## Effect on page weight and on when WebAssembly is fetched
 
-- **Before a pick:** the generic widget island with this tool's words and one choice; the registry entry adds under 1 KB. Measured with `npm run weigh`; under 100 KB like every tool page (Add page numbers, with one choice of six, is the model).
+- **Before a pick:** the generic widget island with this tool's words and one choice; the registry entry adds under 1 KB. Measured with `npm run weigh`; under 100 KB like every tool page.
 - **At a pick:** the read set (qpdf, the spare qpdf making the WebAssembly request at once) and the draw set (PDF.js and its data) for the thumbnail, as for every PDF tool. WebAssembly is fetched at the pick, never at page load.
-- **At the job:** a fresh worker loads qpdf, the Resize engine and the files it imports (`plain`, `inspect`, `stamp`, `qpdf-json`, `option-values`). No PDF.js, pdf-lib or `fflate`. `check:worker` keeps the engine in its own file; `page-weight.mjs` reads engines from the files, and only the `why` text of `stamp` changes.
+- **At the job:** a fresh worker loads qpdf, the Resize engine and the files it imports (`plain`, `inspect`, `pages`, `qpdf-json`, `option-values`). Not the stamp step's file, PDF.js, pdf-lib or `fflate`. `check:worker` keeps the engine in its own file. `scripts/page-weight.mjs` names Resize in the `why` text of `pages` (the chunk the page-reading move creates), not of `stamp`; `scripts/check-worker.mjs`'s note on the users of page reading names Resize beside the stamp tools and Crop.
 
 ## Threats considered
 
-- **A hostile PDF:** qpdf reads only capped JSON (`maxPagesJson`, `maxDictionaryJson`); object ids are taken only as `N G R`; the update and the output are capped by `sizeLimit` (`OutputLimit`); the result passes `qpdf --check`. No PDF.js drawing in the job.
-- **Crafted page boxes, turns and user units:** `pageBox` stops the job on a page out of range (deliberately, as Crop and the stamp tools). `M` is checked to be finite with bounded numbers (decision 2.6). The clip keeps anything the old crop box hid hidden; the new paper is drawn from the old shown box only.
-- **Crafted annotations and destinations:** only arrays of finite numbers of the right length are changed; anything else is left as it was. The destination walk is iterative, bounded in depth, and linear in the JSON read; it changes only arrays whose first item is the id of a page being resized and whose kind and length match. A shared annotation is changed once.
-- **Unbalanced `Q` in a page's own content:** a content stream that restores more than it saves would undo the prefix part-way, so the rest of that page draws at the old size and unclipped. Only a broken file has one; the stamp tools carry the same exposure the other way round. Under Risks; a page made in the test records what PDF.js shows.
-- **Many pages:** no drawing; the work per page is a few dictionary edits. Task 3.3 measures the 120,000-page file; if it takes more than 15 minutes in Chromium, or memory grows with the page count beyond the update itself, the change is updated before the pull request.
-- **An oversized file:** no fixed limit; the 100 MB notice; at most two full copies alive at once besides the worker's input copy. Task 3.3 records the 100 MB peak against Add page numbers' (1.19 GB in Node, 1.36 GB in Chromium).
+- **A hostile PDF:** qpdf reads only capped JSON (`maxPagesJson`, `maxDictionaryJson`, 64 MB per stream batch, a decoded-data budget for the job); object ids are taken only as `N G R`; the update and the output are capped by `sizeLimit` (`OutputLimit`); the result passes `qpdf --check`. No PDF.js drawing in the job.
+- **Showing what was hidden:** the clip to the old shown box, with `n` extra saves for a page whose content restores too much (decision 3), and the Hidden bit for annotations wholly outside the old box (decision 4). The tokenizer stops the job when it cannot tell. Partly visible annotations show whole: said on the page.
+- **Crafted numbers:** `pageBox` stops the job on a page out of range; `k`, `tx`, `ty` and the clip are checked as written (decision 2.7); moved annotation, bead and destination numbers are finite, under 10^9 in size and written in fixed form, else left.
+- **Crafted annotations and destinations:** exact counts only; one working copy per object, each written once with one matrix; the walk is iterative, bounded in depth and linear in the JSON read.
+- **A flate bomb in a content stream:** qpdf decodes into a capped file; the job's decoded budget stops it.
+- **Many pages:** the work per page is dictionary edits and reading its content once. Task 3.3 measures the 120,000-page file; if it takes more than 15 minutes in Chromium, or memory grows with the page count beyond the change map, the change is updated before the pull request.
+- **An oversized file:** no fixed limit; the 100 MB notice; the objects read let go before writing; the peak held to Add page numbers'.
 - **A hostile file name:** the engine never sees it; the page builds `-resized` names as every tool does.
-- **Text or values leaking:** no page text, bookmark title, field value or password goes into an error, a progress report, a message or the console; the no-upload test watches for marked strings, including a form value and a bookmark title.
+- **Text or values leaking:** no page text, bookmark title, destination name, link address, field value or password goes into an error, a progress report, a message or the console; the no-upload tests watch for marked strings.
 
 No server is involved, so SSRF and macros do not apply.
 
 ## Tests
 
-- **`tests/unit/resize-pdf.test.ts`**, with `globalThis.fetch` replaced by a function that throws and records, asserted never called:
-  - `run` on every file in `tests/fixtures/` with `a4` and with `letter`, each outcome recorded (resized, with how many pages; no page changed; damaged; not a PDF; password needed without one);
-  - for every result: `qpdf --check`; no password or restrictions; each page's own decoded content streams byte for byte as before (`pageStreams`) between the new first and last stream; each resized page's `/MediaBox` and `/CropBox` the paper the right way round, `/Rotate` as before, no `/UserUnit`, `/BleedBox`, `/TrimBox`, `/ArtBox`, `/Thumb` or `/VP`; each page left as it is byte for byte the same dictionary;
-  - drawn by PDF.js (`tests/unit/thumbnail-helpers.ts`'s Node canvas): each resized page of `mixed.pdf` and of pages made in the test with `/Rotate 90` and `270`, an offset and reversed paper box, an inherited crop box smaller than the paper and `/UserUnit 2`, shows upright as before, the paper's size, and the original drawing scaled by `f` and centred (mean difference under a small bound), with nothing in the white bands; content the old crop box hid is not drawn;
-  - `rich.pdf`, `form.pdf`, `tagged.pdf`: bookmarks, link, `note.txt`, fields and values, tags kept; each link's and widget's `/Rect` equals `M` of the old one, and PDF.js's text positions under it moved by `M` too, so a link still covers its words; `/QuadPoints`, `/InkList`, `/Vertices`, `/L`, `/CL` and `/RD` on annotations made in the test moved or scaled; a malformed `/QuadPoints` left as it was;
-  - destinations: `/XYZ`, `/FitH`, `/FitV`, `/FitR`, `/FitBH`, `/FitBV`, `/Fit` in an outline, a link's `/Dest`, a GoTo action, a named destination in `/Dests` and in `/Names`, and `/OpenAction`, each moved by its page's `M` with `null` and zoom kept; a destination to a page left as it is unchanged; a look-alike array to another file's page number unchanged; beads' `/R` moved;
-  - an annotation shared by two resized pages of different shapes changed once; an indirect `/Annots` array shared by two pages written once;
-  - the factor, centring and orientation for Letter→A4, A4→Letter, A5 turned a quarter, a square page, a page 1 point off A4 (left), `multilingual.pdf` on A4 (left: 594.96 points wide) and on Letter (resized), with every script's text as before (`tests/unit/multilingual.test.ts`'s checks);
-  - a file whose every page is A4 gives `[]` with `a4`; `chinese-unembedded.pdf` with `letter` is resized;
-  - an unknown `paper`, or none, refused before the file is read;
-  - a page whose content has an extra `Q`: outcome recorded (Risks);
+Expected numbers in the unit tests are hand-computed literals, or derived through PDF.js viewports of the original and the result (a point's place in shown space after resizing equals `f ×` its place before plus the centring offset), never from the engine's own exports. `globalThis.fetch` is replaced by a function that throws and records, asserted never called.
+
+- **`tests/unit/resize-pdf.test.ts`:**
+  - `run` on every file in `tests/fixtures/` with `a4` and with `letter`, each outcome recorded (resized, with how many pages; no page changed; damaged; not a PDF; password needed; stopped as unsafe);
+  - for every result: `qpdf --check`; no password or restrictions; each page's own decoded content streams byte for byte as before between the new first and last stream (`pageStreams`); boxes, turn and removed keys; pages left as they are byte for byte the same dictionary;
+  - **pages made in the test** with `/Rotate 90`, with `270`, with a paper box offset from `0,0`, and with `/UserUnit 2`, each holding a link with `/QuadPoints`, an ink note and a widget, and destinations to it (`/XYZ`, `/FitH`, `/FitV`, `/FitR`, `/FitBV`): every stored number checked against hand-computed literals or PDF.js viewports; each page drawn by PDF.js (Node canvas) matches the original scaled and centred, with nothing in the white bands;
+  - **hidden stays hidden:** an inherited crop box smaller than the paper, content outside it not drawn after; the attack page (extra `Q`, then `SECRET-hidden` outside the old crop box), Letter to A4, nothing drawn in the bands and `SECRET-hidden` not drawn; nested `q`/`Q` with `Q` inside a literal string, an escaped parenthesis, a hex string, a comment and an inline image whose data holds `Q` and `EI`-like bytes, giving the right `n`; an unterminated string and an inline image with no `EI` stopping the job; `n` over 256 stopping it; a content stream that is a flate bomb stopping it within the budget; an annotation wholly outside the crop box moved with its Hidden bit set and other bits kept, and nothing drawn in the band; one partly overlapping moved and still visible;
+  - **rounding:** `/UserUnit 0.001` with a huge box (stops); coordinates near 10^9 (stops at 10^9, written in fixed form below it); a written `k` with 10 significant digits; content, annotation and destination positions agreeing to 0.001 point;
+  - **one working copy:** a direct annotation in `/Annots` whose `/Dest` points to another resized page; an indirect link on a Letter page whose `/Rect` moves by its page's `M` and whose `/Dest` moves by an A5 target page's `M`; a popup in `/Annots` also named by its parent's `/Popup`, moved once; a page object listed twice in the page tree, wrapped once; an annotation shared by two pages of different shapes, changed once;
+  - **edges:** exactly 1.0 point off A4 (left) and 1.01 off (resized); `w = h + 1` (upright) and `w = h + 1.01` (on its side); an A4 page stored on its side with `/Rotate 90` and A4 chosen (left); `/UserUnit` other than 1 on a page that would otherwise match (resized); an inherited `/MediaBox` shared with a page left as it is (that page still inherits it); an inherited `/Rotate` kept; `/Rotate -90` and `/Rotate 45` kept as stored and placed as PDF.js shows them; a destination nested deeper than 32 levels (left, no stack overflow); an own content stream starting with no whitespace;
+  - annotation keys: each kind moved or scaled; wrong counts left; an indirect `/QuadPoints` resolved, written direct, the shared object unchanged; `/Measure` removed;
+  - destinations: every kind in an outline, a link, a GoTo action, `/Dests`, `/Names` and `/OpenAction`; a destination to a page left as it is unchanged; another file's page number unchanged; beads moved;
+  - `rich.pdf`, `form.pdf`, `tagged.pdf` kept; `multilingual.pdf` on A4 (left) and on Letter (resized, every script kept, `multilingual.test.ts`'s checks); an all-A4 file giving `[]` with `a4`; an unknown or missing `paper` refused before reading;
   - progress order and `writesAfter`; the output cap through a small limit; no error holding page text, a field value or the password.
-- **Engine loads:** `resize-pdf` runs in the `engine-loads` shards against every fixture, asking only for `qpdf` when reading and in the job.
-- **`tests/unit/stamp.test.ts`** (or the existing stamp tests): `readPages` without `objects` gives what it gave; with it, the map holds every object; the stamp tools' and Crop's tests pass unchanged.
-- **`tests/e2e/resize-pdf.spec.ts`** (importing `test` from `tests/e2e/fixtures.ts`), at 360px and 1280px: the page; the row, then "Paper size" with A4 chosen and focused; "Getting ready"; two files dropped; not a PDF; damaged; the password flow; Letter chosen by keyboard and a job on `text.pdf` with "Page N of M", the bar never going back, the two result notes, and the download `text-resized.pdf` checked with qpdf (Letter boxes) and PDF.js (same text); `text.pdf` with A4: "Every page is already that size." with its words, focus on the heading, no Download, "Start again"; the choice kept through Cancel and "Go back to your file"; failures from a stand-in engine (memory, `output-limit`, engine not fetched) under "The pages were not resized."; the 100 MB and 20,000-page notices; keyboard only.
-- **No-upload test** in the same spec, as Crop's: exact allowlist read from the build; a protected file made in the test named `qz7report.pdf` with Letter pages, a link, a bookmark titled `SECRET-bookmark` and a form field filled with `SECRET-field`; secrets: the name, its stem, the password, the file's text, `SECRET-bookmark`, `SECRET-field`; nothing in requests, headers, title, storage, address or console.
-- **Uniform requests:** `/resize-pdf` in `tests/e2e/uniform-requests.spec.ts` with `pdfPicks`, the full `pdfJobs` (A4, so `text.pdf` and `rich.pdf` give no file and are not given an `expect`), `failingJob` (`compress-json-bomb.pdf`), `form.pdf`, `mixed.pdf` with `expect: 'done'` (its Letter and A5 pages change on A4), `multilingual.pdf` with `expect: 'no-file'` (already A4 within a point), and `text.pdf` with `expect: 'no-file'`.
-- **100 ms:** "Resize pages: listing and resizing the 500-page file blocks the page for no more than 100 ms at a time" in `tests/e2e/performance.spec.ts`, with Letter chosen (the file is A4).
+- **Engine loads:** `resize-pdf` in the `engine-loads` shards, asking only for `qpdf` when reading and in the job.
+- **`tests/unit/pages.test.ts`** (made by the page-reading move): `readPages` with and without `objects`.
+- **`tests/e2e/resize-pdf.spec.ts`** (importing `test` from `tests/e2e/fixtures.ts`), at 360px and 1280px: the page; the row, then "Paper size" with A4 chosen and focused; "Getting ready"; two files dropped; not a PDF; damaged; the password flow; Letter chosen by keyboard and a job on `text.pdf` with progress, the bar never going back, the two result notes, and the download `text-resized.pdf` checked with qpdf and PDF.js; `text.pdf` with A4: "Every page is already the paper size you chose." with its words, focus on the heading, no Download, "Start again"; the choice kept through Cancel and "Go back to your file"; failures from a stand-in engine (memory, `output-limit`, engine not fetched, the unsafe sentence) under "The pages were not resized."; the 100 MB and 20,000-page notices; keyboard only.
+- **No-upload tests** in the same spec, as Crop's two:
+  - a protected file made in the test named `qz7report.pdf` with Letter pages, a crop box hiding `SECRET-hidden`, a link to `https://example.invalid/SECRET-uri`, a named destination `SECRET-dest`, a bookmark `SECRET-bookmark` and a field filled with `SECRET-field`; secrets: the name, its stem, the password and its fragments (plain and URL-encoded, as Crop's `withEncoded`), the file's text and every `SECRET-` string;
+  - `rich.pdf`, `tagged.pdf` and `form.pdf` with their `SECRET-` strings, run with Resize and Letter chosen;
+  - nothing in requests, headers, title, storage, address or console; the allowlist exact, read from the build, with no `stamp`, `fflate`, pdf-lib or other engine in the job.
+- **Uniform requests:** `/resize-pdf` in `tests/e2e/uniform-requests.spec.ts` with `pdfPicks`, the full `pdfJobs` (A4), `failingJob` (`compress-json-bomb.pdf`), `form.pdf`, `mixed.pdf` with `expect: 'done'`, `multilingual.pdf` and `text.pdf` with `expect: 'no-file'`, and one row with Letter chosen (`text.pdf`, `expect: 'done'`), adding a per-row choice to the spec's input type if it has none.
+- **100 ms:** "Resize pages: listing and resizing the 500-page file blocks the page for no more than 100 ms at a time" in `tests/e2e/performance.spec.ts`, with Letter chosen.
 
 ## Risks / Trade-offs
 
-- **Form fields drawn afresh use their unscaled font size** (decision 3). On a page made much smaller (A3 to A4: 0.71), text typed later can look large for its box. → Said in the questions; the hand checks type into `form.pdf`'s field after an A4→Letter resize in each reader. Scaling `/DA` is left for later.
-- **An unbalanced `Q` in a page's own content** can undo the scale part-way (Threats). → Only broken files; the unit test records PDF.js's drawing; the readers' hand checks use the fixtures.
-- **An annotation outside the old shown box** (hidden before by the crop box) moves with `M` and may land in the new white space, where a reader shows it. → Rare: Crop PDF keeps every annotation inside its crop box; listed here.
-- **Not followed:** layout `/BBox` attributes in tags, positions inside JavaScript, XFA layout, `/BS` widths for annotations with no appearance. → Listed; no fixture has them.
-- **Precision on crafted pages:** `pdfNumber` writes six decimals, so on a page near 10^8 points the factor is rounded by up to about 1%; the content still sits on the paper, which readers clip to. → Crafted only.
-- **Enlarged pages print less sharp** when they hold small pictures (a receipt on A4). → The owner chose shrunk or enlarged; the questions say so.
-- **The no-new-file outcome is known only after the main button,** and its result offers only "Start again", so trying the other size means choosing the file again. → Left for later, as for Remove a password.
+- **Form fields drawn afresh use their unscaled font size.** On a page made much smaller (A3 to A4: 0.71), text typed later can look large for its box. → In the questions; owner question 6; hand checks type into `form.pdf` after resizing.
+- **An annotation partly outside the old shown box shows whole** after resizing, the outside part in the new white space. → Said on the page; wholly outside ones are hidden (owner question 7).
+- **The tokenizer stops genuine but broken files** (an unterminated string, an inline image with no `EI`) instead of resizing them. → A fixed sentence; such files are rare and readers draw them unpredictably anyway; recorded in the fixture runs.
+- **Reading every resized page's content costs time** on the largest files. → Measured in task 3.3, with the response in Threats.
+- **Not followed:** layout `/BBox` attributes in tags, positions inside JavaScript, XFA layout, `/BS` and `/Border` widths. → Listed; no fixture has them.
+- **Precision:** `k` is written with up to 10 significant digits in fixed form, so its relative error is under 10^-9 except on crafted pages, which the 1e-4 check stops; offsets and moved numbers to 6 and 3 decimals, under 0.001 point.
+- **Enlarged pages print less sharp** when they hold small pictures. → The owner chose shrunk or enlarged; the questions say so.
+- **The no-new-file outcome is known only after the main button,** and its result offers only "Start again". → Its words say how to pick the other size; "Go back to your file" there is left for later.
+- **The stamp tools' exposure to a stray `Q`** (decision 3). → Left for later, named.
 - **Signatures and earlier saved versions** are lost, as for every page tool. → Said on the page.
-- **`readPages` lives in `stamp.ts`,** and Resize fetches the stamp step's file at job time, as Crop does. → Moving page reading out of `stamp.ts` "before a third caller" was left for later from Crop; Resize is that third caller, so the pull request names it and the program manager decides at stage 1 whether to move it in its own change first or carry it again. Default: carry it, with no behaviour change.
 - **"Page 1 of 120000" has no thousands separator.** → Known since Crop; not fixed here.
 
 ## Migration Plan
 
-None. A new page and registry entry; no existing page, address or stored data changes. Rolling back is removing the entry, its `option-values` line and the files.
+None. A new page and registry entry; no existing page, address or stored data changes. Rolling back is removing the entry, its `option-values` line and the files. The page-reading move is its own pull request and is not rolled back with this one.

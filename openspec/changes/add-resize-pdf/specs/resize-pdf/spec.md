@@ -95,7 +95,7 @@ When the file cannot be read the page SHALL say it is damaged and cannot be read
 
 ### Requirement: How each page is fitted
 
-Each page, as a reader shows it, SHALL become the chosen paper the same way round (on its side when wider than tall), its content scaled by the largest one factor at which all of it fits and centred, so nothing is cut off. What the old shown box hid SHALL stay hidden. A page already the chosen size the same way round, within 1 point each side, SHALL be left exactly as it was. (CLAUDE.md: Owner decisions, "Resize pages scales to fit, A4 or Letter only (24 Nov 2026)"; SPEC.md: Definition of done)
+Each page, as a reader shows it, SHALL become the chosen paper the same way round (on its side when over 1 point wider than tall), its content scaled by the largest one factor at which all of it fits and centred, so nothing is cut off. A page already the chosen size the same way round, within 1 point each side and with no user unit, SHALL be left exactly as it was. (CLAUDE.md: Owner decisions, "Resize pages scales to fit, A4 or Letter only (24 Nov 2026)"; SPEC.md: Definition of done)
 
 #### Scenario: Letter to A4
 
@@ -127,11 +127,6 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 - **WHEN** a page with `/UserUnit 2` and a paper box of 306 by 396 units (Letter as shown) is resized to A4
 - **THEN** the page is A4 in points with no user unit, and drawn by PDF.js it matches the original scaled and centred
 
-#### Scenario: A page that hid part of itself
-
-- **WHEN** a page whose crop box, inherited from the page tree, is smaller than its paper box is resized
-- **THEN** only what the old crop box showed is drawn on the new page, scaled and centred, and what it hid is not drawn
-
 #### Scenario: Pages already the chosen size
 
 - **WHEN** `mixed.pdf` is resized to A4
@@ -142,9 +137,58 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 - **WHEN** `multilingual.pdf`, whose pages are 594.96 points wide, is resized to A4
 - **THEN** every page is left as it was
 
+#### Scenario: The edges of the rules
+
+- **WHEN** pages exactly 1 point and 1.01 points wider than A4, a page whose width is its height plus 1 point and one plus 1.01 points, an A4 page stored on its side with `/Rotate 90`, and an A4-sized page with `/UserUnit 1.0001` are resized to A4
+- **THEN** the page 1 point off is left and the one 1.01 off is resized; the first square-ish page is upright and the second on its side; the A4 page with `/Rotate 90` is left; the page with a user unit is resized
+
+#### Scenario: A turn that is kept as stored
+
+- **WHEN** pages stored with `/Rotate -90`, with `/Rotate 45`, and with a `/Rotate 90` inherited from the page tree are resized
+- **THEN** each keeps its stored turn as it was, and is placed as PDF.js shows it (`-90` as a quarter turn left, `45` as no turn)
+
+#### Scenario: A rounding that cannot be written safely
+
+- **WHEN** a crafted page with `/UserUnit 0.001` and a box of 10^10 units is resized
+- **THEN** the job stops with "A page could not be resized safely, so the file was not changed." and writes nothing
+
+### Requirement: What was hidden stays hidden
+
+On a resized page, nothing outside its old shown box SHALL be drawn, even when its own content restores more drawing states than it saves; where that cannot be counted safely the job SHALL stop with a fixed sentence. An annotation with no area in common with the old shown box SHALL be moved and marked hidden, keeping its other flags; one that partly overlaps SHALL be moved and stay visible, as the page SHALL say. (SPEC.md: What we are building, rule 4; Privacy, limits and security)
+
+#### Scenario: A page that hid part of itself
+
+- **WHEN** a page whose crop box, inherited from the page tree, is smaller than its paper box is resized
+- **THEN** only what the old crop box showed is drawn on the new page, scaled and centred, and what it hid is not drawn
+
+#### Scenario: A stray restore before hidden text
+
+- **WHEN** a page whose content draws text, then restores once more than it saved, then draws `SECRET-hidden` outside its crop box, is resized from Letter to A4
+- **THEN** PDF.js draws nothing in the white bands and does not draw `SECRET-hidden`
+
+#### Scenario: Content the counting must read past
+
+- **WHEN** a page's content holds `Q` inside a literal string, an escaped parenthesis, a hex string, a comment and an inline image whose data holds `Q` and `EI`-like bytes
+- **THEN** none of them is counted as a restore, and the page is resized with the right number of extra saves
+
+#### Scenario: Content that cannot be counted
+
+- **WHEN** a page's content ends inside a literal string, or holds an inline image with no end, or restores more than 256 times beyond what it saved
+- **THEN** the job stops with "A page could not be resized safely, so the file was not changed." and writes nothing
+
+#### Scenario: A note outside the old crop box
+
+- **WHEN** a page whose crop box keeps a note out of view is resized from Letter to A4
+- **THEN** the note is moved, its Hidden flag is set and its other flags kept, and nothing is drawn in the white bands
+
+#### Scenario: A link partly outside the old crop box
+
+- **WHEN** a link reaches half outside a page's crop box and the page is resized
+- **THEN** the link is moved and stays visible, the half that was outside now in the white space
+
 ### Requirement: What moves with the page
 
-On a resized page, what the file stores in page coordinates outside the content SHALL move and scale with it: annotations' rectangles and other stored places, every destination pointing to the page, and reading-thread beads. A malformed value SHALL be left as it was. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change: links, bookmarks, form fields and text stay intact")
+On a resized page, what the file stores in page coordinates outside the content SHALL move and scale with it, by the same rounded matrix as the content: annotations' rectangles and other stored places, every destination pointing to the page, and reading-thread beads. Each object SHALL be changed once. A malformed value SHALL be left as it was. (SPEC.md: Definition of done, "Leaves alone what it was not asked to change: links, bookmarks, form fields and text stay intact")
 
 #### Scenario: Links and fields line up
 
@@ -163,8 +207,23 @@ On a resized page, what the file stores in page coordinates outside the content 
 
 #### Scenario: A malformed annotation
 
-- **WHEN** a link's `/QuadPoints` holds an odd number of values
+- **WHEN** a link's `/QuadPoints` holds a number of values that is not a multiple of 8
 - **THEN** its `/QuadPoints` is left as it was and its rectangle is still moved
+
+#### Scenario: A link and its destination on pages of different shapes
+
+- **WHEN** a link on a Letter page points to an `/XYZ` place on an A5 page, and the file is resized to A4
+- **THEN** the link's rectangle moves by the Letter page's change and its destination by the A5 page's, both in the one written link
+
+#### Scenario: Objects reached twice
+
+- **WHEN** a popup is listed in a page's `/Annots` and named by its parent's `/Popup`, and a page object is listed twice in the page tree
+- **THEN** the popup is moved once, and the page is wrapped once, by its first listing
+
+#### Scenario: A destination nested too deep
+
+- **WHEN** a destination sits more than 32 levels deep inside an object
+- **THEN** it is left as it was, and the job finishes
 
 ### Requirement: What the new file changes and keeps
 
@@ -178,7 +237,12 @@ Pressing "Resize and download" SHALL write one PDF in which each resized page ke
 #### Scenario: Page keys
 
 - **WHEN** a page with `/Rotate 90`, `/UserUnit 2`, its own bleed, trim and art boxes, a `/Thumb` and a `/VP` is resized
-- **THEN** its `/MediaBox` and `/CropBox` are the new paper as direct arrays on the page, its `/Rotate` is 90 as before, and it has no `/UserUnit`, `/BleedBox`, `/TrimBox`, `/ArtBox`, `/Thumb` or `/VP`
+- **THEN** its `/MediaBox` and `/CropBox` are the new paper as direct arrays on the page, its `/Rotate` is 90 as before, it has no `/UserUnit`, `/BleedBox`, `/TrimBox`, `/ArtBox`, `/Thumb` or `/VP`, and its annotations have no `/Measure`
+
+#### Scenario: Inherited boxes
+
+- **WHEN** a resized page and a page left as it is share a `/MediaBox` inherited from the page tree
+- **THEN** the page tree's value is unchanged, and the page left as it is still inherits it
 
 #### Scenario: Everything else stays
 
@@ -207,12 +271,12 @@ Pressing "Resize and download" SHALL write one PDF in which each resized page ke
 
 ### Requirement: A file where no page changes
 
-When every page is already the chosen size, the job SHALL end with no new file, and the page SHALL say "Every page is already that size." and "No new file was made. Every page of this file is already the paper size you chose. You can use your file as it is.", with "Start again" and no Download. It MUST NOT be called damaged or a failure. (SPEC.md: What we are building, rule 4; Definition of done)
+When every page is already the chosen size, the job SHALL end with no new file, and the page SHALL say "Every page is already the paper size you chose." and "No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size.", with "Start again" and no Download. It MUST NOT be called damaged or a failure. (SPEC.md: What we are building, rule 4; Definition of done)
 
 #### Scenario: An A4 file and A4 chosen
 
 - **WHEN** `text.pdf`, whose pages are all A4, is resized to A4
-- **THEN** the page shows "Every page is already that size." and its words, focus moves to the heading, nothing downloads, and "Start again" empties the page
+- **THEN** the page shows "Every page is already the paper size you chose." and its words, focus moves to the heading, nothing downloads, and "Start again" empties the page
 
 ### Requirement: Progress and cancel
 
@@ -282,16 +346,21 @@ From the moment a file is picked until the result is downloaded, no request SHAL
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test picks a protected file named `qz7report.pdf`, types its password, chooses Letter, resizes it and downloads the result, while watching every request from the page and its workers
-- **THEN** after the pick only an exact list of the site's own files is requested, including the Resize engine and with no `fflate`, pdf-lib or other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password, the file's text, the bookmark title `SECRET-bookmark` or the form value `SECRET-field`; and storage, the title, the address and the console hold none of them
+- **THEN** after the pick only an exact list of the site's own files is requested, including the Resize engine and with no `fflate`, pdf-lib or other tool's engine; no request has a body or another origin; none carries `qz7report.pdf`, `qz7report`, the password or its fragments (plain or URL-encoded), the file's text, text drawn where a crop box hides it, the link address, the named destination, the bookmark title or the form value (each a `SECRET-` string); and storage, the title, the address and the console hold none of them
+
+#### Scenario: Files with everything
+
+- **WHEN** the end-to-end test resizes `rich.pdf`, `tagged.pdf` and `form.pdf` to Letter and downloads each result, watching every request
+- **THEN** none of their `SECRET-` strings reaches a request, header, the title, storage, the address or the console
 
 #### Scenario: The same files for any file
 
-- **WHEN** the uniform-requests test, on `/resize-pdf`, picks a damaged file, a protected file, a file that is not a PDF and `scanned.pdf`, and runs jobs on `text.pdf`, `rich.pdf`, the protected file with its password, `form.pdf`, `compress-json-bomb.pdf` (whose job fails at the page-reading cap), `mixed.pdf` (which must finish with a file) and `multilingual.pdf` and `text.pdf` (which must finish with no new file)
+- **WHEN** the uniform-requests test, on `/resize-pdf`, picks a damaged file, a protected file, a file that is not a PDF and `scanned.pdf`, and runs jobs on `text.pdf`, `rich.pdf`, the protected file with its password, `form.pdf`, `compress-json-bomb.pdf` (whose job fails at the page-reading cap), `mixed.pdf` (which must finish with a file), `multilingual.pdf` and `text.pdf` (which must finish with no new file), and `text.pdf` with Letter chosen (which must finish with a file)
 - **THEN** the site's files requested after each pick are the same, and those of every job are the tool's job set, however the job ends
 
 ### Requirement: The words on the page
 
-The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/tools/resize-pdf.md`, marked as a draft until the owner reviews them, with nothing from "Banned patterns". The questions SHALL cover uploading, pages of another shape, small pages made larger, which way round, why no new file was made, links, forms and bookmarks, what an earlier crop hid, passwords and the original file. (SPEC.md: Tool page anatomy, 7; How the words should read; SEO)
+The page SHALL carry three or four how-to steps and real questions, 250 to 500 words, in `src/content/tools/resize-pdf.md`, marked as a draft until the owner reviews them, with nothing from "Banned patterns". The questions SHALL cover uploading, pages of another shape, small pages made larger, which way round, no new file, links, forms and bookmarks, what is removed, file size, passwords and the original file. (SPEC.md: Tool page anatomy, 7; How the words should read; SEO)
 
 #### Scenario: The text is in the served page
 
@@ -302,3 +371,8 @@ The page SHALL carry three or four how-to steps and real questions, 250 to 500 w
 
 - **WHEN** the questions are read
 - **THEN** one says that links, fields and notes move with the page, and that text typed into a form field afterwards may look larger for its box on a page that was made much smaller
+
+#### Scenario: Honest about what was hidden and what is removed
+
+- **WHEN** the questions are read
+- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a note or link wholly out of view is hidden while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
