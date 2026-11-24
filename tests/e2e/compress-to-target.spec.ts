@@ -25,7 +25,7 @@ const fixture = (name: string) => join(here, '../fixtures', name);
 const tool = tools.find((each) => each.id === 'compress-to-target')!;
 const noSmaller = 'This file could not be made smaller.';
 const noSmallerAdvice = tool.widget!.noSmaller!.advice;
-const overAdvice = tool.widget!.sizeTarget!.overAdvice;
+const overAdvice = tool.widget!.sizeTarget!.overAdvice.replaceAll('{target}', '100 KB');
 const failed = 'The compression did not finish.';
 const engineFile = /\/_astro\/compress-to-target-[A-Za-z0-9_-]{8}\.js$/;
 

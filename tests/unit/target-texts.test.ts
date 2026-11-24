@@ -87,7 +87,7 @@ describe('the text below each target page', () => {
   it('says the file is not uploaded, a password is kept, and a signature stops being valid', () => {
     for (const text of texts) {
       const lower = text.body.toLowerCase();
-      expect(lower, text.slug).toMatch(/not uploaded|never sent|not sent anywhere|leaves it|is not uploaded|leave my|no\. (all|the|your|it|however)/);
+      expect(lower, text.slug).toMatch(/not uploaded|nothing is uploaded|never sent|not sent anywhere|is not uploaded|leave my|no\. (all|the|your|it|however)/);
       expect(lower, text.slug).toMatch(/password/);
       expect(lower, text.slug).toMatch(/signature/);
     }

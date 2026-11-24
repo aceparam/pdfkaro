@@ -564,7 +564,7 @@ describe('Compress to a target size', () => {
       resultWas: true,
       sizeTarget: {
         overAdvice:
-          'Pictures this tool can change were made as small as they can go while staying readable. Some kinds of picture are left as they are; the questions below say which. To get under the limit, remove pages you do not need, or split the file and send it in parts.',
+          'To get under {target}, remove pages you do not need, or split the file and send it in parts.',
       },
       noSmaller: {
         heading: 'This file could not be made smaller.',
@@ -574,7 +574,7 @@ describe('Compress to a target size', () => {
     });
     expect(tool.widget!.options).toBeUndefined();
     expect(tool.widget!.resultNotes).toEqual([
-      'Pictures were made smaller, so they can look less sharp up close. Text, drawings and fonts keep their quality.',
+      'Pictures that were made smaller can look less sharp up close. Text, drawings and fonts keep their quality.',
       'Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
       'If the file had a password or restrictions, it still has them.',
     ]);

@@ -6,13 +6,13 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 1. Pick the PDF that is too large for the form or portal. Dropping it on this page, or pasting it, works as well.
 2. Press “Compress to 100 KB and download”. Nothing needs setting first.
-3. Read the heading above the result. It tells you whether the new file is at most 100 KB, then press Download.
+3. Read the heading above the result. It says whether the new file is 100 KB or smaller. Then press Download.
 
 ## Questions
 
 ### Can every PDF be made 100 KB or smaller?
 
-No. 100 KB is a tight limit: a page or two of text fits easily, and so does a short scan, but a long scan of many pages often does not. This tool lowers the sharpness of the pictures in steps and stops at a floor, 72 pixels to the inch, where small print in a scan still reads. It never goes below that floor.
+No. 100 KB is a tight limit: a page or two of text fits easily, and so does a short scan, but a long scan of many pages often does not. This tool lowers the sharpness of the pictures in steps and stops at a floor of 72 pixels to the inch. It never goes below that floor, but at the floor small print in a scan can become hard to read, so check the result before you send it.
 
 ### What happens if it still does not fit?
 
@@ -32,7 +32,7 @@ When the file you pick is 100 KB or less, the main button stays unavailable and 
 
 ### Does it send my file anywhere?
 
-No. All the work runs inside your browser on this device. Nothing about the file, its name or its password leaves it.
+No. All the work runs inside your browser on this device. The file, its name and any password are not sent anywhere.
 
 ### Will a password or a signature survive?
 

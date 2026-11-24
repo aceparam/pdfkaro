@@ -35,7 +35,7 @@ import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
-import { heldFile, heldSentence, overHeading, overResult, pageTarget, underHeading } from '../../widget/target';
+import { heldFile, heldSentence, overAdviceFor, overHeading, overResult, pageTarget, underHeading } from '../../widget/target';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
@@ -596,7 +596,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
         <Result
           heading={over ? overHeading(target) : underHeading(target)}
           sentence={over?.sentence}
-          advice={over ? words.sizeTarget.overAdvice : undefined}
+          advice={over ? overAdviceFor(words.sizeTarget.overAdvice, target) : undefined}
           file={{ name: state.result.name, detail: over ? over.detail : resultDetail(state.result), href: result.url }}
           notes={words.resultNotes}
           onStartAgain={startAgain}

@@ -265,6 +265,7 @@ export async function shrinkToBytes(
   /** The size each step draws `picture` at, never larger than its own. */
   const sizeAt = (picture: Kept, step: number): Size => {
     const size = sizeUnder(picture, limits![step]!);
+    // Belt and braces: `sizeUnder` never gives a larger size, so this cannot happen; it is kept so a later change cannot ask for one.
     if (size.width > picture.width || size.height > picture.height) throw new Error(tooLargeSize);
     return size;
   };
@@ -275,6 +276,7 @@ export async function shrinkToBytes(
   /** A decoded JPG at one step: its data when the encoder wrote one usable frame of the step's size; else undefined. */
   const jpegAt = async (decoded: DecodedJpeg, picture: Kept, step: number) => {
     const size = sizeAt(picture, step);
+    // Belt and braces: every step's limit is at most step 1's, so this cannot happen either; kept for the same reason.
     if (size.width > decoded.width || size.height > decoded.height) throw new Error(tooLargeSize);
     const written = await encodeJpeg(decoded, size, ladder[step]!.quality, canvases!);
     if (!written || (picture.candidate.components === 3 && written.components !== 3)) return undefined;
@@ -354,7 +356,13 @@ export async function shrinkToBytes(
   }
 
   // ---- Choose: estimate(s) = F + Σ size[i][s], with F0 = the input less the measured pictures' raw data.
-  const measured = [...trace.sizes.keys()];
+  // A picture that cannot be redone in a write, though it was measured, leaves the measured set at once: its raw data
+  // then counts in F, so every later estimate is still made from what was written.
+  let measured = [...trace.sizes.keys()];
+  const unmeasure = (id: string) => {
+    trace.sizes.delete(id);
+    measured = measured.filter((each) => each !== id);
+  };
   const sum = (step: number) => measured.reduce((total, id) => total + trace.sizes.get(id)![step]!, 0);
   const f0 = file.length - measured.reduce((total, id) => total + rawLength.get(id)!, 0);
   for (const step of steps) trace.estimates[step] = f0 + sum(step);
@@ -369,6 +377,7 @@ export async function shrinkToBytes(
   async function write(step: number | null, cap: number, band: (typeof writeBands)[number]): Promise<{ bytes: Uint8Array; handed: Map<string, number> }> {
     const replacements = new Map<string, StreamReplacement>();
     const handed = new Map<string, number>();
+    const dropped: string[] = [];
     const scale = ([from, to]: [number, number], share: number) => from + (to - from) * Math.min(1, Math.max(0, share));
     progress.writing(band.pass[0]);
     if (step !== null && measured.length > 0) {
@@ -378,17 +387,22 @@ export async function shrinkToBytes(
         if (!trace.sizes.has(picture.id)) continue;
         progress.writing(scale(band.pass, ++done / total));
         let replacement: StreamReplacement | undefined;
+        let failed = false;
         try {
           replacement = await redo(picture, raw, step);
         } catch {
           replacement = undefined;
+          failed = true;
           skipped.add(picture.id);
         }
         // The length handed over, recorded here, before writeUpdate empties the map.
         handed.set(picture.id, replacement ? replacement.data.length : raw.length);
         if (replacement) replacements.set(picture.id, replacement);
+        // Measured smaller than written, or thrown: no longer measured (it is written at its raw length).
+        else if (failed || trace.sizes.get(picture.id)![step]! < raw.length) dropped.push(picture.id);
       }
     }
+    for (const id of dropped) unmeasure(id);
     // A measured picture a pass gave no data for is still counted, at its raw length, so F stays exact.
     for (const id of measured) if (!handed.has(id)) handed.set(id, rawLength.get(id)!);
     progress.writing(band.qpdf[0]);
@@ -443,9 +457,14 @@ export async function shrinkToBytes(
 
   // Write 1: the mildest step whose estimate fits, or the step with the smallest estimate. Capped at 2 × input + 16 MB.
   const chosen = mildestFitting(steps, f0) ?? smallest(steps, f0)!;
-  const first = await write(chosen, 2 * file.length + 16 * 1024 * 1024, writeBands[0]!);
-  let rest = record(chosen, first.bytes, first.handed);
-  let best = { bytes: first.bytes, step: chosen };
+  // Only the best file is held between writes: write 1's result goes straight into `best`.
+  let best: { bytes: Uint8Array; step: number };
+  let rest: number;
+  {
+    const { bytes, handed } = await write(chosen, 2 * file.length + 16 * 1024 * 1024, writeBands[0]!);
+    rest = record(chosen, bytes, handed);
+    best = { bytes, step: chosen };
+  }
   const written = new Set([chosen]);
 
   if (best.bytes.length <= targetBytes) {

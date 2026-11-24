@@ -206,7 +206,7 @@ When no written file fits the target, the page SHALL offer the smallest file mad
 #### Scenario: A long scan on the 100 KB page
 
 - **WHEN** a file whose floor step gives 312 KB is compressed on the 100 KB page
-- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice says some kinds of picture are left as they are and names removing pages or splitting the file, and Download gives that file
+- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice says "To get under 100 KB, remove pages you do not need, or split the file and send it in parts.", and Download gives that file
 
 #### Scenario: Just over the target
 
@@ -229,7 +229,7 @@ When no written file fits the target and the smallest is not at least 1% smaller
 
 ### Requirement: What the file keeps
 
-The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures can look less sharp while text, drawings and fonts keep their quality, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
+The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures that were made smaller can look less sharp while text, drawings and fonts keep their quality, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
 
 #### Scenario: A file with links, bookmarks and a form
 

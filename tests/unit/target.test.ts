@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { sizeTargets, acceptedTarget } from '../../src/widget/option-values';
-import { heldByTarget, heldFile, heldSentence, overHeading, overResult, pageTarget, sizeAgainstTarget, underHeading } from '../../src/widget/target';
+import { heldByTarget, heldFile, heldSentence, overAdviceFor, overHeading, overResult, pageTarget, sizeAgainstTarget, underHeading } from '../../src/widget/target';
 
 const kb100 = sizeTargets['100kb'];
 const kb200 = sizeTargets['200kb'];
@@ -98,6 +98,11 @@ describe('the byte rule', () => {
 });
 
 describe('the over-target words', () => {
+  it('put the page\'s label into the tool\'s advice', () => {
+    expect(overAdviceFor('To get under {target}, remove pages.', kb200)).toBe('To get under 200 KB, remove pages.');
+    expect(overAdviceFor('No label here.', mb1)).toBe('No label here.');
+  });
+
   it('name the same size in the sentence and in the line under the name', () => {
     const words = overResult({ size: 203_000, was: 620 * 1024, pages: 3 }, kb200);
     expect(words.sentence).toBe('The smallest file this tool could make is 203,000 bytes, which is over 200 KB.');

@@ -34,6 +34,9 @@ export const heldSentence = (name: string, target: SizeTarget): string =>
 /** The result's heading when the new file is at or under the target. */
 export const underHeading = (target: SizeTarget): string => `Your file is now ${target.label} or smaller`;
 
+/** The tool's one thing to try over the target, with `{target}` (each place it stands) replaced by the page's label. */
+export const overAdviceFor = (advice: string, target: SizeTarget): string => advice.replaceAll('{target}', target.label);
+
 /** The result's heading when the smallest file made is still over the target. */
 export const overHeading = (target: SizeTarget): string => `Your file is still over ${target.label}`;
 

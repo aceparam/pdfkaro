@@ -288,7 +288,7 @@ export type ToolWidgetWords = {
    * For a tool whose every page sets a size the result must fit (Compress to a target size): the page's preset key
    * is always `target`, naming one of `sizeTargets` in src/widget/option-values.ts. A file already at or under it is
    * held from the pick, and the result is measured against it (src/widget/target.ts). `overAdvice` is the one thing
-   * to try when the smallest file made is still over the target.
+   * to try when the smallest file made is still over the target, with `{target}` standing for the page's label.
    */
   sizeTarget?: { overAdvice: string };
   /** Plain notes shown with the result, such as what was not carried over. */
@@ -1009,7 +1009,7 @@ export const tools: Tool[] = [
       // Page text, a draft for the owner's review like the result notes.
       sizeTarget: {
         overAdvice:
-          'Pictures this tool can change were made as small as they can go while staying readable. Some kinds of picture are left as they are; the questions below say which. To get under the limit, remove pages you do not need, or split the file and send it in parts.',
+          'To get under {target}, remove pages you do not need, or split the file and send it in parts.',
       },
       noSmaller: {
         heading: 'This file could not be made smaller.',
@@ -1018,7 +1018,7 @@ export const tools: Tool[] = [
       },
       // Passwords are kept, as Compress PDF keeps them (open owner question "Compress PDF keeps passwords").
       resultNotes: [
-        'Pictures were made smaller, so they can look less sharp up close. Text, drawings and fonts keep their quality.',
+        'Pictures that were made smaller can look less sharp up close. Text, drawings and fonts keep their quality.',
         'Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'If the file had a password or restrictions, it still has them.',
       ],

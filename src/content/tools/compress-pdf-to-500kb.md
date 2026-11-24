@@ -32,7 +32,7 @@ Never. A screenshot or diagram stored without loss may be scaled down, but it is
 
 ### Could anything stop it reaching 500 KB?
 
-Large fonts, attached files, or pictures this tool leaves alone, such as CMYK photos, JPEG 2000 images or black and white scans. If the target is out of reach, you get the smallest file made and a sentence saying how far over it is.
+Large fonts, attached files, or pictures this tool leaves alone, such as CMYK photos, JPEG 2000 images or black and white scans. If the target is out of reach, the page offers the smallest file it made, in a sentence naming its size. When even that saves less than 1% of your file, no new file is offered, and the page tells you why.
 
 ### Does my document leave my computer?
 

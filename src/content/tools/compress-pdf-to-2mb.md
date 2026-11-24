@@ -5,7 +5,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 ## Compressing a large PDF to 2 MB
 
 1. Choose the big PDF, such as an annual report, a thesis with figures or a set of scanned chapters. You may drop it on the page or paste it.
-2. Next, press “Compress to 2 MB and download”. A file of many megabytes can take a while, and the progress line keeps you posted.
+2. Next, press “Compress to 2 MB and download”. A file of many megabytes can take a while, and the progress line shows how far it has got.
 3. When it finishes, press Download. The result shows the new size next to the original one.
 
 ## Questions
@@ -28,7 +28,7 @@ As 2,000,000 bytes. Since some limits mean 2,000,000 bytes and some mean 2,097,1
 
 ### What if the result is still over 2 MB?
 
-The page says so plainly, names the size of the smallest file it made, and lets you download it. To go further, take out pages with Delete pages, or use Split PDF and send the file in parts.
+The page says so, names the size of the smallest file it made, and lets you download it. To go further, take out pages with Delete pages, or use Split PDF and send the file in parts.
 
 ### Is a large file uploaded somewhere to be compressed?
 

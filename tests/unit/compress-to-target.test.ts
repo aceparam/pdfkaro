@@ -39,14 +39,17 @@ import { tools as drawingTools } from './thumbnail-helpers';
 // ---------------------------------------------------------------------------
 // Tools: qpdf with its whole-file writes counted, and everything else as the worker gives it.
 
-const counted = { writes: 0, qpdfs: 0 };
-/** qpdf, counting each instance and each whole-file write (`cappedWrite` caps /out.pdf before each). */
+const counted = { writes: 0, qpdfs: 0, caps: [] as number[] };
+/** qpdf, counting each instance and each whole-file write (`cappedWrite` caps /out.pdf before each), with each write's cap. */
 async function countingQpdf(patch?: (path: string, data: Uint8Array) => Uint8Array): Promise<Qpdf> {
   const qpdf = await makeQpdf();
   counted.qpdfs += 1;
   const capFile = qpdf.capFile.bind(qpdf);
   qpdf.capFile = (path, limit) => {
-    if (path === '/out.pdf') counted.writes += 1;
+    if (path === '/out.pdf') {
+      counted.writes += 1;
+      counted.caps.push(limit);
+    }
     return capFile(path, limit);
   };
   if (patch) {
@@ -72,6 +75,7 @@ const argsFor = (given?: string) => (given === undefined ? [] : [`--password=${g
 async function shrink(file: Uint8Array, target: number, options: { given?: string; tools?: EngineTools; budget?: number; lossless?: LosslessSteps } = {}) {
   const progress: Progress[] = [];
   counted.writes = 0;
+  counted.caps = [];
   const trace = await shrinkToBytes(file, target, argsFor(options.given), options.tools ?? tools, (step) => progress.push(step), {
     ...(options.budget !== undefined ? { budget: options.budget } : {}),
     ...(options.lossless ? { lossless: options.lossless } : {}),
@@ -91,11 +95,14 @@ async function packed(bytes: Uint8Array): Promise<Uint8Array> {
 /** The estimate of step `step` (counted from 0) with a given F: F plus every measured picture's size at that step. */
 const estimateWith = (trace: Trace, step: number, rest: number) => rest + [...trace.sizes.values()].reduce((sum, sizes) => sum + sizes[step]!, 0);
 
-/** The two exact checks of the estimate, on every write a job made. */
+/**
+ * The exact check of the estimate, on every write a job made: each measured picture's size at the step written is the
+ * length handed to qpdf for it. (With F taken from the written length, the estimate of the step written then equals
+ * that length by construction, so that is not checked again.)
+ */
 function expectExactEstimates(trace: Trace) {
   for (const pass of trace.passes) {
     for (const [id, sizes] of trace.sizes) expect(pass.handed.get(id), `picture ${id} at step ${pass.step + 1}`).toBe(sizes[pass.step]);
-    expect(estimateWith(trace, pass.step, pass.rest)).toBe(pass.length);
   }
 }
 
@@ -337,6 +344,7 @@ describe('finding the step on JPG-only files', () => {
   }
   async function shrinkLying(target: number, lying: ReturnType<typeof lyingCanvas>) {
     counted.writes = 0;
+    counted.caps = [];
     const trace = await shrinkToBytes(file, target, [], withTools({ canvas: lying.canvas }), (step) => {
       if (step.stage === 'writing') lying.writing();
     });
@@ -363,6 +371,8 @@ describe('finding the step on JPG-only files', () => {
     expect(trace.writes).toBe(3);
     expect(trace.passes.map((pass) => pass.step)).toEqual([0, 1, 2]);
     expect(trace.output!.length).toBe(Math.min(...trace.passes.map((pass) => pass.length)));
+    const [first, second] = trace.passes.map((pass) => pass.length);
+    expect(counted.caps).toEqual([2 * file.length + 16 * 1024 * 1024, first, Math.min(first!, second!)]);
   }, 60_000);
 
   it('keeps write 1 when write 2 passes its cap', async () => {
@@ -407,6 +417,7 @@ describe('finding the step on JPG-only files', () => {
     expect(trace.step).toBe(1);
     expect(writes).toBe(2);
     expect(trace.output!.length).toBeLessThanOrEqual(goal);
+    expect(counted.caps).toEqual([2 * loose.length + 16 * 1024 * 1024, goal]);
   }, 60_000);
 });
 
@@ -554,6 +565,37 @@ describe('which pictures are measured', () => {
     expect(trace.sizes.size).toBe(1);
     const after = await picturesOf(trace.output!);
     expect(after.find((each) => each.dict['/Width'] === 1200)!.data.equals(Buffer.from(throwing))).toBe(true);
+  }, 60_000);
+});
+
+describe('a picture that cannot be redone in a write', () => {
+  it('leaves the measured set, so its raw data counts in F and later estimates stay honest', async () => {
+    const throwing = await photoJpeg(1200, 900, 92, 4);
+    const fine = await photoJpeg(1000, 1000, 92, 5);
+    const file = picturePdf(144, 144, [
+      { entries: jpegEntries(1200, 900), data: throwing },
+      { entries: jpegEntries(1000, 1000), data: fine },
+    ]);
+    // The 1200 by 900 picture decodes while measured, and throws in every write.
+    let seen = 0;
+    const real = drawingTools.decodePicture!;
+    const decoder = async () => {
+      const inner = (await real()) as { decode(bytes: Uint8Array, width: number, height: number): Promise<unknown> };
+      return {
+        decode: async (bytes: Uint8Array, width: number, height: number) => {
+          if (width === 300 && height === 225 && seen++ > 0) throw new Error('the decoder gave up');
+          return inner.decode(bytes, width, height);
+        },
+      };
+    };
+    const { trace } = await shrink(file, 2000, { tools: withTools({ decodePicture: decoder }) });
+    expect(seen).toBe(2);
+    expect(trace.sizes.size).toBe(1);
+    const pass = trace.passes[0]!;
+    // Handed over at its raw length, and counted in F: F and the one measured picture's size make the written length.
+    expect(pass.handed.get([...pass.handed.keys()].find((id) => !trace.sizes.has(id))!)).toBe(throwing.length);
+    expect(estimateWith(trace, pass.step, pass.rest)).toBe(pass.length);
+    expect(pass.rest).toBeGreaterThan(throwing.length);
   }, 60_000);
 });
 
@@ -729,7 +771,7 @@ describe('hostile files', () => {
 });
 
 describe('a capped write', () => {
-  it('writes through a cap at twice the input plus 16 MB, removing nothing else', async () => {
+  it('writes a file with no picture once, capped at twice its size and 16 MB', async () => {
     const tiny = rawPdf([
       Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
       Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
@@ -738,6 +780,7 @@ describe('a capped write', () => {
     ]);
     const { trace, writes } = await shrink(tiny, 10);
     expect(writes).toBe(1);
+    expect(counted.caps).toEqual([2 * tiny.length + 16 * 1024 * 1024]);
     expect(trace.output === undefined || trace.output.length <= tiny.length * keepBelow).toBe(true);
   });
 });
