@@ -150,7 +150,7 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 #### Scenario: A rounding that cannot be written safely
 
 - **WHEN** a crafted page with `/UserUnit 0.001` and a box of 10^10 units is resized
-- **THEN** the job stops with "A page of this file could not be resized safely, so no new file was made." and writes nothing
+- **THEN** the job stops with "A page of this file could not be resized, so no new file was made." and writes nothing
 
 #### Scenario: A clip that cannot be written closely enough
 
@@ -159,7 +159,7 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 
 ### Requirement: What was hidden
 
-On a resized page, drawn content outside its old shown box SHALL be clipped. A page whose own drawing instructions restore more than they save can undo the scaling and the clip in some readers, and may then show what was hidden at its old size, as the page SHALL say. An annotation other than a popup with no area in common with the old shown box SHALL be marked hidden; one that partly overlaps SHALL stay visible, as the page SHALL say. (SPEC.md: What we are building, rule 4)
+On a resized page, drawn content outside its old shown box SHALL be clipped; a page whose drawing restores more than it saves can undo that in some readers, as the page SHALL say. An annotation other than a popup that shares no area with the old shown box SHALL be marked hidden, with its popup; one that partly overlaps SHALL stay visible, as the page SHALL say. (SPEC.md: What we are building, rule 4)
 
 #### Scenario: A page that hid part of itself
 
@@ -179,12 +179,17 @@ On a resized page, drawn content outside its old shown box SHALL be clipped. A p
 #### Scenario: A link partly outside the old crop box
 
 - **WHEN** a link reaches half outside a page's crop box and the page is resized
-- **THEN** the link is moved and stays visible, the half that was outside now in the white space
+- **THEN** the link is moved and stays visible, and may now show more of itself, or all of it, the half that was outside now in the white space
 
 #### Scenario: A popup beside the page
 
 - **WHEN** a note's popup has a rectangle starting at the old paper's right edge, and the page is resized
 - **THEN** the popup is moved, its `/F` is unchanged, and PDF.js still opens it from the note
+
+#### Scenario: A hidden note's popup
+
+- **WHEN** a note wholly outside the old crop box has a popup with `/Open true`, and the page is resized
+- **THEN** the note and its popup are both marked hidden, their other flags kept, so the open popup cannot show the note's text in the white space
 
 ### Requirement: What moves with the page
 
@@ -287,6 +292,11 @@ While the job runs the page SHALL show progress in real units: "Reading the file
 - **WHEN** `pages-500.pdf` is resized to Letter
 - **THEN** the page shows "Reading the file", then "Page 1 of 500" up to "Page 500 of 500", then the writing, with the bar never going back, and no task blocks the page for more than 100 ms
 
+#### Scenario: Pages left as they are are counted
+
+- **WHEN** `mixed.pdf`, four pages of which two are already A4, is resized to A4
+- **THEN** the page counts "Page 1 of 4" up to "Page 4 of 4", as its row says 4 pages
+
 #### Scenario: Cancel is pressed
 
 - **WHEN** the visitor, with Letter chosen, presses Cancel while the job runs
@@ -320,15 +330,20 @@ When the job fails the page SHALL say "The pages were not resized." and what hap
 - **WHEN** the worker runs out of memory
 - **THEN** the page says so and gives "Try on a computer, or split the file first and resize the parts."
 
-#### Scenario: A page that cannot be resized safely
+#### Scenario: A page that cannot be resized
 
 - **WHEN** the engine stops because a page's numbers cannot be written safely
-- **THEN** the page says "The pages were not resized.", "A page of this file could not be resized safely, so no new file was made." and "The file may be damaged. Try another copy of it.", and offers "Go back to your file"
+- **THEN** the page says "The pages were not resized.", "A page of this file could not be resized, so no new file was made." and "The file may be damaged. Try another copy of it.", and offers "Go back to your file"
 
 #### Scenario: The new file would be far too large
 
 - **WHEN** the update or the new file passes the size budget
 - **THEN** the page shows the shared `output-limit` sentence and its advice, and "Go back to your file"
+
+#### Scenario: One shared value named many times
+
+- **WHEN** a crafted file names one indirect array of many numbers from many annotations, or repeats one stroke many times in one `/InkList`
+- **THEN** the moved numbers are counted against the size budget as they are built, and the job stops with the shared `output-limit` sentence before memory fills
 
 ### Requirement: Large files
 
@@ -380,4 +395,4 @@ The page SHALL carry three or four how-to steps and real questions, 250 to 500 w
 #### Scenario: Honest about what was hidden and what is removed
 
 - **WHEN** the questions are read
-- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a page with broken drawing instructions, whether made by mistake or on purpose, can show it in some programs after resizing, that cropping or resizing is not a way to hide something private, that a note or link wholly out of view is hidden and stays in the file while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
+- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a page with broken drawing instructions, whether made by mistake or on purpose, can show it in some programs after resizing, that cropping or resizing is not a way to hide something private, that a note, link or form field wholly out of view is hidden and stays in the file while one partly out of view may now show more of it, or all of it, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed

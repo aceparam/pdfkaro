@@ -7,7 +7,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { fixed, makeRun, run } from '../../src/engines/tools/resize-pdf';
+import { fixed, makeRun, placement, run } from '../../src/engines/tools/resize-pdf';
 import { OutputLimit } from '../../src/engines/qpdf';
 import { failureKind } from '../../src/workers/worker-core';
 import { fixture, pageStreams, texts } from './stamp-helpers';
@@ -80,6 +80,21 @@ describe('how numbers are written', () => {
     expect(fixed(0.12345678906, 20, 'down').text).toBe('0.123456789');
     expect(fixed(0.12345678904, 20, 'up').text).toBe('0.1234567891');
     expect(fixed(100, 20, 'up').text).toBe('100');
+  });
+
+  it('the clip is outward on every side, even when rounding to the nearest would leave the far edge inside (a negative corner)', () => {
+    // The stage 2 code reviewer's box: rounding the size to the nearest left x1 half a unit in the tenth digit inside.
+    const [x0, x1] = [-294.05818623891525, 993.6035291999975];
+    const box: [number, number, number, number] = [x0, 0, x1, 500];
+    const placed = placement({ turn: 0, box, unit: 1, width: x1 - x0, height: 500 }, 'a4')!;
+    const { clip } = prefixOf(placed.prefix);
+    expect(clip[0]!).toBeLessThanOrEqual(x0);
+    expect(clip[1]!).toBeLessThanOrEqual(0);
+    expect(clip[0]! + clip[2]!).toBeGreaterThanOrEqual(x1);
+    expect(clip[1]! + clip[3]!).toBeGreaterThanOrEqual(500);
+    // Still within 0.01 point of the old box once scaled.
+    expect((clip[0]! + clip[2]! - x1) * placed.matrix.k).toBeLessThan(0.01);
+    expect((x0 - clip[0]!) * placed.matrix.k).toBeLessThan(0.01);
   });
 
   it('moved values keep at most 6 decimals', () => {
@@ -401,6 +416,27 @@ describe('what was hidden', { timeout: 120_000 }, () => {
     // The black square, 150..450 by 150..600, at k times it plus the move, in half points from the top.
     const box = inkBox(image)!;
     near(box, [(m.k * 150 + m.tx) / 2, (841.89 - (m.k * 600 + m.ty)) / 2, (m.k * 450 + m.tx) / 2, (841.89 - (m.k * 150 + m.ty)) / 2], 1.5);
+  });
+
+  it("hides a hidden note's popup with it, its other flags kept, so an open popup cannot show the note's text", async () => {
+    const bytes = pdf([
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Count 1 /Kids [3 0 R] /CropBox [100 100 512 692] >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R /Annots [5 0 R 6 0 R] >>',
+      stream('0 0 0 rg 150 150 300 450 re f'),
+      '<< /Type /Annot /Subtype /Text /Rect [20 720 40 740] /F 4 /Contents (SECRET-note) /Popup 6 0 R >>',
+      '<< /Type /Annot /Subtype /Popup /Rect [40 700 240 780] /F 4 /Open true /Parent 5 0 R >>',
+    ]);
+    const after = (await resize(bytes, 'a4')).output!;
+    const { pages, value } = await dictionaries(after);
+    const [note, popup] = ((value(pages[0]!.object) as Json)['/Annots'] as string[]).map((ref) => value(ref) as Json);
+    expect(note!['/F']).toBe(6);
+    expect(popup!['/F']).toBe(6);
+    expect(popup!['/Open']).toBe(true);
+    near(popup!['/Rect'], through(m, [40, 700, 240, 780]), 2e-6);
+    const read = (await shown(after))[0]!.annotations;
+    for (const each of read) expect(each.annotationFlags & 2, each.subtype).toBe(2);
+    expect(redPixels(await picture(after, 1, 0.5))).toBe(0);
   });
 
   it('hides a note wholly outside, keeping its other flags; leaves a link half outside visible; moves a popup without hiding it', async () => {
@@ -868,6 +904,57 @@ describe('what a resized file keeps', () => {
 // Progress, the cap, and what errors hold.
 
 describe('progress, the cap and errors', { timeout: 120_000 }, () => {
+  it('counts every page, those left as they are included: mixed.pdf to A4 counts "Page 1 of 4" to "Page 4 of 4"', async () => {
+    const { progress } = await resize(fixture('mixed.pdf'), 'a4');
+    expect(progress.filter((step) => step.stage === 'working')).toEqual([1, 2, 3, 4].map((done) => ({ stage: 'working', unit: 'page', done, total: 4, writesAfter: true })));
+  });
+
+  /** A Letter page with `annotations` and one indirect array of `numbers` numbers, object 5, that they name. */
+  function sharedValue(numbers: number, annotations: (index: number) => string, count: number): Uint8Array {
+    const values = Array.from({ length: numbers }, (_, index) => index % 600).join(' ');
+    const annots = Array.from({ length: count }, (_, index) => `${6 + index} 0 R`).join(' ');
+    return pdf([
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R /Annots [${annots}] >>`,
+      stream('0 0 0 rg 10 10 50 50 re f'),
+      `[${values}]`,
+      ...Array.from({ length: count }, (_, index) => annotations(index)),
+    ]);
+  }
+
+  /** Runs a job expected to stop at the budget; gives its time and how much the heap and peak memory grew. */
+  async function stopped(bytes: Uint8Array) {
+    const [heap, peak, started] = [process.memoryUsage().heapUsed, process.resourceUsage().maxRSS, Date.now()];
+    // The page is Letter, so A4 resizes it.
+    const error = await resize(bytes, 'a4').catch((caught: unknown) => caught);
+    const seconds = (Date.now() - started) / 1000;
+    const heapGrowth = (process.memoryUsage().heapUsed - heap) / 1024 ** 2;
+    const peakGrowth = (process.resourceUsage().maxRSS - peak) / 1024;
+    return { error, seconds, heapGrowth, peakGrowth };
+  }
+
+  it('one indirect array of 40,000 numbers named by 2,000 annotations stops with OutputLimit quickly, before memory fills', async () => {
+    const bytes = sharedValue(40_000, (index) => `<< /Type /Annot /Subtype /Highlight /Rect [10 ${index % 700} 100 ${(index % 700) + 10}] /QuadPoints 5 0 R >>`, 2_000);
+    const { error, seconds, heapGrowth, peakGrowth } = await stopped(bytes);
+    console.log(`shared /QuadPoints: ${bytes.length} bytes, OutputLimit after ${seconds.toFixed(2)} s, heap +${heapGrowth.toFixed(0)} MB, peak resident memory +${peakGrowth.toFixed(0)} MB`);
+    expect(error).toBeInstanceOf(OutputLimit);
+    expect(failureKind(error)).toBe('output-limit');
+    expect(seconds).toBeLessThan(20);
+    expect(heapGrowth).toBeLessThan(400);
+  });
+
+  it('one stroke of 40,000 numbers repeated 2,000 times in one /InkList stops with OutputLimit quickly, before memory fills', async () => {
+    const strokes = Array.from({ length: 2_000 }, () => '5 0 R').join(' ');
+    const bytes = sharedValue(40_000, () => `<< /Type /Annot /Subtype /Ink /Rect [10 10 600 700] /InkList [${strokes}] >>`, 1);
+    const { error, seconds, heapGrowth, peakGrowth } = await stopped(bytes);
+    console.log(`repeated stroke: ${bytes.length} bytes, OutputLimit after ${seconds.toFixed(2)} s, heap +${heapGrowth.toFixed(0)} MB, peak resident memory +${peakGrowth.toFixed(0)} MB`);
+    expect(error).toBeInstanceOf(OutputLimit);
+    expect(failureKind(error)).toBe('output-limit');
+    expect(seconds).toBeLessThan(20);
+    expect(heapGrowth).toBeLessThan(400);
+  });
+
   it('reports "Reading the file", then each page counted with writesAfter, then writing that never goes back, ending at 100', async () => {
     const { progress } = await resize(fixture('text.pdf'), 'letter');
     expect(progress[0]).toEqual({ stage: 'reading', unit: 'file', done: 0, total: 1 });

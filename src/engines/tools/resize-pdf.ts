@@ -141,16 +141,23 @@ export function placement(place: Pick<PagePlace, 'turn' | 'box' | 'unit' | 'widt
   const tx = fixed(txExact);
   const ty = fixed(tyExact);
   if (!(Math.abs(tx.value) < largestNumber && Math.abs(ty.value) < largestNumber)) throw new UnsafePage();
-  // The clip, in the page's own units, rounded outward so nothing shown before is clipped.
+  // The clip, in the page's own units, outward of the old shown box, so nothing shown before is clipped: its near
+  // corner rounded down; its size taken from the far corner rounded up, written to the nearest (rounding the
+  // subtraction up would add its float noise), then one step larger when the far edge would still fall inside the
+  // old box, as it can by half a unit in the tenth significant digit. Checked after: outward on every side, and
+  // within 0.01 point of the old box once scaled.
   if (![x0, y0, x1, y1].every((n) => Math.abs(n) < largestNumber)) throw new UnsafePage();
   const left = fixed(x0, 20, 'down');
   const bottom = fixed(y0, 20, 'down');
-  // The size from the rounded corners, written to the nearest (rounding it up as well would add the float noise of
-  // the subtraction); the check below holds the far edge to the old box within 0.01 point once scaled.
-  const across = fixed(fixed(x1, 20, 'up').value - left.value);
-  const up = fixed(fixed(y1, 20, 'up').value - bottom.value);
+  const outward = (near: number, far: number) => {
+    const size = fixed(fixed(far, 20, 'up').value - near);
+    return near + size.value < far ? fixed(size.value + 10 ** -decimalsFor(size.value, 20), 20) : size;
+  };
+  const across = outward(left.value, x1);
+  const up = outward(bottom.value, y1);
   const clip = [left.value, bottom.value, left.value + across.value, bottom.value + up.value];
   if (![...clip, across.value, up.value].every((n) => Math.abs(n) < largestNumber)) throw new UnsafePage();
+  if (!(clip[0]! <= x0 && clip[1]! <= y0 && clip[2]! >= x1 && clip[3]! >= y1)) throw new UnsafePage();
   const off = [clip[0]! - x0, clip[1]! - y0, clip[2]! - x1, clip[3]! - y1];
   if (off.some((n) => Math.abs(n) * k.value > clipError)) throw new UnsafePage();
   const prefix = `q\n${k.text} 0 0 ${k.text} ${tx.text} ${ty.text} cm\n${left.text} ${bottom.text} ${across.text} ${up.text} re W n\n`;
@@ -160,12 +167,27 @@ export function placement(place: Pick<PagePlace, 'turn' | 'box' | 'unit' | 'widt
 // ---------------------------------------------------------------------------
 // What moves with the page.
 
+/**
+ * The moved numbers counted against the new file's size budget while the working copies are made. Each moved
+ * number is counted as at least 2 bytes of the update (a digit and a separator) before its array is built, so a
+ * crafted file whose one indirect array is named by many annotations, or whose /InkList repeats one stroke,
+ * stops with `OutputLimit` before memory holds the copies, not after.
+ */
+export type Tally = { used: number; limit: number };
+
+/** Counts `count` moved numbers; past the budget, the job stops with `OutputLimit`. */
+export function spend(tally: Tally, count: number): void {
+  tally.used += 2 * count;
+  if (tally.used > tally.limit) throw new OutputLimit();
+}
+
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const numbers = (value: unknown, count?: (n: number) => boolean): value is number[] =>
   Array.isArray(value) && value.every(isNumber) && (count === undefined || count(value.length));
 
 /** Each (x, y) pair through M, written with at most 6 decimals; null when any is 10^9 or more in size. */
-function points(values: readonly number[], m: Matrix): number[] | null {
+function points(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
+  spend(tally, values.length);
   const out: number[] = [];
   for (let at = 0; at < values.length; at += 2) {
     const x = moved(m.k * values[at]! + m.tx);
@@ -177,15 +199,16 @@ function points(values: readonly number[], m: Matrix): number[] | null {
 }
 
 /** A rectangle's two corners through M, normalised. */
-function rectangle(values: readonly number[], m: Matrix): number[] | null {
-  const moved4 = points(values, m);
+function rectangle(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
+  const moved4 = points(values, m, tally);
   if (!moved4) return null;
   const [a, b, c, d] = moved4 as [number, number, number, number];
   return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
 }
 
 /** Each value times k, written with at most 6 decimals; null when any is 10^9 or more in size. */
-function scaled(values: readonly number[], m: Matrix): number[] | null {
+function scaled(values: readonly number[], m: Matrix, tally: Tally): number[] | null {
+  spend(tally, values.length);
   const out: number[] = [];
   for (const value of values) {
     const next = moved(value * m.k);
@@ -203,54 +226,62 @@ function overlap(a: readonly number[], b: readonly number[]): boolean {
 /**
  * Moves one annotation dictionary, in place (it is a working copy), by M: each key well formed by its exact count
  * moved, every other left as it was; /Measure removed. `hide` sets the Hidden flag when its old /Rect and the old
- * shown box share no area. `resolve` gives the value of an indirect key; the moved value is written direct.
- * Exported for the unit test.
+ * shown box share no area, and gives whether it did. `resolve` gives the value of an indirect key; the moved value
+ * is written direct. Every moved number is counted in `tally` before it is built. Exported for the unit test.
  */
-export function moveAnnotation(annotation: Dict, m: Matrix, old: readonly number[] | null, resolve: (value: unknown) => unknown): void {
+export function moveAnnotation(annotation: Dict, m: Matrix, old: readonly number[] | null, resolve: (value: unknown) => unknown, tally: Tally): boolean {
   const read = (key: string) => resolve(annotation[key]);
   const set = (key: string, value: unknown[] | number | null) => {
     if (value !== null) annotation[key] = value;
   };
   const rect = read('/Rect');
   const oldRect = numbers(rect, (n) => n === 4) ? [Math.min(rect[0]!, rect[2]!), Math.min(rect[1]!, rect[3]!), Math.max(rect[0]!, rect[2]!), Math.max(rect[1]!, rect[3]!)] : null;
-  if (oldRect) set('/Rect', rectangle(oldRect, m));
+  if (oldRect) set('/Rect', rectangle(oldRect, m, tally));
   const quad = read('/QuadPoints');
-  if (numbers(quad, (n) => n > 0 && n % 8 === 0)) set('/QuadPoints', points(quad, m));
+  if (numbers(quad, (n) => n > 0 && n % 8 === 0)) set('/QuadPoints', points(quad, m, tally));
   const ink = read('/InkList');
   if (Array.isArray(ink) && ink.length > 0) {
     const strokes = ink.map(resolve);
     if (strokes.every((stroke) => numbers(stroke, (n) => n % 2 === 0))) {
-      const next = (strokes as number[][]).map((stroke) => points(stroke, m));
+      const next = (strokes as number[][]).map((stroke) => points(stroke, m, tally));
       if (next.every((stroke) => stroke !== null)) annotation['/InkList'] = next;
     }
   }
   const vertices = read('/Vertices');
-  if (numbers(vertices, (n) => n > 0 && n % 2 === 0)) set('/Vertices', points(vertices, m));
+  if (numbers(vertices, (n) => n > 0 && n % 2 === 0)) set('/Vertices', points(vertices, m, tally));
   const line = read('/L');
-  if (numbers(line, (n) => n === 4)) set('/L', points(line, m));
+  if (numbers(line, (n) => n === 4)) set('/L', points(line, m, tally));
   const callout = read('/CL');
-  if (numbers(callout, (n) => n === 4 || n === 6)) set('/CL', points(callout, m));
+  if (numbers(callout, (n) => n === 4 || n === 6)) set('/CL', points(callout, m, tally));
   const path = read('/Path');
   if (Array.isArray(path) && path.length > 0) {
     const parts = path.map(resolve);
     if (parts.every((part) => numbers(part, (n) => n === 2 || n === 6))) {
-      const next = (parts as number[][]).map((part) => points(part, m));
+      const next = (parts as number[][]).map((part) => points(part, m, tally));
       if (next.every((part) => part !== null)) annotation['/Path'] = next;
     }
   }
   const differences = read('/RD');
-  if (numbers(differences, (n) => n === 4) && differences.every((n) => n >= 0)) set('/RD', scaled(differences, m));
+  if (numbers(differences, (n) => n === 4) && differences.every((n) => n >= 0)) set('/RD', scaled(differences, m, tally));
   for (const key of ['/LL', '/LLE', '/LLO']) {
     const value = read(key);
     if (!isNumber(value)) continue;
+    spend(tally, 1);
     const next = moved(value * m.k);
     if (next !== null) annotation[key] = key === '/LLO' ? Math.max(0, next) : next;
   }
   delete annotation['/Measure'];
   if (old && oldRect && !overlap(oldRect, old)) {
-    const flags = resolve(annotation['/F']);
-    annotation['/F'] = (Number.isInteger(flags) ? (flags as number) : 0) | 2;
+    hide(annotation, resolve);
+    return true;
   }
+  return false;
+}
+
+/** Sets the Hidden flag (2) in an annotation's /F, its other flags kept; an absent or non-integer /F is read as 0. */
+export function hide(annotation: Dict, resolve: (value: unknown) => unknown): void {
+  const flags = resolve(annotation['/F']);
+  annotation['/F'] = (Number.isInteger(flags) ? (flags as number) : 0) | 2;
 }
 
 /** The kinds of explicit destination, each with its length and which items after the kind are x and which y. */
@@ -297,8 +328,9 @@ export function findDestinations(value: unknown, matrices: ReadonlyMap<string, M
 }
 
 /** Moves one explicit destination, in place, by M: each coordinate that is a number; null stays null; zoom is kept. */
-export function moveDestination(array: unknown[], m: Matrix): void {
+export function moveDestination(array: unknown[], m: Matrix, tally: Tally): void {
   const { axes } = destinations[array[1] as string]!;
+  spend(tally, axes.length);
   axes.forEach((axis, index) => {
     const at = index + 2;
     const value = array[at];
@@ -312,7 +344,7 @@ export function moveDestination(array: unknown[], m: Matrix): void {
 // The working copies.
 
 /** What the job keeps once the pages and objects read are let go: the new streams' text and each changed object. */
-type Changes = { max: number; total: number; prefixes: Map<string, string>; restoreId: string; copies: Map<string, unknown> };
+type Changes = { max: number; limit: number; prefixes: Map<string, string>; restoreId: string; copies: Map<string, unknown> };
 
 /** The one stream that restores the drawing state after a resized page's own streams. */
 export const restoreText = '\nQ\n';
@@ -330,10 +362,15 @@ async function changesFor(
   plain: Uint8Array,
   paper: Paper,
   onPage: (done: number, total: number) => void,
+  budget: (plainBytes: number, pages: number) => number,
 ): Promise<Changes | null> {
   const read = await readPages(tools, plain, { objects: true });
   const objects: ReadonlyMap<string, ObjectEntry> = read.objects!;
   const total = read.pages.length;
+  // The new file's size budget, known as soon as the pages are read, so the moved numbers are counted against it
+  // while the copies are made (`Tally`), and the update against it while it is written.
+  const limit = budget(plain.byteLength, total);
+  const tally: Tally = { used: 0, limit };
   const valueOf = (id: string): unknown => {
     const entry = objects.get(id);
     return entry && 'value' in entry ? entry.value : undefined;
@@ -378,11 +415,18 @@ async function changesFor(
     for (const key of removedPageKeys) delete dict[key];
   }
 
-  // 2 and 3. Annotations and their popups, then beads, through one visited set, in page order.
+  // 2 and 3. Annotations and their popups, then beads, through one visited set, in page order. Every page listed
+  // is counted in the progress, those left as they are included, so "Page N of M" counts the pages the row shows.
   // A page object is never taken for an annotation or a bead, even when a crafted file lists it as one.
   const visited = new Set<string>(placements.keys());
-  let done = 0;
-  for (const { id, placement: placed } of order) {
+  const worked = new Set<string>();
+  for (const [index, { id }] of read.pages.entries()) {
+    const placed = placements.get(id);
+    if (!placed || worked.has(id)) {
+      onPage(index + 1, total);
+      continue;
+    }
+    worked.add(id);
     const m = placed.matrix;
     const dict = copies.get(id) as Dict;
     /** The items of a page's array key, as a list to change in place: the page's own array, or an indirect array's working copy. */
@@ -396,7 +440,7 @@ async function changesFor(
       }
       return undefined;
     };
-    const popups: unknown[] = [];
+    const popups: { popup: unknown; hidden: boolean }[] = [];
     // A direct annotation is changed where it sits, inside the page's working copy or the array's.
     const moveOne = (item: unknown, hideable: boolean) => {
       let annotation: Dict;
@@ -409,13 +453,19 @@ async function changesFor(
       } else return;
       const popup = annotation['/Popup'];
       const isPopup = annotation['/Subtype'] === '/Popup';
-      moveAnnotation(annotation, m, hideable && !isPopup ? placed.old : null, resolve);
-      if (popup !== undefined) popups.push(popup);
+      const hidden = moveAnnotation(annotation, m, hideable && !isPopup ? placed.old : null, resolve, tally);
+      if (popup !== undefined) popups.push({ popup, hidden });
     };
     const annots = listOf('/Annots');
     if (annots) for (const item of annots) moveOne(item, true);
-    // A popup is moved only, never hidden: it often lies beside the page's shown area, and is opened from its note.
-    for (const popup of popups) moveOne(popup, false);
+    // A popup is moved, and never hidden by its own place: it often lies beside the page's shown area, and is opened
+    // from its note. It is hidden with its note, so an open popup cannot show a hidden note's text in the white space.
+    for (const { popup, hidden } of popups) {
+      moveOne(popup, false);
+      if (!hidden) continue;
+      if (isRef(popup) && isDict(valueOf(popup)) && !placements.has(popup)) hide(copyOf(popup) as Dict, resolve);
+      else if (isDict(popup)) hide(popup, resolve);
+    }
     const beads = listOf('/B');
     if (beads) {
       for (const item of beads) {
@@ -428,12 +478,12 @@ async function changesFor(
         else continue;
         const rect = resolve(bead['/R']);
         if (numbers(rect, (n) => n === 4)) {
-          const next4 = rectangle(rect, m);
+          const next4 = rectangle(rect, m, tally);
           if (next4) bead['/R'] = next4;
         }
       }
     }
-    onPage(++done, order.length);
+    onPage(index + 1, total);
   }
 
   // 4. Destinations, last, over the working copy of every object that has one and the read value of every other.
@@ -446,10 +496,10 @@ async function changesFor(
     let found = findDestinations(current, matrices);
     if (found.length === 0) continue;
     if (!copies.has(id)) found = findDestinations(copyOf(id), matrices);
-    for (const { array, matrix } of found) moveDestination(array, matrix);
+    for (const { array, matrix } of found) moveDestination(array, matrix, tally);
   }
 
-  return { max: read.max, total, prefixes, restoreId, copies };
+  return { max: read.max, limit, prefixes, restoreId, copies };
 }
 
 /** Bytes as base64, in chunks, with what a worker and Node both have. */
@@ -474,10 +524,10 @@ export function makeRun(limits: Partial<Limits> = {}): Engine<Options> {
     onProgress({ stage: 'reading', unit: 'file', done: 0, total: 1 });
     // The plain copy is handed over in an object and read only through it, so it can be let go once qpdf holds it.
     const source: PlainSource = { plain: (await plainCopy(tools, file, passwordFrom(options))).plain };
-    const changes = await changesFor(tools, source.plain!, paper, (done, total) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true }));
+    const changes = await changesFor(tools, source.plain!, paper, (done, total) => onProgress({ stage: 'working', unit: 'page', done, total, writesAfter: true }), budget);
     if (!changes) return [];
 
-    const limit = budget(source.plain!.byteLength, changes.total);
+    const limit = changes.limit;
     const qpdf = await freshQpdf(tools, source.plain!);
     delete source.plain;
     const encoder = new TextEncoder();

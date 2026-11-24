@@ -22,7 +22,7 @@ export const outputLimitSentence = 'The new file would be far larger than expect
  * file reaches it, so it fails the same on a computer: its own advice. Resize pages is the only tool that raises it, so
  * it names resizing; a later tool that places pages gives its own words.
  */
-export const unsafePageSentence = 'A page of this file could not be resized safely, so no new file was made. The file may be damaged. Try another copy of it.';
+export const unsafePageSentence = 'A page of this file could not be resized, so no new file was made. The file may be damaged. Try another copy of it.';
 
 /** What the page says when the engine refuses a text, for a tool with no words of its own for it. */
 export const textRefusedSentence = 'The text could not be used. Check it and try again.';

@@ -138,18 +138,28 @@ for (const [what, sentence] of [
     if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name}, which holds ${what}, holds pdf-lib's code.`);
   }
 }
-// The tools that place or crop pages without drawing read pages from pages.ts only, so their jobs never fetch the
-// drawing step's file: their engine files name the page-reading file and not the drawing step's.
-for (const id of ['crop-pdf', 'resize-pdf']) {
+// The drawing step's file is for the tools that draw with pdf-lib: no engine file may import it unless that
+// engine's job loads pdf-lib (`loads.job`, read from its source), so a tool that only reads and places pages
+// (Crop PDF, Resize pages) never fetches it. At least one engine must import it, so the rule cannot pass by finding nothing.
+const stampHolders = holdersOf['the drawing step (stamp.ts)'] ?? [];
+let stampImporters = 0;
+for (const id of engineIds) {
   const engineFile = files.find((each) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each));
-  if (!engineFile) {
-    problems.push(`No engine file for ${id}.`);
+  if (!engineFile) continue;
+  const job = /export const loads[^=]*=\s*\{[^}]*\bjob:\s*\[([^\]]*)\]/.exec(readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8'));
+  if (!job) {
+    problems.push(`Could not read loads.job of ${id}.`);
     continue;
   }
+  const drawsWithPdflib = /['"]pdflib['"]/.test(job[1]);
   const text = readFileSync(join(assets, engineFile), 'utf8');
-  for (const name of holdersOf['the drawing step (stamp.ts)'] ?? []) if (text.includes(name)) problems.push(`${engineFile} imports the drawing step (${name}).`);
-  for (const name of holdersOf['the page reading and page update steps (pages.ts)'] ?? []) if (!text.includes(name)) problems.push(`${engineFile} does not import the page reading steps (${name}).`);
+  for (const name of stampHolders) {
+    if (!text.includes(name)) continue;
+    stampImporters++;
+    if (!drawsWithPdflib) problems.push(`${engineFile} imports the drawing step (${name}), but ${id}'s job does not load pdf-lib.`);
+  }
 }
+if (stampImporters === 0) problems.push('No engine imports the drawing step, so the rule on who may import it found nothing to check.');
 
 // The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
 // picture.ts throws no sentences, so its marker names stand in for them.

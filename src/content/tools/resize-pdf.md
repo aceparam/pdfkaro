@@ -32,11 +32,11 @@ A part hidden by cropping stays hidden, and it stays in the file. But a page wit
 
 ### Why did I get no new file?
 
-Every page was already the paper size you chose. You can use your file as it is, or press Start again and pick the other size.
+Every page was already the paper size you chose. You can use your file as it is, or press Start again, choose the file again and pick the other size.
 
 ### Do links, forms and bookmarks still work?
 
-Yes. Links, form fields and notes move with the page, and bookmarks still go to the same place. A note or link that was wholly out of view is hidden and stays in the file; one partly out of view now shows whole. Text you type into a form field afterwards may look larger on a page that was made much smaller. A digital signature will no longer be valid.
+Yes. Links, form fields and notes move with the page, and bookmarks still go to the same place; a note, link or form field that was wholly out of view is hidden and stays in the file, and one partly out of view may now show more of it, or all of it. Text you type into a form field afterwards may look larger on a page that was made much smaller, and a digital signature will no longer be valid.
 
 ### What is removed?
 

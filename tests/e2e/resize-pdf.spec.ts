@@ -23,7 +23,7 @@ const open = 'open-sesame';
 /** The marked password of the file protected in the no-upload test. */
 const marked = 'Qz7 pw#%@ Kv4';
 const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
-const unsafeSentence = 'A page of this file could not be resized safely, so no new file was made. The file may be damaged. Try another copy of it.';
+const unsafeSentence = 'A page of this file could not be resized, so no new file was made. The file may be damaged. Try another copy of it.';
 const noneHeading = 'Every page is already the paper size you chose.';
 const noneAdvice = 'No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size.';
 const resultNotes = [
@@ -403,7 +403,7 @@ test.describe('Cancel and failures', () => {
   const cases: [string, string, string][] = [
     ['the browser runs out of memory', "throw new RangeError('Array buffer allocation failed');", 'Your browser ran out of memory. Try on a computer, or split the file first and resize the parts.'],
     ['the new file would be far too large', "const error = new Error('x'); error.name = 'OutputLimit'; throw error;", outputLimitSentence],
-    ['a page cannot be resized safely', "const error = new Error('x'); error.name = 'UnsafePage'; throw error;", unsafeSentence],
+    ['a page cannot be resized', "const error = new Error('x'); error.name = 'UnsafePage'; throw error;", unsafeSentence],
   ];
   for (const [what, run, sentence] of cases) {
     test(`when ${what}, the page says so under "The pages were not resized."; "Go back to your file" keeps the file, its password and Letter, and the job runs again`, async ({ page, context }) => {
@@ -490,8 +490,9 @@ test.describe('the words below the tool', () => {
       'Cropping or resizing is not a way to hide something private.',
       'Why did I get no new file?',
       'Do links, forms and bookmarks still work?',
-      'Text you type into a form field afterwards may look larger on a page that was made much smaller.',
-      'A note or link that was wholly out of view is hidden and stays in the file; one partly out of view now shows whole.',
+      'Text you type into a form field afterwards may look larger on a page that was made much smaller, and a digital signature will no longer be valid.',
+      'press Start again, choose the file again and pick the other size.',
+      'a note, link or form field that was wholly out of view is hidden and stays in the file, and one partly out of view may now show more of it, or all of it.',
       'What is removed?',
       'Will this make my file smaller?',
       'report-resized.pdf',
