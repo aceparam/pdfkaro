@@ -11,7 +11,7 @@ The common reasons to resize: a form portal or a printer that wants A4 and the f
 
 So the page has one choice, "Paper size", built with the existing `ChoiceOption` and `ChoiceGroup` (`add-tool-options`). No new shared component and no new option kind is needed, so the tool is proposed directly, as `SPEC.md` "Build phases" rule 3 allows.
 
-**Order (stage 1, program manager and architect):** page reading is first moved out of `src/engines/stamp.ts` into `src/engines/pages.ts`, in its own pull request with no change in behaviour (`readPages`, `pageBox`, the place types, the limits, `pdfNumber`, `sizeLimit`, `PlainSource`, and stamp's update writer renamed `writePageUpdate`; `opening` and `entryText` into `src/engines/qpdf-json.ts`). Resize is the third caller of page reading, which Crop left for later. Resize is built once that pull request is merged.
+**Order (stage 1, program manager and architect):** page reading is first moved out of `src/engines/stamp.ts` into `src/engines/pages.ts`, in its own pull request with no change in behaviour (`readPages`, `pageBox`, the place types, the limits, `pdfNumber`, `sizeLimit`, `PlainSource`, and stamp's update writer renamed `writePageUpdate`; `opening` and `entryText` into `src/engines/qpdf-json.ts`). Resize is the third caller of page reading, which Crop left for later. The move goes through the review panel's stage 2 and gets its own line in "Where the project stands"; Resize is built once it is merged.
 
 Not built, and why (design, decision 1): other paper sizes (the owner chose A4 and Letter only); changing the paper without scaling, which either cuts content off or adds white space only on two sides (the owner chose scale to fit); one orientation for every page (the owner chose each page's own).
 
@@ -25,14 +25,14 @@ Not built, and why (design, decision 1): other paper sizes (the owner chose A4 a
   - a page already the chosen size the same way round, to within 1 point on each side and with no user unit, is left exactly as it is.
 - **What changes in the file, and how** (design, decisions 2 to 5):
   - each resized page's own content streams are not rewritten: two small new streams are put around them in `/Contents`, the first saving the drawing state, scaling and moving the page's drawing into the new paper and clipping it to where the page was shown before, the second restoring the state;
-  - **what was hidden stays hidden:** each resized page's content is read and its saves and restores counted, so a page whose content restores more than it saves gets as many extra saves, and nothing outside its old shown box can be drawn; where the count cannot be made safely the job stops with a sentence. A note, link or field that lay wholly outside the old shown box is moved and marked hidden; one that lay partly outside is moved and shows whole, which the page says;
+  - **what was hidden:** drawn content outside a page's old shown box is clipped. A page whose own drawing instructions are broken (an extra restore) can undo the scale and the clip in some readers and show what an earlier crop hid, at its old size; the page says so plainly, with that hidden parts stay in the file and cropping or resizing is not a way to hide something private. A note, link or field that lay wholly outside the old shown box is moved and marked hidden (popups excepted); one that lay partly outside is moved and shows whole, which the page says;
   - one rounded matrix per page moves the content, its annotations (their rectangles and the other places they store), every destination that points to it (bookmarks, links, named destinations, the opening view) and its reading-thread beads, so they line up; each changed object is written once;
   - the page's `/MediaBox` and `/CropBox` become the new paper, written on the page itself; its `/UserUnit` is removed; its `/Rotate` is kept, so it shows the same way up; its own `/BleedBox`, `/TrimBox`, `/ArtBox`, `/Thumb` and `/VP`, and its annotations' `/Measure`, are removed;
   - text, tags, bookmarks, attached files and the document's details are kept. The file is written afresh, so earlier saved versions inside it are not kept and a digital signature stops being valid. The new file has no password and no restrictions, as every page tool's, and the page says so.
 - **A file where no page changes** (every page already the chosen size): no new file is made, and the page says "Every page is already the paper size you chose." with how to pick the other size, using the "no new file" outcome Compress PDF, Remove a password and Crop PDF use.
-- **Progress:** "Reading the file", then "Page N of M" while each page's content is read and the changes worked out, then writing; Cancel works throughout.
+- **Progress:** "Reading the file", then "Page N of M" while the changes are worked out, then writing; Cancel works throughout.
 - **The "Organise pages" hub words** gain resizing, as a tool joining a group with a hub must (`add-search-basics`).
-- **Shared engine code riding along, no shared component:** `readPages` in `pages.ts` gains an option to give back every object it read (`{ objects: true }`), as Crop added `{ pictures: true }`. Nothing is exported from `stamp.ts`. The annotation and destination movers and the content tokenizer stay in `resize-pdf.ts` for now.
+- **Shared engine code riding along, no shared component:** `readPages` in `pages.ts` gains an option to give back every object it read (`{ objects: true }`), as Crop added `{ pictures: true }`. Nothing is exported from `stamp.ts`. The annotation and destination movers stay in `resize-pdf.ts` for now.
 - **Page text, tests and screenshots,** as for every tool.
 
 ### Scope
@@ -42,7 +42,7 @@ Not built, and why (design, decision 1): other paper sizes (the owner chose A4 a
   - other paper sizes, a size the visitor types, and one orientation for every page (the owner's decisions of 24 Nov 2026);
   - a margin around the content, choosing which pages to resize, and changing the paper without scaling;
   - scaling the font size a form field uses when a reader draws typed text afresh (owner question 6);
-  - fixing the stamp tools' own exposure to a page whose content restores more than it saves (left for later; design decision 3);
+  - reading or checking a page's own drawing instructions (a check for an extra restore was planned and dropped at stage 2, design decision 3; owner question 8), and fixing the stamp tools' own exposure to an extra restore (left for later);
   - knowing before the main button that every page is already the chosen size, and "Go back to your file" in a no-new-file result (left for later; Remove a password has the same gap);
   - next steps after the result, a known gap across the site;
   - the missing thousands separator in "Page N of M", recorded as known since Crop.
@@ -50,7 +50,7 @@ Not built, and why (design, decision 1): other paper sizes (the owner chose A4 a
 ### `SPEC.md` sections
 
 - "Tool catalogue": Resize pages to A4 or Letter, `/resize-pdf`, Browser, Phase 2, eighth under "Organise pages".
-- "What we are building": rules 1, 2, 4 ("Honest about limits": what does not scale exactly, partly hidden annotations) and 5.
+- "What we are building": rules 1, 2, 4 ("Honest about limits": what does not scale exactly, partly hidden annotations, a broken page that can undo the clip) and 5.
 - "Architecture and tech stack": qpdf for page structure; "Rules for the code" 1 to 4.
 - "Tool page anatomy": parts 1 to 7 (part 4: one option, with a default that makes the main button work), and every state in "States every tool handles".
 - "Details that apply everywhere": output names.
@@ -73,7 +73,8 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
   4. a resized page's own bleed, trim and art boxes are removed (the new paper is the finished size). Crop PDF cuts these boxes back to its new crop box; Resize removes them, because scaled they would no longer match the paper;
   5. passwords and restrictions dropped, extending the owner's decision of 13 Nov 2026 for page tools, as Crop did;
   6. text typed into a form field after resizing uses the field's old font size, which can look large on a page made much smaller; accepted for now;
-  7. notes, links and fields that an earlier crop kept out of view are hidden after resizing (their Hidden flag is set); keep?
+  7. notes, links and fields that an earlier crop kept out of view are hidden after resizing (their Hidden flag is set; popups excepted); keep?
+  8. a page with broken drawing instructions can show, after resizing, what an earlier crop hid (it was still in the file before too); accept for now, or build a content check later? Default: accept.
 - **20,000 pages:** the shared notice is shown, by the owner's decision of 13 Nov 2026.
 - **Repair PDF link:** as for every tool, no link until Repair PDF is published.
 - **Signed files** (open owner question): Resize, like every page tool, makes a signature invalid and says so.
@@ -81,7 +82,7 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 - **Shared pieces in tool pull requests** (open owner question): the page-reading move goes in its own pull request first, by the stage 1 decision; only the `objects` option of `readPages` rides along with Resize; named in the pull request.
 - **Character maps:** not touched; PDF.js only draws the first page's thumbnail here.
 - **Licence, server host, money, analytics, AI tools:** not touched. No server, no dependency.
-- **The agent's own choices,** named in the pull request: the choice's labels, the output name `-resized`, the words, the hub words, removing `/Thumb`, `/VP` and `/Measure`, stopping the job when a page's content cannot be counted safely.
+- **The agent's own choices,** named in the pull request: the choice's labels, the output name `-resized`, the words, the hub words, removing `/Thumb`, `/VP` and `/Measure`, stopping the job when a page's numbers cannot be written safely ("A page of this file could not be resized safely, so no new file was made.", with the shared advice "The file may be damaged. Try another copy of it."), and its failure kind if a new one is needed.
 
 No open decision needs more than its assumed default.
 
@@ -89,7 +90,7 @@ No open decision needs more than its assumed default.
 
 ### New Capabilities
 
-- `resize-pdf`: what the Resize pages tool at `/resize-pdf` does. That covers choosing one file, the paper-size choice, how each page is fitted, that hidden content stays hidden, what moves with it, what the new file keeps and changes, a file where no page changes, every state of "States every tool handles", nothing uploaded, and the words on the page.
+- `resize-pdf`: what the Resize pages tool at `/resize-pdf` does. That covers choosing one file, the paper-size choice, how each page is fitted, what happens to hidden content, what moves with it, what the new file keeps and changes, a file where no page changes, every state of "States every tool handles", nothing uploaded, and the words on the page.
 
 ### Modified Capabilities
 
@@ -98,7 +99,7 @@ No open decision needs more than its assumed default.
 ## Impact
 
 - **New code:**
-  - `src/engines/tools/resize-pdf.ts` (placement, the content tokenizer, the batched decoded read, the annotation, bead and destination movers);
+  - `src/engines/tools/resize-pdf.ts` (placement, the annotation, bead and destination movers);
   - `src/content/tools/resize-pdf.md`;
   - `tests/unit/resize-pdf.test.ts`, with `tests/unit/resize-helpers.ts` for files made in the test;
   - `tests/e2e/resize-pdf.spec.ts`.

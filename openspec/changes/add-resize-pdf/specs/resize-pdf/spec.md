@@ -150,31 +150,26 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 #### Scenario: A rounding that cannot be written safely
 
 - **WHEN** a crafted page with `/UserUnit 0.001` and a box of 10^10 units is resized
-- **THEN** the job stops with "A page could not be resized safely, so the file was not changed." and writes nothing
+- **THEN** the job stops with "A page of this file could not be resized safely, so no new file was made." and writes nothing
 
-### Requirement: What was hidden stays hidden
+#### Scenario: A clip that cannot be written closely enough
 
-On a resized page, nothing outside its old shown box SHALL be drawn, even when its own content restores more drawing states than it saves; where that cannot be counted safely the job SHALL stop with a fixed sentence. An annotation with no area in common with the old shown box SHALL be moved and marked hidden, keeping its other flags; one that partly overlaps SHALL be moved and stay visible, as the page SHALL say. (SPEC.md: What we are building, rule 4; Privacy, limits and security)
+- **WHEN** a crafted page with `/UserUnit 1000000`, a crop box of 0.000001 units and content outside it is resized
+- **THEN** either nothing outside the old crop box is drawn, or the job stops with the same sentence
+
+### Requirement: What was hidden
+
+On a resized page, drawn content outside its old shown box SHALL be clipped. A page whose own drawing instructions restore more than they save can undo the scaling and the clip in some readers, and may then show what was hidden at its old size, as the page SHALL say. An annotation other than a popup with no area in common with the old shown box SHALL be marked hidden; one that partly overlaps SHALL stay visible, as the page SHALL say. (SPEC.md: What we are building, rule 4)
 
 #### Scenario: A page that hid part of itself
 
 - **WHEN** a page whose crop box, inherited from the page tree, is smaller than its paper box is resized
 - **THEN** only what the old crop box showed is drawn on the new page, scaled and centred, and what it hid is not drawn
 
-#### Scenario: A stray restore before hidden text
+#### Scenario: A page with an extra restore, recorded
 
 - **WHEN** a page whose content draws text, then restores once more than it saved, then draws `SECRET-hidden` outside its crop box, is resized from Letter to A4
-- **THEN** PDF.js draws nothing in the white bands and does not draw `SECRET-hidden`
-
-#### Scenario: Content the counting must read past
-
-- **WHEN** a page's content holds `Q` inside a literal string, an escaped parenthesis, a hex string, a comment and an inline image whose data holds `Q` and `EI`-like bytes
-- **THEN** none of them is counted as a restore, and the page is resized with the right number of extra saves
-
-#### Scenario: Content that cannot be counted
-
-- **WHEN** a page's content ends inside a literal string, or holds an inline image with no end, or restores more than 256 times beyond what it saved
-- **THEN** the job stops with "A page could not be resized safely, so the file was not changed." and writes nothing
+- **THEN** the job finishes, what PDF.js draws is recorded in the fixtures README as a known outcome, not a promise, and the test fails only if that outcome changes
 
 #### Scenario: A note outside the old crop box
 
@@ -185,6 +180,11 @@ On a resized page, nothing outside its old shown box SHALL be drawn, even when i
 
 - **WHEN** a link reaches half outside a page's crop box and the page is resized
 - **THEN** the link is moved and stays visible, the half that was outside now in the white space
+
+#### Scenario: A popup beside the page
+
+- **WHEN** a note's popup has a rectangle starting at the old paper's right edge, and the page is resized
+- **THEN** the popup is moved, its `/F` is unchanged, and PDF.js still opens it from the note
 
 ### Requirement: What moves with the page
 
@@ -320,6 +320,11 @@ When the job fails the page SHALL say "The pages were not resized." and what hap
 - **WHEN** the worker runs out of memory
 - **THEN** the page says so and gives "Try on a computer, or split the file first and resize the parts."
 
+#### Scenario: A page that cannot be resized safely
+
+- **WHEN** the engine stops because a page's numbers cannot be written safely
+- **THEN** the page says "The pages were not resized.", "A page of this file could not be resized safely, so no new file was made." and "The file may be damaged. Try another copy of it.", and offers "Go back to your file"
+
 #### Scenario: The new file would be far too large
 
 - **WHEN** the update or the new file passes the size budget
@@ -375,4 +380,4 @@ The page SHALL carry three or four how-to steps and real questions, 250 to 500 w
 #### Scenario: Honest about what was hidden and what is removed
 
 - **WHEN** the questions are read
-- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a note or link wholly out of view is hidden while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
+- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a deliberately broken page can show it after resizing, that cropping or resizing is not a way to hide something private, that a note or link wholly out of view is hidden and stays in the file while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
