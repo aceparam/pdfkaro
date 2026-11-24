@@ -22,6 +22,23 @@ describe('matchesPhrase', () => {
     expect(matchesPhrase(merge, '  merge  ')).toBe(true);
   });
 
+  it('ignores spaces inside the phrase and the words, so "200kb" finds "200 KB"', () => {
+    const target = { name: 'Compress PDF to 200 KB', summary: 'Make a PDF 200 KB or smaller.' };
+    expect(matchesPhrase(target, '200kb')).toBe(true);
+    expect(matchesPhrase(target, '200KB')).toBe(true);
+    expect(matchesPhrase(target, 'compress pdf to 200kb')).toBe(true);
+    expect(matchesPhrase(target, 'compresspdf')).toBe(true);
+    expect(matchesPhrase(target, '2 0 0 k b')).toBe(true);
+    expect(matchesPhrase(target, '100kb')).toBe(false);
+    expect(matchesPhrase(target, '200mb')).toBe(false);
+  });
+
+  it('loses no earlier match: every phrase found as typed is still found', () => {
+    for (const phrase of ['merge', 'MERGE pdf', 'combine', 'several pdfs', '  merge  ', 'pdfs into one']) expect(matchesPhrase(merge, phrase)).toBe(true);
+    expect(matchesPhrase({ name: 'A (b)', summary: '' }, '(b)')).toBe(true);
+    expect(matchesPhrase({ name: 'A (b)', summary: '' }, 'a (b)')).toBe(true);
+  });
+
   it('does not match other words', () => {
     expect(matchesPhrase(merge, 'rotate')).toBe(false);
   });

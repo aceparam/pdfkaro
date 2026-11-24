@@ -346,7 +346,7 @@ test.describe('nothing is uploaded', () => {
     for (const name of [/\/compress-pdf-/, /\/fflate-/, /\/picture-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     expect(holding(fetched, 'The samples are not the size given.').length).toBe(1);
     expect(holding(fetched, 'An object id was not valid.').length).toBe(1);
-    for (const other of [/\/pdflib-/, /\/picture-thumbnail-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
+    for (const other of [/\/compress-to-target-/, /\/pdflib-/, /\/picture-thumbnail-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     await expectNothingHeld(page, context, secrets, consoleText);
   });
 

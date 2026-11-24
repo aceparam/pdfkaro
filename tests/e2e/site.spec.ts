@@ -141,11 +141,11 @@ test.describe('tool page', () => {
     const related = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');
     // Compress PDF is published since its own change; JPG to PDF since Image to PDF.
     await expect(related).toHaveText(['Split PDF', 'Reorder pages', 'Rotate PDF', 'Compress PDF', 'JPG to PDF']);
-    // Compress PDF names PDF to JPG, published since its own change. Every related tool named in the registry is
+    // Compress PDF names PDF to JPG, published since its own change, and Compress PDF to 200 KB. Every related tool named in the registry is
     // now published, so leaving out an unpublished one is checked in tests/unit/queries.test.ts.
     await page.goto('/compress-pdf');
     const own = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');
-    await expect(own).toHaveText(['Merge PDF', 'Split PDF', 'Delete pages', 'JPG to PDF', 'PDF to JPG']);
+    await expect(own).toHaveText(['Merge PDF', 'Split PDF', 'Delete pages', 'JPG to PDF', 'PDF to JPG', 'Compress PDF to 200 KB']);
     // A tool of several pages links each page to the others, never to itself.
     await page.goto('/pdf-to-jpg');
     const sibling = page.locator('section', { has: page.getByRole('heading', { name: 'Related tools' }) }).getByRole('list').getByRole('link');

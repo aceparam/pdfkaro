@@ -35,6 +35,7 @@ import { orderSummary } from '../../widget/order';
 import { allAnnouncement, turnAnnouncement, turnCaption, turnChunk, turnedAll, turnedPage, turnOf, turnRules, turnsVersion, type Turns } from '../../widget/turns';
 import { toggledMarks, toggleRules } from '../../widget/toggles';
 import { allReady, canRun, currentProblem, hugeFiles, isLarge, isManyPages, isNoNewFile, isUnreadable, manyPages, pageBatch, totals, type FileEntry } from '../../widget/state';
+import { heldFile, heldSentence, overAdviceFor, overHeading, overResult, pageTarget, underHeading } from '../../widget/target';
 import { ChoiceGroup } from '../ChoiceGroup/ChoiceGroup';
 import { DrawingPad } from '../DrawingPad/DrawingPad';
 import { FilePicker } from '../FilePicker/FilePicker';
@@ -66,9 +67,13 @@ type Props = {
 const drawFirst = 30;
 const drawStep = 100;
 
-/** What a file's row says beside its name. `listPages: false` leaves the page count out, for a tool whose every file is one page. */
-function detailFor(file: FileEntry, listPages = true): string {
+/**
+ * What a file's row says beside its name. `listPages: false` leaves the page count out, for a tool whose every file is
+ * one page. A file held as already under the page's target (`held`) shows its size, never that it needs a password.
+ */
+function detailFor(file: FileEntry, listPages = true, held = false): string {
   if (file.checking) return 'Trying the password';
+  if (held && file.status !== 'ready') return formatSize(file.size);
   switch (file.status) {
     case 'reading':
       return 'Getting ready';
@@ -107,6 +112,11 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
   const run = useToolRun({ toolId, accepts, words, preset, createWorker: createToolWorker, onProgress: announceProgress });
   const { state, result, thumbnails } = run;
+  // The size a page sets the result to fit (Compress to a target size), and the one file when it is already at or
+  // under it: held from the pick, with no password asked, its sentence tied to the main button.
+  const target = useMemo(() => pageTarget(words, preset), [words, preset]);
+  const held = heldFile(state.files, target);
+  const heldWords = held && target ? heldSentence(held.name, target) : null;
 
   const summaryRef = useRef<HTMLParagraphElement | null>(null);
   const mainRef = useRef<HTMLButtonElement | null>(null);
@@ -188,7 +198,7 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
 
   // Problems, one at a time in list order. A file whose password is being tried
   // stays the problem until the answer comes back.
-  const problem = currentProblem(state);
+  const problem = held ? undefined : currentProblem(state);
   const problemKey = problem ? `${problem.id}:${problem.status}${problem.checking ? ':checking' : ''}` : '';
   // A file that cannot be read: its heading and the tool's advice, worked out once per render.
   const unreadableWords = problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? unreadableNotice(problem.name, problem.status, words) : undefined;
@@ -376,9 +386,9 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
     const byId = new Map(state.files.map((file) => [file.id, file]));
     return entries.map((entry) => {
       const file = byId.get(entry.fileId);
-      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file, listPages), thumbnail: thumbnails[entry.id] };
+      return { id: entry.id, title: entry.title, detail: pages || !file ? '' : detailFor(file, listPages, held?.id === file.id), thumbnail: thumbnails[entry.id] };
     });
-  }, [entries, state.files, thumbnails, pages, listPages]);
+  }, [entries, state.files, thumbnails, pages, listPages, held]);
   // A tool that lists pages has one file, shown on its own line above them.
   const onlyFile = pages ? state.files[0] : undefined;
   // A tool that takes one file and lists it as a row (Compress PDF): the row says it all, so no summary line above it.
@@ -400,14 +410,16 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   }, [pages, drawn, items.length]);
   const gridItemsDrawn = useMemo(() => (pages ? items.slice(0, drawn) : items), [pages, items, drawn]);
 
-  // When that file has been read and its pages or its row appear, say what the line now says.
-  const onlyReady = soleFile && soleFile.status === 'ready' && !soleFile.checking ? `${soleFile.id}:${detailFor(soleFile)}` : '';
+  // When that file has been read and its pages or its row appear, say what the line now says; for a file held as
+  // already under the page's target, its sentence too, whether or not it needs a password.
+  const soleHeld = soleFile !== undefined && held?.id === soleFile.id;
+  const onlyReady = soleFile && (soleFile.status === 'ready' || soleHeld) && !soleFile.checking ? `${soleFile.id}:${detailFor(soleFile, true, soleHeld)}:${soleHeld}` : '';
   const announcedReady = useRef('');
   useEffect(() => {
     if (!onlyReady || !soleFile || announcedReady.current === onlyReady) return;
     announcedReady.current = onlyReady;
-    setAnnouncement(`${soleFile.name}, ${detailFor(soleFile)}.`);
-  }, [onlyReady, soleFile, setAnnouncement]);
+    setAnnouncement([`${soleFile.name}, ${detailFor(soleFile, true, soleHeld)}.`, soleHeld ? heldWords : null].filter(Boolean).join(' '));
+  }, [onlyReady, soleFile, soleHeld, heldWords, setAnnouncement]);
 
   // A toggle on each page, such as Split's cuts or Extract's choice. What it means comes from toggles.ts.
   const itemToggle = words.itemToggle;
@@ -509,10 +521,11 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   // The main button: too few files, or, once a page tool's pages are shown, what its toggle kind still needs.
   const tooFew = state.files.length < words.minFiles;
   const blocked = rules && filePages > 0 ? rules.blocked(filePages, marks) : turnsBlocked;
-  const ready = canRun(state, words.minFiles, blocked === null) && hold === null;
+  const ready = canRun(state, words.minFiles, blocked === null) && hold === null && !held;
   // An empty text's sentence goes under the main button once its field is shown, after too few files and the toggles' sentence.
   // A picture still being read says so there too, as does a new password not yet typed twice.
-  const tiedFor = (each: OptionHold | null) => (tooFew ? words.tooFewFiles : (blocked ?? (showOptions && each && holdsUnderButton(each) ? each.sentence : null)));
+  const tiedFor = (each: OptionHold | null) =>
+    tooFew ? words.tooFewFiles : (heldWords ?? blocked ?? (showOptions && each && holdsUnderButton(each) ? each.sentence : null));
   const tiedSentence = tiedFor(hold);
   const holdIds = {
     tied: whyNotId,
@@ -575,6 +588,22 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   }
 
   if (state.step === 'done' && state.result && !isNoNewFile(state.result) && result) {
+    // A result measured against the page's target: under it, its own heading and the shared line; over it, the
+    // heading, a sentence naming its size and the target, the tool's advice, and the line with the same size.
+    if (target && words.sizeTarget && state.result.was !== undefined) {
+      const over = state.result.size > target.bytes ? overResult({ size: state.result.size, was: state.result.was, pages: state.result.pages }, target) : null;
+      return (
+        <Result
+          heading={over ? overHeading(target) : underHeading(target)}
+          sentence={over?.sentence}
+          advice={over ? overAdviceFor(words.sizeTarget.overAdvice, target) : undefined}
+          file={{ name: state.result.name, detail: over ? over.detail : resultDetail(state.result), href: result.url }}
+          notes={words.resultNotes}
+          onStartAgain={startAgain}
+          headingRef={resultRef}
+        />
+      );
+    }
     // A zip says how many files it holds; a PDF, how many pages; a tool that makes files smaller, the old size.
     return (
       <Result

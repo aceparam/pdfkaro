@@ -13,7 +13,9 @@ import {
   passwordCharacters,
   passwordRule,
   pictureRule,
+  sizeTargets,
   textRule,
+  type SizeTargetKey,
   type DrawingRule,
   type PasswordRule,
   type PictureRule,
@@ -165,7 +167,8 @@ describe('catalogue order', () => {
     const { readFileSync } = await import('node:fs');
     const spec = readFileSync('SPEC.md', 'utf8');
     const catalogue = spec.slice(spec.indexOf('## Tool catalogue'), spec.indexOf('## Architecture'));
-    const order = [...catalogue.matchAll(/\| (\/[a-z0-9-]+) \|/g)].map((match) => match[1]!.slice(1));
+    // The first address of every row, including a row that lists several ("/compress-pdf-to-100kb, -200kb, …").
+    const order = [...catalogue.matchAll(/\| (\/[a-z0-9-]+)[,| ]/g)].map((match) => match[1]!.slice(1));
     // Image to PDF is one tool with three pages (the owner's decision of 13 Nov 2026). Its first page,
     // /jpg-to-pdf, sits under "Convert to PDF", but the owner's tool is Image to PDF, which the
     // export lists at /image2pdf, right after Rotate PDF; so it is counted there.
@@ -173,6 +176,13 @@ describe('catalogue order', () => {
     const positions = tools.map((tool) => order.indexOf(placeOf(tool)));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    // The row that lists several addresses is read by its first: Compress to a target size counts after Compress
+    // PDF and before PDF to JPG.
+    const target = order.indexOf('compress-pdf-to-100kb');
+    expect(target).toBeGreaterThan(order.indexOf('compress-pdf'));
+    expect(target).toBeLessThan(order.indexOf('pdf-to-jpg'));
+    const ids = tools.map((tool) => tool.id);
+    expect(ids.indexOf('compress-to-target')).toBe(ids.indexOf('compress-pdf') + 1);
   });
 });
 
@@ -431,7 +441,7 @@ describe('Compress PDF', () => {
 
   it('is the first row of "Make smaller and fix", after Image to PDF, taking one PDF', () => {
     expect(tool).toMatchObject({ group: 'smaller', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
-    expect(tool.related).toEqual(['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg']);
+    expect(tool.related).toEqual(['merge-pdf', 'split-pdf', 'delete-pdf-pages', 'jpg-to-pdf', 'pdf-to-jpg', 'compress-pdf-to-200kb']);
     const ids = tools.map((each) => each.id);
     expect(ids.indexOf('compress-pdf')).toBe(ids.indexOf('images-to-pdf') + 1);
     expect(tool.pages).toEqual([
@@ -483,11 +493,169 @@ describe('Compress PDF', () => {
   it('leaves the other tools without the "was" size or the words for no smaller file, so they are unchanged', () => {
     for (const each of tools) {
       if (each.id === 'compress-pdf') continue;
-      expect(each.widget?.resultWas).toBeUndefined();
+      // Compress to a target size shows the old size too, and gives no new file when nothing fits or saves 1%.
+      if (each.id !== 'compress-to-target') expect(each.widget?.resultWas).toBeUndefined();
       // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
       // Crop PDF gives no new file when no page is cut; Resize pages when every page is already the chosen size.
-      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
+      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf', 'compress-to-target'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
     }
+  });
+});
+
+describe('Compress to a target size', () => {
+  const tool = tools.find((each) => each.id === 'compress-to-target')!;
+  const sizes = [
+    ['100kb', '100 KB'],
+    ['200kb', '200 KB'],
+    ['500kb', '500 KB'],
+    ['1mb', '1 MB'],
+    ['2mb', '2 MB'],
+  ] as const;
+
+  it('is one Phase 2 tool with five pages, right after Compress PDF under "Make smaller and fix", taking one PDF', () => {
+    expect(tool).toMatchObject({ group: 'smaller', runsIn: 'browser', phase: 2, accepts: ['application/pdf'] });
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('compress-to-target')).toBe(ids.indexOf('compress-pdf') + 1);
+    expect(tool.pages.map((page) => page.slug)).toEqual(sizes.map(([key]) => `compress-pdf-to-${key}`));
+    expect(tool.related).toEqual(['compress-pdf-to-200kb', 'compress-pdf-to-500kb', 'compress-pdf-to-1mb', 'compress-pdf', 'delete-pdf-pages', 'split-pdf']);
+  });
+
+  it('gives each page its target through its preset, and its own words naming its size', () => {
+    tool.pages.forEach((page, index) => {
+      const [key, label] = sizes[index]!;
+      expect(page.preset).toEqual({ target: key });
+      expect(page.name).toBe(`Compress PDF to ${label}`);
+      expect(page.summary).toBe(`Make a PDF ${label} or smaller.`);
+      expect(page.title).toBe(`Compress a PDF to ${label} in your browser - PDFkaro`);
+      expect(page.heading).toBe(`Compress a PDF to ${label}`);
+      expect(page.sentence).toBe(`Make a PDF ${label} or smaller. Your file stays on your device.`);
+      expect(page.words).toEqual({ actionLabel: `Compress to ${label} and download` });
+      expect(page.description).toContain(label);
+      expect(page.description).toContain('The file stays on your device and is not uploaded.');
+      expect(pageWords(tool, page)?.actionLabel).toBe(`Compress to ${label} and download`);
+    });
+  });
+
+  it('links each page to the others of the design, never to itself', () => {
+    const links = (slug: string) => relatedItems(tools, tool, '/', tool.pages.find((page) => page.slug === slug)!).map((item) => item.href);
+    expect(links('compress-pdf-to-200kb')).toEqual(['/compress-pdf-to-500kb', '/compress-pdf-to-1mb', '/compress-pdf', '/delete-pdf-pages', '/split-pdf']);
+    expect(links('compress-pdf-to-100kb')).toHaveLength(6);
+    expect(links('compress-pdf-to-2mb')).toHaveLength(6);
+  });
+
+  it('has the widget words of the design: one file as a row, no options, the "was" size, a size target and no smaller file', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      tooFewFiles: 'Choose a PDF file to compress.',
+      writingLabel: 'Writing the compressed file',
+      doneHeading: 'Your compressed file is ready',
+      failedHeading: 'The compression did not finish.',
+      outputSuffix: 'compressed',
+      outputs: 'one',
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and compress the parts.',
+      resultWas: true,
+      sizeTarget: {
+        overAdvice:
+          'To get under {target}, remove pages you do not need, or split the file and send it in parts.',
+      },
+      noSmaller: {
+        heading: 'This file could not be made smaller.',
+        advice:
+          'Its pictures are already small, or of a kind this tool leaves alone, and text, drawings and fonts keep their quality, so they cannot be made much smaller. To get under the limit, remove pages you do not need, or split the file and send it in parts.',
+      },
+    });
+    expect(tool.widget!.options).toBeUndefined();
+    expect(tool.widget!.resultNotes).toEqual([
+      'Pictures that were made smaller can look less sharp up close. Text, drawings and fonts keep their quality.',
+      'Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
+      'If the file had a password or restrictions, it still has them.',
+    ]);
+  });
+
+  it('names upload limits in the "Make smaller and fix" hub words', () => {
+    const smaller = groups.find((group) => group.id === 'smaller')!;
+    expect(smaller.description).toBe(
+      'Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded.',
+    );
+    expect(smaller.sentence).toBe('Tools that make a PDF file smaller, or small enough for an upload limit.');
+    expect(smaller.claimsDevice).toBe(true);
+  });
+});
+
+/**
+ * What is wrong with a tool's size target: every page of a tool whose words declare one has a preset naming a key of
+ * `sizeTargets`, whose label is in the page's heading, sentence, title and main button; no other tool's page sets
+ * `target`. Run on every tool, and on entries made wrong on purpose so each check is seen to fail.
+ */
+function sizeTargetProblems(tool: Pick<Tool, 'id' | 'pages' | 'widget'>): string[] {
+  const problems: string[] = [];
+  for (const page of tool.pages) {
+    const named = page.preset && Object.hasOwn(page.preset, 'target') ? page.preset.target : undefined;
+    if (!tool.widget?.sizeTarget) {
+      if (named !== undefined) problems.push(`${page.slug}: sets target, but the tool has no size target`);
+      continue;
+    }
+    const target = typeof named === 'string' && Object.hasOwn(sizeTargets, named) ? sizeTargets[named as SizeTargetKey] : undefined;
+    if (!target) {
+      problems.push(`${page.slug}: the preset names no known target`);
+      continue;
+    }
+    const button = pageWords(tool as Tool, page)?.actionLabel ?? '';
+    for (const [name, words] of [['heading', page.heading], ['sentence', page.sentence], ['title', page.title], ['main button', button]] as const) {
+      if (!words.includes(target.label)) problems.push(`${page.slug}: the ${name} does not name ${target.label}`);
+    }
+  }
+  return problems;
+}
+
+describe('size targets', () => {
+  const target = tools.find((each) => each.id === 'compress-to-target')!;
+  const compress = tools.find((each) => each.id === 'compress-pdf')!;
+  const withPage = (change: Partial<Tool['pages'][number]>, index = 2): Tool => ({
+    ...target,
+    pages: target.pages.map((page, at) => (at === index ? { ...page, ...change } : page)),
+  });
+
+  it('are sound for every tool', () => {
+    for (const each of tools) expect(sizeTargetProblems(each), each.id).toEqual([]);
+  });
+
+  it('are written once, in thousands, with their labels and the labels in 1024s', () => {
+    expect(Object.entries(sizeTargets)).toEqual([
+      ['100kb', { bytes: 100_000, label: '100 KB', binary: 102_400 }],
+      ['200kb', { bytes: 200_000, label: '200 KB', binary: 204_800 }],
+      ['500kb', { bytes: 500_000, label: '500 KB', binary: 512_000 }],
+      ['1mb', { bytes: 1_000_000, label: '1 MB', binary: 1_048_576 }],
+      ['2mb', { bytes: 2_000_000, label: '2 MB', binary: 2_097_152 }],
+    ]);
+  });
+
+  it('fail, naming the page, when a page has no target or an unknown one', () => {
+    expect(sizeTargetProblems(withPage({ preset: undefined }))).toEqual(['compress-pdf-to-500kb: the preset names no known target']);
+    expect(sizeTargetProblems(withPage({ preset: { target: '300kb' } }))).toEqual(['compress-pdf-to-500kb: the preset names no known target']);
+    expect(sizeTargetProblems(withPage({ preset: { target: '__proto__' } }))).toEqual(['compress-pdf-to-500kb: the preset names no known target']);
+  });
+
+  it('fail when a tool without a size target has a page that sets target', () => {
+    const page = { ...compress.pages[0]!, preset: { target: '200kb' } };
+    expect(sizeTargetProblems({ ...compress, pages: [page] })).toEqual(['compress-pdf: sets target, but the tool has no size target']);
+  });
+
+  it('fail when the heading, sentence, title or main button lacks the label', () => {
+    expect(sizeTargetProblems(withPage({ heading: 'Compress a PDF' }))).toEqual(['compress-pdf-to-500kb: the heading does not name 500 KB']);
+    expect(sizeTargetProblems(withPage({ sentence: 'Make a PDF smaller. Your file stays on your device.' }))).toEqual(['compress-pdf-to-500kb: the sentence does not name 500 KB']);
+    expect(sizeTargetProblems(withPage({ title: 'Compress a PDF in your browser - PDFkaro' }))).toEqual(['compress-pdf-to-500kb: the title does not name 500 KB']);
+    expect(sizeTargetProblems(withPage({ words: { actionLabel: 'Compress and download' } }))).toEqual(['compress-pdf-to-500kb: the main button does not name 500 KB']);
+    // A label of another page is not this page's label.
+    expect(sizeTargetProblems(withPage({ heading: 'Compress a PDF to 200 KB' }))).toEqual(['compress-pdf-to-500kb: the heading does not name 500 KB']);
   });
 });
 
@@ -559,10 +727,10 @@ describe('Remove a password (Unlock PDF)', () => {
 describe('PDF to JPG and PDF to PNG', () => {
   const tool = tools.find((each) => each.id === 'pdf-to-images')!;
 
-  it('is one tool with two pages under Convert from PDF, taking one PDF, after Compress PDF, each page setting its format', () => {
+  it('is one tool with two pages under Convert from PDF, taking one PDF, after Compress to a target size, each page setting its format', () => {
     expect(tool).toMatchObject({ group: 'from-pdf', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
     const ids = tools.map((each) => each.id);
-    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('compress-pdf') + 1);
+    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('compress-to-target') + 1);
     expect(tool.pages.map(({ slug, name, preset }) => ({ slug, name, preset }))).toEqual([
       { slug: 'pdf-to-jpg', name: 'PDF to JPG', preset: { format: 'jpg' } },
       { slug: 'pdf-to-png', name: 'PDF to PNG', preset: { format: 'png' } },
@@ -629,6 +797,11 @@ describe('PDF to JPG and PDF to PNG', () => {
       if (each.id === 'pdf-to-images') continue;
       expect(each.widget?.outputExtension).toBeUndefined();
       for (const page of each.pages) {
+        // Compress to a target size's pages name only their own main button, and still give PDFs.
+        if (each.id === 'compress-to-target') {
+          expect(Object.keys(page.words ?? {})).toEqual(['actionLabel']);
+          continue;
+        }
         expect(page.words).toBeUndefined();
         expect(pageWords(each, page)).toEqual(each.widget);
       }

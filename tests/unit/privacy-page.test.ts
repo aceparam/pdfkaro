@@ -162,6 +162,25 @@ describe('the Privacy page', () => {
     });
   });
 
+  describe('target size guard', () => {
+    // add-compress-to-target, design decision 11: a file at or under a target page's size starts no job, so whether a
+    // job's programs are fetched there depends on the file's size, and the page says so in both places.
+    const target = registryTools.find((tool) => tool.id === 'compress-to-target');
+    const labels = (target?.pages ?? []).map((page) => /to (.+)$/.exec(page.name)?.[1] ?? '');
+
+    it('says a held file starts no job, and what GitHub can then tell, naming every target page', () => {
+      const held = section('What happens to your file').paragraphs.find((paragraph) => paragraph.includes('starts no job'));
+      const seen = section('Who serves the site').paragraphs.find((paragraph) => paragraph.includes('larger than that page’s size'));
+      expect(labels).toHaveLength(5);
+      for (const paragraph of [held, seen]) {
+        expect(paragraph).toBeDefined();
+        expect(paragraph).toContain('Compress PDF to');
+        for (const label of labels) expect(paragraph).toContain(label);
+      }
+      expect(seen).toContain('It cannot tell the file’s contents, its name or its exact size.');
+    });
+  });
+
   describe('policy guard', () => {
     const policy = section('What the page may load and send');
 

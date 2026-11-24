@@ -8,7 +8,7 @@
 // need it. Every request also passes the no-upload watcher. (add-uniform-requests, design.md decision 11)
 
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from '@playwright/test';
 import { findPage, pageWords } from '../../src/tools/queries';
@@ -18,10 +18,14 @@ import { startHostLog, type HostLog } from './host-log';
 import { headersRead, violations, watch } from './no-upload';
 import { widgetPages } from './pages';
 import { acrossInputs, recordProblems, type InputRecord } from './request-record';
+import { targetFiles, targetPassword } from './target-files';
 import { toolFiles } from './tool-files';
+import { sizeTargets, type SizeTargetKey } from '../../src/widget/option-values';
+import { overHeading, pageTarget, underHeading } from '../../src/widget/target';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const fixture = (name: string) => join(here, '../fixtures', name);
+/** A fixture under tests/fixtures/, or a file made by target-files.ts, by its absolute path. */
+const fixture = (name: string) => (isAbsolute(name) ? name : join(here, '../fixtures', name));
 const password = 'open-sesame';
 const typedName = 'Ann Lee';
 const typedText = 'DRAFT';
@@ -47,9 +51,12 @@ type Input = {
   /**
    * How the job must end: `'done'` refuses the failed heading, so a failed job cannot pass as the same requests;
    * `'no-file'` wants the tool's words for no new file (Crop PDF with no page cropped, Resize pages with every page
-   * already the size chosen), and refuses the others.
+   * already the size chosen), and refuses the others; `'over'` wants the heading of a result still over the page's
+   * target (Compress to a target size). On a target page, `'done'` wants the heading of a result under the target.
    */
-  expect?: 'done' | 'no-file';
+  expect?: 'done' | 'no-file' | 'over';
+  /** A pick only, of a file already at or under the page's target: held, the main button unavailable, no job set fetched. */
+  held?: true;
 };
 
 const pdfPicks: Input[] = [
@@ -66,6 +73,30 @@ const pdfJobs: Input[] = [
 /** A file read as ready whose job fails in the browser, on the pages where one does (the drawing step's JSON cap). */
 const failingJob: Input = { label: 'compress-json-bomb.pdf (the job fails)', files: ['compress-json-bomb.pdf'], job: true };
 const asPicks = (inputs: Input[]) => inputs.map((input) => ({ ...input, job: false }));
+
+/**
+ * Each target page's inputs, over that page's target (target-files.ts): a file that fits once compressed, one still
+ * over at the floor, a packed text-only file (no new file), a protected file with its password, the shared
+ * failing-job file padded over the target (on these pages it ends with no new file, as on Compress PDF), and held
+ * rows: text.pdf, and a protected file under the target, for which no password is asked.
+ */
+async function targetInputs(key: SizeTargetKey): Promise<Input[]> {
+  const files = await targetFiles(key);
+  return [
+    { label: 'damaged-xref.pdf', files: ['damaged-xref.pdf'], job: false },
+    { label: 'not-a-pdf.pdf (wrong kind)', files: ['not-a-pdf.pdf'], job: false },
+    { label: 'text.pdf (already under the target: held)', files: ['text.pdf'], job: false, held: true },
+    { label: 'password.pdf (already under the target: held, no password asked)', files: ['password.pdf'], job: false, held: true },
+    { label: `a photo over ${key} that fits once compressed`, files: [files.fits], job: true, expect: 'done' },
+    { label: `a photo and an attachment, still over ${key} at the floor`, files: [files.over], job: true, expect: 'over' },
+    { label: `a packed text-only file over ${key} (no new file)`, files: [files.packed], job: true, expect: 'no-file' },
+    { label: `a protected photo over ${key}, with its password`, files: [files.protectedFits], password: targetPassword, job: true, expect: 'done' },
+    { label: `compress-json-bomb.pdf, padded over ${key}`, files: [files.failing], job: true },
+  ];
+}
+const targetPages = Object.fromEntries(
+  await Promise.all((Object.keys(sizeTargets) as SizeTargetKey[]).map(async (key) => [`/compress-pdf-to-${key}`, await targetInputs(key)] as const)),
+);
 
 /** The inputs of each page (design.md, decision 11). A page with no row fails. */
 const inputs: Record<string, Input[]> = {
@@ -103,6 +134,7 @@ const inputs: Record<string, Input[]> = {
     { label: 'text.pdf (already A4; no new file)', files: ['text.pdf'], job: true, expect: 'no-file' },
     { label: 'text.pdf with Letter chosen', files: ['text.pdf'], paper: 'letter', job: true, expect: 'done' },
   ],
+  ...targetPages,
   '/compress-pdf': [
     ...pdfPicks,
     ...pdfJobs,
@@ -204,7 +236,7 @@ async function getReady(page: Page, slug: string, input: Input): Promise<void> {
 /** A fixture picked under a unique, long name, so every input's name and stem are secrets no site file can hold. */
 let pickCount = 0;
 function asPicked(name: string): { name: string; mimeType: string; buffer: Buffer } {
-  const base = name.split('/').pop()!;
+  const base = basename(name);
   const type = base.endsWith('.png') ? 'image/png' : base.endsWith('.jpg') ? 'image/jpeg' : 'application/pdf';
   pickCount += 1;
   return { name: `qz7pick${pickCount}x${base}`, mimeType: type, buffer: readFileSync(fixture(name)) };
@@ -217,6 +249,7 @@ const pickShown = (page: Page) =>
     .or(page.getByText(/Damaged and cannot be read|Saved in a way this tool cannot read/))
     .or(page.getByLabel(/^Password for /))
     .or(page.getByRole('status').filter({ hasText: /is not a/ }))
+    .or(page.locator('p:not([role=status])', { hasText: /is already .+ or smaller, so there is nothing to do here/ }))
     .first();
 
 type Run = { record: InputRecord; problems: string[] };
@@ -257,6 +290,19 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
     await expect(pickShown(page)).toBeVisible({ timeout: limit });
     await end('the pick', from, files.pick);
 
+    if (input.held) {
+      // Held from the pick: the main button is unavailable, says why, and pressing it starts no job.
+      const main = page.getByRole('button', { name: words.actionLabel });
+      await expect(main).toHaveAttribute('aria-disabled', 'true');
+      await expect(main).toHaveAccessibleDescription(/is already .+ or smaller, so there is nothing to do here/);
+      await expect(page.getByLabel(/^Password for /)).toHaveCount(0);
+      from = begin();
+      await main.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('p[class*=progressLine]')).toHaveCount(0);
+      await end('the held main button', from, []);
+    }
+
     if (input.password) {
       const field = page.getByLabel(/^Password for /);
       await expect(field).toBeVisible({ timeout: limit });
@@ -285,12 +331,17 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
       await expect(main).not.toHaveAttribute('aria-disabled', 'true', { timeout: limit });
       from = begin();
       await main.click();
+      // A page that sets a target measures its result against it: its own headings in place of the done heading.
+      const target = pageTarget(words, entry.page.preset);
+      const done = target ? underHeading(target) : words.doneHeading;
       const endings =
         input.expect === 'done'
-          ? [words.doneHeading]
+          ? [done]
           : input.expect === 'no-file'
             ? [words.noSmaller!.heading]
-            : [words.doneHeading, words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
+            : input.expect === 'over'
+              ? [overHeading(target!)]
+              : [done, ...(target ? [overHeading(target)] : []), words.failedHeading, ...(words.noSmaller ? [words.noSmaller.heading] : [])];
       await expect(page.getByRole('heading').filter({ hasText: new RegExp(`^(${endings.map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`) })).toBeVisible({ timeout: 120_000 });
       await end('the main button', from, files.job);
     }

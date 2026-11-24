@@ -10,15 +10,23 @@ function normalise(text: string): string {
   return text.trim().toLowerCase();
 }
 
+/** The text with every space taken out, so "200kb" and "200 KB" compare the same. */
+const spaceless = (text: string) => text.replace(/\s+/g, '');
+
 /**
- * True when the phrase is found in the item's name or summary.
+ * True when the phrase is found in the item's name or summary, as typed or
+ * with spaces taken out of both, so "200kb" finds "Compress PDF to 200 KB".
  * The phrase is compared as plain text: no pattern is built from it.
  * An empty phrase matches everything.
  */
 export function matchesPhrase(item: Filterable, phrase: string): boolean {
   const wanted = normalise(phrase);
   if (wanted === '') return true;
-  return normalise(item.name).includes(wanted) || normalise(item.summary).includes(wanted);
+  const name = normalise(item.name);
+  const summary = normalise(item.summary);
+  if (name.includes(wanted) || summary.includes(wanted)) return true;
+  const squeezed = spaceless(wanted);
+  return spaceless(name).includes(squeezed) || spaceless(summary).includes(squeezed);
 }
 
 export type FilteredGroup<Group extends { items: Filterable[] }> = Omit<Group, 'items'> & {

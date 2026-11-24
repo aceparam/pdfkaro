@@ -32,6 +32,10 @@ import { draftSentence, footerPage, siteName } from '../site';
   <p>After you choose a file, the page fetches the programs that read and write PDFs. They come from this site. These requests carry nothing from your file: not its contents, not its name and not a password.</p>
   {/* Draft words for the owner (add-uniform-requests): tied to its claim table and to tests/e2e/uniform-requests.spec.ts. */}
   <p>Which programs the page fetches does not depend on what your file holds. This is true for a damaged file, a protected file or a file of the wrong kind too.</p>
+  {/* Draft words for the owner (add-compress-to-target, design decision 11): a file at or under the page's size is held, so no job set is fetched for it. */}
+  <p>
+    On the Compress PDF to 100 KB, 200 KB, 500 KB, 1 MB and 2 MB pages, a file already at or under the page’s size starts no job, so the programs a job needs are not fetched for it.
+  </p>
   <p>Your file’s name is shown on the page and used to name the new file.</p>
   <p>
     A new PDF can carry the old file’s title, author and other details, its accessibility tags and its attached files. The tags can bring along what was typed in form fields on pages you left out. In
@@ -129,5 +133,10 @@ import { draftSentence, footerPage, siteName } from '../site';
     From your browser’s requests, GitHub can tell which tool page you opened and when you chose a file: in practice your first file, and later ones once your browser’s copies of
     the programs are about 10 minutes old, or if your browser keeps no copies. It may be able to tell when you started a job. GitHub does not receive your file, its name or a password. Your
     browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, asking again can tell GitHub that.
+  </p>
+  {/* Draft words for the owner (add-compress-to-target, design decision 11): whether a job's programs are fetched on those pages depends on the file's size. */}
+  <p>
+    On the Compress PDF to 100 KB, 200 KB, 500 KB, 1 MB and 2 MB pages, when the programs a job needs are fetched, GitHub can tell that your file was larger than that page’s size. It cannot tell the
+    file’s contents, its name or its exact size.
   </p>
 </Base>

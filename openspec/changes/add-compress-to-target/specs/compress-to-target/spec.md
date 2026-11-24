@@ -120,12 +120,12 @@ Before any raw data is read, the engine SHALL plan the job's decoded and encoded
 
 #### Scenario: Many large JPGs that pass the frame check
 
-- **WHEN** a small file made in the test, of JPGs that pass the frame check with at least 4 KB of real data each on a page large enough that no step scales them, is compressed with a small test budget and a decoder and canvas stand-in that count calls and do no pixel work
+- **WHEN** a small file made in the test, of real JPGs that pass the frame check and qpdf's check, at least 4 KB each, on a page large enough that no step scales them, is compressed with a small test budget and a decoder and canvas stand-in that count calls and do no pixel work
 - **THEN** the plan is cut first to steps 1, 4 and 7 and then by dropping the smallest, the counted decodes plus encodes stay within the budget, and the job ends
 
 #### Scenario: The lossless counterpart
 
-- **WHEN** a file made in the test of about 50 grey lossless pictures, a few MB in all, whose data inflates exactly, on a page large enough that no step scales them, is compressed with a small test budget and counting stand-ins
+- **WHEN** a file made in the test of about 50 grey lossless pictures, a few MB in all, whose data inflates exactly, on a page small enough that every step scales them (a lossless picture no step scales is never worked on), is compressed with a small test budget and counting stand-ins
 - **THEN** their pixels count with the lossless weight, the plan is cut the same way, the counted work stays within the budget, and the job ends
 
 #### Scenario: A plan over the budget
@@ -206,7 +206,7 @@ When no written file fits the target, the page SHALL offer the smallest file mad
 #### Scenario: A long scan on the 100 KB page
 
 - **WHEN** a file whose floor step gives 312 KB is compressed on the 100 KB page
-- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice says some kinds of picture are left as they are and names removing pages or splitting the file, and Download gives that file
+- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice says "To get under 100 KB, remove pages you do not need, or split the file and send it in parts.", and Download gives that file
 
 #### Scenario: Just over the target
 
@@ -229,7 +229,7 @@ When no written file fits the target and the smallest is not at least 1% smaller
 
 ### Requirement: What the file keeps
 
-The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures can look less sharp while text, drawings and fonts keep their quality, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
+The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures that were made smaller can look less sharp while text, drawings and fonts keep their quality, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
 
 #### Scenario: A file with links, bookmarks and a form
 
