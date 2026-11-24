@@ -16,21 +16,9 @@ import { Deflate, Inflate } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import type { ObjectEntry } from '../../src/engines/qpdf-json';
+import { canShrink, keepBelow, losslessOptions, newDictionary, pictureContext, pixelLimit, shrinkJpeg, shrinkLossless, zlibDeflate, type Candidate } from '../../src/engines/shrink';
 import { openDocument } from '../../src/engines/thumbnail';
-import {
-  canShrink,
-  inspect,
-  keepBelow,
-  losslessOptions,
-  newDictionary,
-  pictureContext,
-  pixelLimit,
-  run,
-  shrinkJpeg,
-  shrinkLossless,
-  zlibDeflate,
-  type Candidate,
-} from '../../src/engines/tools/compress-pdf';
+import { inspect, run } from '../../src/engines/tools/compress-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { progressFraction, progressLine } from '../../src/widget/format';
 import { jpegCanvasMaker, pictureDecoder, tools as drawingTools } from './thumbnail-helpers';
