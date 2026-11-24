@@ -14,9 +14,47 @@ export type Fflate = { Inflate: InflateClass; Deflate: DeflateClass };
 
 class TooLong extends Error {}
 
+/** fflate's streaming inflater, once made. */
+type Inflater = InstanceType<InflateClass>;
+
+/** Input that gives no output for this long means the deflate stream has ended (see `pushPieces`). */
+export const quietInput = 68_096;
+
 /**
- * Inflates raw deflate data, pushing it in small pieces so no one piece can
- * make much more than a megabyte, and stops as soon as the output passes `limit`.
+ * Pushes raw deflate data into fflate's inflater in 1 KiB pieces, so no one
+ * piece can make much more than a megabyte; the last piece is pushed as final.
+ *
+ * fflate does not say when the deflate stream has ended: the `final` its
+ * `ondata` passes on is only the push's own flag, and every push after the end
+ * copies all the input still pending, so trailing bytes would take time
+ * growing with their square (16 MiB took 42 s, 32 MiB 564 s). No block holds
+ * back output for more than a stored block's 65,535 bytes and its header, so
+ * once `quietInput` bytes (66.5 KiB) in a row have made nothing, the data is
+ * taken to end there: an empty final push follows, which fflate accepts only
+ * when the stream has reached its final block and refuses with a throw
+ * otherwise, and nothing more is pushed. A stream padded with that many empty
+ * stored blocks is refused, which is safe. `made` counts the output so far;
+ * `stopped` ends the pushing early.
+ */
+export function pushPieces(inflater: Inflater, data: Uint8Array, made: () => number, stopped: () => boolean = () => false): void {
+  const piece = 1024;
+  let quiet = 0;
+  for (let at = 0; at < data.length && !stopped(); at += piece) {
+    const before = made();
+    const last = at + piece >= data.length;
+    inflater.push(data.subarray(at, at + piece), last);
+    if (last) return;
+    if (made() !== before) quiet = 0;
+    else if ((quiet += piece) >= quietInput) {
+      inflater.push(new Uint8Array(0), true);
+      return;
+    }
+  }
+}
+
+/**
+ * Inflates raw deflate data, pushing it in small pieces (`pushPieces`), and
+ * stops as soon as the output passes `limit`.
  */
 export function inflateLimited(data: Uint8Array, Inflate: InflateClass, limit: number): Uint8Array | undefined {
   const parts: Uint8Array[] = [];
@@ -28,12 +66,12 @@ export function inflateLimited(data: Uint8Array, Inflate: InflateClass, limit: n
     parts.push(chunk.slice());
     if (final) ended = true;
   });
-  const piece = 1024;
   try {
-    for (let at = 0; at < data.length && !ended; at += piece) inflater.push(data.subarray(at, at + piece), at + piece >= data.length);
+    pushPieces(inflater, data, () => size, () => ended);
   } catch {
     return undefined;
   }
+  // `ended` is set by the final push only, which fflate makes only for a stream that reached its final block.
   if (!ended) return undefined;
   const out = new Uint8Array(size);
   let at = 0;
@@ -109,10 +147,8 @@ export function inflatePrefix(data: Uint8Array, Inflate: InflateClass, bytes: nu
     size += take;
     if (size >= bytes) throw new Enough();
   });
-  const raw = data.subarray(2);
-  const piece = 1024;
   try {
-    for (let at = 0; at < raw.length; at += piece) inflater.push(raw.subarray(at, at + piece), at + piece >= raw.length);
+    pushPieces(inflater, data.subarray(2), () => size);
   } catch (error) {
     if (!(error instanceof Enough)) return undefined;
   }

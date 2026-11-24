@@ -12,7 +12,7 @@
 // numbers and the last four operands' places.
 
 import type { Dict } from './qpdf-json';
-import { isZlib, type InflateClass } from './zlib';
+import { isZlib, pushPieces, type InflateClass } from './zlib';
 
 /** A decode step's output, and the per-page cap of a tool that uses the reader. */
 export const maxContentBytes = 64 * 1024 * 1024;
@@ -103,6 +103,8 @@ function stepOf(name: StepName, parms: unknown): Step | undefined {
   if (predictor === 2 && bits !== 8) return undefined;
   // PDF.js works the row out with 32-bit shifts; past this they would disagree.
   if (colors * bits * columns > 2 ** 31 - 1) return undefined;
+  // A row over 1 MiB is refused, so undoing a predictor holds at most two rows of that size beside its pieces.
+  if (predictor > 1 && Math.ceil((colors * bits * columns) / 8) > pieceSize) return undefined;
   if (early !== 0 && early !== 1) return undefined;
   step.predictor = { predictor, colors, bits, columns };
   step.earlyChange = early;
@@ -142,12 +144,20 @@ function stepsOf(dict: Dict, resolve: Resolve): Step[] | undefined {
   return steps.some((step) => step.name === 'runlength') ? steps : undefined;
 }
 
+/** The largest piece a step's output grows by. */
 const pieceSize = 1024 * 1024;
+/** The first piece; each later one twice the one before, up to `pieceSize`, so a small stream allocates little. */
+const firstPiece = 4 * 1024;
 
-/** A step's output, grown as pieces of at most 1 MiB and joined once; the cap is checked before each unit is added. */
+/**
+ * A step's output, grown as pieces of 4 KiB doubling to at most 1 MiB, each
+ * made only when a byte is written into it, and joined once (the only piece
+ * itself when it is exactly full); the cap is checked before each unit is added.
+ */
 class Output {
   private readonly pieces: Uint8Array[] = [];
-  private current = new Uint8Array(pieceSize);
+  private current: Uint8Array | undefined;
+  private nextSize = firstPiece;
   private at = 0;
   total = 0;
   spendError: unknown;
@@ -158,23 +168,33 @@ class Output {
     if (this.total + bytes > maxContentBytes) throw new TooLarge();
   }
 
+  /** Hands the piece in hand to the budget and the list; the next is made only when written to. */
   private flush(): void {
-    if (this.at === 0) return;
+    if (!this.current || this.at === 0) return;
     const full = this.at === this.current.length ? this.current : this.current.slice(0, this.at);
+    const counted = this.at;
     this.pieces.push(full);
+    this.current = undefined;
+    this.at = 0;
     try {
-      this.spend(this.at);
+      this.spend(counted);
     } catch (error) {
       this.spendError = error;
       throw error;
     }
-    this.current = new Uint8Array(pieceSize);
-    this.at = 0;
+  }
+
+  /** The piece to write into, with room for at least one byte. */
+  private room(): Uint8Array {
+    if (this.current && this.at < this.current.length) return this.current;
+    this.flush();
+    this.current = new Uint8Array(this.nextSize);
+    this.nextSize = Math.min(pieceSize, this.nextSize * 2);
+    return this.current;
   }
 
   byte(value: number): void {
-    if (this.at === this.current.length) this.flush();
-    this.current[this.at++] = value;
+    this.room()[this.at++] = value;
     this.total++;
   }
 
@@ -182,9 +202,9 @@ class Output {
   bytes(data: Uint8Array): void {
     let from = 0;
     while (from < data.length) {
-      if (this.at === this.current.length) this.flush();
-      const take = Math.min(data.length - from, this.current.length - this.at);
-      this.current.set(data.subarray(from, from + take), this.at);
+      const piece = this.room();
+      const take = Math.min(data.length - from, piece.length - this.at);
+      piece.set(data.subarray(from, from + take), this.at);
       this.at += take;
       from += take;
     }
@@ -197,6 +217,11 @@ class Output {
 
   join(): Uint8Array {
     this.flush();
+    if (this.pieces.length === 1 && this.pieces[0]!.length === this.total) {
+      const only = this.pieces[0]!;
+      this.pieces.length = 0;
+      return only;
+    }
     const out = new Uint8Array(this.total);
     let at = 0;
     for (const piece of this.pieces) {
@@ -225,14 +250,15 @@ function inflateStep(data: Uint8Array, Inflate: InflateClass, out: Output): void
     if (final) ended = true;
   });
   const raw = data.subarray(2);
-  const piece = 1024;
   try {
     if (raw.length === 0) inflater.push(raw, true);
-    for (let at = 0; at < raw.length && !ended; at += piece) inflater.push(raw.subarray(at, at + piece), at + piece >= raw.length);
+    pushPieces(inflater, raw, () => out.total, () => ended);
   } catch {
     if (stop !== undefined) throw stop;
     throw new NotDecoded();
   }
+  // `ended` is set by the final push only (fflate's flag is the push's own), which fflate accepts only for a stream
+  // that reached its final block; trailing bytes are cut short by `pushPieces`, and the checksum is not compared.
   if (!ended) throw new NotDecoded();
 }
 
@@ -259,6 +285,8 @@ function runLengthStep(data: Uint8Array, out: Output): void {
 }
 
 function lzwStep(data: Uint8Array, earlyChange: number, out: Output): void {
+  // Bit positions are read with 32-bit shifts, so input past 256 MiB is refused.
+  if (data.length > 256 * 1024 * 1024) throw new NotDecoded();
   const prefix = new Int16Array(4096);
   const last = new Uint8Array(4096);
   const lengths = new Uint16Array(4096);
@@ -553,8 +581,15 @@ for (const byte of [0x09, 0x0a, 0x0c, 0x0d, 0x20]) byteClass[byte] = WS;
 for (let byte = 0x21; byte <= 0x7e; byte++) byteClass[byte] = REGULAR;
 for (const char of '()<>[]{}/%') byteClass[char.charCodeAt(0)] = DELIM;
 
-/** Whether bytes start..end are exactly a number: [+-]?(\d+(\.\d*)?|\.\d+). */
+/** The longest number token read; a longer one is doubt. */
+const maxNumberBytes = 32;
+/** The longest name `nameValue` reads, once #xx is decoded, as PDF's own limit; a longer one gives undefined. */
+const maxNameBytes = 127;
+
+/** Whether bytes start..end are exactly a number: [+-]?(\d+(\.\d*)?|\.\d+), at most `maxNumberBytes` long. */
 function isNumber(data: Uint8Array, start: number, end: number): boolean {
+  // A number longer than this is doubt: no reader needs one, and it would be copied to be read.
+  if (end - start > maxNumberBytes) return false;
   let at = start;
   if (data[at] === 0x2b || data[at] === 0x2d) at++;
   let digits = 0;
@@ -626,17 +661,21 @@ function hexEnd(data: Uint8Array, start: number): number {
 
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-/** A name operand as qpdf's JSON writes it: #xx decoded, then strict UTF-8; undefined when not valid UTF-8. */
+/** A name operand as qpdf's JSON writes it: #xx decoded, then strict UTF-8; undefined when not valid UTF-8 or longer than 127 bytes. */
 export function nameValue(data: Uint8Array, operand: Operand): string | undefined {
-  const bytes: number[] = [];
+  // Checked before anything is copied: at most three bytes a decoded byte.
+  if (operand.end - operand.start - 1 > 3 * maxNameBytes) return undefined;
+  const bytes = new Uint8Array(operand.end - operand.start - 1);
+  let length = 0;
   for (let at = operand.start + 1; at < operand.end; at++) {
     if (data[at] === 0x23 && isHexDigit(data[at + 1]) && isHexDigit(data[at + 2])) {
-      bytes.push(hexValue(data[at + 1]!) * 16 + hexValue(data[at + 2]!));
+      bytes[length++] = hexValue(data[at + 1]!) * 16 + hexValue(data[at + 2]!);
       at += 2;
-    } else bytes.push(data[at]!);
+    } else bytes[length++] = data[at]!;
   }
+  if (length > maxNameBytes) return undefined;
   try {
-    return `/${textDecoder.decode(new Uint8Array(bytes))}`;
+    return `/${textDecoder.decode(bytes.subarray(0, length))}`;
   } catch {
     return undefined;
   }
@@ -685,48 +724,75 @@ function wholeNumber(data: Uint8Array, start: number, end: number): number {
   return value;
 }
 
-type InlineValue = { kind: 'name' | 'number' | 'boolean' | 'array' | 'dictionary'; start: number; end: number; items: number; names: number; firstName: string | undefined; truth: boolean };
+/** One value of an inline picture's dictionary: its kind and span; for an array or dictionary, how many items and names, and its first name's span. */
+type InlineValue = { kind: 'name' | 'number' | 'boolean' | 'array' | 'dictionary'; start: number; end: number; items: number; names: number; first: Operand | undefined; truth: boolean };
 
-/** One value of an inline picture's dictionary at `at`: a name, number, boolean, array or dictionary of these; doubt for anything else. */
-function inlineValue(data: Uint8Array, at: number, depth: number): InlineValue {
-  if (depth > maxNesting) throw new Doubt();
+/** A name, number or boolean at `at`; doubt for anything else. */
+function inlineScalar(data: Uint8Array, at: number): InlineValue {
   const byte = data[at];
   if (byte === undefined) throw new Doubt();
   if (byte === 0x2f) {
     const end = nameEnd(data, at);
     if (end < 0) throw new Doubt();
-    return { kind: 'name', start: at, end, items: 0, names: 1, firstName: nameValue(data, { kind: 'name', start: at, end }), truth: false };
-  }
-  if (byte === 0x5b || (byte === 0x3c && data[at + 1] === 0x3c)) {
-    const dictionary = byte === 0x3c;
-    let walk = at + (dictionary ? 2 : 1);
-    let names = 0;
-    let firstName: string | undefined;
-    let items = 0;
-    for (;;) {
-      walk = skipSpaces(data, walk);
-      if (walk >= data.length) throw new Doubt();
-      if (!dictionary && data[walk] === 0x5d) return { kind: 'array', start: at, end: walk + 1, items, names, firstName, truth: false };
-      if (dictionary && data[walk] === 0x3e) {
-        if (data[walk + 1] !== 0x3e || items % 2 !== 0) throw new Doubt();
-        return { kind: 'dictionary', start: at, end: walk + 2, items, names, firstName, truth: false };
-      }
-      const item = inlineValue(data, walk, depth + 1);
-      if (dictionary && items % 2 === 0 && item.kind !== 'name') throw new Doubt();
-      if (item.kind === 'name') {
-        if (names === 0) firstName = item.firstName;
-        names++;
-      }
-      items++;
-      walk = item.end;
-    }
+    return { kind: 'name', start: at, end, items: 0, names: 1, first: { kind: 'name', start: at, end }, truth: false };
   }
   if (byteClass[byte] !== REGULAR) throw new Doubt();
   const end = regularEnd(data, at);
   if (end < data.length && byteClass[data[end]!] === 0) throw new Doubt();
-  if (isNumber(data, at, end)) return { kind: 'number', start: at, end, items: 0, names: 0, firstName: undefined, truth: false };
-  if (matches(data, at, end, 'true') || matches(data, at, end, 'false')) return { kind: 'boolean', start: at, end, items: 0, names: 0, firstName: undefined, truth: data[at] === 0x74 };
+  if (isNumber(data, at, end)) return { kind: 'number', start: at, end, items: 0, names: 0, first: undefined, truth: false };
+  if (matches(data, at, end, 'true') || matches(data, at, end, 'false')) return { kind: 'boolean', start: at, end, items: 0, names: 0, first: undefined, truth: data[at] === 0x74 };
   throw new Doubt();
+}
+
+/**
+ * One value of an inline picture's dictionary at `at`: a name, number,
+ * boolean, or an array or dictionary of these, at most `maxNesting` deep;
+ * doubt for anything else. A loop with its own small stack, no recursion.
+ */
+function inlineValue(data: Uint8Array, at: number): InlineValue {
+  const opens = (where: number) => data[where] === 0x5b || (data[where] === 0x3c && data[where + 1] === 0x3c);
+  if (!opens(at)) return inlineScalar(data, at);
+  type Frame = { dictionary: boolean; start: number; items: number; names: number; first: Operand | undefined };
+  const frames: Frame[] = [];
+  const open = (where: number) => {
+    if (frames.length >= maxNesting) throw new Doubt();
+    const dictionary = data[where] === 0x3c;
+    frames.push({ dictionary, start: where, items: 0, names: 0, first: undefined });
+    return where + (dictionary ? 2 : 1);
+  };
+  let walk = open(at);
+  for (;;) {
+    walk = skipSpaces(data, walk);
+    if (walk >= data.length) throw new Doubt();
+    const top = frames[frames.length - 1]!;
+    const keyWanted = top.dictionary && top.items % 2 === 0;
+    let done: InlineValue;
+    if (!top.dictionary && data[walk] === 0x5d) {
+      frames.pop();
+      walk += 1;
+      done = { kind: 'array', start: top.start, end: walk, items: top.items, names: top.names, first: top.first, truth: false };
+    } else if (top.dictionary && data[walk] === 0x3e) {
+      if (data[walk + 1] !== 0x3e || keyWanted === false) throw new Doubt();
+      frames.pop();
+      walk += 2;
+      done = { kind: 'dictionary', start: top.start, end: walk, items: top.items, names: top.names, first: top.first, truth: false };
+    } else if (opens(walk)) {
+      if (keyWanted) throw new Doubt();
+      walk = open(walk);
+      continue;
+    } else {
+      done = inlineScalar(data, walk);
+      if (keyWanted && done.kind !== 'name') throw new Doubt();
+      walk = done.end;
+    }
+    const parent = frames[frames.length - 1];
+    if (!parent) return done;
+    if (done.kind === 'name') {
+      if (parent.names === 0) parent.first = done.first;
+      parent.names++;
+    }
+    parent.items++;
+  }
 }
 
 /** Where PDF.js's three-state scan, run from `start`, stands just before `end`: 0, 1 or 2; -1 if it made a candidate before. */
@@ -765,12 +831,12 @@ function lookAhead(data: Uint8Array, from: number, place: Place): void {
     if (place === 'not-last') throw new Doubt();
     return;
   }
-  const window = from + 75;
+  const lookLimit = from + 75;
   let count = 0;
   let at = from;
   for (;;) {
     at = skipSpaces(data, at);
-    if (at >= n || at >= window) throw new Doubt();
+    if (at >= n || at >= lookLimit) throw new Doubt();
     const byte = data[at]!;
     let end: number;
     if (byte === 0x2f) {
@@ -786,7 +852,7 @@ function lookAhead(data: Uint8Array, from: number, place: Place): void {
         const name = operatorNames[index]!;
         const wanted = operandCounts[name]!;
         if (variableOperands.has(name) ? count > wanted : count !== wanted) throw new Doubt();
-        if (end > window) throw new Doubt();
+        if (end > lookLimit) throw new Doubt();
         return;
       }
     } else throw new Doubt();
@@ -822,7 +888,7 @@ function inlinePicture(data: Uint8Array, at: number, place: Place): number {
     at = skipSpaces(data, keyEnd);
     if (at >= n) throw new Doubt();
     if (data[at] === 0x49 && data[at + 1] === 0x44 && (at + 2 >= n || byteClass[data[at + 2]!] !== REGULAR)) throw new Doubt();
-    const value = inlineValue(data, at, 1);
+    const value = inlineValue(data, at);
     values[canonical] = value;
     at = value.end;
   }
@@ -850,7 +916,8 @@ function inlinePicture(data: Uint8Array, at: number, place: Place): number {
   } else {
     const space = values.CS;
     if (!space || bits === undefined || space.kind !== 'name') throw new Doubt();
-    const found = inlineColours[space.firstName ?? ''];
+    const name = nameValue(data, space.first!);
+    const found = name === undefined ? undefined : inlineColours[name];
     if (found === undefined) throw new Doubt();
     colours = found;
   }
@@ -860,8 +927,9 @@ function inlinePicture(data: Uint8Array, at: number, place: Place): number {
   if (given) {
     // A name, a one-name array, or an empty array (no filter).
     const named = given.kind === 'name' || (given.kind === 'array' && given.items === 1 && given.names === 1);
+    const name = named ? nameValue(data, given.first!) : undefined;
     if (given.kind === 'array' && given.items === 0) filter = 'none';
-    else if (named && given.firstName !== undefined && inlineFilters[given.firstName]) filter = inlineFilters[given.firstName]!;
+    else if (name !== undefined && inlineFilters[name]) filter = inlineFilters[name]!;
     else throw new Doubt();
   }
   // ID, then exactly one whitespace byte, not CR followed by LF.
@@ -974,6 +1042,12 @@ class Writer {
     this.hash = Math.imul(this.hash ^ value, 0x01000193) >>> 0;
   }
 
+  /** In pass 1, the edited length past `maxEditedBytes` is doubt at once, so nothing more is worked out. */
+  private grow(count: number): void {
+    this.length += count;
+    if (!this.buffer && this.length > maxEditedBytes) throw new Doubt();
+  }
+
   copyTo(position: number): void {
     const count = position - this.copied;
     if (count <= 0) return;
@@ -982,7 +1056,7 @@ class Writer {
       if (count < 64) for (let index = 0; index < count; index++) this.buffer[this.length + index] = this.data[this.copied + index]!;
       else this.buffer.set(this.data.subarray(this.copied, position), this.length);
     }
-    this.length += count;
+    this.grow(count);
     this.copied = position;
   }
 
@@ -998,7 +1072,7 @@ class Writer {
       if (this.length + piece.length > this.buffer.length) throw new Error(mismatchSentence);
       for (let index = 0; index < piece.length; index++) this.buffer[this.length + index] = piece.charCodeAt(index);
     }
-    this.length += piece.length;
+    this.grow(piece.length);
   }
 
   mark(position: number): void {
@@ -1032,6 +1106,8 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
   // Arrays and dictionaries: depth, and one bit per level, 1 for a dictionary.
   let depth = 0;
   let mask = 0;
+  // In each open dictionary, one bit: 1 while a value is wanted after its key, 0 while a key is wanted.
+  let valueMask = 0;
   let openedAt = 0;
   let bx = 0;
   let edits = 0;
@@ -1048,6 +1124,20 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
     if (kind === 0) numbers++;
     kinds |= 1 << kind;
     lastEnd = end;
+  };
+  /**
+   * A whole token, array or dictionary: an operand at the top level; inside a dictionary, a name key and then
+   * exactly one value, in turn. PDF.js takes `>>` as the value of a key with none, and swallows what follows.
+   */
+  const item = (kind: number, start: number, end: number) => {
+    if (depth === 0) {
+      operand(kind, start, end);
+      return;
+    }
+    const level = depth - 1;
+    if (((mask >>> level) & 1) === 0) return;
+    if (((valueMask >>> level) & 1) === 0 && kind !== 1) throw new Doubt();
+    valueMask ^= 1 << level;
   };
   const resetRun = () => {
     count = 0;
@@ -1072,10 +1162,11 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
     const { before, operands, operator, after } = asked;
     if (before === undefined && operands === undefined && operator === undefined && after === undefined) return;
     if (before !== undefined) checkPiece(before, false, scratch);
-    if (operands !== undefined) {
-      if (count === 0) throw new Error(pieceSentence);
-      checkPiece(operands, true, scratch);
-    }
+    if (operands !== undefined && count === 0) throw new Error(pieceSentence);
+    // Removal: empty operands and an empty operator together (or an empty operator that has no operands); never one alone.
+    if (operands === '' && operator !== '') throw new Error(pieceSentence);
+    if (operator === '' && operands !== '' && count > 0) throw new Error(pieceSentence);
+    if (operands !== undefined) checkPiece(operands, true, scratch);
     if (operator !== undefined) checkPiece(operator, true, scratch);
     if (after !== undefined) checkPiece(after, false, scratch);
     allEdits++;
@@ -1112,7 +1203,7 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
     if (byte === 0x28) {
       const end = stringEnd(data, at);
       if (end < 0) throw new Doubt();
-      if (depth === 0) operand(2, at, end);
+      item(2, at, end);
       at = end;
       continue;
     }
@@ -1121,22 +1212,24 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
         if (depth >= maxNesting) throw new Doubt();
         if (depth === 0) openedAt = at;
         mask |= 1 << depth;
+        valueMask &= ~(1 << depth);
         depth++;
         at += 2;
         continue;
       }
       const end = hexEnd(data, at);
       if (end < 0) throw new Doubt();
-      if (depth === 0) operand(3, at, end);
+      item(3, at, end);
       at = end;
       continue;
     }
     if (byte === 0x3e) {
-      if (data[at + 1] !== 0x3e || depth === 0 || ((mask >>> (depth - 1)) & 1) !== 1) throw new Doubt();
+      // A dictionary closes only where a key is wanted: never right after a key with no value.
+      if (data[at + 1] !== 0x3e || depth === 0 || ((mask >>> (depth - 1)) & 1) !== 1 || ((valueMask >>> (depth - 1)) & 1) !== 0) throw new Doubt();
       depth--;
       mask &= ~(1 << depth);
       at += 2;
-      if (depth === 0) operand(5, openedAt, at);
+      item(5, openedAt, at);
       continue;
     }
     if (byte === 0x5b) {
@@ -1151,13 +1244,13 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
       if (depth === 0 || ((mask >>> (depth - 1)) & 1) !== 0) throw new Doubt();
       depth--;
       at++;
-      if (depth === 0) operand(4, openedAt, at);
+      item(4, openedAt, at);
       continue;
     }
     if (byte === 0x2f) {
       const end = nameEnd(data, at);
       if (end < 0) throw new Doubt();
-      if (depth === 0) operand(1, at, end);
+      item(1, at, end);
       at = end;
       continue;
     }
@@ -1166,17 +1259,17 @@ function pass(data: Uint8Array, editor: Editor, place: Place, buffer: Uint8Array
     const first = byte;
     if (first === 0x2b || first === 0x2d || first === 0x2e || (first >= 0x30 && first <= 0x39)) {
       if (!isNumber(data, at, end)) throw new Doubt();
-      if (depth === 0) operand(0, at, end);
+      item(0, at, end);
       at = end;
       continue;
     }
     if (matches(data, at, end, 'true') || matches(data, at, end, 'false')) {
-      if (depth === 0) operand(6, at, end);
+      item(6, at, end);
       at = end;
       continue;
     }
     if (matches(data, at, end, 'null')) {
-      if (depth === 0) operand(7, at, end);
+      item(7, at, end);
       at = end;
       continue;
     }

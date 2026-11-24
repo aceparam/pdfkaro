@@ -16,6 +16,7 @@ import {
   numberValue,
   operandCounts,
   variableOperands,
+  type Edit,
   type Editor,
   type OperandKind,
   type Place,
@@ -149,6 +150,11 @@ const doubtCases: [string, string][] = [
   ['a mismatched ]', '[1 >> 0 d'],
   ['a mismatched >>', '<</A [1 >> ] MP'],
   ['33 nested levels', `${'['.repeat(33)}${']'.repeat(33)} MP`],
+  ['a key with no value', '/P <</A>> BDC EMC'],
+  ['a last key with no value', '/P <</A 1 /B>> BDC EMC'],
+  ['a key that is not a name', '/P <<1 /A 2>> BDC EMC'],
+  ['a key with no value inside an array', '[<</A>>] MP'],
+  ['an array as a key', '/P <<[1] 2>> BDC EMC'],
   ['an operator inside an array', '[ 1 rg ]'],
   ['an operator inside a dictionary', '<< /A q >> MP'],
   ['ID with no BI', 'ID'],
@@ -419,6 +425,27 @@ describe('the editor', () => {
     expect(() => read('1 0 0 rg', editor)).toThrow(new Error(pieceSentence));
   });
 
+  it('an empty operands or operator only together, or an empty operator that has no operands', () => {
+    const editing = (edit: Edit): Editor => ({ operators: new Set(['rg']), edit: () => edit });
+    expect(() => read('1 0 0 rg', editing({ operands: '' }))).toThrow(new Error(pieceSentence));
+    expect(() => read('1 0 0 rg', editing({ operator: '' }))).toThrow(new Error(pieceSentence));
+    expect(() => read('1 0 0 rg', editing({ operands: '', operator: ' g ' }))).toThrow(new Error(pieceSentence));
+    expect(() => read('1 0 0 rg', editing({ operands: ' 0 ', operator: '' }))).toThrow(new Error(pieceSentence));
+    const removed = read('q 1 0 0 rg q', editing({ operands: '', operator: '' }));
+    expect(removed.kind === 'edited' && text(removed.data)).toBe('q   q');
+    const bare = read('q Q', { operators: new Set(['q']), edit: () => ({ operator: '' }) });
+    expect(bare.kind === 'edited' && text(bare.data)).toBe(' Q');
+  });
+
+  it('pass 1 stops as doubt as soon as the edited length passes 3 × 64 MiB', () => {
+    let calls = 0;
+    const piece = ` ${'0 '.repeat(1007)}`;
+    const editor: Editor = { operators: new Set(['n']), edit: () => (calls++, { after: piece }) };
+    expect(read('n '.repeat(200_000), editor)).toEqual({ kind: 'doubt' });
+    // 99,912 edits pass 3 × 64 MiB; none after that is asked for.
+    expect(calls).toBe(Math.floor(maxEditedBytes / (piece.length + 2)) + 1);
+  }, 60_000);
+
   it('operands on an operator that has none are refused', () => {
     const editor: Editor = { operators: new Set(['q']), edit: () => ({ operands: ' 1 ' }) };
     expect(() => read('q', editor)).toThrow(new Error(pieceSentence));
@@ -609,6 +636,86 @@ describe('memory and time', () => {
     expect(editTime).toBeLessThan(20_000);
   }, 120_000);
 
+  it('a predictor at its 1 MiB row limit stays under the raw data plus 3 × 64 MiB plus 2 MiB', async () => {
+    const { deflateSync } = await import('node:zlib');
+    const row = 1024 * 1024;
+    const rows = 63;
+    // Tag 2 (up) on every row of zeros: each row the same as the one before.
+    const predicted = new Uint8Array(rows * (row + 1));
+    for (let at = 0; at < predicted.length; at += row + 1) predicted[at] = 2;
+    const raw = new Uint8Array(deflateSync(predicted));
+    globalThis.gc?.();
+    const base = sample().arrayBuffers;
+    let peak = base;
+    const spend = () => {
+      peak = Math.max(peak, sample().arrayBuffers);
+    };
+    const result = decodeContent(raw, { '/Filter': '/FlateDecode', '/DecodeParms': { '/Predictor': 12, '/Columns': row } }, () => undefined, Inflate, spend);
+    peak = Math.max(peak, sample().arrayBuffers);
+    expect(result.kind).toBe('decoded');
+    expect((result as { data: Uint8Array }).data.length).toBe(rows * row);
+    console.info(`predictor at 1 MiB rows: raw ${mib(raw.length)} MiB, arrayBuffers growth ${mib(peak - base)} MiB`);
+    expect(peak - base).toBeLessThan(raw.length + 3 * maxContentBytes + 2 * 1024 * 1024);
+  }, 120_000);
+
+  it('very long tokens are never copied: a 60 MiB name or number', () => {
+    const big = 60 * 1024 * 1024;
+    const longName = (prefix: string, suffix: string) => {
+      const head = latin1(prefix);
+      const tail = latin1(suffix);
+      const out = new Uint8Array(head.length + 1 + big + tail.length);
+      out.set(head);
+      out[head.length] = 0x2f;
+      out.fill(0x41, head.length + 1, head.length + 1 + big);
+      out.set(tail, head.length + 1 + big);
+      return out;
+    };
+    const asKey = longName('q BI ', ' 1 /W 2 /H 1 /BPC 8 /CS /G ID ab EI Q');
+    const asColourSpace = longName('q BI /W 2 /H 1 /BPC 8 /CS ', ' ID ab EI Q');
+    const asFilter = longName('q BI /W 2 /H 1 /BPC 8 /CS /G /F ', ' ID ab EI Q');
+    const asOperand = longName('', ' Tf');
+    const number = new Uint8Array(big + 3).fill(0x31);
+    number.set(latin1(' w'), big + 1);
+    number[big] = 0x20;
+    globalThis.gc?.();
+    const base = sample();
+    let peak = 0;
+    const watch = () => {
+      const now = sample();
+      peak = Math.max(peak, now.arrayBuffers - base.arrayBuffers + now.heapUsed - base.heapUsed);
+    };
+    for (const stream of [asKey, asColourSpace, asFilter]) {
+      expect(read(stream)).toEqual({ kind: 'doubt' });
+      watch();
+    }
+    const names: (string | undefined)[] = [];
+    const reading: Editor = {
+      operators: new Set(['Tf']),
+      edit: (_, run, data) => {
+        names.push(nameValue(data, run.last[0]!));
+        watch();
+        return null;
+      },
+    };
+    expect(read(asOperand, reading)).toEqual({ kind: 'unchanged' });
+    expect(names).toEqual([undefined]);
+    expect(read(number)).toEqual({ kind: 'doubt' });
+    watch();
+    console.info(`60 MiB tokens: growth at most ${mib(peak)} MiB`);
+    expect(peak).toBeLessThan(16 * 1024 * 1024);
+  }, 60_000);
+
+  it('names of up to 127 bytes are read, and numbers of up to 32 bytes', () => {
+    const name127 = `/${'a'.repeat(127)}`;
+    expect(nameValue(latin1(name127), { kind: 'name', start: 0, end: 128 })).toBe(name127);
+    expect(nameValue(latin1(`${name127}b`), { kind: 'name', start: 0, end: 129 })).toBeUndefined();
+    expect(nameValue(latin1(`/${'#41'.repeat(127)}`), { kind: 'name', start: 0, end: 382 })).toBe(`/${'A'.repeat(127)}`);
+    expect(read(`${'1'.repeat(32)} w`).kind).toBe('unchanged');
+    expect(read(`${'1'.repeat(33)} w`).kind).toBe('doubt');
+    expect(read(`-${'1'.repeat(29)}.5 w`).kind).toBe('unchanged');
+    expect(read(`-${'1'.repeat(30)}.5 w`).kind).toBe('doubt');
+  });
+
   it('a four-step chain whose middle step reaches the cap stays under the raw data plus 3 × 64 MiB plus 2 MiB', async () => {
     const { ascii85, runLength } = await import('./content-helpers');
     const { deflateSync } = await import('node:zlib');
@@ -702,6 +809,13 @@ describe('PDF.js agrees with the inline rules (design decision 5)', () => {
     // Read as written, an extra path is drawn before the font is set: `F1` was taken for `F` and `1`.
     expect(names).not.toEqual(spaced.names);
     expect(names.length).toBe(spaced.names.length + 1);
+    expect(read(stream).kind).toBe('doubt');
+  });
+
+  it('a dictionary key with no value: PDF.js takes >> as its value and swallows what follows', async () => {
+    const stream = '/P <</A>> BDC 1 0 0 rg 0 0 9 9 re f EMC 0 0 1 rg 0 0 5 5 re f';
+    expect((await operators(stream)).names).toEqual([]);
+    expect((await operators('/P <</A 1>> BDC 1 0 0 rg 0 0 9 9 re f EMC')).names).toContain('setFillRGBColor');
     expect(read(stream).kind).toBe('doubt');
   });
 
@@ -840,7 +954,9 @@ describe('every fixture through the reader', async () => {
     let streams: Awaited<ReturnType<typeof plainStreams>>;
     try {
       streams = await plainStreams(plain);
-    } catch {
+    } catch (error) {
+      // Only `readDictionaries` refusing the file (its JSON past the cap) is expected here.
+      expect((error as Error).message).toBe('The plain copy could not be read.');
       expect(expected).toBe('dictionaries over the JSON cap');
       return;
     }

@@ -67,6 +67,39 @@ Each decode step SHALL work in pieces with its output capped at 64 MiB, checked 
 - **WHEN** a caller's budget refuses more bytes while a stream is decoded
 - **THEN** decoding stops at once with the caller's own error, and nothing more is decoded
 
+### Requirement: Bytes after the end of Flate data are cut short
+
+Every inflating step, in the content reader and the shared zlib steps, SHALL stop pushing input once 66.5 KiB in a row makes no output, then end with an empty final push that succeeds only for data that reached its final block, so bytes after the end take no time growing with their square. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: Bytes after the end of Flate data
+
+- **WHEN** a lone Flate stream is followed by 16 MiB of other bytes, or the last Flate step of `[/FlateDecode /RunLengthDecode /FlateDecode]` (a few hundred raw bytes) by about 63 MiB
+- **THEN** each decodes to its content in under a second
+
+#### Scenario: Bytes after the end, in the shared zlib steps
+
+- **WHEN** the shared inflate with a cap, or the first bytes, are asked of zlib data followed by 16 MiB of other bytes
+- **THEN** each finishes in under a second, with the same answer as for the data alone
+
+### Requirement: Decode steps refuse sizes that would stretch memory
+
+A predictor row over 1 MiB and LZW input over 256 MiB SHALL be reported as not decoded, and a step's output SHALL grow from small pieces made only when written to. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: A predictor row of 1 MiB and one byte
+
+- **WHEN** a Flate stream has a PNG predictor whose rows are 1 MiB, and another whose rows are one byte longer
+- **THEN** the first decodes and the second is reported as not decoded
+
+#### Scenario: LZW past 256 MiB
+
+- **WHEN** the LZW step of a chain is given more than 256 MiB
+- **THEN** it is reported as not decoded before a code is read
+
+#### Scenario: A small stream
+
+- **WHEN** 10,000 small streams are decoded one after another
+- **THEN** each takes under 200 µs, as a step's pieces start at 4 KiB and are made only when written to
+
 ### Requirement: Drawing instructions are read with certainty or left
 
 The content reader SHALL read a decoded stream in two streaming passes by ISO 32000 7.2 and 7.8.2, with constant state and no list of tokens or edits. The first pass SHALL check the stream and work out the edited length; the second SHALL write the edited copy into a buffer of exactly that length. At the first doubt the whole stream SHALL be left as it was. (SPEC.md: Privacy, limits and security; What we are building, rule 4)
@@ -108,7 +141,26 @@ Doubt SHALL include: a control or non-ASCII byte outside a string or inline data
 #### Scenario: An edit that grows too much
 
 - **WHEN** an editor's edits would make a stream longer than 3 × 64 MiB
-- **THEN** the first pass reads it as doubt and no buffer for the edited copy is allocated
+- **THEN** the first pass reads it as doubt as soon as the length passes that, asks the editor nothing more, and no buffer for the edited copy is allocated
+
+### Requirement: Dictionaries hold keys and values in pairs, and numbers are short
+
+Inside `<< >>`, the content reader SHALL take a name key and then exactly one value, in turn, and read anything else as doubt; a number over 32 bytes SHALL be doubt. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: A dictionary key with no value
+
+- **WHEN** a stream holds `/P <</A>> BDC 1 0 0 rg 0 0 9 9 re f EMC`, which PDF.js was drawn reading as nothing at all
+- **THEN** it is read as doubt and left byte for byte
+
+#### Scenario: Keys and values out of turn
+
+- **WHEN** a stream holds `<</A>>`, `<</A 1 /B>>`, `<<1 /A 2>>` or `[<</A>>]`
+- **THEN** each is read as doubt and left byte for byte
+
+#### Scenario: A long number
+
+- **WHEN** a stream holds a number of 33 bytes, or of 60 MiB
+- **THEN** it is read as doubt, and nothing of it is copied
 
 ### Requirement: Inline pictures are stepped over only where every reader agrees
 
@@ -227,8 +279,17 @@ The content reader SHALL take a caller's editor, which names its operators and, 
 
 #### Scenario: Names read as qpdf reads them
 
-- **WHEN** the editor reads the names `/A#20B`, `/C#e9` and `/D#c3#a9`
-- **THEN** it gets the first and last as qpdf's JSON keys write them, and nothing for `/C#e9`, which is not valid UTF-8
+- **WHEN** the editor reads the names `/A#20B`, `/C#e9` and `/D#c3#a9`, and a name of 128 bytes or 60 MiB
+- **THEN** it gets the first and last as qpdf's JSON keys write them, and nothing for `/C#e9`, which is not valid UTF-8, or for the long names, which are never copied
+
+### Requirement: Removal empties a command whole
+
+An edit SHALL remove a command only by giving empty operands and an empty operator together, or an empty operator for an operator with no operands; an empty operands or operator alone SHALL be refused as a programming error with the pieces' fixed sentence. (SPEC.md: Rules for the code, 2)
+
+#### Scenario: Half a removal
+
+- **WHEN** an editor empties the operands of `1 0 0 rg` but keeps its operator, or empties its operator but keeps its operands
+- **THEN** the reader refuses it with its fixed sentence, and no edited copy is made
 
 ### Requirement: A page with too much drawing on it
 

@@ -8,7 +8,7 @@ import { deflateSync, inflateSync } from 'node:zlib';
 import { Deflate, Inflate } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { maxProfileBytes } from '../../src/engines/picture';
-import { inflateLimited, inflatePrefix, zlibDeflate } from '../../src/engines/zlib';
+import { inflateLimited, inflatePrefix, quietInput, zlibDeflate } from '../../src/engines/zlib';
 
 const fetched: unknown[] = [];
 const realFetch = globalThis.fetch;
@@ -97,5 +97,56 @@ describe('the first bytes of zlib data', () => {
     const data = new Uint8Array(deflateSync(Buffer.alloc(100)));
     for (const bytes of [0, 65_537, 1.5, Number.NaN, -1]) expect(() => inflatePrefix(data, Inflate, bytes)).toThrow(new Error('The start of zlib data was asked for an impossible length.'));
     expect(inflatePrefix(data, Inflate, 100)).toEqual(new Uint8Array(100));
+  });
+});
+
+describe('bytes after the end of the deflate data', () => {
+  const trailing = (bytes: number) => new Uint8Array(bytes).fill(0x41);
+  const timed = <T>(run: () => T): [T, number] => {
+    const started = performance.now();
+    const value = run();
+    return [value, performance.now() - started];
+  };
+
+  it('inflateLimited stops at the end: 16 MiB of trailing bytes in under a second, as before for a few', () => {
+    const hello = new Uint8Array(deflateSync(Buffer.from('hello'))).subarray(2);
+    const [few, quick] = timed(() => inflateLimited(new Uint8Array([...hello, 1, 2, 3]), Inflate, 100));
+    expect(few).toEqual(new TextEncoder().encode('hello'));
+    expect(quick).toBeLessThan(1000);
+    const data = new Uint8Array(hello.length + 16 * 1024 * 1024);
+    data.set(hello);
+    data.set(trailing(16 * 1024 * 1024), hello.length);
+    const [result, took] = timed(() => inflateLimited(data, Inflate, 100));
+    expect(result).toEqual(new TextEncoder().encode('hello'));
+    expect(took).toBeLessThan(1000);
+  });
+
+  it('inflatePrefix stops at the end too: 16 MiB after data too short gives nothing, in under a second', () => {
+    const short = new Uint8Array(deflateSync(Buffer.alloc(12, 1)));
+    const data = new Uint8Array(short.length + 16 * 1024 * 1024);
+    data.set(short);
+    data.set(trailing(16 * 1024 * 1024), short.length);
+    const [result, took] = timed(() => inflatePrefix(data, Inflate, 20));
+    expect(result).toBeUndefined();
+    expect(took).toBeLessThan(1000);
+    const enough = new Uint8Array(deflateSync(Buffer.alloc(40, 2)));
+    const after = new Uint8Array(enough.length + 16 * 1024 * 1024);
+    after.set(enough);
+    expect(inflatePrefix(after, Inflate, 20)).toEqual(new Uint8Array(20).fill(2));
+  });
+
+  it('a stored block of 65,535 bytes holds back its output for less than quietInput', () => {
+    const random = Uint8Array.from({ length: 300_000 }, (_, index) => (index * 2654435761) >>> 24);
+    const stored = new Uint8Array(deflateSync(random, { level: 0 })).subarray(2);
+    expect(inflateLimited(stored, Inflate, 1_000_000)).toEqual(random);
+    expect(quietInput).toBe(68_096);
+  });
+
+  it('more empty stored blocks in a row than quietInput are refused (safe), fewer are read', () => {
+    const empty = [0x00, 0x00, 0x00, 0xff, 0xff];
+    const last = new Uint8Array(deflateSync(Buffer.from('end'))).subarray(2);
+    const padded = (blocks: number) => Uint8Array.from([...Array.from({ length: blocks }, () => empty).flat(), ...last]);
+    expect(inflateLimited(padded(1000), Inflate, 100)).toEqual(new TextEncoder().encode('end'));
+    expect(inflateLimited(padded(20_000), Inflate, 100)).toBeUndefined();
   });
 });

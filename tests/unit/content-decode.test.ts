@@ -292,6 +292,20 @@ describe('each step, strictly', () => {
     expect(peak - before).toBeLessThan(16 * 1024 * 1024);
   });
 
+  it('predictors: a row of at most 1 MiB, one byte more refused', () => {
+    const parms = (columns: number): Dict => ({ '/Filter': '/FlateDecode', '/DecodeParms': { '/Predictor': 12, '/Columns': columns } });
+    const row = 1024 * 1024;
+    const data = pngPredict(new Uint8Array(2 * row).fill(0x20), row, 1, 0);
+    expect(decode(flate(data), parms(row))).toEqual(decoded(new Uint8Array(2 * row).fill(0x20)));
+    const wider = pngPredict(new Uint8Array(2 * (row + 1)).fill(0x20), row + 1, 1, 0);
+    expect(decode(flate(wider), parms(row + 1))).toEqual({ kind: 'not-decoded' });
+  });
+
+  it('LZW input past 256 MiB is refused before a code is read', () => {
+    const big = new Uint8Array(256 * 1024 * 1024 + 1);
+    expect(decode(big, chain('LZWDecode', 'RunLengthDecode'))).toEqual({ kind: 'not-decoded' });
+  });
+
   it('RunLength: needs its end mark and whole runs', () => {
     expect(rl(latin1('\x02abc\xfex\x80ignored'))).toEqual(decoded(latin1('abcxxx')));
     expect(rl(latin1('\x02abc'))).toEqual({ kind: 'not-decoded' });
@@ -389,6 +403,30 @@ const text85 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
 
 // ---------------------------------------------------------------------------
 
+describe('bytes after the end of Flate data', () => {
+  const timed = (run: () => DecodedContent): [DecodedContent, number] => {
+    const started = performance.now();
+    const value = run();
+    return [value, performance.now() - started];
+  };
+
+  it('a lone Flate with 16 MiB of trailing bytes decodes in under a second', () => {
+    const data = join(flate(content), new Uint8Array(16 * 1024 * 1024).fill(0x41));
+    const [result, took] = timed(() => decode(data, lone('FlateDecode')));
+    expect(result).toEqual(decoded(content));
+    expect(took).toBeLessThan(1000);
+  });
+
+  it('[/Fl /RL /Fl] with about 63 MiB of trailing bytes after the last Flate, from a few hundred raw bytes, in under a second', () => {
+    const inner = join(flate(content), new Uint8Array(63 * 1024 * 1024).fill(0x41));
+    const raw = flate(runLength(inner));
+    expect(raw.length).toBeLessThan(2000);
+    const [result, took] = timed(() => decode(raw, chain('FlateDecode', 'RunLengthDecode', 'FlateDecode')));
+    expect(result).toEqual(decoded(content));
+    expect(took).toBeLessThan(1000);
+  });
+});
+
 describe('the 64 MiB cap and the budget', () => {
   const cap = maxContentBytes;
 
@@ -447,18 +485,41 @@ describe('the 64 MiB cap and the budget', () => {
     const withPredictor = recordingBudget();
     expect(decode(runLength(flate(predicted)), { '/Filter': ['/RL', '/Fl'], '/DecodeParms': [null, { '/Predictor': 12, '/Columns': 16 }] }, withPredictor)).toEqual(decoded(content));
     expect(withPredictor.total).toBe(flate(predicted).length + predicted.length + content.length);
-    // Large output is counted as each 1 MiB piece is made.
+    // Large output is counted as each piece is made.
     const big = new Uint8Array(3 * 1024 * 1024 + 5).fill(0x20);
     const pieces = recordingBudget();
     expect(decode(flate(big), lone('FlateDecode'), pieces)).toEqual(decoded(big));
-    expect(pieces.calls).toEqual([1024 * 1024, 1024 * 1024, 1024 * 1024, 5]);
+    // Pieces start at 4 KiB and double to 1 MiB, each counted when it is full, the last when the step ends.
+    const sizes: number[] = [];
+    for (let size = 4096, left = big.length; left > 0; size = Math.min(1024 * 1024, size * 2)) {
+      sizes.push(Math.min(size, left));
+      left -= Math.min(size, left);
+    }
+    expect(pieces.calls).toEqual(sizes);
+    expect(pieces.total).toBe(big.length);
+  });
+
+  it('a small stream allocates little: 10,000 small streams decode quickly', () => {
+    const small = flate(latin1('q 1 0 0 rg 0 0 9 9 re f Q'));
+    const smallChain = runLength(flate(latin1('q 1 0 0 rg 0 0 9 9 re f Q')));
+    decode(small, lone('FlateDecode'));
+    const started = performance.now();
+    for (let index = 0; index < 5000; index++) {
+      decode(small, lone('FlateDecode'));
+      decode(smallChain, chain('RunLengthDecode', 'FlateDecode'));
+    }
+    const each = ((performance.now() - started) * 1000) / 10_000;
+    console.info(`a small stream: ${Math.round(each)} µs a decode`);
+    expect(each).toBeLessThan(200);
   });
 
   it("stops at once with the caller's own error when the budget refuses", () => {
     const big = new Uint8Array(5 * 1024 * 1024).fill(0x20);
     const spend = recordingBudget(2 * 1024 * 1024);
     expect(() => decode(flate(big), lone('FlateDecode'), spend)).toThrow(BudgetRefused);
-    expect(spend.calls.length).toBe(3);
+    // The piece that passed the budget was the last counted: nothing more was decoded or counted after it.
+    expect(spend.total).toBeGreaterThan(2 * 1024 * 1024);
+    expect(spend.total - spend.calls.at(-1)!).toBeLessThanOrEqual(2 * 1024 * 1024);
     const small = recordingBudget(10);
     expect(() => decode(ascii85(runLength(content)), chain('ASCII85Decode', 'RunLengthDecode'), small)).toThrow(BudgetRefused);
   });

@@ -43,6 +43,17 @@ No dependency, no tool, no page, no component. No registry entry, page text, end
 - [ ] 8.2 Write in the pull request: why the reader comes before Grayscale PDF; the measured filter set and keys (design decision 2's table); the PDF.js measurements and drawings (design decision 5's table); the departures from grayscale decision 4 (design decision 12), for `add-grayscale-pdf` task 0.2 to copy; task 4.1's built-file sizes and that no fetched file list changed, with the likely `zlib-*.js` split and what Grayscale does if it does not happen; the memory and time figures; the byte-identical comparison; the agent's own choices (proposal); "Left for later" (the plain copy's `/DP` bug, the copies of `need`); and that no page changes, so no screenshots. Verify the description holds each item.
 - [ ] 8.3 Run the review panel (see the review-panel skill), stage 2, and resolve its findings: `code-reviewer`, `security-reviewer`, `privacy-reviewer`, `software-architect` and `program-manager` (no `ux-designer`, as no page, component, content, style or registry file changes). Verify every agent approves and the verdicts are in the pull request.
 
+## 9. Stage 2 findings
+
+- [x] 9.1 Stop pushing Flate input once 66.5 KiB in a row makes no output, then end with an empty final push (`pushPieces` in `zlib.ts`), in the reader's Flate step, `inflateLimited` and `inflatePrefix`; tests for a lone Flate with 16 MiB and `[/Fl /RL /Fl]` with about 63 MiB of trailing bytes, and for `inflateLimited` and `inflatePrefix` with 16 MiB, each under a second; run task 2.2's comparison again. Verify the tests pass and the comparison is identical.
+- [x] 9.2 Inside `<< >>`, a name key and exactly one value in turn (a mask per level); doubt tests for `<</A>>`, `<</A 1 /B>>`, `<<1 /A 2>>`, `[<</A>>]` and `<<[1] 2>>`, and a PDF.js drawing of `/P <</A>> BDC …`.
+- [x] 9.3 Numbers over 32 bytes are doubt; `nameValue` gives `undefined` past 127 bytes, checked before copying; only an inline picture's `CS` and `F` names (and its keys) are read; 60 MiB tokens under a memory assertion.
+- [x] 9.4 A step's pieces start at 4 KiB, double to 1 MiB and are made only when written to; `join` gives the only piece when it is exactly full; a test that 10,000 small streams decode under 200 µs each.
+- [x] 9.5 A predictor row over 1 MiB is `not-decoded`, with a memory test at the limit; LZW input over 256 MiB is `not-decoded`; pass 1 stops as doubt once the edited length passes `maxEditedBytes`; removal needs both pieces empty (or the operator alone with no operands); the inline picture's values are read with a loop; the fixture sweep asserts the error it catches; `window` renamed `lookLimit`.
+- [x] 9.6 Decision 12 tells grayscale's task 0.2 to keep a private copy of `need`, and that `zlib-*.js` will split out (about 759 B by gzip).
+- [x] 9.7 Find why `sign-pdf.test.ts` "reading the chosen picture before the job" failed once under load; fix it only if it is a real fault.
+- [ ] 9.8 Run lint, check, `npm test` and spec in the main tree, and a worktree build with `check:worker` and `weigh`; the end-to-end suite again only if the built files change.
+
 ## Workflow follow-up
 
 - After merge, archive the change with `/opsx:archive`, so its `tool-engines` requirements join `openspec/specs/tool-engines/spec.md`.
