@@ -155,7 +155,7 @@ Each page, as a reader shows it, SHALL become the chosen paper the same way roun
 #### Scenario: A clip that cannot be written closely enough
 
 - **WHEN** a crafted page with `/UserUnit 1000000`, a crop box of 0.000001 units and content outside it is resized
-- **THEN** either nothing outside the old crop box is drawn, or the job stops with the same sentence
+- **THEN** the page is resized and nothing outside the old crop box is drawn
 
 ### Requirement: What was hidden
 
@@ -380,4 +380,4 @@ The page SHALL carry three or four how-to steps and real questions, 250 to 500 w
 #### Scenario: Honest about what was hidden and what is removed
 
 - **WHEN** the questions are read
-- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a deliberately broken page can show it after resizing, that cropping or resizing is not a way to hide something private, that a note or link wholly out of view is hidden and stays in the file while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
+- **THEN** they say that a part of a page hidden before stays hidden and stays in the file, that a page with broken drawing instructions, whether made by mistake or on purpose, can show it in some programs after resizing, that cropping or resizing is not a way to hide something private, that a note or link wholly out of view is hidden and stays in the file while one partly out of view now shows whole, and that each resized page's bleed, trim and art boxes, stored thumbnail and measuring scales are removed
