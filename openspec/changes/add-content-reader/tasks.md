@@ -4,7 +4,7 @@ No dependency, no tool, no page, no component. No registry entry, page text, end
 
 ## 1. Registry entry
 
-- [ ] 1.1 Confirm no registry change is needed: no tool, page or option is added. Verify `git diff main -- src/tools/` is empty at the end of the work.
+- [x] 1.1 Confirm no registry change is needed: no tool, page or option is added. Verify `git diff main -- src/tools/` is empty at the end of the work.
 
 ## 2. The shared zlib steps and `need`
 
@@ -22,24 +22,24 @@ No dependency, no tool, no page, no component. No registry entry, page text, end
 
 ## 4. Worker wiring and built files
 
-- [ ] 4.1 Add `content.ts` and `zlib.ts` to `lateSources` in `scripts/check-worker.mjs` (design decision 10), and update the `picture` and `shrink` descriptions in `scripts/page-weight.mjs`. In a temporary git worktree (never in the main tree while end-to-end tests may run there), run `npm run build`, `npm run check:worker`, `npm run weigh`, `npm run check:base` and `npm run check:csp`; record each built file's gzip size against design decision 9's table (which was measured with re-exports and `need` in `zlib.ts`) and confirm no `zlib-*.js`, `tools-given-*.js` or other new file appears, no file is missing, and `content.ts` is in no built file. If the bundler makes a new file, stop and update the change (page weight, uniform-requests lists) before going on. Verify all the checks pass and the sizes are in the pull request.
-- [ ] 4.2 Confirm no tool's set of fetched files changed: run `tests/e2e/uniform-requests.spec.ts` and the no-upload tests of Compress PDF, Compress to a target size, Image to PDF and Sign PDF against that build, unchanged. Verify they pass, and record the "most fetched after a pick" figure the uniform-requests spec reports against 2,026.5 KB.
+- [x] 4.1 Add `content.ts` and `zlib.ts` to `lateSources` in `scripts/check-worker.mjs` (design decision 10), and update the `picture` and `shrink` descriptions in `scripts/page-weight.mjs`. In a temporary git worktree (never in the main tree while end-to-end tests may run there), run `npm run build`, `npm run check:worker`, `npm run weigh`, `npm run check:base` and `npm run check:csp`; record each built file's gzip size against design decision 9's table (which was measured with re-exports and `need` in `zlib.ts`) and confirm no `zlib-*.js`, `tools-given-*.js` or other new file appears, no file is missing, and `content.ts` is in no built file. If the bundler makes a new file, stop and update the change (page weight, uniform-requests lists) before going on. Verify all the checks pass and the sizes are in the pull request.
+- [x] 4.2 Confirm no tool's set of fetched files changed: run `tests/e2e/uniform-requests.spec.ts` and the no-upload tests of Compress PDF, Compress to a target size, Image to PDF and Sign PDF against that build, unchanged. Verify they pass, and record the "most fetched after a pick" figure the uniform-requests spec reports against 2,026.5 KB.
 
 ## 5. Page and page text
 
-- [ ] 5.1 Confirm nothing on any page changes: no file under `src/pages/`, `src/components/`, `src/content/`, `src/styles/` or `src/layouts/` is touched, and the built HTML of every page is byte for byte as on `main` apart from script file names. Verify with `git diff main --stat` and a comparison of the two builds' HTML with hashed names masked.
+- [x] 5.1 Confirm nothing on any page changes: no file under `src/pages/`, `src/components/`, `src/content/`, `src/styles/` or `src/layouts/` is touched, and the built HTML of every page is byte for byte as on `main` apart from script file names. Verify with `git diff main --stat` and a comparison of the two builds' HTML with hashed names masked.
 
 ## 6. End-to-end and no-upload tests
 
-- [ ] 6.1 Confirm the existing end-to-end suite passes unchanged against the worktree build (`npm run e2e -- --trace off`), with no new spec, as nothing is shown on a page. Verify it passes.
+- [x] 6.1 Confirm the existing end-to-end suite passes unchanged against the worktree build (`npm run e2e -- --trace off`), with no new spec, as nothing is shown on a page. Verify it passes.
 
 ## 7. Licences
 
-- [ ] 7.1 `LICENSES.md`: confirm no change is needed, as no dependency is added. Verify `git diff main -- package.json package-lock.json LICENSES.md` is empty.
+- [x] 7.1 `LICENSES.md`: confirm no change is needed, as no dependency is added. Verify `git diff main -- package.json package-lock.json LICENSES.md` is empty.
 
 ## 8. Checks and review
 
-- [ ] 8.1 Run `npm run lint`, `npm run check`, `npm test`, the build checks of task 4.1, `npm run e2e`, `npm audit` and `npm run spec` (`openspec validate --all --strict`). Verify each passes.
+- [x] 8.1 Run `npm run lint`, `npm run check`, `npm test`, the build checks of task 4.1, `npm run e2e`, `npm audit` and `npm run spec` (`openspec validate --all --strict`). Verify each passes.
 - [ ] 8.2 Write in the pull request: why the reader comes before Grayscale PDF; the measured filter set and keys (design decision 2's table); the PDF.js measurements and drawings (design decision 5's table); the departures from grayscale decision 4 (design decision 12), for `add-grayscale-pdf` task 0.2 to copy; task 4.1's built-file sizes and that no fetched file list changed, with the likely `zlib-*.js` split and what Grayscale does if it does not happen; the memory and time figures; the byte-identical comparison; the agent's own choices (proposal); "Left for later" (the plain copy's `/DP` bug, the copies of `need`); and that no page changes, so no screenshots. Verify the description holds each item.
 - [ ] 8.3 Run the review panel (see the review-panel skill), stage 2, and resolve its findings: `code-reviewer`, `security-reviewer`, `privacy-reviewer`, `software-architect` and `program-manager` (no `ux-designer`, as no page, component, content, style or registry file changes). Verify every agent approves and the verdicts are in the pull request.
 
