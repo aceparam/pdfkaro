@@ -2,8 +2,9 @@
 // pictures smaller: which pictures a tool can safely redo (`canShrink`,
 // `listCandidates`), how sharp a picture needs to be (`pixelLimit`), a JPG
 // decoded once and encoded at a size and quality (`decodeJpeg`, `encodeJpeg`,
-// composed as `shrinkJpeg`), a picture stored without loss scaled down and
-// stored without loss again (`shrinkLossless`), and qpdf's options for writing
+// composed as `shrinkJpeg`), a picture stored without loss inflated once and
+// scaled down and stored without loss again (`decodeLossless`,
+// `encodeLossless`, composed as `shrinkLossless`), and qpdf's options for writing
 // the file again without loss. Pure functions: no page, no network; the
 // decoder, the canvas and fflate come from `tools`.
 
@@ -354,23 +355,49 @@ export async function shrinkJpeg(
   return { dict: newDictionary(dict, size, '/DCTDecode', space), data: written.bytes };
 }
 
+/** A picture stored without loss, inflated: its 8-bit samples with no predictor bytes, ready to be scaled and stored once or more. */
+export type DecodedLossless = { samples: Uint8Array; width: number; height: number; components: 1 | 3 };
+
 /**
- * A picture stored without loss, made smaller, or undefined to leave it. Only
- * a picture too large for the page is redone: its data is inflated with a cap
- * at exactly the size it should have (with one predictor byte per row), any
- * predictor is undone, it is scaled down by area averaging, and stored without
- * loss again. It replaces the old one only when smaller.
+ * A picture stored without loss, inflated, or undefined to leave it: its data
+ * must start with a zlib header, is inflated with a cap at exactly the size it
+ * should have (with one predictor byte per row), and any predictor is undone.
  */
-export function shrinkLossless(raw: Uint8Array, dict: Dict, candidate: Candidate, limit: number, fflate: Fflate): StreamReplacement | undefined {
+export function decodeLossless(raw: Uint8Array, candidate: Candidate, Inflate: InflateClass): DecodedLossless | undefined {
   const { width, height, components, predictor } = candidate;
-  if (Math.max(width, height) <= limit || !isZlib(raw)) return undefined;
+  if (!isZlib(raw)) return undefined;
   const expected = (width * components + (predictor ? 1 : 0)) * height;
-  const inflated = inflateLimited(raw.subarray(2), fflate.Inflate, expected);
+  const inflated = inflateLimited(raw.subarray(2), Inflate, expected);
   if (!inflated || inflated.length !== expected) return undefined;
   const samples = predictor ? unpredict(inflated, width, height, components) : inflated;
   if (!samples) return undefined;
+  return { samples, width, height, components };
+}
+
+/**
+ * An inflated picture scaled down to `size` by area averaging and stored
+ * without loss again, as zlib data /FlateDecode reads. `size` is never larger
+ * than the picture.
+ */
+export function encodeLossless(decoded: DecodedLossless, size: { width: number; height: number }, Deflate: DeflateClass): Uint8Array {
+  const { samples, width, height, components } = decoded;
+  if (!isWhole(size.width, 1) || !isWhole(size.height, 1) || size.width > width || size.height > height) throw new Error(cannotRedo);
+  return zlibDeflate(scaleDown(samples, width, height, components, size.width, size.height), Deflate);
+}
+
+/**
+ * A picture stored without loss, made smaller, or undefined to leave it. Only
+ * a picture too large for the page is redone: inflated (`decodeLossless`),
+ * scaled down by area averaging and stored without loss again
+ * (`encodeLossless`). It replaces the old one only when smaller.
+ */
+export function shrinkLossless(raw: Uint8Array, dict: Dict, candidate: Candidate, limit: number, fflate: Fflate): StreamReplacement | undefined {
+  const { width, height } = candidate;
+  if (Math.max(width, height) <= limit) return undefined;
+  const decoded = decodeLossless(raw, candidate, fflate.Inflate);
+  if (!decoded) return undefined;
   const size = fittedSize(width, height, limit);
-  const data = zlibDeflate(scaleDown(samples, width, height, components, size.width, size.height), fflate.Deflate);
+  const data = encodeLossless(decoded, size, fflate.Deflate);
   if (data.length >= raw.length) return undefined;
   return { dict: newDictionary(dict, size, '/FlateDecode'), data };
 }
