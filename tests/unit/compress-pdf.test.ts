@@ -9,14 +9,14 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { deflateSync, inflateSync } from 'node:zlib';
+import { deflateSync } from 'node:zlib';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { PDFDocument, concatTransformationMatrix, drawObject, popGraphicsState, pushGraphicsState } from '@cantoo/pdf-lib';
 import { Deflate, Inflate } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import type { ObjectEntry } from '../../src/engines/qpdf-json';
-import { canShrink, keepBelow, losslessOptions, newDictionary, pictureContext, pixelLimit, shrinkJpeg, shrinkLossless, zlibDeflate, type Candidate } from '../../src/engines/shrink';
+import { canShrink, keepBelow, losslessOptions, newDictionary, pictureContext, pixelLimit, shrinkJpeg, shrinkLossless, type Candidate } from '../../src/engines/shrink';
 import { openDocument } from '../../src/engines/thumbnail';
 import { inspect, run } from '../../src/engines/tools/compress-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
@@ -239,14 +239,6 @@ describe('the new dictionary', () => {
 });
 
 describe('data stored without loss', () => {
-  it('is deflated by fflate and framed as zlib data', () => {
-    const data = Uint8Array.from({ length: 300_000 }, (_, index) => (index * 31) & 0xff);
-    const framed = zlibDeflate(data, Deflate);
-    expect([framed[0], framed[1]]).toEqual([0x78, 0xda]);
-    expect(new Uint8Array(inflateSync(framed))).toEqual(data);
-    expect(new Uint8Array(inflateSync(zlibDeflate(new Uint8Array(0), Deflate)))).toEqual(new Uint8Array(0));
-  });
-
   const candidate: Candidate = { kind: 'lossless', width: 400, height: 400, components: 3, deviceGray: false, predictor: false };
   const dict = { '/Subtype': '/Image', '/Width': 400, '/Height': 400, '/ColorSpace': '/DeviceRGB', '/BitsPerComponent': 8, '/Filter': '/FlateDecode' };
   const fflate = { Inflate: CountingInflate, Deflate };

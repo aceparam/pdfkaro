@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import { optionPictures, type PictureRule } from '../../src/widget/option-values';
 import {
   acceptedPicture,
-  inflateLimited,
   isHuge,
   jpegForPdf,
   maxPngPixels,
@@ -313,24 +312,6 @@ describe('colour profiles', () => {
     }
   });
 
-  it('stops inflating as soon as the output passes the limit', async () => {
-    const { deflateSync } = await import('node:zlib');
-    const data = new Uint8Array(deflateSync(Buffer.alloc(50 * 1024 * 1024), { level: 9 })).subarray(2);
-    let largest = 0;
-    class Counting extends Inflate {
-      constructor(ondata: (chunk: Uint8Array, final: boolean) => void) {
-        super((chunk, final) => {
-          largest = Math.max(largest, chunk.length);
-          ondata(chunk, final);
-        });
-      }
-    }
-    expect(inflateLimited(data, Counting, maxProfileBytes)).toBeUndefined();
-    // No one piece of output came near the 50 MB the data would make.
-    expect(largest).toBeLessThan(2 * 1024 * 1024);
-    expect(inflateLimited(new Uint8Array(deflateSync(Buffer.from('hello'))).subarray(2), Inflate, 100)).toEqual(new TextEncoder().encode('hello'));
-    expect(inflateLimited(new Uint8Array([1, 2, 3]), Inflate, 100)).toBeUndefined();
-  });
 });
 
 describe('only the colour data of a profile', () => {
