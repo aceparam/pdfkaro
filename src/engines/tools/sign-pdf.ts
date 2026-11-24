@@ -51,7 +51,8 @@ import {
 import { inspectPdf } from '../inspect';
 import { acceptedPicture, jpegForPdf, orientedMatrix, pictureOutcome, pngForPdf, readPicture, shownSize, type InflateClass, type Orientation } from '../picture';
 import { passwordFrom, plainCopy } from '../plain';
-import { OutputLimit, pdfNumber, stampPages } from '../stamp';
+import { pdfNumber } from '../pages';
+import { OutputLimit, stampPages } from '../stamp';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 
 /** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */

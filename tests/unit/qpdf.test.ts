@@ -1,4 +1,4 @@
-// The capped write in src/engines/qpdf.ts, shared by the drawing step's `writeUpdate` and Protect with a password:
+// The capped write in src/engines/qpdf.ts, shared by the page update's `writePageUpdate` (pages.ts) and Protect with a password:
 // qpdf's write progress, the cap, the refused write, the no-space print, the size check after writing, and
 // removing /in.pdf once the write has passed. A fake qpdf plays each case; one real run shows the cap holds.
 

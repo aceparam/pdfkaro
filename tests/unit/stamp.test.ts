@@ -1,4 +1,4 @@
-// The drawing step (src/engines/stamp.ts): where a page is shown, the matrix,
+// The drawing step (src/engines/stamp.ts) and the page reading it uses (src/engines/pages.ts): where a page is shown, the matrix,
 // pdf-lib objects into qpdf's JSON, and real runs with the same qpdf and
 // pdf-lib the browser gets, each result drawn by PDF.js to find the mark.
 
@@ -6,20 +6,8 @@ import * as PdfLib from '@cantoo/pdf-lib';
 import { PDFDocument, PDFName, PDFNumber, PDFOperator, rgb } from '@cantoo/pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { plainCopy } from '../../src/engines/plain';
-import {
-  OutputLimit,
-  fromPdfLib,
-  layerMatrix,
-  pageBox,
-  pageEstimate,
-  pdfNumber,
-  sharedText,
-  sizeLimit,
-  stampPages,
-  writeUpdate,
-  type NewObjects,
-  type StampSteps,
-} from '../../src/engines/stamp';
+import { pageBox, pdfNumber, sizeLimit, writePageUpdate } from '../../src/engines/pages';
+import { OutputLimit, fromPdfLib, layerMatrix, pageEstimate, sharedText, stampPages, type NewObjects, type StampSteps } from '../../src/engines/stamp';
 import { failureKind } from '../../src/workers/worker-core';
 import { fixture, jsonOf, makeQpdf, marks, open, qpdfOn, storedPlaces, streamText, tools } from './stamp-helpers';
 
@@ -490,7 +478,7 @@ describe('large and hostile files', { timeout: 60_000 }, () => {
     qpdf.write('/in.pdf', plain);
     qpdf.append('/update.json', new TextEncoder().encode('{"qpdf":[{"jsonversion":2,"pushedinheritedpageresources":false,"calledgetallpages":false,"maxobjectid":1},'));
     qpdf.append('/update.json', new TextEncoder().encode('{}]}'));
-    expect(() => writeUpdate(qpdf, 20_000)).toThrow(OutputLimit);
+    expect(() => writePageUpdate(qpdf, 20_000)).toThrow(OutputLimit);
     expect(qpdf.size('/out.pdf')).toBeLessThanOrEqual(20_000);
   });
 
