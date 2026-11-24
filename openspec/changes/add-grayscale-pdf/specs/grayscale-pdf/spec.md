@@ -105,13 +105,13 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 
 #### Scenario: The starting colour after cs
 
-- **WHEN** a stream selects `/DeviceRGB` by `cs`, or selects by name an entry that now points at the RGB stand-in where the name's meaning is certain
-- **THEN** the result reads `/GreyRGB cs 0 0 0 scn`, or the name followed by `0 0 0 scn`, so text drawn with no colour set stays black
+- **WHEN** an edited stream selects `/DeviceRGB` by `cs`, or selects by name an entry that every dictionary in force for it gives as a direct RGB space
+- **THEN** the result reads `/GreyRGB cs 0 0 0 scn`, or the name followed by `0 0 0 scn`, so text drawn with no colour set stays black whether or not the entry is repointed
 
 #### Scenario: A left stream selects a name
 
 - **WHEN** a stream left because of doubt does `/CS0 cs` and paints with no colour set, and `/CS0` is an ICC RGB space
-- **THEN** `/CS0` is left unchanged in every dictionary that holds it, so that text stays black, while CMYK, indexed and pattern entries in the same dictionaries are still repointed
+- **THEN** `/CS0` is left unchanged in every dictionary that holds it, so that text stays black; edited streams that also select `/CS0` hold a harmless `0 0 0 scn` after it and draw as before; CMYK, indexed and pattern entries in the same dictionaries are still repointed
 
 #### Scenario: A compressed colour profile
 
@@ -208,7 +208,7 @@ Drawing streams SHALL be decoded by the engine from raw data qpdf read with no d
 #### Scenario: A decode bomb
 
 - **WHEN** one content stream inflates to 1 GB
-- **THEN** decoding stops at 64 MiB and the job stops under "The file was not converted.", with "A page of this file has too much drawing on it to convert here, so no new file was made. Split the file, or delete that page, and convert the rest." and "Go back to your file", before qpdf writes or checks a file
+- **THEN** decoding stops at 64 MiB and, if that stream is on page 14, the job stops under "The file was not converted.", with "Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest." and "Go back to your file", before qpdf writes or checks a file; the sentence holds the page number and nothing else from the file
 
 #### Scenario: A page of several large streams
 
@@ -270,7 +270,7 @@ The new file SHALL keep every page, its searchable text, links, form fields and 
 
 ### Requirement: A file with nothing to turn grey
 
-When nothing in the file would be turned grey (a `/Thumb`, and a picture reached only through one, do not count), the engine SHALL give no file and the page SHALL show the heading "Nothing in this file was turned grey." with advice naming the kinds of colour left alone, focus on the heading, no Download and "Start again". Black set as RGB counts as a change. (SPEC.md: States every tool handles, Done)
+When nothing in the file would be turned grey (a `/Thumb`, a picture reached only through one, and a stream whose only edit is an inserted starting black do not count), the engine SHALL give no file and the page SHALL show the heading "Nothing in this file was turned grey." with advice naming the kinds of colour left alone, focus on the heading, no Download and "Start again". Black set as RGB counts as a change. (SPEC.md: States every tool handles, Done)
 
 #### Scenario: The grey-only test file
 
@@ -345,7 +345,7 @@ The text below the tool SHALL be 250 to 500 words of steps and real questions, m
 #### Scenario: The text is built
 
 - **WHEN** the page is built with scripts off
-- **THEN** the steps and questions are in the served HTML, including "Will this make my file smaller?" and "What stays in colour?", saying what stays in colour, that the colours stay stored underneath, that the file stays about the same size, that the text stays searchable, and that a page with very large drawing instructions cannot be converted
+- **THEN** the steps and questions are in the served HTML, including "Will this make my file smaller?" and "What stays in colour?", saying what stays in colour, that the colours stay stored underneath, that the file stays about the same size, that the text stays searchable, and, in a question of its own, that a page with very large drawing instructions cannot be converted and shows an error naming the page
 
 #### Scenario: The Privacy draft
 
