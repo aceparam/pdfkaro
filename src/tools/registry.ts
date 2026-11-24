@@ -337,8 +337,8 @@ export const groups: Group[] = [
     slug: 'organise-pages',
     title: 'Organise PDF pages - PDFkaro',
     description:
-      'Combine, split, copy out, remove, reorder, turn and crop the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
-    sentence: 'Tools that combine, split, reorder and crop the pages of a PDF.',
+      'Combine, split, copy out, remove, reorder, turn, crop and resize the pages of a PDF, in your browser. Files stay on your device and are not uploaded.',
+    sentence: 'Tools that combine, split, reorder, crop and resize the pages of a PDF.',
     claimsDevice: true,
   },
   {
@@ -678,7 +678,6 @@ export const tools: Tool[] = [
     runsIn: 'browser',
     phase: 2,
     accepts: ['application/pdf'],
-    // Resize pages is linked once it is published.
     related: ['rotate-pdf', 'resize-pdf', 'split-pdf', 'compress-pdf', 'pdf-to-jpg', 'merge-pdf'],
     pages: [
       {
@@ -720,6 +719,70 @@ export const tools: Tool[] = [
         'Each page is cut to what is drawn on it, with a small margin left. Blank pages, pages with no white margin, and pages the tool cannot measure safely are left as they are.',
         'What was cut off is still in the file. Anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it. Cropping is not a way to hide something private.',
         "Pages, text, links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
+      ],
+    },
+  },
+  {
+    // The second Phase 2 tool. Every page becomes A4 or Letter, the same way round as shown, its content scaled to
+    // fit and centred (the owner's decisions of 24 Nov 2026). Each page's own content is wrapped, never rewritten;
+    // annotations, beads and destinations move with it (src/engines/tools/resize-pdf.ts).
+    id: 'resize-pdf',
+    group: 'organise',
+    runsIn: 'browser',
+    phase: 2,
+    accepts: ['application/pdf'],
+    related: ['crop-pdf', 'rotate-pdf', 'merge-pdf', 'compress-pdf', 'add-page-numbers-to-pdf'],
+    pages: [
+      {
+        slug: 'resize-pdf',
+        name: 'Resize pages to A4 or Letter',
+        summary: 'Make every page A4 or Letter size, scaled to fit.',
+        title: 'Resize PDF pages to A4 or Letter in your browser - PDFkaro',
+        description: 'Make every page of a PDF A4 or Letter size, its content scaled to fit. The file stays on your device and is not uploaded.',
+        heading: 'Resize PDF pages to A4 or Letter',
+        sentence: 'Make every page of a PDF A4 or Letter size, scaled to fit. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Resize and download',
+      writingLabel: 'Writing the resized file',
+      doneHeading: 'Your resized file is ready',
+      failedHeading: 'The pages were not resized.',
+      tooFewFiles: 'Choose a PDF file to resize its pages.',
+      outputSuffix: 'resized',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and resize the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // The values are also listed in src/widget/option-values.ts, which the engine reads. A4 first (the owner, 24 Nov 2026).
+      options: [
+        {
+          kind: 'choice',
+          key: 'paper',
+          legend: 'Paper size',
+          initial: 'a4',
+          choices: [
+            { value: 'a4', label: 'A4, 210 by 297 mm' },
+            { value: 'letter', label: 'Letter, 8.5 by 11 inches' },
+          ],
+        },
+      ],
+      // Page text, a draft for the owner's review like the result notes. Every page already the chosen size gives no file.
+      noSmaller: {
+        heading: 'Every page is already the paper size you chose.',
+        advice: 'No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size.',
+      },
+      // Passwords are dropped, as for every page tool (the owner's decision of 13 Nov 2026, extended to Resize by default).
+      resultNotes: [
+        'Each page is now the paper size you chose, the same way round as before. What is on it is made smaller or larger to fit, keeping its shape, and centred, so a page of another shape has white space at two edges. Pages that were already that size are left as they are.',
+        "Text, links, form fields, notes, bookmarks, attached files and the document's details are kept, and links, fields and notes move with the page. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
       ],
     },
   },

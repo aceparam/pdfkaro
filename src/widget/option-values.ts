@@ -7,6 +7,7 @@
 
 /** Each tool's accepted values for each option, by tool id and option key. */
 export const optionValues: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  'resize-pdf': { paper: ['a4', 'letter'] },
   'add-page-numbers': { position: ['bottom-left', 'bottom-centre', 'bottom-right', 'top-left', 'top-centre', 'top-right'] },
   'sign-pdf': {
     source: ['type', 'draw', 'picture'],

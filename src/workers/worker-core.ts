@@ -54,6 +54,8 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'TooManyPictures') return 'too-many-pictures';
   // The drawing step's new file, or its update, would pass their size budget (stamp.ts). Known by name, as above.
   if (error instanceof Error && error.name === 'OutputLimit') return 'output-limit';
+  // A page could not be placed on its new paper safely (pages.ts's `UnsafePage`, Resize pages). Known by name, as above.
+  if (error instanceof Error && error.name === 'UnsafePage') return 'unsafe-page';
   // An engine refused the text it was sent (option-values.ts's `TextRefused`). Known by name, as above.
   if (error instanceof Error && error.name === 'TextRefused') return 'text-refused';
   // An engine refused the drawing it was sent (option-values.ts's `DrawingRefused`). Known by name, as above.

@@ -39,8 +39,8 @@ const loadedLater = [
   { name: 'picture-thumbnail', type: 'js', why: "draws a picture's thumbnail with the browser's image decoder, started after every pick on Image to PDF's pages, whatever the file" },
   { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads at the start of every Image to PDF, Add page numbers, Watermark or Sign PDF job, before the engine reads the file' },
   { name: 'stamp', type: 'js', why: 'the drawing step (stamp.ts) that Add page numbers, Watermark and Sign PDF share; a file of its own' },
-  { name: 'pages', type: 'js', why: 'reads every page and writes the page update (pages.ts), shared by the drawing step and Crop PDF; the bundler gives it a file of its own' },
-  { name: 'option-values', type: 'js', why: "each tool's accepted option values and its rules for texts, drawings, pictures and new passwords (option-values.ts), which Add page numbers, Watermark, Sign PDF and Protect's engines read; the bundler gives them a file of their own" },
+  { name: 'pages', type: 'js', why: 'reads every page and writes the page update (pages.ts), shared by the drawing step, Crop PDF and Resize pages; the bundler gives it a file of its own' },
+  { name: 'option-values', type: 'js', why: "each tool's accepted option values and its rules for texts, drawings, pictures and new passwords (option-values.ts), which Resize pages, Add page numbers, Watermark, Sign PDF and Protect's engines read; the bundler gives them a file of their own" },
   ...engineIds.map((id) => ({ name: id, type: 'js', why: `the ${id} engine, which the worker loads` })),
 ].map((entry) => ({ ...entry, pattern: new RegExp(`^_astro/${entry.name.replaceAll('.', '\\.')}[.-][A-Za-z0-9_-]{8}\\.${entry.type}$`) }));
 

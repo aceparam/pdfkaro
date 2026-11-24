@@ -123,19 +123,43 @@ for (const name of [workers[0], ...files.filter((each) => engineIds.some((id) =>
   if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name} holds pdf-lib's code.`);
 }
 // The drawing step (stamp.ts, for Add page numbers, then Watermark and Sign PDF) takes pdf-lib from its tools too,
-// and the page reading and page update steps it shares with Crop PDF (pages.ts) use no pdf-lib at all: whichever
-// file holds each one's code, found by a sentence of its own, holds none of pdf-lib's, and is not the worker.
+// and the page reading and page update steps it shares with Crop PDF and Resize pages (pages.ts) use no pdf-lib at
+// all: whichever file holds each one's code, found by a sentence of its own, holds none of pdf-lib's, and is not the worker.
+const holdersOf = {};
 for (const [what, sentence] of [
   ['the drawing step (stamp.ts)', 'A drawing used an object that cannot be written.'],
   ['the page reading and page update steps (pages.ts)', 'A page is too small or too large to draw on.'],
 ]) {
   const holders = files.filter((name) => /\.js$/.test(name) && readFileSync(join(assets, name), 'utf8').includes(sentence));
+  holdersOf[what] = holders;
   if (holders.length !== 1) problems.push(`Expected ${what} in one file, found ${holders.length}.`);
   for (const name of holders) {
     if (name === workers[0]) problems.push(`The worker file holds ${what}.`);
     if (readFileSync(join(assets, name), 'utf8').includes(pdflibSentence)) problems.push(`${name}, which holds ${what}, holds pdf-lib's code.`);
   }
 }
+// The drawing step's file is for the tools that draw with pdf-lib: no engine file may import it unless that
+// engine's job loads pdf-lib (`loads.job`, read from its source), so a tool that only reads and places pages
+// (Crop PDF, Resize pages) never fetches it. At least one engine must import it, so the rule cannot pass by finding nothing.
+const stampHolders = holdersOf['the drawing step (stamp.ts)'] ?? [];
+let stampImporters = 0;
+for (const id of engineIds) {
+  const engineFile = files.find((each) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each));
+  if (!engineFile) continue;
+  const job = /export const loads[^=]*=\s*\{[^}]*\bjob:\s*\[([^\]]*)\]/.exec(readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8'));
+  if (!job) {
+    problems.push(`Could not read loads.job of ${id}.`);
+    continue;
+  }
+  const drawsWithPdflib = /['"]pdflib['"]/.test(job[1]);
+  const text = readFileSync(join(assets, engineFile), 'utf8');
+  for (const name of stampHolders) {
+    if (!text.includes(name)) continue;
+    stampImporters++;
+    if (!drawsWithPdflib) problems.push(`${engineFile} imports the drawing step (${name}), but ${id}'s job does not load pdf-lib.`);
+  }
+}
+if (stampImporters === 0) problems.push('No engine imports the drawing step, so the rule on who may import it found nothing to check.');
 
 // The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
 // picture.ts throws no sentences, so its marker names stand in for them.

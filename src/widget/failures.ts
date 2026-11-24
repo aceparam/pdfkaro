@@ -17,6 +17,13 @@ const shared: Record<'memory' | 'engine-load' | 'engine', string> = {
 /** What the page says when a new file would grow far past what drawing on it adds (stamp.ts's `OutputLimit`). */
 export const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
 
+/**
+ * What the page says when a page could not be placed on its new paper safely (pages.ts's `UnsafePage`). Only a crafted
+ * file reaches it, so it fails the same on a computer: its own advice. Resize pages is the only tool that raises it, so
+ * it names resizing; a later tool that places pages gives its own words.
+ */
+export const unsafePageSentence = 'A page of this file could not be resized, so no new file was made. The file may be damaged. Try another copy of it.';
+
 /** What the page says when the engine refuses a text, for a tool with no words of its own for it. */
 export const textRefusedSentence = 'The text could not be used. Check it and try again.';
 
@@ -49,6 +56,7 @@ export function failureSentence(
   if (kind === 'too-many-pictures') return tooManyPicturesSentence();
   // Only a broken or crafted file reaches the drawing step's budget, so it fails the same on a computer: its own advice.
   if (kind === 'output-limit') return outputLimitSentence;
+  if (kind === 'unsafe-page') return unsafePageSentence;
   // The page should never send a text the engine refuses; if the two disagree, the first shown text's own words, else the shared ones.
   // A hidden text is never sent, so its words never apply (shownOptions decides what is shown, in one place).
   if (kind === 'text-refused') {

@@ -232,14 +232,14 @@ describe('Rotate PDF', () => {
 describe('Images to PDF', () => {
   const tool = tools.find((each) => each.id === 'images-to-pdf')!;
 
-  it('is one tool with three pages under Convert to PDF, taking JPG and PNG, after Crop PDF', () => {
+  it('is one tool with three pages under Convert to PDF, taking JPG and PNG, after Resize pages', () => {
     expect(tool).toMatchObject({ group: 'to-pdf', runsIn: 'browser', phase: 1, accepts: ['image/jpeg', 'image/png'] });
     expect(tool.pages.map((page) => page.slug)).toEqual(['jpg-to-pdf', 'png-to-pdf', 'image-to-pdf']);
     expect(tool.pages.map((page) => page.name)).toEqual(['JPG to PDF', 'PNG to PDF', 'Image to PDF']);
     for (const page of tool.pages) expect(page.accepts).toBeUndefined();
     const ids = tools.map((each) => each.id);
-    // At /image2pdf's catalogue row, the last of "Organise pages", so after Crop PDF (/crop-pdf).
-    expect(ids.indexOf('images-to-pdf')).toBe(ids.indexOf('crop-pdf') + 1);
+    // At /image2pdf's catalogue row, the last of "Organise pages", so after Resize pages (/resize-pdf).
+    expect(ids.indexOf('images-to-pdf')).toBe(ids.indexOf('resize-pdf') + 1);
     expect(tool.related).toEqual(['merge-pdf', 'compress-pdf', 'pdf-to-jpg', 'rotate-pdf', 'rearrange-pdf-pages']);
   });
 
@@ -353,6 +353,79 @@ describe('Crop PDF', () => {
   });
 });
 
+describe('Resize pages', () => {
+  const tool = tools.find((each) => each.id === 'resize-pdf')!;
+
+  it('is the second Phase 2 tool, right after Crop PDF under "Organise pages", taking one PDF', () => {
+    expect(tool).toMatchObject({ group: 'organise', runsIn: 'browser', phase: 2, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['crop-pdf', 'rotate-pdf', 'merge-pdf', 'compress-pdf', 'add-page-numbers-to-pdf']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('resize-pdf')).toBe(ids.indexOf('crop-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'resize-pdf',
+        name: 'Resize pages to A4 or Letter',
+        summary: 'Make every page A4 or Letter size, scaled to fit.',
+        title: 'Resize PDF pages to A4 or Letter in your browser - PDFkaro',
+        description: 'Make every page of a PDF A4 or Letter size, its content scaled to fit. The file stays on your device and is not uploaded.',
+        heading: 'Resize PDF pages to A4 or Letter',
+        sentence: 'Make every page of a PDF A4 or Letter size, scaled to fit. Your file stays on your device.',
+      },
+    ]);
+  });
+
+  it('offers one choice, "Paper size", A4 first and chosen at first, then Letter', () => {
+    expect(tool.widget!.options).toEqual([
+      {
+        kind: 'choice',
+        key: 'paper',
+        legend: 'Paper size',
+        initial: 'a4',
+        choices: [
+          { value: 'a4', label: 'A4, 210 by 297 mm' },
+          { value: 'letter', label: 'Letter, 8.5 by 11 inches' },
+        ],
+      },
+    ]);
+  });
+
+  it('has the widget words of the design, with words for no page changed and two notes', () => {
+    expect(tool.widget).toMatchObject({
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      outputSuffix: 'resized',
+      outputs: 'one',
+      resultPages: 'input',
+      actionLabel: 'Resize and download',
+      writingLabel: 'Writing the resized file',
+      doneHeading: 'Your resized file is ready',
+      failedHeading: 'The pages were not resized.',
+      tooFewFiles: 'Choose a PDF file to resize its pages.',
+      memoryAdvice: 'Try on a computer, or split the file first and resize the parts.',
+      noSmaller: {
+        heading: 'Every page is already the paper size you chose.',
+        advice: 'No new file was made. You can use your file as it is. To make the pages the other size, press Start again, choose the file and pick the other size.',
+      },
+    });
+    const notes = tool.widget!.resultNotes;
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toMatch(/the same way round as before/);
+    expect(notes[0]).toMatch(/Pages that were already that size are left as they are/);
+    expect(notes[1]).toMatch(/links, fields and notes move with the page/);
+    expect(notes[1]).toMatch(/no password and no restrictions/);
+    for (const text of [...notes, ...Object.values(tool.widget!.noSmaller!)]) expect(text).not.toContain('!');
+  });
+
+  it('names resizing in the "Organise pages" hub words', () => {
+    const group = groups.find((each) => each.id === 'organise')!;
+    expect(group.description).toBe('Combine, split, copy out, remove, reorder, turn, crop and resize the pages of a PDF, in your browser. Files stay on your device and are not uploaded.');
+    expect(group.sentence).toBe('Tools that combine, split, reorder, crop and resize the pages of a PDF.');
+    expect(group.claimsDevice).toBe(true);
+  });
+});
+
 describe('Compress PDF', () => {
   const tool = tools.find((each) => each.id === 'compress-pdf')!;
 
@@ -412,8 +485,8 @@ describe('Compress PDF', () => {
       if (each.id === 'compress-pdf') continue;
       expect(each.widget?.resultWas).toBeUndefined();
       // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
-      // Crop PDF gives no new file when no page is cut.
-      if (each.id !== 'unlock-pdf' && each.id !== 'crop-pdf') expect(each.widget?.noSmaller).toBeUndefined();
+      // Crop PDF gives no new file when no page is cut; Resize pages when every page is already the chosen size.
+      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
     }
   });
 });

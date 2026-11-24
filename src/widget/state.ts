@@ -32,6 +32,7 @@ export type FailureKind =
   | 'zip-too-large'
   | 'too-many-pictures'
   | 'output-limit'
+  | 'unsafe-page'
   | 'text-refused'
   | 'drawing-refused'
   | 'picture-refused'

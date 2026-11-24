@@ -109,6 +109,15 @@ describe('failureKind', () => {
     expect(failureKind(new Error(new OutputLimit().message))).toBe('engine');
   });
 
+  it('knows a page that could not be placed safely by its name (pages.ts), and its message is not taken for anything else', async () => {
+    const { UnsafePage } = await import('../../src/engines/pages');
+    expect(failureKind(new UnsafePage())).toBe('unsafe-page');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'UnsafePage' }))).toBe('unsafe-page');
+    expect(failureKind(new Error(new UnsafePage().message))).toBe('engine');
+    // A page out of pageBox's range is the engine's failure, as before.
+    expect(failureKind(new Error('A page is too small or too large to draw on.'))).toBe('engine');
+  });
+
   it('knows a refused text by its name, and its message is not taken for anything else', async () => {
     const { TextRefused } = await import('../../src/widget/option-values');
     expect(failureKind(new TextRefused())).toBe('text-refused');

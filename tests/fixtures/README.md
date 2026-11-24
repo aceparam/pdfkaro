@@ -816,3 +816,56 @@ Measured on 23 Nov 2026. In Chromium, the built page through Playwright at 1280 
 - **Node's memory is not the browser's:** `@napi-rs/canvas` 1.1.0, which only the Node tests use, keeps the memory of every `getImageData` call (about 2.3 MB for an A4 page read in full, with or without garbage collection, outside the test runner too). So `pages-500.pdf` peaks at 1.29 GB in Node, growing by the same amount each page, and the 120,000-page file runs Node out of memory. The worker's `OffscreenCanvas` does not do this, as the Chromium figures show.
 - **Time on the 120,000-page file is over the 15 minutes the design set.** Measuring at a lower scale does not help: drawing 1,000 of its pages at half the scale took 15.2 s against 16.1 s, as the time goes to PDF.js's work for each page, not to its pixels. So of the design's two responses, only a sentence beside the 20,000-page notice is left, which needs a per-tool notice in the shared widget; it is not built here and is named in the pull request.
 - **Known, not fixed here:** "Page N of M" has no thousands separator (`src/widget/format.ts`), so this file shows "Page 1 of 120000", as on every page tool.
+
+### Resize pages (`src/engines/tools/resize-pdf.ts`, with `readPages(…, { objects: true })` in `src/engines/pages.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/resize-pdf.test.ts`), with A4 and with Letter, the encrypted ones with `open-sesame`. Every file given back passes `qpdf --check`, is not encrypted, holds each page's decoded content streams byte for byte as before between a new first stream (the prefix: `q`, one `cm`, the old shown box as a clip) and a new last stream (`Q`), has `/MediaBox` and `/CropBox` equal to the paper (either way round) on each resized page, keeps its `/Rotate` and `/Resources`, has no `/UserUnit`, `/BleedBox`, `/TrimBox`, `/ArtBox`, `/Thumb` or `/VP` on a resized page, and leaves every other page's dictionary as it was. Sizes in bytes, from a run on 24 Nov 2026.
+
+| File | Before | A4 | Letter |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` (595 by 842 points) | 6,057 | No page changed, no file ("Every page is already the paper size you chose.") | 3 of 3 resized, 3,785 |
+| `pages-500.pdf` | 198,025 | No page changed | 500 of 500 resized, 102,107 |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | 7,178 and 7,181 | No page changed | 3 of 3 resized, 3,822; no password and no restrictions |
+| `form.pdf` | 3,189 | No page changed | 1 of 1 resized, 2,911; both fields and `Sample text` kept, each field at f times its place plus the centring |
+| `mixed.pdf` (A4, Letter on its side, A5 turned a quarter, A4 upside down) | 2,257 | 2 of 4 resized (the Letter page to A4 on its side, the A5 page enlarged to A4 on its side), 1,994; the two A4 pages left as they were | 3 of 4 resized, 1,984; the Letter page on its side left |
+| `rich.pdf` | 2,064 | No page changed | 2 of 2 resized, 1,939; bookmarks, the link and `note.txt` kept |
+| `tagged.pdf` (Letter) | 5,118 | 2 of 2 resized, 2,837 | 2 of 2 resized, 2,746; tags, named destination, thread, note, link, fields and text kept |
+| `multilingual.pdf` (594.96 points wide) | 48,414 | No page changed: within a point of A4 | 5 of 5 resized, 37,446; every page's text read by PDF.js as before, and ink in every script band of page 5, scaled |
+| `images.pdf`, `scanned.pdf`, `chinese-unembedded.pdf`, `compress-bomb-attachment.pdf`, `compress-lossless.pdf`, `compress-packed.pdf`, `compress-scans.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf` | | No page changed | Every page resized; the 1 GB attachment is never inflated |
+| `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf`, `compress-kinds.pdf`, `compress-password.pdf` (with `open-sesame`) | | Every page resized (1, 2, 7 and 1) | Every page resized |
+| `compress-json-bomb.pdf` | 140,759 | Fails with "The pages could not be read." after about 14 seconds: its JSON of dictionaries passes the page-reading cap. The page gives the shared failure | The same |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | Read as damaged before any job; a run fails with "qpdf could not read the file." | The same |
+
+No fixture stops the job as unsafe; only the crafted pages below do.
+
+Files made in the test: pages turned 90 and 270 (and stored as `-90`, `45`, and 90 inherited from the page tree), a paper box offset to `[100 200 712 992]`, `/UserUnit 2`, each with a link with `/QuadPoints`, an ink note, a widget with a value and `/XYZ`, `/FitH`, `/FitV`, `/FitR` and `/FitBV` destinations, checked against hand-computed matrices and against PDF.js's viewports (every annotation shown at f times its old place plus the centring, to 0.001 point), and drawn by PDF.js as the original scaled and centred with nothing in the white bands; an inherited crop box hiding two red squares (not drawn after); a note wholly outside it (`/F` 4 becomes 6), a link half outside (still visible), and a popup from the old paper's right edge (moved, `/F` unchanged, still opened from its note); a `/UserUnit 0.001` page of 10^10 units and a box at 10^9 points (stopped with `UnsafePage`, the page's sentence "A page of this file could not be resized, so no new file was made."); a `/UserUnit 1000000` page with a crop box of 10^-6 units (resized, k = 595276000, nothing outside the crop box drawn); a box just under 10^9 points (resized, every number in fixed form); a 10 by 14 page (k = 59.5276; content, link and destinations agree to 0.001 point); a link whose `/Rect` moves by its Letter page and its `/Dest` by an A5 page; a popup listed twice and an annotation shared by two pages (each moved once); a page object listed twice in the page tree (qpdf makes the second listing an object of its own in the plain copy, so each is wrapped once); the edges (1.0 point off A4 left, 1.01 resized; 501 by 500 upright, 501.01 by 500 on its side; A4 stored on its side with `/Rotate 90` left; `/UserUnit 1.0001` resized); a destination 34 levels deep (left) and one 2 levels deep (moved); every annotation key with right and wrong counts, an indirect `/QuadPoints` written direct with the shared array unchanged, `/Measure` removed; every destination kind in an outline, a link, a GoTo action and its `/Next`, `/Dests`, the `/Names` tree and `/OpenAction`, a destination to a page left as it is and another file's page number (both unchanged), and a bead.
+
+**One shared value named many times (stage 2, security).** Every array an annotation or bead names is counted against the size budget (at least 2 bytes a number) as soon as it is resolved, before its length or numbers are checked, well formed or not; and before the fix one indirect array named many times was either built again for each name (the reviewer's process ran out of memory) or read again for each name (minutes to hours). Each file below is resized to A4, on a Letter page, and stops with `OutputLimit` ("The new file would be far larger than expected, so it was not made.…"). Measured in Node on 24 Nov 2026, each alone in a process; the peak includes loading qpdf.
+
+| File | Size | Stops after | Heap grew | Peak resident memory grew |
+| --- | --- | --- | --- | --- |
+| 2,000 highlights naming one 40,000-number `/QuadPoints` array | 404,360 bytes | 4.0 s | 98 MB | 139 MB |
+| One ink note repeating one 40,000-number stroke 2,000 times in its `/InkList` | 165,245 bytes | 0.2 s | 6 MB | 27 MB |
+| One ink note naming one 400,000-number stroke 200,000 times in its `/InkList` (the reviewer's file, about 38 s before) | 2,727,246 bytes | 1.2 s | 15 MB | 189 MB |
+| 20,000 highlights naming one `/QuadPoints` array of 400,001 numbers, the wrong length (12.5 s and a file made before) | 4,079,179 bytes | 1.8 s | 16 MB | 139 MB |
+
+**A hidden note's popup.** A note wholly outside the old crop box (`/F 4`) whose popup has `/Open true` and `/F 4`: both get `/F 6`, PDF.js reads both as hidden, and nothing is drawn in the white space.
+
+**Progress counts every page:** `mixed.pdf` to A4 reports "Page 1 of 4" to "Page 4 of 4", though two of its pages are left as they are.
+
+**A page with an extra restore, recorded (a known outcome, not a promise).** A Letter page with crop box `[0 0 612 700]` whose content draws a black square, then `Q` with no matching `q`, then `SECRET-hidden` and a red bar above y = 700, resized to A4: the job finishes and the file passes `qpdf --check`, and PDF.js (6.5.438) pops the prefix's save at the extra `Q`, so the red bar is drawn at its old place (x 100 to 400, y 720 to 740 points on the new page), unscaled and unclipped, and `SECRET-hidden` is drawn and read as text. The test fails if this changes.
+
+Measured on 24 Nov 2026, as Crop PDF's above: in Node under the test runner, one file per process with qpdf loaded first on `text.pdf`, peak the process's highest resident memory (the runner's own included); in Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, the resident memory of every browser process added up every 0.2 seconds, over its level just before the press. "Walk" is the peak from the last "Page N of M" line to the first writing line, which holds the destination walk and the update handed to qpdf.
+
+| File | In | Out | Node: time | Node: peak (walk) | Chromium: time | Chromium: peak over baseline (walk) | Chromium: second and ninth tenth |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pages-500.pdf`, to Letter | 198,025 bytes | 102,107 bytes | 0.28 s | 0.14 GB (0.14) | 0.82 s | 0.01 GB (0.01) | |
+| `make-large.mjs`'s file (one A4 page), to Letter | 110.1 MB | 110.1 MB | 1.5 s | 1.14 GB (1.03) | 1.9 s | 0.56 GB (0.50) | 0.02 and 0.52 GB |
+| 120,000 pages of 200 by 200 points (`make-many-pages.mjs`), to Letter | 16.6 MB | 1.2 MB | 24.0 s | 0.82 GB (0.82) | 15.9 s | 0.66 GB (0.65) | 0.16 and 0.64 GB |
+| A Letter page and 220,000 objects each holding a destination to it (dictionary JSON 61.6 MB, near `maxDictionaryJson`), to A4 | 30.8 MB | 5.7 MB | 23.8 s | 1.08 GB (1.08) | 15.5 s | 0.76 GB (0.46) | 0.24 and 0.49 GB |
+
+- **Against Add page numbers** on the 100 MB file (1.19 GB in Node, 1.36 GB in Chromium): Resize peaks at 1.14 GB in Node and 0.56 GB over baseline in Chromium, so every file above is under the ceiling. The 100 MB file in Node is the closest, 0.05 GB under: `plainCopy` makes four qpdf instances in one job (opening, counting, reading, writing), as the stamp tools' do.
+- **Time:** the 120,000-page file takes 16 seconds in Chromium, far under the design's 15 minutes. About half is reading the pages and every object.
+- **Memory with the page count:** in Node, the heap was 0.42 GB once the pages were read and each page's working copy made, and 0.42 then 0.43 GB at the second and ninth tenth of the per-page loop, so nothing beyond the working copies grows with the pages. The Chromium tenths (0.16 then 0.64 GB) follow the job's phases, not the pages: reading first, then the read objects and the copies held together until the read is let go before writing.
+- **The objects file** (every one of 220,000 objects changed by the destination walk) is the worst case for the working copies: 1.08 GB in Node, 0.76 GB over baseline in Chromium, under the ceiling.
+- **Known, not fixed here:** "Page N of M" has no thousands separator, as on every page tool.
