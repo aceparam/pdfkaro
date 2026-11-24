@@ -2,9 +2,10 @@
 // written into a temporary folder of this test process (never committed: the 2 MB page's files pass 2 MB). Each kind:
 // a photo a little over the target that fits once compressed, the same file with a password, a photo plus a
 // random-bytes attachment larger than the target (still over at the floor), a text-only file already packed by qpdf
-// (no smaller file), and the shared failing-job file padded over the target. Made the same way on every run.
+// (no smaller file), and the shared failing-job file padded over the target. Made the same way on every run (the
+// protected file's encryption aside, which uses random salt), once, and kept in the folder for later runs.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -16,7 +17,10 @@ import { sizeTargets, type SizeTargetKey } from '../../src/widget/option-values'
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const makeQpdf = () => createQpdf(async () => require('@neslinesli93/qpdf-wasm'), require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm'));
-const folder = join(tmpdir(), `pdfkaro-target-files-${process.pid}`);
+// One folder for every test process, outside the repo. Each file is written under a name of this process and then
+// moved into place, so processes making the same file at once never read one half written; a file already there is
+// kept. The version in the name changes whenever what is made here changes.
+const folder = join(tmpdir(), 'pdfkaro-target-files-v1');
 export const targetPassword = 'open-sesame';
 /** qpdf's options for writing a file again without loss, as Compress PDF writes it (shrink.ts). */
 const lossless = ['--object-streams=generate', '--compress-streams=y', '--recompress-flate', '--compression-level=9', '--remove-unreferenced-resources=yes'];
@@ -177,14 +181,21 @@ export async function targetFiles(key: SizeTargetKey): Promise<TargetFiles> {
   const { bytes } = sizeTargets[key];
   const seed = bytes / 1000;
   const path = (kind: string) => join(folder, `${kind}-${key}.pdf`);
-  const fits = photoPdf(bytes, seed);
-  writeFileSync(path('fits'), fits);
-  writeFileSync(path('protected'), await qpdfWrite(fits, ['--encrypt', `--user-password=${targetPassword}`, `--owner-password=${targetPassword}`, '--bits=256', '--']));
-  const random = seeded(seed + 1);
-  const attachment = Buffer.from(Uint8Array.from({ length: Math.round(1.1 * bytes) }, () => Math.floor(random() * 256)));
-  writeFileSync(path('over'), photoPdf(Math.max(50_000, bytes / 4), seed + 2, attachment));
-  writeFileSync(path('packed'), await packedText(bytes, seed + 3));
-  writeFileSync(path('failing'), await paddedFailing(bytes, seed + 4));
+  const put = async (kind: string, make: () => Promise<Uint8Array | Buffer> | Uint8Array | Buffer) => {
+    if (existsSync(path(kind))) return;
+    const partial = `${path(kind)}.${process.pid}`;
+    writeFileSync(partial, await make());
+    renameSync(partial, path(kind));
+  };
+  await put('fits', () => photoPdf(bytes, seed));
+  await put('protected', () => qpdfWrite(readFileSync(path('fits')), ['--encrypt', `--user-password=${targetPassword}`, `--owner-password=${targetPassword}`, '--bits=256', '--']));
+  await put('over', () => {
+    const random = seeded(seed + 1);
+    const attachment = Buffer.from(Uint8Array.from({ length: Math.round(1.1 * bytes) }, () => Math.floor(random() * 256)));
+    return photoPdf(Math.max(50_000, bytes / 4), seed + 2, attachment);
+  });
+  await put('packed', () => packedText(bytes, seed + 3));
+  await put('failing', () => paddedFailing(bytes, seed + 4));
   const files: TargetFiles = { fits: path('fits'), protectedFits: path('protected'), over: path('over'), packed: path('packed'), failing: path('failing') };
   made.set(key, files);
   return files;

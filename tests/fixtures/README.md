@@ -144,11 +144,17 @@ So the tests compare PDF.js's reading of a page before and after a tool, never w
 
 `chinese-unembedded.pdf` comes from `make.mjs`, section 16: a Type 0 font `STSong-Light-UniGB-UCS2-H` with the encoding `UniGB-UCS2-H` and a `CIDFontType0` descendant (`Adobe`, `GB1`, 4) whose descriptor has no font file, and one A4 page showing the Chinese heading and first line of `multilingual-text.json` as UCS-2 codes. It needs no font and no network. PDF.js asks its data factory once per document for `UniGB-UCS2-H.bcmap`; the owner's fixed helper data (11 Nov 2026) holds no character maps, so the request is refused in memory, PDF.js reads and draws none of its text, and no request leaves the page. Poppler without its language pack reads none either. Adobe Reader may offer to download its Asian font pack for this file itself.
 
-**Not committed:** the file over 100 MB. `make-large.mjs` writes one outside the repo when it is needed:
+**Not committed:** the file over 100 MB, and the large files Compress to a target size was measured on. `make-large.mjs` writes them outside the repo when they are needed:
 
 ```bash
 node tests/fixtures/make-large.mjs
+node tests/fixtures/make-large.mjs --scans
+node tests/fixtures/make-large.mjs --lossless
+node tests/fixtures/make-large.mjs --hostile-jpeg
+node tests/fixtures/make-large.mjs --hostile-lossless
 ```
+
+The files over each of Compress to a target size's targets are made by `tests/e2e/target-files.ts` into the temporary folder when its tests run.
 
 ## What each engine does with each file
 
@@ -461,6 +467,63 @@ Each file was compressed in Node with the same qpdf the browser uses (`tests/uni
 | `chinese-unembedded.pdf` | 1,693 | 1,147 | Written again with objects packed; text kept |
 
 The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI.
+
+### Compress to a target size (`src/engines/tools/compress-to-target.ts`, with `src/engines/shrink.ts`)
+
+Each file was run in Node with the same qpdf the browser uses (`tests/unit/compress-to-target.test.ts`), with `@napi-rs/canvas` decoding and encoding JPGs in place of the browser, against each page's target and, through `shrinkToBytes`, against half and a tenth of its own size (most fixtures are under 100 KB). "Held" means the file is already at or under the target: the page holds the main button and the engine gives no file without reading it. Every file given passes `qpdf --check` (with the password where needed); "under" is at or under the target, "over" is the smallest file written, at most 99% of the input; the step is the ladder's, 1 to 7. Sizes in bytes, from a run on 24 Nov 2026; JPG sizes depend on the encoder, so the browser's differ a little.
+
+| File | Size | Read | 100 KB | 200 KB | 500 KB | 1 MB | 2 MB | Half its size | A tenth |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `chinese-unembedded.pdf` | 1,693 | ready | held | held | held | held | held | over 1147, 1 write | over 1147, 1 write |
+| `compress-bomb-attachment.pdf` | 1,045,278 | ready | no smaller file, 1 write | no smaller file, 1 write | no smaller file, 1 write | no smaller file, 1 write | held | no smaller file, 1 write | no smaller file, 1 write |
+| `compress-flate-bomb.pdf` | 103,018 | ready | no smaller file, 1 write | held | held | held | held | no smaller file, 1 write | no smaller file, 1 write |
+| `compress-jpeg-mismatch.pdf` | 15,014 | ready | held | held | held | held | held | over 14774, 1 write | over 14774, 1 write |
+| `compress-json-bomb.pdf` | 140,759 | ready | no smaller file, 1 write | held | held | held | held | no smaller file, 1 write | no smaller file, 1 write |
+| `compress-kinds.pdf` | 41,034 | ready | held | held | held | held | held | over 25640 (step 7), 1 write | over 25640 (step 7), 1 write |
+| `compress-lossless.pdf` | 16,884 | ready | held | held | held | held | held | under 6380 (step 3), 1 write | over 3783 (step 7), 1 write |
+| `compress-packed.pdf` | 3,441 | ready | held | held | held | held | held | no smaller file, 1 write | no smaller file, 1 write |
+| `compress-password.pdf` | 36,730 | needs-password (ready with its password) | held | held | held | held | held | under 12707 (step 1), 1 write | over 4577 (step 7), 1 write |
+| `compress-scans.pdf` | 634,679 | ready | under 80107 (step 7), 1 write | under 156812 (step 3), 1 write | under 237481 (step 1), 1 write | held | held | under 237481 (step 1), 1 write | over 80107 (step 7), 1 write |
+| `compress-small-jpg.pdf` | 12,852 | ready | held | held | held | held | held | over 8448 (step 5), 1 write | over 8448 (step 5), 1 write |
+| `compress-text.pdf` | 21,019 | ready | held | held | held | held | held | under 2391, 1 write | over 2391, 1 write |
+| `damaged-cut.pdf` | 79,210 | damaged | held | held | held | held | held | fails: qpdf could not write the new file (exit 2). | fails: qpdf could not write the new file (exit 2). |
+| `damaged-xref.pdf` | 6,057 | damaged | held | held | held | held | held | fails: qpdf could not write the new file (exit 2). | fails: qpdf could not write the new file (exit 2). |
+| `form.pdf` | 3,189 | ready | held | held | held | held | held | over 2651, 1 write | over 2651, 1 write |
+| `images.pdf` | 1,642 | ready | held | held | held | held | held | over 1543, 1 write | over 1543, 1 write |
+| `mixed.pdf` | 2,257 | ready | held | held | held | held | held | over 1590, 1 write | over 1590, 1 write |
+| `multilingual.pdf` | 48,414 | ready | held | held | held | held | held | over 37027, 1 write | over 37027, 1 write |
+| `not-a-pdf.pdf` | 42 | damaged | held | held | held | held | held | fails: qpdf could not write the new file (exit 2). | fails: qpdf could not write the new file (exit 2). |
+| `pages-500.pdf` | 198,025 | ready | over 101461, 1 write | held | held | held | held | over 101461, 1 write | over 101461, 1 write |
+| `password.pdf` | 7,178 | needs-password (ready with its password) | held | held | held | held | held | over 4192, 1 write | over 4192, 1 write |
+| `restricted.pdf` | 7,181 | ready | held | held | held | held | held | over 4195, 1 write | over 4195, 1 write |
+| `rich.pdf` | 2,064 | ready | held | held | held | held | held | over 1676, 1 write | over 1676, 1 write |
+| `scanned.pdf` | 6,191 | ready | held | held | held | held | held | over 4442, 1 write | over 4442, 1 write |
+| `tagged.pdf` | 5,118 | ready | held | held | held | held | held | under 2523, 1 write | over 2523, 1 write |
+| `text.pdf` | 6,057 | ready | held | held | held | held | held | over 3441, 1 write | over 3441, 1 write |
+| `warning.pdf` | 6,057 | ready | held | held | held | held | held | over 3441, 1 write | over 3441, 1 write |
+
+Not in the table: `compress-kinds.pdf`'s CMYK JPG and CCITT scan stay byte for byte, and its image mask, colour-key picture, grey ICC picture and `/Matte` pair decode byte for byte; `compress-lossless.pdf`'s screenshot is scaled and still `/FlateDecode` at every step; `multilingual.pdf`, `rich.pdf`, `form.pdf` and `tagged.pdf` keep every page's decoded content streams and text; `rich.pdf` and `form.pdf` keep their outlines, fields, values and attachments; the three bombs end within a minute, inflating under 64 MB. The two exact checks of the estimate hold on every write of every run: each picture's measured size is the length handed to qpdf for it, and the estimate of the step written, with F after that write, is the written length.
+
+**Files made for the measurements** (`make-large.mjs`, outside the repo): `--scans`, 25 A4 colour JPG scans at 300 pixels to the inch, quality 90 (106,432,245 bytes); `--lossless`, 12 A4 colour scans stored without loss with a PNG predictor (106,440,092 bytes); `--hostile-jpeg`, 17 flat JPGs of 7,000 by 7,000 pixels on pages of 7,000 points, so no step scales them, planned at 11,662,000,000 JPG pixels, the most whole pictures fit under the budget (12,244,319 bytes); `--hostile-lossless`, 6 lossless RGB pictures of 7,000 by 7,000 with a PNG predictor on pages of 288 points, so every step scales them, planned at 11,881,736,640 (35,523,145 bytes).
+
+Measured on 24 Nov 2026, as Resize pages' are: in Node under the test runner, each case in a process of its own with qpdf loaded first on `text.pdf`, peak the process's highest resident memory (the runner's own included); in Chromium, the built page through Playwright at 1280 pixels, from pressing the main button to the result, the resident memory of every browser process added up every 0.2 seconds, over its level just before the press. "Measuring" is the time from the first "Picture" line to the first writing line. Every case wrote once: no estimate was off far enough for a second write.
+
+| File | Target | Planned (JPG pixels) | Out, step | Node: time (measuring), peak | Chromium: time (measuring), peak over baseline | CPU slowed four times |
+| --- | --- | --- | --- | --- | --- | --- |
+| `compress-scans.pdf` | 100 KB | 571,013,908 | 80,107 under, 7 | 2.3 s (1.5), 0.32 GB | 2.9 s (2.1), 0.13 GB | |
+| `compress-scans.pdf` | 200 KB | 571,013,908 | 156,812 under, 3 | 2.6 s (1.6), 0.34 GB | 3.4 s (1.9), 0.13 GB | 11.5 s (7.0), 0.10 GB |
+| `compress-scans.pdf` | 500 KB | 571,013,908 | 237,481 under, 1 | 3.0 s (1.7), 0.34 GB | 3.9 s (2.1), 0.13 GB | |
+| `--scans` | 100 KB | 1,255,474,050 | 1,812,677 over, 7 | 16.5 s (9.6), 0.48 GB | 17.5 s (9.8), 0.35 GB | 56.7 s (31.2), 0.33 GB |
+| `--scans` | 2 MB | 1,255,474,050 | 1,812,677 under, 7 | 16.5 s (9.6), 0.47 GB | 17.5 s (9.6), 0.33 GB | |
+| `--lossless` | 2 MB | 5,648,810,040 | 4,881,100 over, 7 | 75.3 s (47.1), 0.52 GB | 110.2 s (67.3), 0.26 GB | |
+| `make-large.mjs`'s file (no picture) | 2 MB | 0 | no smaller file | 4.9 s, 0.83 GB | 4.9 s, 0.52 GB | |
+| 120,000 pages (`make-many-pages.mjs`, no picture) | 2 MB | 0 | 1,130,731 under | 11.5 s, 0.46 GB | 8.4 s, 0.25 GB | |
+| `--hostile-jpeg` | 100 KB | 11,662,000,000 | 11,608,390 over, 5 | 125.0 s (87.4), 0.72 GB | 90.0 s (55.7), 0.56 GB | 302.6 s (185.9), 0.53 GB |
+| `--hostile-lossless` | 100 KB | 11,881,736,640 | 1,081,303 over, 7 | 37.3 s (24.3), 0.71 GB | 55.8 s (35.5), 0.53 GB | 197.0 s (126.1), 0.51 GB |
+
+Every peak is under the ceiling (1.19 GB in Node, 1.36 GB in Chromium), and every time under the 5-minute budget in desktop Chromium. **The budget is kept,** `pixelWorkBudget` 12,000,000,000 and `losslessPixelCost` 10: the hostile JPG file, planned at the budget, took 90 s in Chromium with one write; its write pass took about 34 s, so the three writes the plan allows would take about 160 s. The lossless worst case, planned at the budget with lossless pixels weighted by 10, took 56 s, so 10 is on the safe side and was not raised.
+
+**The phone factor.** Chromium's own CPU throttling (`Emulation.setCPUThrottlingRate`) reaches the page but not its workers ("Operation is only supported for pages, not workers"; a busy loop in a worker ran as fast with it on), so the slowed runs stop and start every renderer process in turn, running one part in four of each 20 ms. Jobs took 3.2 to 3.5 times as long. At that factor the hostile JPG file takes 303 s, just over 5 minutes with one write (about 9 minutes with three); the page promises no time.
 
 ### PDF to JPG and PDF to PNG (`src/engines/tools/pdf-to-images.ts`)
 

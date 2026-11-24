@@ -120,12 +120,12 @@ Before any raw data is read, the engine SHALL plan the job's decoded and encoded
 
 #### Scenario: Many large JPGs that pass the frame check
 
-- **WHEN** a small file made in the test, of JPGs that pass the frame check with at least 4 KB of real data each on a page large enough that no step scales them, is compressed with a small test budget and a decoder and canvas stand-in that count calls and do no pixel work
+- **WHEN** a small file made in the test, of real JPGs that pass the frame check and qpdf's check, at least 4 KB each, on a page large enough that no step scales them, is compressed with a small test budget and a decoder and canvas stand-in that count calls and do no pixel work
 - **THEN** the plan is cut first to steps 1, 4 and 7 and then by dropping the smallest, the counted decodes plus encodes stay within the budget, and the job ends
 
 #### Scenario: The lossless counterpart
 
-- **WHEN** a file made in the test of about 50 grey lossless pictures, a few MB in all, whose data inflates exactly, on a page large enough that no step scales them, is compressed with a small test budget and counting stand-ins
+- **WHEN** a file made in the test of about 50 grey lossless pictures, a few MB in all, whose data inflates exactly, on a page small enough that every step scales them (a lossless picture no step scales is never worked on), is compressed with a small test budget and counting stand-ins
 - **THEN** their pixels count with the lossless weight, the plan is cut the same way, the counted work stays within the budget, and the job ends
 
 #### Scenario: A plan over the budget

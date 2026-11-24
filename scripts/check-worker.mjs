@@ -306,5 +306,5 @@ for (const id of engineIds) {
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing, page reading and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address; the thumbnail code imports nothing the worker and engine do not already load; no engine imports another.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing, page reading, the drawing step and the picture steps out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address; the thumbnail code imports nothing the worker and engine do not already load; no engine imports another, and no shared file imports an engine.`,
 );

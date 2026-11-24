@@ -12,7 +12,7 @@ status: Draft. Waiting for the owner to review this wording before the tool is c
 
 ### Why might a file far over 2 MB not fit?
 
-Pictures are the only thing this tool shrinks. A long document can carry several megabytes of fonts, or files attached inside it, and those keep their full size. If the text and fonts alone weigh more than 2 MB, no amount of picture work brings the whole file under the limit.
+Pictures are the only thing this tool shrinks. A long document can carry several megabytes of fonts, or files attached inside it, and those keep their full size. If the text and fonts alone weigh more than 2 MB, no amount of picture work brings the whole file under the limit. Some pictures are not touched either: CMYK photos, black and white scans, JPEG 2000 images, pictures with a palette and masks keep their size.
 
 ### How sharp do the pictures stay?
 
