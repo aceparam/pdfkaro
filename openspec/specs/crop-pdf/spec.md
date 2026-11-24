@@ -1,7 +1,7 @@
 # crop-pdf Specification
 
 ## Purpose
-TBD - created by archiving change add-crop-pdf. Update Purpose after archive.
+Crop PDF (`/crop-pdf`) trims each page's white margins automatically, each page to its own content, by writing only the page's crop box; what is cut off stays in the file. (Change `add-crop-pdf`; owner decisions of 23 Nov 2026.)
 
 ## Requirements
 

@@ -127,7 +127,7 @@ Each registry entry SHALL name four to six related tools, chosen from the catalo
 
 ### Requirement: Tools ship in phase and catalogue order
 
-Tools SHALL be built in catalogue order within a phase. Merge PDF SHALL be the first tool. No tool from a phase SHALL be built before the phase before it passes its gate, except that Phase 2 tools MAY be built before the Phase 1 gate passes, by the owner's decision of 23 Nov 2026; Phase 2 browser tools SHALL come first, in catalogue order, and a Phase 2 server tool SHALL wait for the owner's server host and budget decision. Launch still needs the Phase 1 gate. (SPEC.md: Build phases; CLAUDE.md: Owner decisions, "Phase 2 starts before the Phase 1 gate (23 Nov 2026)")
+Tools SHALL be built in catalogue order within a phase, Merge PDF first. No phase's tools SHALL be built before the phase before it passes its gate, except that Phase 2 browser tools MAY be built, in catalogue order, before the Phase 1 gate (owner, 23 Nov 2026); a Phase 2 server tool SHALL wait for the owner's server host and budget decision. Launch still needs the Phase 1 gate. (SPEC.md: Build phases; CLAUDE.md: Owner decisions, 23 Nov 2026)
 
 #### Scenario: A later-phase tool is proposed early
 
