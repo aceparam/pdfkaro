@@ -39,7 +39,7 @@ While the engine loads, the file's row SHALL show "Getting ready". Once read, th
 #### Scenario: A file is being read
 
 - **WHEN** `report.pdf` has been chosen and the engine has not finished loading
-- **THEN** its row shows "Getting ready", and neither the option nor the main button is shown yet
+- **THEN** its row shows "Getting ready", the option is not shown yet, and the main button, as on every tool, is shown but cannot be used yet
 
 #### Scenario: A file has been read
 
@@ -57,8 +57,8 @@ The option "Paper size" SHALL offer "A4, 210 by 297 mm" and "Letter, 8.5 by 11 i
 
 #### Scenario: Letter is chosen by keyboard
 
-- **WHEN** a keyboard user, with focus on "A4, 210 by 297 mm", presses the down arrow and then Tab
-- **THEN** "Letter, 8.5 by 11 inches" is chosen, a screen reader reads it as 2 of 2 in "Paper size", and focus moves to "Resize and download"
+- **WHEN** a keyboard user, with focus on "A4, 210 by 297 mm", presses the down arrow and then Tab twice
+- **THEN** "Letter, 8.5 by 11 inches" is chosen, a screen reader reads it as 2 of 2 in "Paper size", and focus moves past "Choose another file" to "Resize and download", the order of every tool's actions row
 
 #### Scenario: Keyboard only through the job
 

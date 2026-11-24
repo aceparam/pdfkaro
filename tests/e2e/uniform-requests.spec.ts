@@ -41,10 +41,13 @@ type Input = {
   picture?: string;
   /** Sign PDF: the way the signature is given for the job. */
   sign?: 'type' | 'draw' | 'picture';
+  /** Resize pages: the paper chosen before the job; left out, the page's own first choice (A4). */
+  paper?: 'letter';
   job: boolean;
   /**
    * How the job must end: `'done'` refuses the failed heading, so a failed job cannot pass as the same requests;
-   * `'no-file'` wants the tool's words for no new file (Crop PDF with no page cropped), and refuses the others.
+   * `'no-file'` wants the tool's words for no new file (Crop PDF with no page cropped, Resize pages with every page
+   * already the size chosen), and refuses the others.
    */
   expect?: 'done' | 'no-file';
 };
@@ -87,6 +90,18 @@ const inputs: Record<string, Input[]> = {
     { label: 'form.pdf', files: ['form.pdf'], job: true },
     { label: 'multilingual.pdf', files: ['multilingual.pdf'], job: true, expect: 'done' },
     { label: 'chinese-unembedded.pdf (a character map asked for; no page cropped)', files: ['chinese-unembedded.pdf'], job: true, expect: 'no-file' },
+  ],
+  // Resize reads every object but no content: a form, mixed sizes and turns (a file given), every script and an A4
+  // file (no new file with A4), the same A4 file with Letter chosen (a file given), and the page-reading cap failing.
+  '/resize-pdf': [
+    ...pdfPicks,
+    ...pdfJobs,
+    failingJob,
+    { label: 'form.pdf', files: ['form.pdf'], job: true },
+    { label: 'mixed.pdf (mixed sizes and turns)', files: ['mixed.pdf'], job: true, expect: 'done' },
+    { label: 'multilingual.pdf (already A4; no new file)', files: ['multilingual.pdf'], job: true, expect: 'no-file' },
+    { label: 'text.pdf (already A4; no new file)', files: ['text.pdf'], job: true, expect: 'no-file' },
+    { label: 'text.pdf with Letter chosen', files: ['text.pdf'], paper: 'letter', job: true, expect: 'done' },
   ],
   '/compress-pdf': [
     ...pdfPicks,
@@ -168,6 +183,7 @@ async function getReady(page: Page, slug: string, input: Input): Promise<void> {
   if (slug === '/delete-pdf-pages') await page.getByRole('button', { name: 'Delete page 1', exact: true }).click();
   if (slug === '/rotate-pdf') await page.getByRole('button', { name: 'Turn page 1 right', exact: true }).click();
   if (slug === '/watermark-pdf') await page.getByRole('textbox', { name: 'Watermark text' }).fill(typedText);
+  if (slug === '/resize-pdf' && input.paper === 'letter') await page.getByRole('radio', { name: 'Letter, 8.5 by 11 inches', exact: true }).check();
   if (slug === '/protect-pdf') {
     await page.getByLabel('New password', { exact: true }).fill(newPassword);
     await page.getByLabel('Type the new password again', { exact: true }).fill(newPassword);

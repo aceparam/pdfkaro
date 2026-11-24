@@ -172,3 +172,27 @@ test('Crop PDF: listing and cropping the 500-page file blocks the page for no mo
   const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
   expect(long.filter((duration) => duration > 100)).toEqual([]);
 });
+
+test('Resize pages: listing and resizing the 500-page file blocks the page for no more than 100 ms at a time', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto('/resize-pdf');
+  await page.waitForLoadState('networkidle');
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+  await page.evaluate(() => {
+    const long: number[] = [];
+    (window as unknown as { longTasks: number[] }).longTasks = long;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) long.push(entry.duration);
+    }).observe({ type: 'longtask', buffered: false });
+  });
+  await page.locator('input[type=file]').first().setInputFiles(join(here, '../fixtures/pages-500.pdf'));
+  await expect(page.locator('astro-island ol > li img')).toHaveCount(1, { timeout: 30000 });
+  // pages-500.pdf is A4, so Letter is chosen for every page to be resized.
+  await page.getByRole('radio', { name: 'Letter, 8.5 by 11 inches', exact: true }).check();
+  await page.getByRole('button', { name: 'Resize and download' }).click();
+  await expect(page.getByRole('heading', { name: 'Your resized file is ready' })).toBeFocused({ timeout: 200000 });
+  await expect(page.locator('astro-island section')).toContainText('500 pages');
+  await page.waitForTimeout(500);
+  const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
+  expect(long.filter((duration) => duration > 100)).toEqual([]);
+});
