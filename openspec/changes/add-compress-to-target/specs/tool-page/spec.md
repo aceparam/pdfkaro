@@ -39,8 +39,8 @@ A size over the target SHALL be shown in bytes, with a thousands separator, when
 
 #### Scenario: The byte rule's edges
 
-- **WHEN** the rule is given 1,000,001, 1,040,000 and 1,048,576 bytes against 1 MB, 2,050,000 against 2 MB, and 102,400 and 102,911 against 100 KB
-- **THEN** each is shown in bytes; 1,101,000 and 1,110,000 against 1 MB show "1.1 MB" and 2,150,000 against 2 MB shows "2.1 MB"
+- **WHEN** the rule is given 1,000,001, 1,040,000, 1,048,576, 1,101,000 and 1,101,004 bytes against 1 MB, 2,050,000 against 2 MB, and 102,400 and 102,911 against 100 KB
+- **THEN** each is shown in bytes; 1,101,005 and 1,110,000 against 1 MB show "1.1 MB", 2,150,000 against 2 MB shows "2.1 MB", and 102,912 against 100 KB shows "101 KB"
 
 #### Scenario: Keyboard and screen reader
 

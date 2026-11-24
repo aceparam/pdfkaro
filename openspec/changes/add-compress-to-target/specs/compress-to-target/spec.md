@@ -75,6 +75,11 @@ When the picked file's size is at or under the page's target, the main button SH
 - **WHEN** a protected file under 200,000 bytes is picked on the 200 KB page
 - **THEN** it is held with the sentence and no password field appears
 
+#### Scenario: A small damaged file
+
+- **WHEN** `damaged-xref.pdf` (under 200,000 bytes) is picked on the 200 KB page
+- **THEN** the page shows the shared damaged notice alone, not the hold sentence
+
 #### Scenario: A screen reader user meets the held button
 
 - **WHEN** a screen reader user reaches the held main button
@@ -111,12 +116,17 @@ The engine SHALL change only the data of pictures Compress PDF can safely redo, 
 
 ### Requirement: A fixed budget of pixel work
 
-Before any raw data is read, the engine SHALL plan the job's decoded and encoded pixels over every step and candidate from the dictionaries, against one constant budget beside the ladder. When the plan is over it, the engine SHALL first measure only steps 1, 4 and 7, then leave the smallest candidates alone until the plan fits. (design decision 5; SPEC.md: Privacy, limits and security)
+Before any raw data is read, the engine SHALL plan the job's decoded and encoded pixels over every step and candidate from the dictionaries, lossless pixels weighted by a calibrated cost, against one constant budget beside the ladder. When the plan is over it, the engine SHALL first measure only steps 1, 4 and 7, then leave the smallest candidates alone until the plan fits. (design decision 5; SPEC.md: Privacy, limits and security)
 
-#### Scenario: Many truncated JPGs claiming large frames
+#### Scenario: Many large JPGs that pass the frame check
 
-- **WHEN** a file made in the test holds 10,000 truncated 4 KB JPGs whose dictionaries claim large frames on a huge page
-- **THEN** the job's planned pixel work is within the budget, and it finishes or stops with the shared failure, never running without end
+- **WHEN** a file made in the test holds 10,000 JPGs of about 49 million pixels that pass the frame check, each with at least 4 KB of real data, on a page large enough that no step scales them
+- **THEN** the plan is cut first to steps 1, 4 and 7 and then by dropping the smallest, the decodes plus encodes counted stay within the budget, and the job ends
+
+#### Scenario: The lossless counterpart
+
+- **WHEN** a file made in the test holds 10,000 lossless pictures of about 49 million pixels whose data inflates exactly
+- **THEN** their pixels count with the lossless weight, the plan is cut the same way, the counted work stays within the budget, and the job ends
 
 #### Scenario: A plan over the budget
 
