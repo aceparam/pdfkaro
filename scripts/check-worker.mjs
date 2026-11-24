@@ -3,7 +3,7 @@
 // file itself. Run after a build.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 const assets = join('dist', '_astro');
 const fail = (message) => {
@@ -161,6 +161,24 @@ for (const id of engineIds) {
 }
 if (stampImporters === 0) problems.push('No engine imports the drawing step, so the rule on who may import it found nothing to check.');
 
+// No engine imports another engine (read from the sources): what two tools share lives outside src/engines/tools/
+// (shrink.ts, pages.ts, plain.ts and so on), so loading one tool never brings another tool's engine with it.
+const toolsDir = resolve('src', 'engines', 'tools');
+let engineImports = 0;
+for (const id of engineIds) {
+  const source = readFileSync(join(toolsDir, `${id}.ts`), 'utf8');
+  const specifiers = [...source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*['"`]([^'"`\n]+)['"`]/g)].map((match) => match[1]);
+  for (const specifier of specifiers) {
+    engineImports++;
+    if (!specifier.startsWith('.')) continue;
+    const target = resolve(toolsDir, specifier);
+    if (dirname(target) === toolsDir || target === toolsDir || target.startsWith(toolsDir + sep)) {
+      problems.push(`src/engines/tools/${id}.ts imports another engine's file (${specifier}); shared steps belong outside src/engines/tools/.`);
+    }
+  }
+}
+if (engineImports === 0) problems.push('No import was found in any engine source, so the rule that no engine imports another found nothing to check.');
+
 // The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
 // picture.ts throws no sentences, so its marker names stand in for them.
 const sentencesIn = (path) => [...readFileSync(path, 'utf8').matchAll(/['"`]([A-Z][^'"`\n$]{15,})['"`]/g)].map((match) => match[1]);
@@ -273,5 +291,5 @@ for (const id of engineIds) {
 
 if (problems.length > 0) fail(problems.join('\n'));
 console.log(
-  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing, page reading and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address; the thumbnail code imports nothing the worker and engine do not already load.`,
+  `${engineIds.length} engine(s), each its own file and loaded late by ${workers[0]}, none holding PDF.js; the shared qpdf JSON steps, resampling, page drawing, page reading and the drawing step out of it; PDF.js, its helper data, fflate, pdf-lib and the picture code in files of their own${pdflibNote}; every worker (${helperStarts}) started from a blob: address; the thumbnail code imports nothing the worker and engine do not already load; no engine imports another.`,
 );
