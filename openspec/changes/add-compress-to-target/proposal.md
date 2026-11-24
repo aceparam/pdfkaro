@@ -106,7 +106,7 @@ No open decision needs more than its assumed default.
   - `src/widget/option-values.ts`: `sizeTargets`, `acceptedTarget`;
   - `src/hooks/useToolRun.ts`, `ToolWorkspace`, `Result`: the hold and the result words;
   - `src/tools/filter.ts` and its test: spaces ignored;
-  - `scripts/check-worker.mjs`: the engine-import rule and `shrink.ts` in `lateSources`; `scripts/page-weight.mjs` if needed;
+  - `scripts/check-worker.mjs`: `shrink.ts` in `lateSources` (the engine-import rule came with the move PR); `scripts/page-weight.mjs` if needed;
   - `tests/e2e/uniform-requests.spec.ts`, `tests/e2e/tool-files.ts`, `tests/e2e/host-log.ts` if it needs the generated folder, `tests/e2e/performance.spec.ts`, other tools' no-upload forbidden lists;
   - `tests/fixtures/make-large.mjs` (`--scans`, `--lossless`), `tests/fixtures/README.md`.
 - **Every other tool:** no change in behaviour.

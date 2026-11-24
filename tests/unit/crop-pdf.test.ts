@@ -346,7 +346,8 @@ describe('what a cropped file keeps', () => {
     });
     const { pages } = await readPages(tools, bytes, { pictures: true });
     expect(pages.map((page) => page.largestPicture)).toEqual([Infinity, 0]);
-  });
+    // Building and reading 20,000 nested forms takes about 3 s alone; under a full parallel run it passed the 5 s default.
+  }, 30_000);
 
   it('leaves chinese-unembedded.pdf as it is, giving no file', async () => {
     expect((await crop(fixture('chinese-unembedded.pdf'))).outputs).toEqual([]);
