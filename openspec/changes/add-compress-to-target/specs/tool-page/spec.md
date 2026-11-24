@@ -2,7 +2,7 @@
 
 ### Requirement: A target size a page sets
 
-A tool whose pages each set a target size SHALL take the target's bytes and label from `src/widget/option-values.ts`, never from words typed in the registry, and its words SHALL be written once, as plain functions. Once a file is read, when its size is at or under the target, the main button SHALL be unavailable with a sentence tied to it that names the file. (SPEC.md: Tool page anatomy, 5; What we are building, rule 4)
+A tool whose pages each set a target size SHALL take the target's bytes and label from `src/widget/option-values.ts`, never from words typed in the registry, and its words SHALL be written once, as plain functions. When a picked file's size is at or under the target, the main button SHALL be unavailable with a sentence tied to it that names the file, decided at the pick, and no password SHALL be asked for that file. (SPEC.md: Tool page anatomy, 5; What we are building, rule 4)
 
 #### Scenario: A file already under the target
 
@@ -16,7 +16,7 @@ A tool whose pages each set a target size SHALL take the target's bytes and labe
 
 ### Requirement: A result measured against the page's target
 
-A result at or under the page's target SHALL say so in its heading. A result over it SHALL say so in its heading and in a sentence naming its size and the target, then the tool's advice, and SHALL still offer Download. A size said to be over the target that would read as the target's number or less SHALL be given in bytes. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+A result at or under the page's target SHALL say so in its heading. A result over it SHALL say so in its heading and in a sentence naming its size and the target, then the tool's advice, and SHALL still offer Download. (SPEC.md: Tool page anatomy, 6)
 
 #### Scenario: A result under the target
 
@@ -28,10 +28,19 @@ A result at or under the page's target SHALL say so in its heading. A result ove
 - **WHEN** a job on a 200 KB page gives a file of 312 KB
 - **THEN** the heading is "Your file is still over 200 KB", then "The smallest file this tool could make is 312 KB, which is over 200 KB.", the tool's advice, and Download
 
+### Requirement: One byte rule for sizes over a target
+
+A size over the target SHALL be shown in bytes, with a thousands separator, whenever the size the shared format shows, taken back to bytes in 1024s, is at most the label in 1024s. The over-target sentence and the "was" line SHALL use the same form. (SPEC.md: Details that apply everywhere)
+
 #### Scenario: Sizes that would read the same
 
 - **WHEN** a job on a 200 KB page gives a file of 203,000 bytes
-- **THEN** the sentence names "203,000 bytes", never "198 KB"
+- **THEN** the sentence and the "was" line both name "203,000 bytes", never "198 KB"
+
+#### Scenario: The byte rule's edges
+
+- **WHEN** the rule is given 1,000,001, 1,040,000 and 1,048,576 bytes against 1 MB, 2,050,000 against 2 MB, and 102,400 and 102,911 against 100 KB
+- **THEN** each is shown in bytes; 1,101,000 and 1,110,000 against 1 MB show "1.1 MB" and 2,150,000 against 2 MB shows "2.1 MB"
 
 #### Scenario: Keyboard and screen reader
 

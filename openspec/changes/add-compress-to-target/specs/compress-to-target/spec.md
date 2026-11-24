@@ -63,12 +63,17 @@ While the engine loads, the file's row SHALL show "Getting ready". Once read, th
 
 ### Requirement: A file already at or under the target
 
-When the listed file's size is at or under the page's target, the main button SHALL be unavailable, with a sentence tied to it that names the file and says there is nothing to do and that it can be used as it is. The engine SHALL also give no file for such an input. (SPEC.md: What we are building, rule 4; Tool page anatomy, 5)
+When the picked file's size is at or under the page's target, the main button SHALL be unavailable, with a sentence tied to it that names the file and says there is nothing to do and that it can be used as it is, and no password SHALL be asked for it. The engine SHALL also give no file for such an input. (SPEC.md: What we are building, rule 4; Tool page anatomy, 5)
 
 #### Scenario: A small file on the 200 KB page
 
 - **WHEN** `text.pdf` (well under 200,000 bytes) is listed on the 200 KB page
 - **THEN** the main button is unavailable and described by "text.pdf is already 200 KB or smaller, so there is nothing to do here. You can use it as it is.", and pressing it starts no job
+
+#### Scenario: A small protected file
+
+- **WHEN** a protected file under 200,000 bytes is picked on the 200 KB page
+- **THEN** it is held with the sentence and no password field appears
 
 #### Scenario: A screen reader user meets the held button
 
@@ -82,7 +87,7 @@ When the listed file's size is at or under the page's target, the main button SH
 
 ### Requirement: Only pictures are made smaller
 
-The engine SHALL change only the data of the pictures Compress PDF can safely redo, with stated data of at least 4 KB, at most the 10,000 largest. A picture SHALL be replaced only when its new data is smaller. Text, drawings, fonts and content streams SHALL NOT be changed, and no page SHALL be turned into a picture. Everything else SHALL be written again by qpdf without loss, as Compress PDF writes it. (CLAUDE.md: owner decision of 24 Nov 2026, "Pictures only"; SPEC.md: Definition of done)
+The engine SHALL change only the data of pictures Compress PDF can safely redo, with a stated and a real length of at least 4 KB (none without a stated length), at most the 10,000 largest, within the pixel-work budget, each replaced only when smaller. Decoded content streams SHALL NOT be changed, and no page SHALL be turned into a picture. The rest SHALL be written again by qpdf without loss. (CLAUDE.md: owner decision of 24 Nov 2026, "Pictures only"; SPEC.md: Definition of done)
 
 #### Scenario: Pictures this tool leaves alone
 
@@ -99,47 +104,71 @@ The engine SHALL change only the data of the pictures Compress PDF can safely re
 - **WHEN** a file made in the test holds 20,000 pictures of under 4 KB and 12,000 larger ones
 - **THEN** the tiny pictures are left alone and only the 10,000 largest are measured
 
+#### Scenario: A real length under the stated one
+
+- **WHEN** a picture states 50 KB but its raw data read back is 3 KB
+- **THEN** it is left alone in every pass
+
+### Requirement: A fixed budget of pixel work
+
+Before any raw data is read, the engine SHALL plan the job's decoded and encoded pixels over every step and candidate from the dictionaries, against one constant budget beside the ladder. When the plan is over it, the engine SHALL first measure only steps 1, 4 and 7, then leave the smallest candidates alone until the plan fits. (design decision 5; SPEC.md: Privacy, limits and security)
+
+#### Scenario: Many truncated JPGs claiming large frames
+
+- **WHEN** a file made in the test holds 10,000 truncated 4 KB JPGs whose dictionaries claim large frames on a huge page
+- **THEN** the job's planned pixel work is within the budget, and it finishes or stops with the shared failure, never running without end
+
+#### Scenario: A plan over the budget
+
+- **WHEN** a file's full plan is over the budget
+- **THEN** only steps 1, 4 and 7 are measured and chosen from, and if that is still over, the smallest candidates are left alone
+
 ### Requirement: The mildest step that fits
 
-The engine SHALL lower picture resolution and JPG quality along the design's ladder, from 150 pixels to the inch across the largest page at quality 75 to the floor of 72 pixels to the inch at quality 40, and SHALL use the mildest step whose file fits the target. Nothing SHALL go below the floor. (CLAUDE.md: owner decision of 24 Nov 2026; design decision 4)
+The engine SHALL lower picture resolution and JPG quality along the design's seven-step ladder, from 150 pixels to the inch across the largest page at quality 75 to the floor of 72 pixels to the inch at quality 40. It SHALL write the mildest step whose estimate fits within 99% of the target, and judge the result by the written file's real size. Nothing SHALL go below the floor. (CLAUDE.md: owner decision of 24 Nov 2026; design decisions 4 and 6)
 
 #### Scenario: The first step fits
 
-- **WHEN** a file whose pictures at Compress PDF's own setting bring it under the target is compressed
-- **THEN** every picture is at most 150 pixels to the inch and saved at quality 75 where that was smaller, and no stronger step is used
+- **WHEN** a JPG-only file whose step 1 estimate fits within 99% of the target is compressed
+- **THEN** the chosen step is 1, every picture is at most 150 pixels to the inch and saved at quality 75 where that was smaller, qpdf writes once, and the file is at or under the target
 
 #### Scenario: A stronger step is needed
 
-- **WHEN** a file that fits only at step 4 is compressed
-- **THEN** its pictures are at most 100 pixels to the inch at quality 50, the file is at or under the target, and step 3's file would have been over it
+- **WHEN** a JPG-only file whose estimates fit within 99% of the target first at step 4 is compressed
+- **THEN** the chosen step is 4, its pictures are at most 100 pixels to the inch at quality 50, qpdf writes once, and the file is at or under the target
 
-### Requirement: Lossless pictures stay lossless until nothing else fits
+### Requirement: Lossless pictures stay lossless
 
-Pictures stored without loss SHALL be scaled down and stay lossless in steps 1 to 7. Only in steps 8 to 14 SHALL they be saved as JPGs, and never one with a soft mask. A soft mask SHALL never be changed. (design decision 3; owner question 2)
+Pictures stored without loss SHALL never be saved as JPGs. At each step they MAY be scaled down to the step's resolution and stored without loss again, replacing the old data only when smaller. A soft mask SHALL never be changed. (CLAUDE.md: owner decision of 24 Nov 2026, "No, keep them lossless")
 
-#### Scenario: A lossless screenshot
+#### Scenario: A lossless screenshot at the floor
 
-- **WHEN** a file whose only large picture is a lossless screenshot reaches the target by step 7
-- **THEN** the screenshot is scaled down and still stored without loss
+- **WHEN** a file whose only large picture is a lossless screenshot is compressed and reaches the floor
+- **THEN** the screenshot is scaled to 72 pixels to the inch and still stored with `/FlateDecode`, and the result is the smallest file made
 
 #### Scenario: A lossless picture with a soft mask
 
-- **WHEN** a file needs steps 8 to 14 and holds a lossless picture with a soft mask
-- **THEN** that picture is never saved as a JPG, and its soft mask is byte for byte as it was
+- **WHEN** a file holding a lossless picture with a soft mask is compressed at any step
+- **THEN** the picture is never a JPG, and its soft mask is byte for byte as it was
 
 ### Requirement: Few full writes
 
-The engine SHALL measure every picture's size at every step in one pass over the pictures, keeping only the sizes, choose the step from those sizes, then write and check the file, and SHALL write the whole file at most three times. The answer SHALL be judged by the written file's real size, never by an estimate. (SPEC.md: Definition of done, "Never blocks the page"; design decision 5)
+The engine SHALL measure every picture at every measured step in one pass, keeping only sizes, then write and check the file, at most three times. Every write SHALL go through `cappedWrite` with its own fresh qpdf: write 1 capped at twice the input plus 16 MB, a later write at the target or at the best file so far. A write stopped by its cap SHALL lose, and the best file so far SHALL be kept. (design decision 6)
 
 #### Scenario: The estimate is right
 
-- **WHEN** a file whose estimate picks a step that fits, with no milder step estimated to fit, is compressed
+- **WHEN** a JPG-only file whose chosen step fits, with no milder step estimated to fit within 99%, is compressed
 - **THEN** qpdf writes the whole file once
 
 #### Scenario: The estimate is off
 
 - **WHEN** the first written file is over the target
-- **THEN** a stronger step is written, and no more than three whole-file writes happen in the job
+- **THEN** the mildest stronger step estimated to fit is written, or else the step with the smallest estimate unless it was already written, and no more than three whole-file writes happen in the job
+
+#### Scenario: A later write passes its cap
+
+- **WHEN** write 2 is stopped by its cap at the size of write 1
+- **THEN** write 1 is kept and the search ends
 
 #### Scenario: A file with no picture to redo
 
@@ -148,26 +177,31 @@ The engine SHALL measure every picture's size at every step in one pass over the
 
 ### Requirement: The result under the target
 
-When the file is made at or under the target, the result SHALL say so in its heading and show the name, the new size beside the old, the page count and Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
+When a written file is at or under the target, it SHALL be given whatever it saves, and the result SHALL say so in its heading and show the name, the new size beside the old, the page count and Download. (SPEC.md: Tool page anatomy, 6; Details that apply everywhere)
 
 #### Scenario: A scan reaches 200 KB
 
 - **WHEN** `compress-scans.pdf` is compressed on the 200 KB page and the result is 184 KB
 - **THEN** the heading is "Your file is now 200 KB or smaller", the line reads like "184 KB, was 620 KB, 3 pages", the download is `compress-scans-compressed.pdf`, and nothing downloads until Download is pressed
 
+#### Scenario: A fit that saves under 1%
+
+- **WHEN** a file just over the target is rewritten to just under it, saving less than 1%
+- **THEN** that file is given as the result under the target
+
 ### Requirement: The smallest file, over the target
 
-When no step brings the file to the target, the page SHALL offer the smallest file made, when it is at least 1% smaller than the file chosen, with a heading saying it is still over the target, a sentence naming its size and the target, and advice. A size that would read as the target's number or less SHALL be given in bytes. (CLAUDE.md: owner decision of 24 Nov 2026, "Give the smallest, say so"; SPEC.md: What we are building, rule 4)
+When no written file fits the target, the page SHALL offer the smallest file made, when it is at least 1% smaller than the file chosen, with a heading saying it is still over the target, a sentence naming its size and the target, and advice. Sizes SHALL follow the one byte rule of tool-page, in the sentence and the "was" line alike. (CLAUDE.md: owner decision of 24 Nov 2026, "Give the smallest, say so"; SPEC.md: What we are building, rule 4)
 
 #### Scenario: A long scan on the 100 KB page
 
 - **WHEN** a file whose floor step gives 312 KB is compressed on the 100 KB page
-- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice names removing pages or splitting the file, and Download gives that file
+- **THEN** the heading is "Your file is still over 100 KB", the page says "The smallest file this tool could make is 312 KB, which is over 100 KB.", the advice says some kinds of picture are left as they are and names removing pages or splitting the file, and Download gives that file
 
 #### Scenario: Just over the target
 
 - **WHEN** the smallest file is 203,000 bytes on the 200 KB page
-- **THEN** the sentence reads "The smallest file this tool could make is 203,000 bytes, which is over 200 KB."
+- **THEN** the sentence reads "The smallest file this tool could make is 203,000 bytes, which is over 200 KB.", and the "was" line's new size is "203,000 bytes" too
 
 #### Scenario: The result is announced
 
@@ -176,16 +210,16 @@ When no step brings the file to the target, the page SHALL offer the smallest fi
 
 ### Requirement: No smaller file
 
-When the smallest file made is not at least 1% smaller than the file chosen, the engine SHALL give no file, and the page SHALL say "This file could not be made smaller." with this tool's advice, "Start again" and no Download button. (SPEC.md: What we are building, rule 4; tool-page "Result block")
+When no written file fits the target and the smallest is not at least 1% smaller than the file chosen, the engine SHALL give no file, and the page SHALL say "This file could not be made smaller." with this tool's advice, "Start again" and no Download button. (SPEC.md: What we are building, rule 4; tool-page "Result block")
 
 #### Scenario: A packed file with no pictures
 
 - **WHEN** a text-only file over 100 KB, already written by qpdf with Compress PDF's options, is compressed on the 100 KB page
-- **THEN** the page says "This file could not be made smaller.", gives the advice, shows "Start again", focus moves to the sentence, and there is no Download button
+- **THEN** the page says "This file could not be made smaller.", gives the advice naming removing pages or splitting the file, shows "Start again", focus moves to the sentence, and there is no Download button
 
 ### Requirement: What the file keeps
 
-The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures can look less sharp, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
+The new file SHALL keep its pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details. The result notes SHALL say that pictures can look less sharp while text, drawings and fonts keep their quality, that earlier saved versions are not kept and a digital signature stops being valid, and that a password or restrictions are kept. (SPEC.md: Definition of done)
 
 #### Scenario: A file with links, bookmarks and a form
 
@@ -255,7 +289,7 @@ Every part of each page SHALL work with a keyboard alone and with a screen reade
 
 ### Requirement: Nothing is uploaded
 
-No request SHALL carry the file's contents, its name or its password, and the requests the page makes SHALL not depend on the file or the page's target. The engine SHALL declare `loads: { read: ['qpdf'], job: ['qpdf', 'fflate'] }`. (SPEC.md: Privacy, limits and security, Browser tools; CLAUDE.md: owner decision of 22 Nov 2026, "Requests must not depend on the file")
+No request SHALL carry the file's contents, its name or its password. The requests SHALL not depend on the file's contents or the page's target; whether a job starts (a file at or under the target is held) and the number of qpdf instances SHALL be named as differences. The engine SHALL declare `loads: { read: ['qpdf'], job: ['qpdf', 'fflate'] }`. (SPEC.md: Privacy, limits and security, Browser tools; CLAUDE.md: owner decision of 22 Nov 2026, "Requests must not depend on the file")
 
 #### Scenario: The no-upload test
 
@@ -264,17 +298,22 @@ No request SHALL carry the file's contents, its name or its password, and the re
 
 #### Scenario: The same requests on every page and for every file
 
-- **WHEN** `uniform-requests.spec.ts` picks and compresses the shared PDF list on each of the five pages
-- **THEN** the files fetched after a pick and in a job are the same for every file and on every page
+- **WHEN** `uniform-requests.spec.ts` runs each of the five pages with generated inputs over that page's target (one that fits after compressing, one over at the floor, a packed text-only file, a protected file with its password, a failing job) and a held file
+- **THEN** the files fetched after a pick are the same for every input, the files fetched in a job are the same for every job on every page, and the held file starts no job
+
+#### Scenario: The floor path sends nothing
+
+- **WHEN** an unprotected file is compressed on the 100 KB page to an over-target result and downloaded
+- **THEN** no request holds its name, stem, text or `SECRET-` strings, and every request is in the allowlist
 
 ### Requirement: Text below each page written for its size
 
-Each of the five pages SHALL have its own text below the tool, 250 to 500 words of how-to steps and real questions, written for that size, marked as a draft for the owner. No sentence of eight words or more SHALL appear in two of the five texts. (SPEC.md: SEO, Specific-search pages; Every tool page; How the words should read)
+Each of the five pages SHALL have its own text below the tool, 250 to 500 words of how-to steps and real questions, written for that size, marked as a draft for the owner. Once every target label and number is replaced by one token, no run of eight words SHALL appear in two of the five texts, steps and questions included. Each text SHALL say, in its own words, how the target's bytes are counted. (SPEC.md: SEO, Specific-search pages; Every tool page; How the words should read)
 
 #### Scenario: The texts are checked
 
 - **WHEN** the unit tests run
-- **THEN** each text is 250 to 500 words, no sentence of eight words or more is shared by two texts, and none holds a banned word, "100%", capitals for emphasis or an exclamation mark
+- **THEN** each text is 250 to 500 words, no run of eight words is shared by two texts once target sizes are one token, each explains the thousands, and none holds a banned word, "100%", capitals for emphasis or an exclamation mark
 
 #### Scenario: Scripts are off
 

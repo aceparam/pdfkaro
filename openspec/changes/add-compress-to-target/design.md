@@ -2,150 +2,178 @@
 
 ## Context
 
-See `proposal.md` for why Compress to a target size is next and what the owner decided on 24 Nov 2026.
+See `proposal.md` for why Compress to a target size is next and what the owner decided on 24 Nov 2026 (three decisions: "Pictures only", "Give the smallest, say so", and, after stage 1, "No, keep them lossless").
 
-**Order.** Compress PDF's picture steps move first out of `src/engines/tools/compress-pdf.ts` into `src/engines/shrink.ts`, in their own pull request with no change in behaviour (as `pages.ts` came out of `stamp.ts` before Resize, entry 27): `canShrink`, `pictureContext`, `pixelLimit`, `newDictionary`, `shrinkJpeg`, `shrinkLossless`, `zlibDeflate`, `statedLength`, the `Candidate`, `PictureContext`, `PictureDecoder`, `DeflateClass` types and the limits (`pixelsPerInch`, `jpegQuality`, `jpegSaving`, `maxPixels`, the allowed keys). `compress-pdf.ts` keeps `run`, `loads`, `losslessOptions`, `keepBelow` and re-exports nothing. Called "the picture-steps move" below. It needs no OpenSpec change (no change in behaviour), goes through the review panel's stage 2, gets its own line in "Where the project stands", and its tests are Compress PDF's, unchanged, plus Compress's output on every fixture compared byte for byte before and after. Without it, this tool's engine would import another tool's engine file, which `check:worker`'s "each engine is its own file" rule is there to stop.
+**Order: the picture-steps move first** (stage 1, program manager and architect). In its own pull request, with no change in behaviour and no OpenSpec change (as `pages.ts` came out of `stamp.ts` before Resize, entry 27), Compress PDF's picture work moves out of `src/engines/tools/compress-pdf.ts` into `src/engines/shrink.ts`:
+
+- `canShrink`, `pictureContext`, `pixelLimit`, `newDictionary`, `shrinkJpeg`, `shrinkLossless`, `zlibDeflate`, `statedLength`, `streamDict`, `need`, the `Candidate`, `PictureContext`, `PictureDecoder`, `DeflateClass` types, and the limits `pixelsPerInch`, `jpegQuality`, `jpegSaving`, `maxPixels` and the allowed keys;
+- `losslessOptions` and `keepBelow`;
+- `listCandidates(objects, context)`, the loop now inside Compress PDF's `run` that walks the dictionaries and keeps each `canShrink` candidate, taken out unchanged;
+- `pixelLimit(objects, ppi = pixelsPerInch)`: the resolution as an argument, 150 when left out;
+- `shrinkJpeg` rebuilt on two steps both tools use: `decodeJpeg(raw, dict, candidate, size, decoder)` (frame checked with `walkJpeg`, rebuilt by `jpegForPdf`, decoded at `size`) and `encodeJpeg(decoded, size, quality, canvases)` (drawn and encoded, the output walked and checked, as now). `imageSmoothingQuality` is set to `'high'` only when the canvas size differs from the decoded size, so Compress PDF's draws are as before.
+
+Compress PDF's output on every fixture is compared byte for byte before and after; its tests change only in their import lines (`compress-pdf.test.ts`, and `multilingual.test.ts`, which imports `run` from `compress-pdf.ts` and keeps doing so). With one importer the bundler inlines `shrink.ts` into Compress PDF's engine chunk, so the move PR makes no new built file and changes neither `check-worker.mjs` nor `page-weight.mjs`. `shrink.ts` carries a fixed sentence (in a thrown error: "A picture step was given a picture it cannot redo.") so that, once this tool's pull request makes `shrink.ts` a chunk of its own, `check-worker.mjs` names it in `lateSources` and looks for that sentence in the worker file. The move PR goes through the review panel's stage 2 and gets its own line in "Where the project stands". **This tool's pull request then changes no Compress PDF code.**
 
 What exists and is reused:
 
-- **The one-file tool flow** with no options, as Compress PDF has it: the row with the first page's thumbnail, no summary line, the password field, the damaged and not-a-PDF states, the 100 MB and 20,000-page notices, Cancel, "Go back to your file", the result with the "was" size (`resultWas`), and the "no new file" outcome (`noSmaller`, `[]` from the engine).
-- **Page presets** (`ToolPage.preset`, documented in the registry as "Options already chosen when this URL opens, such as a target size"), sent with every job, as PDF to JPG and PNG use them; the registry test already refuses an option key a preset uses, "so a choice never replaces what the page promises".
-- **Page words** (`PageWords`, merged by `pageWords` in `queries.ts`): each page may name its own main button and result notes.
-- **Compress PDF's picture work** (in `shrink.ts` after the move): candidates read from dictionaries only (`readDictionaries`, capped at 64 MB of JSON), raw data in bounded batches (`rawBatches`, `readRawStreams`, 32 MB a batch, each batch a fresh qpdf), a JPG's own frame checked against its dictionary before the browser decodes it, lossless data inflated with a cap at exactly its size, the encoder's output checked before it goes in, and `writeUpdate` with `losslessOptions`, which keeps a password and restrictions and runs `qpdf --check`.
-- **`acceptedValue`** and `optionValues` in `src/widget/option-values.ts`, read by engines to check what they are sent.
+- **The one-file tool flow** with no options, as Compress PDF has it: the row with the first page's thumbnail and no summary line, the password field, the damaged and not-a-PDF states, the 100 MB and 20,000-page notices, Cancel, "Go back to your file", the result with the "was" size (`resultWas`), and the "no new file" outcome (`noSmaller`, `[]` from the engine).
+- **Page presets** (`ToolPage.preset`, documented in the registry as "Options already chosen when this URL opens, such as a target size"), sent with every job, as PDF to JPG and PNG use them; the registry test refuses an option key a preset uses, "so a choice never replaces what the page promises".
+- **Page words** (`PageWords`, merged by `pageWords`): each page names its own main button.
+- **Compress PDF's picture work** (in `shrink.ts`): dictionaries read without data (`readDictionaries`, capped at 64 MB of JSON), raw data in bounded batches (`rawBatches`, `readRawStreams`, 32 MB, a fresh qpdf each), a JPG's frame checked against its dictionary before the browser decodes it, lossless data inflated with a cap at exactly its size, the encoder's output walked before it goes in, and `writeUpdate` with `losslessOptions`, which keeps a password and restrictions and runs `qpdf --check`.
+- **`cappedWrite` and `OutputLimit`** in `src/engines/qpdf.ts`.
+- **`acceptedValue`**, `optionValues` (`src/widget/option-values.ts`) and `holdErrorId` (the main button's description).
 - **`loads`** per engine and the uniform request sets (`add-uniform-requests`).
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- A file at or under the page's target, by lowering picture resolution and JPG quality step by step, keeping pictures as sharp as the target allows (the owner's "pictures only").
-- When the target cannot be reached, the smallest file made, with its size and that it is over the target (the owner's "give the smallest, say so").
-- Few full writes: every picture decoded at most once per pass, the step chosen from measured sizes, at most three qpdf writes.
-- Memory no higher than Compress PDF's on the same file, plus a table of numbers.
+- A file at or under the page's target, by lowering picture resolution and JPG quality step by step, keeping pictures as sharp as the target allows ("Pictures only").
+- When the target cannot be reached, the smallest file made, with its size and that it is over the target ("Give the smallest, say so").
+- Pictures stored without loss stay lossless ("No, keep them lossless").
+- Few full writes: each picture decoded once per pass, the step chosen from measured sizes, at most three capped writes.
+- A fixed budget of pixel work, planned before any raw data is read.
+- Memory no higher than Compress PDF's on the same file, plus a table of numbers and one output.
 - Five pages whose words are each written for their own size.
-- No dependency, no new component, no new option kind.
+- No dependency, no new component, no new option kind, no change to Compress PDF's code in this pull request.
 
 **Non-Goals:**
 
-- Turning pages into pictures, touching text, drawings or fonts, removing anything that is not a picture's own data.
+- Turning pages into pictures, saving any lossless picture as a JPG, touching text, drawings or fonts beyond qpdf's lossless rewrite.
 - A target the visitor types, a target choice on the page, other targets.
 - Pictures Compress PDF leaves alone.
 - Telling, before the main button, whether the target can be reached.
 
 ## Decisions
 
-### 1. One new tool with five pages, sharing Compress PDF's picture steps
+### 1. One new tool with five pages
 
 Options considered:
 
-- **Five pages of Compress PDF** (the `compress-pdf` entry gaining pages with presets): one widget's words serve all its pages, and Compress PDF's words ("could not be made smaller" below 1%, no target, its 10% rule) do not fit a target page; `SPEC.md` lists the tool as its own catalogue row, and the registry's catalogue order would put five Phase 2 pages inside a Phase 1 entry. Rejected.
-- **Five tools:** five registry entries for one engine, against "one tool with preset pages". Rejected.
-- **One new tool, `compress-to-target`, five pages, each preset `{ target: '<key>' }`** (chosen), as PDF to JPG and PNG are one tool with two presets (the agent's choice of 16 Nov 2026, after the owner's Image to PDF decision). Its engine is its own file, `src/engines/tools/compress-to-target.ts`, importing the shared picture steps from `shrink.ts` (after the picture-steps move).
+- **Five pages of Compress PDF:** one widget's words serve all its pages, and Compress PDF's words (no target, "could not be made smaller" below 1%, its 10% rule) do not fit; `SPEC.md` lists a catalogue row of its own; five Phase 2 pages inside a Phase 1 entry would break catalogue order. Rejected.
+- **Five tools:** five entries for one engine, against "one tool with preset pages". Rejected.
+- **One new tool, `compress-to-target`, five pages, each preset `{ target: '<key>' }`** (chosen), as PDF to JPG and PNG are one tool with two presets. Its engine, `src/engines/tools/compress-to-target.ts`, imports `shrink.ts` and never another engine's file. A new general `check:worker` rule (source level) fails when any file under `src/engines/tools/` imports another file there.
 
-**Target fixed by the page, no choice.** `SPEC.md` says each page "opens the compressor with that target already selected". A choice whose first value is the page's own would need a new shared piece (an option whose initial value a page sets), and the registry test refuses an option key that a preset uses so that a page always does what its address says. A visitor who needs another size follows a related link to that page. Owner question 1.
+**Target fixed by the page, no choice.** `SPEC.md` says each page "opens the compressor with that target already selected". A choice whose first value the page sets would be a new shared piece, and the registry refuses an option key a preset uses. A visitor who needs another size follows a related link. Owner question 1.
 
-The tool sits in the registry right after `compress-pdf`, before `pdf-to-images`: its catalogue place is second under "Make smaller and fix", and the order test counts it there. Its pages are listed in size order on the home page and on `/make-smaller-and-fix`.
+**Catalogue order.** The order test (`tests/unit/registry.test.ts`, "catalogue order") reads addresses with `/\| (\/[a-z0-9-]+) \|/`, which misses the row `| /compress-pdf-to-100kb, -200kb, -500kb, -1mb, -2mb |`. Task 1.1 changes it to take the first address of each row (`/\| (\/[a-z0-9-]+)[,| ]/`), keeps `placeOf` for Image to PDF, and checks that `compress-to-target` lands after `compress-pdf` and before `pdf-to-jpg`. The entry sits in the registry right after `compress-pdf`.
 
-### 2. A target is bytes, counted in thousands, written once
+### 2. A target is bytes, counted in thousands, and one byte rule
 
-`src/widget/option-values.ts` gains:
+`src/widget/option-values.ts` gains `sizeTargets` (`'100kb'` 100,000 bytes, label "100 KB"; `'200kb'` 200,000; `'500kb'` 500,000; `'1mb'` 1,000,000, "1 MB"; `'2mb'` 2,000,000) and `acceptedTarget(value)` (own keys only, as `acceptedValue`). The engine refuses a missing or unknown target before reading the file (`engine` failure, fixed sentence).
 
-```
-sizeTargets = {
-  '100kb': { bytes: 100_000, label: '100 KB' },
-  '200kb': { bytes: 200_000, label: '200 KB' },
-  '500kb': { bytes: 500_000, label: '500 KB' },
-  '1mb':   { bytes: 1_000_000, label: '1 MB' },
-  '2mb':   { bytes: 2_000_000, label: '2 MB' },
-}
-```
+**Why thousands:** forms count "200 KB" as 200,000 or 204,800 bytes and the visitor cannot know which; 200,000 fits both. Owner question 4.
 
-and `acceptedTarget(value)`, giving the entry for an own key or `undefined` (as `acceptedValue` does, `Object.hasOwn` only). The engine refuses a missing or unknown target before it reads the file, with a fixed error (`engine` failure).
+**The byte rule** (`sizeAgainstTarget(bytes, target)` in `src/widget/target.ts`, the only place it is decided). The site's `formatSize` counts in 1024s and rounds. Each label also has a size in 1024s: 100 KB = 102,400, 200 KB = 204,800, 500 KB = 512,000, 1 MB = 1,048,576, 2 MB = 2,097,152 bytes. A size over the target's bytes is written **in bytes, with the shared thousands separator**, whenever the value `formatSize` would show, taken back to bytes in 1024s, is at most the label's size in 1024s; otherwise it is written by `formatSize`. So the page can never say "over 1 MB" beside "1.0 MB" or "1016 KB". The same form is used for the new size in the over-target "was" line, so the sentence and that line always show the same text. Cases tested in `target.test.ts` (1 MB unless named):
 
-**Why thousands:** upload forms count "200 KB" as 200,000 or 204,800 bytes, and the visitor cannot know which. 200,000 bytes fits both. The site shows sizes in 1024s (`format.ts`), so a result of 199,000 bytes reads "194 KB", under the label either way. The other direction can mislead: a file of 203,000 bytes reads "198 KB" but is over 200,000 bytes. So whenever the page says a size is over a target, and the size in the shared format would read as the target's number or less, it is written in bytes with the shared thousands separator ("203,000 bytes"), the finer form Compress PDF added for sizes that would read the same. A file of 203,000 bytes is also not "already under" the 200 KB target (decision 7), and the text below the tool explains why a file the site shows as 198 KB is still compressed. Owner question 4.
+| Bytes | Shown |
+| --- | --- |
+| 1,000,001 | 1,000,001 bytes (`formatSize` 977 KB) |
+| 1,040,000 | 1,040,000 bytes (1016 KB) |
+| 1,048,576 | 1,048,576 bytes (1.0 MB) |
+| 1,101,000 | 1.1 MB |
+| 1,110,000 | 1.1 MB |
+| 2,050,000, 2 MB | 2,050,000 bytes (2.0 MB) |
+| 2,150,000, 2 MB | 2.1 MB |
+| 102,400, 100 KB | 102,400 bytes (100 KB) |
+| 102,911, 100 KB | 102,911 bytes (100 KB) |
+
+The row on target pages keeps `formatSize`; the text below each page explains, each in its own words, that 200 KB here means 200,000 bytes, so a file the row shows as "198 KB" may still be compressed.
 
 ### 3. Which pictures change
 
-Exactly Compress PDF's candidates (`canShrink`, unchanged): an image XObject, 8 bits, `/DeviceGray`, `/DeviceRGB` or an RGB ICC profile, `/DCTDecode` with no `/DecodeParms`, or `/FlateDecode` with none or a matching PNG predictor, no key outside the allowed list (so no `/Decode`, `/Mask`, `/ImageMask`, `/Alternates`, `/OPI`), not itself another picture's `/SMask` or `/Mask`, a soft mask (if any) without `/Matte`, at most 50 million pixels. Two limits are added, so a hostile file cannot multiply the work by sheer count (security):
+Compress PDF's candidates (`listCandidates`, `canShrink`, unchanged): an image XObject, 8 bits, `/DeviceGray`, `/DeviceRGB` or an RGB ICC profile, `/DCTDecode` with no `/DecodeParms`, or `/FlateDecode` with none or a matching PNG predictor, no key outside the allowed list, not itself another picture's mask, a soft mask (if any) without `/Matte`, at most 50 million pixels. Added here:
 
-- a picture whose stated data length is under 4 KB is left alone (at the floor it could save almost nothing, and a page of thousands of tiny pictures would cost thousands of canvases per step);
-- at most the 10,000 largest candidates by stated length are worked on; the rest are left alone.
+- a picture with **no stated length** is left alone (Compress PDF reads such a picture in a batch of its own; here its size cannot be planned);
+- a picture whose stated length is under **4 KB** is left alone, and once read, a picture whose **real raw length** is under 4 KB is left alone too;
+- at most the **10,000 largest** by stated length;
+- then the **pixel-work budget** (decision 5), which can leave more alone.
 
-**Left alone, as in Compress PDF, and said on the page:** CMYK, indexed colours, grey with a colour profile (its tone could shift), 1-bit scans (CCITT, JBIG2), JPEG 2000, 16-bit, inline pictures, pictures with unusual keys, and masks and soft masks themselves. Converting CMYK or indexed pictures would change their colours or need our own decoders; inline pictures sit inside content streams, which "pictures only" leaves alone. A soft mask is never scaled: a picture and its soft mask may have different sizes without `/Matte` (ISO 32000-2, 11.6.5.3), which `canShrink` already requires.
+**Lossless pictures stay lossless** (owner, 24 Nov 2026, "No, keep them lossless"): they are scaled down to the step's resolution by area averaging and deflated again (`shrinkLossless`), and replaced only when smaller. They are never saved as JPGs; quality does not apply to them. Grey JPGs come back from the canvas as RGB JPGs whose pixels stay grey, as in Compress PDF (open owner question).
 
-**Pictures stored without loss** (screenshots, drawings, some scanners): in steps 1 to 7 they are scaled down and stored without loss again (`shrinkLossless`, at the step's resolution; quality does not apply). The owner named "resolution and JPG quality"; saving a lossless picture as a JPG changes its kind and can blur sharp edges, so it is kept for when nothing else fits: steps 8 to 14 repeat steps 1 to 7 and also save lossless pictures as JPGs at the step's quality, through the same canvas encoder, never one with a soft mask (a sharp mask over a blurred JPG shows halos at its edges). A grey `/DeviceGray` picture comes back from the canvas as an RGB JPG whose pixels stay grey, and its colour space becomes `/DeviceRGB`, as Compress PDF does with grey JPGs; an RGB ICC picture keeps its profile. Owner question 2.
+**Left alone, and said on the page:** CMYK, indexed colours, grey with a colour profile, 1-bit scans, JPEG 2000, 16-bit, inline pictures, unusual keys, masks and soft masks themselves.
 
 ### 4. The ladder and the floor
 
-The resolution is Compress PDF's: pixels to the inch across the file's largest page (`pixelLimit`, each page's crop box or media box scaled by its user unit), so the longer side of every picture is held to `ceil(longest page side / 72 × ppi)`. `pixelLimit` gains the resolution as an argument (150 when left out, so Compress PDF is unchanged).
+The resolution is pixels to the inch across the file's largest page (`pixelLimit`): each picture's longer side is held to `ceil(longest page side / 72 × ppi)`.
 
-| Step | Pixels to the inch | JPG quality | Lossless pictures |
-| --- | --- | --- | --- |
-| 1 | 150 | 75 | scaled, stay lossless |
-| 2 | 150 | 60 | scaled, stay lossless |
-| 3 | 120 | 55 | scaled, stay lossless |
-| 4 | 100 | 50 | scaled, stay lossless |
-| 5 | 100 | 40 | scaled, stay lossless |
-| 6 | 85 | 40 | scaled, stay lossless |
-| 7 | 72 | 40 | scaled, stay lossless |
-| 8 to 14 | as 1 to 7 | as 1 to 7 | saved as JPGs, unless they have a soft mask |
+| Step | Pixels to the inch | JPG quality |
+| --- | --- | --- |
+| 1 | 150 (`pixelsPerInch`) | 75 (`jpegQuality`) |
+| 2 | 150 | 60 |
+| 3 | 120 | 55 |
+| 4 | 100 | 50 |
+| 5 | 100 | 40 |
+| 6 | 85 | 40 |
+| 7 | 72 | 40 |
 
-Step 1 is Compress PDF's own setting, so a file Compress PDF already brings under the target is never made worse. At every step a JPG picture is scaled to the step's limit (if larger) and saved at the step's quality, and replaces the old one **only when smaller** (no 10% rule: here every byte counts); a lossless picture is replaced only when smaller.
+Step 1 reads `pixelsPerInch` and `jpegQuality` from `shrink.ts`, so it is always Compress PDF's own setting. At every step a JPG picture is scaled to the step's limit (if larger) and saved at the step's quality, and a lossless picture is scaled (if larger) and stays lossless; each replaces the old data only when smaller (no 10% rule). Lossless pictures have five distinct settings (150, 120, 100, 85, 72).
 
-**The floor is step 7's 72 pixels to the inch and quality 40** (step 14 for lossless pictures). At 72 to the inch a page's picture has one pixel per point, so a scanned page shows at its printed size on a screen with 10-point text about 10 pixels tall, still readable; below quality 40 JPG blocks start to break up small letters. Nothing goes lower: at the floor, the smallest file made is the answer, by the owner's decision. Owner question 3.
+**The floor is step 7: 72 pixels to the inch, quality 40.** At 72 to the inch a page's picture has one pixel per point, so a scan shows at its printed size on a screen with 10-point text about 10 pixels tall; below quality 40 JPG blocks break up small letters. Nothing goes lower: at the floor, the smallest file made is the answer. Owner question 2.
 
-### 5. Finding the step: measure once, choose, write, check
+### 5. The plan and the pixel-work budget, before any raw data is read
 
-A full qpdf write on a 100 MB file costs seconds and a copy of the file in memory, and each raw-data pass loads the file into a fresh qpdf per batch, so the search avoids trying steps by writing them.
+From the dictionaries alone, each candidate's pixel work is planned: for a JPG, its frame's pixels once per pass (decoded; `walkJpeg` later checks the frame equals the dictionary, so the plan is exact) plus the encoded pixels of each step measured; for a lossless picture, its pixels once per pass (inflated and scaled) plus each distinct setting's output pixels. The plan counts the measuring pass and three write passes at the step-1 sizes (the largest), so the plan bounds the whole job.
 
-1. **Read.** `acceptedTarget`; when the input is at or under the target bytes the engine gives `[]` (never reached from the page, which holds the button, decision 7). "Reading the file". `readDictionaries` once; candidates as decision 3. When the dictionaries cannot be read or no page has a usable box, or there is no candidate, skip to step 4 with no replacements (one write).
-2. **Measure.** One raw-data pass (`readRawStreams`). For each candidate, in turn: decode it once (a JPG through the browser at the size step 1 allows, after `walkJpeg` checks its frame; a lossless one inflated with the cap and its predictor undone), then for each distinct step setting encode it and record only the byte length, `size[i][s] = min(raw length, encoded length)`. The decoded picture and every encoded copy are let go before the next picture. Encodes per JPG: seven (one per step); per lossless picture: five lossless sizes (150, 120, 100, 85, 72) and, unless it has a soft mask, seven JPGs. "Picture N of M".
-3. **Estimate.** For each step `s`, `estimate(s) = F + Σ size[i][s]`, where `F` is everything but the candidates' data. Before any write, `F0 = input length − Σ raw length` (an upper bound in practice, as qpdf's lossless rewrite rarely grows the rest). The chosen step is the first, in ladder order, whose estimate is at most 99% of the target; when none is, the step with the smallest estimate (normally 14).
-4. **Write 1.** A second raw-data pass encodes each candidate at the chosen step through exactly the same code as the measuring (`encodeAt` on the decoded picture, decision 5a), and `writeUpdate` writes and checks the file. Its length `L1` gives the real fixed part, `F1 = L1 − Σ (bytes written for each candidate stream)`, kept candidates counted at their raw length.
-5. **Check, at most two more writes.**
-   - `L1` at or under the target: if an earlier (milder) step `s'` has `F1 + Σ size[i][s'] ≤ 0.99 × target`, write the mildest such step once (write 2) and keep it if it fits; otherwise keep write 1.
-   - `L1` over the target: the first later step whose estimate with `F1` fits is written (write 2); if that is also over, the step with the smallest estimate is written (write 3) when not yet written.
-   - Of the files written, the result is the mildest one at or under the target; when none fits, the smallest. It is given only when it is at least 1% smaller than the input (as Compress PDF's `keepBelow`); otherwise `[]`, the "no new file" outcome.
-   Only the current best file is kept between writes; a worse one is let go at once.
+One constant sits beside the ladder: **`pixelWorkBudget` = 12,000,000,000 pixels** a job (decoded plus encoded, summed over every step and candidate), confirmed or lowered by task 3.3 so a job at the budget finishes within the time budget (decision 7) in desktop Chromium. When the plan is over it:
 
-So a file reaches its answer with one dictionary read, one measuring pass and one to three write passes (each a raw-data pass, a qpdf write and `qpdf --check`). A file with no candidate has one write and no measuring.
+1. first, only steps 1, 4 and 7 are measured, and only measured steps can be chosen;
+2. then, while still over, the lowest-priority candidates are left alone: the smallest stated length first, ties by object number.
 
-**5a. Same bytes when measured and written.** Measuring and writing use one function per kind: `decodeForSteps` (the JPG decoded once at step 1's size, or the lossless samples) and `encodeAt(decoded, setting)` (drawn to a canvas at the setting's size with the same smoothing and encoded at its quality, or scaled by area averaging and deflated). Each job runs in one fresh worker in one browser, so the encoder is the same. A difference is still handled: write 1 uses real lengths for `F1`, and the check in step 5 uses the written file's real size, never the estimate. Compress PDF's `shrinkJpeg` decodes at its target size directly; it is rebuilt on `decodeForSteps` and `encodeAt` so its output is byte for byte as before (riding along, tested on every fixture before and after; if a byte differs, `shrinkJpeg` keeps its own path and only this tool uses the split, named in the pull request).
+The plan always fits after step 2 (in the end, no candidate). A hostile file of 10,000 truncated 4 KB JPGs whose dictionaries claim large frames on a huge page is planned, cut to the budget and finishes within it (a truncated JPG fails `walkJpeg` before decoding, and is left alone); if it cannot finish, it stops with the shared failure, never by running out of memory or time without end. Unit test in task 3.1; named in Threats and the pull request.
 
-**Why not a binary search over writes:** with fourteen steps it needs four writes and four raw passes every time, each with a full copy of the file in qpdf; the measuring pass costs one pass and canvases at sizes well below the original. **Why not keep every encoded copy:** on a 100 MB scan file the copies for fourteen steps add up to several times the pictures' data; keeping only numbers holds memory to Compress PDF's.
+### 6. Finding the step: measure once, choose, write capped, check
 
-### 6. Progress, memory and time
+`shrinkToBytes(file, targetBytes, passwordArgs, tools, onProgress)` does the work and returns `{ output, step, estimates, writes }` for tests; `run` checks the target and calls it with the target's bytes.
 
-- **Progress:** "Reading the file"; while measuring, "Picture N of M" (`working`, unit `picture`, the shared bar from 20% to 80%); then "Writing the compressed file" as `writing` with percents from 75 up, so the bar continues from 80% and never goes back: write 1's pass from 75 to 88 (one step a picture), its qpdf write at 90, a second write's pass and write at 92 to 96, a third at 97 to 98; no 100% (as Compress PDF). Cancel ends the worker at any point (shared).
-- **Memory:** at any time the input, one qpdf with the file, one raw batch (at most 32 MB, or one larger picture alone), one decoded picture (at most 50 million pixels, as Compress PDF) and one canvas at a time, the size table (14 numbers per candidate, at most 10,000 candidates) and, between writes, the best output so far. Peak no higher than Compress PDF's on the same file plus one output's size; the ceiling is Add page numbers' on the 100 MB file (1.19 GB in Node, 1.36 GB in Chromium), as for Resize.
-- **Time, to be measured (task 3.3):** `compress-scans.pdf` for each target; a scans file of about 100 MB made by `make-large.mjs` with a new `--scans` mode (pages of 300-to-the-inch JPGs from the committed pictures, not committed), for 100 KB (floor, likely over) and 2 MB; `make-large.mjs`'s 100 MB file (an attachment of random bytes and no picture: one write, no smaller file); the 120,000-page file of `make-many-pages.mjs` (no picture: one write). **Budget:** the 100 MB scans file in under 5 minutes in desktop Chromium, at most three writes. If it takes longer, the change is updated before the pull request: measure only steps 1, 4, 7, 8, 11 and 14 and estimate the others between them (sizes fall smoothly with quality and pixels), with the writes still checking the real size.
+1. **Read.** "Reading the file". An input at or under the target gives `[]` (the page holds the button first, decision 8). `readDictionaries` once; candidates (decision 3); the plan (decision 5). With no dictionaries, no usable page box or no candidate, go to step 4 with no replacements: one write.
+2. **Measure.** One raw-data pass. Each candidate is decoded once (a JPG at the step-1 size through `decodeJpeg`; a lossless one inflated with the cap), then encoded at each measured step's setting with `encodeJpeg` or `shrinkLossless`, keeping only `size[i][s] = min(raw length, encoded length)`. The decoded picture and every encoded copy are let go before the next. A picture that throws while measured is marked skipped and is left alone in every later pass. "Picture N of M".
+3. **Choose.** `estimate(s) = F + Σ size[i][s]`, with `F0 = input length − Σ raw length` before any write. The chosen step is **the mildest step whose estimate fits within 99% of the target**; when none does, the step with the smallest estimate (normally 7).
+4. **Write 1.** A raw-data pass encodes each candidate at the chosen step with the same functions; the length handed to `writeUpdate` for each replaced stream is recorded **before `writeUpdate` empties the replacements map**. `writeUpdate`, through `cappedWrite` with a fresh qpdf, writes and checks the file, capped at `2 × input + 16 MB` (as Protect's and Unlock's). `F1 = L1 − Σ` (the recorded handed-over lengths, kept candidates counted at their raw length). qpdf's `--recompress-flate` re-deflates lossless streams, and whatever that adds or saves folds into `F1`.
+5. **Check, at most two more writes, each capped:**
+   - **Write 1 fits** (`L1 ≤ target`): if a milder step has `F1 + Σ size[i][s'] ≤ 0.99 × target`, the mildest such step is written once, capped at the target; it is kept if it fits. Otherwise write 1 is the answer.
+   - **Write 1 is over:** the mildest later step whose estimate with `F1` fits within 99% is written, capped at `L1`; if none fits, the step with the smallest estimate is written, capped at `L1`, unless the chosen step already had the smallest estimate, when nothing more is written. If write 2 is over too and a stronger step with a smaller estimate remains, write 3 does the same, capped at the best so far.
+   - An `OutputLimit` from a capped write means that attempt lost: the best file so far is kept and the search ends.
+   - Each write uses its own fresh qpdf (and its raw-data pass its own batches), released before the next pass; only the best file is kept between writes.
+6. **Answer.** Any written file at or under the target is given (the mildest that fits), **whatever it saves**. When none fits, the smallest written is given only when at most `keepBelow` (99%) of the input; otherwise `[]`, the "no new file" outcome.
 
-### 7. The page target size (shared, riding along)
+A file with no candidate has one write and no measuring. The answer is always judged by the written file's real size, never the estimate.
 
-`ToolWidgetWords` gains an optional `sizeTarget: { key: string; overAdvice: string }`. The registry test fails unless every page of a tool with `sizeTarget` has a preset whose `key` value is a key of `sizeTargets`, and no tool without it has a preset with that key. The page's widget gets the target's bytes and label from `option-values.ts` (`targetOf(preset, words)` in `src/widget/target.ts`); the label is never typed in the registry. The words below are written once in `target.ts`, composed with the label and sizes, and are drafts for the owner.
+**Same bytes when measured and written.** Measuring and writing call the same `decodeJpeg`, `encodeJpeg` and `shrinkLossless` in one fresh worker, so the encoder is the same. A difference is still harmless: `F1` uses real lengths, and every decision after write 1 uses the written size.
 
-- **Already at or under it.** Once the one file is read (after its password, if it has one), when its size is at or under the target's bytes, the main button is unavailable, with a sentence tied to it as Extract's is (`holdErrorId`): "report.pdf is already 200 KB or smaller, so there is nothing to do here. You can use it as it is." Focus goes where it goes for a one-file tool once read; the sentence is announced with the status line. The visitor can choose another file. A file name in the sentence is shown as text, never as markup (shared rule).
-- **Under the target:** the result heading is "Your file is now 200 KB or smaller"; the line under the name is the shared one, "184 KB, was 1.4 MB, 3 pages"; the tool's result notes follow.
-- **Over the target:** heading "Your file is still over 200 KB"; then "The smallest file this tool could make is 312 KB, which is over 200 KB." (the size in bytes when it would read as the target or less, decision 2); then the tool's `overAdvice`; then Download, the name and the "was" line, and the notes. Focus moves to the heading and the screen reader announces it, as for every result.
-- **No smaller file:** the tool's `noSmaller` words, as Compress PDF's.
+**Why not a binary search over writes:** with seven steps it needs three writes and three raw passes every time; the measuring pass costs one pass and encodes at sizes well below the original. **Why not keep encoded copies:** on a 100 MB scan file they add up to several times the pictures' data.
 
-No new component: `ToolWorkspace` holds the button and `Result` takes an optional heading and over-target lines. `target.ts` is a plain module tested in Node.
+### 7. Progress, memory and time
 
-### 8. What the file keeps, and passwords
+- **Progress:** "Reading the file"; while measuring, "Picture N of M" (`working`, unit `picture`, the shared bar from 20% to 80%); then "Writing the compressed file" (`writing`) with percents from 75 up, so the bar continues from 80% and never goes back: write 1's pass 75 to 86, its qpdf write 86 to 90 (`cappedWrite`'s write progress, scaled), a second write 91 to 95, a third 96 to 98; no 100%. Cancel ends the worker at any point.
+- **Memory:** the input, one qpdf with the file, one raw batch (at most 32 MB, or one larger picture alone), one decoded picture (at most 50 million pixels) and one canvas at a time, the size table (seven numbers per candidate, at most 10,000), and between writes the best output (capped). With lossless pictures kept lossless there is no lossless picture on a canvas and no extra copy of its pixels. Ceiling: Add page numbers' on the 100 MB file (1.19 GB in Node, 1.36 GB in Chromium), as for Resize.
+- **Time, measured in task 3.3:** `compress-scans.pdf` for each target; `make-large.mjs --scans` (about 100 MB of 300-to-the-inch JPG scans, written outside the repo) for 100 KB and 2 MB; `make-large.mjs --lossless` (about 100 MB of lossless scans with a PNG predictor) for 2 MB; the existing 100 MB file (a random-bytes attachment, no picture: one write); the 120,000-page file (no picture: one write). **Budget:** each 100 MB file under 5 minutes in desktop Chromium, at most three writes, peak under the ceiling. If over, the change is updated before the pull request (first lever: measure only steps 1, 4 and 7 always; second: a lower `pixelWorkBudget`).
 
-As Compress PDF: pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details are kept; earlier saved versions inside the file are not, and a digital signature stops being valid. **Passwords and restrictions are kept**: the file is opened with its password and `writeUpdate` writes it with the same password and restrictions. Compress PDF does this, and the open owner question "Compress PDF keeps passwords" decides both; if the owner chooses to drop them, both tools change together. Encryption adds a few bytes per stream; the size check is on the written, encrypted file.
+### 8. The page target size (shared, riding along)
 
-### 9. The registry entry and the words
+`ToolWidgetWords` gains an optional `sizeTarget: { overAdvice: string }`. Its preset key is always `target`. The registry test fails unless every page of a tool with `sizeTarget` has `preset.target` naming a key of `sizeTargets`, no other tool's page sets `target`, and each page's heading, sentence, title and `actionLabel` contain its target's label. `src/widget/target.ts` (plain functions, tested in Node) holds the rules and fixed words, composed with the label; `useToolRun` and `ToolWorkspace` join its hold through `holdErrorId`, and `Result` takes its heading and over-target lines. No new component; `options.ts` is not changed.
+
+- **Already at or under it** (`heldByTarget(size, target)`): decided from the picked file's size at the pick, before any password is asked. The file is still sent to the worker and read as every pick is, so the requests after a pick stay the same for every file, but for a held file a "password needed" answer shows no password field, so a protected file under the target is never asked for its password. The row shows the file; the main button is unavailable with the sentence tied to it: "report.pdf is already 200 KB or smaller, so there is nothing to do here. You can use it as it is." The name is shown as text. The visitor can choose another file.
+- **Under the target:** heading "Your file is now 200 KB or smaller"; the shared "was" line.
+- **Over the target:** heading "Your file is still over 200 KB"; "The smallest file this tool could make is 312 KB, which is over 200 KB." (the byte rule, decision 2); the tool's `overAdvice`; Download, the name and the "was" line, whose new size uses the same form as the sentence. Focus moves to the heading, which is announced with the sentence.
+- **No smaller file:** the tool's `noSmaller` words.
+
+**The home filter** (a shared change, its own task line): `matchesPhrase` in `src/tools/filter.ts` also compares the phrase and the words with spaces removed, so "200kb" finds "Compress PDF to 200 KB". It changes no other match a visitor would miss; `filter.test.ts` gains cases.
+
+### 9. What the file keeps, and passwords
+
+As Compress PDF: pages, text, drawings, fonts, links, form fields with their values, bookmarks, attached files, tags and the document's details are kept, and decoded content streams are not changed; qpdf packs the file tighter without loss. Earlier saved versions inside the file are not kept and a digital signature stops being valid. **Passwords and restrictions are kept** (`writeUpdate` with the password), as Compress PDF; the open owner question "Compress PDF keeps passwords" decides both. The size check is on the written, encrypted file.
+
+### 10. The registry entry and the words
 
 ```
 id: 'compress-to-target', group: 'smaller', runsIn: 'browser', phase: 2,
 accepts: ['application/pdf'],
-related: ['compress-pdf-to-100kb', 'compress-pdf-to-200kb', 'compress-pdf-to-500kb',
-          'compress-pdf-to-1mb', 'compress-pdf-to-2mb', 'compress-pdf'],
+related: ['compress-pdf-to-200kb', 'compress-pdf-to-500kb', 'compress-pdf-to-1mb',
+          'compress-pdf', 'delete-pdf-pages', 'split-pdf'],
 ```
 
-Each page links to the four other targets and Compress PDF (five links), never to itself (`relatedItems`).
+Each page shows the related links but itself: the 200 KB, 500 KB and 1 MB pages show five, the 100 KB and 2 MB pages six. Delete pages and Split PDF are what the over-target advice suggests.
 
 | Page | Name | Title | Heading | Description |
 | --- | --- | --- | --- | --- |
@@ -155,68 +183,94 @@ Each page links to the four other targets and Compress PDF (five links), never t
 | `/compress-pdf-to-1mb` | Compress PDF to 1 MB | Compress a PDF to 1 MB in your browser - PDFkaro | Compress a PDF to 1 MB | Bring a PDF of photos or scans to 1 MB or smaller by shrinking its pictures until it fits. The file stays on your device and is not uploaded. |
 | `/compress-pdf-to-2mb` | Compress PDF to 2 MB | Compress a PDF to 2 MB in your browser - PDFkaro | Compress a PDF to 2 MB | Make a large PDF 2 MB or smaller, with pictures kept as sharp as the size allows. The file stays on your device and is not uploaded. |
 
-Titles are 48 to 50 characters, descriptions 132 to 151. Each page: summary "Make a PDF <label> or smaller.", sentence "Make a PDF <label> or smaller. Your file stays on your device.", preset `{ target: '<key>' }`, page words `actionLabel: 'Compress to <label> and download'`.
+Titles 48 to 50 characters, descriptions 132 to 151. Each page: summary "Make a PDF <label> or smaller.", sentence "Make a PDF <label> or smaller. Your file stays on your device.", preset `{ target: '<key>' }`, `actionLabel: 'Compress to <label> and download'`.
 
-Tool words: picker "Choose a PDF file", "Choose another file", the shared drop hint, `acceptsName: 'a PDF'`, `writingLabel: 'Writing the compressed file'`, `doneHeading: 'Your compressed file is ready'` (used only if no target applies, which the registry test makes impossible), `failedHeading: 'The compression did not finish.'`, `tooFewFiles: 'Choose a PDF file to compress.'`, `outputSuffix: 'compressed'` (`report-compressed.pdf`, as Compress PDF; a name with the size would be false when the result is over it), one file, `resultPages: 'input'`, `memoryAdvice: 'Try on a computer, or split the file first and compress the parts.'`, `items: 'files'`, no item controls, `outputs: 'one'`, `resultWas: true`, `sizeTarget: { key: 'target', overAdvice }`, `noSmaller`, and result notes. Drafts:
+Tool words: picker "Choose a PDF file", "Choose another file", the shared drop hint, `acceptsName: 'a PDF'`, `writingLabel: 'Writing the compressed file'`, `doneHeading: 'Your compressed file is ready'` (never shown: every page has a target), `failedHeading: 'The compression did not finish.'`, `tooFewFiles: 'Choose a PDF file to compress.'`, `outputSuffix: 'compressed'` (a name with the size would be false over the target), one file, `resultPages: 'input'`, `memoryAdvice: 'Try on a computer, or split the file first and compress the parts.'`, `items: 'files'`, no item controls, `outputs: 'one'`, `resultWas: true`, `sizeTarget`, `noSmaller`, result notes. Drafts:
 
-- `overAdvice`: "Pictures were made as small as they can go while staying readable. Text, drawings and fonts are not made smaller. To get under the limit, remove pages you do not need, or split the file and send it in parts."
-- `noSmaller`: heading "This file could not be made smaller."; advice "Its pictures are already small, or of a kind this tool leaves alone, and text, drawings and fonts are not made smaller. The questions below say more."
-- Result notes: "Pictures were made smaller until the file fitted, so they can look less sharp up close. Text, drawings and fonts are as they were." / "Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid." / "If the file had a password or restrictions, it still has them."
+- `overAdvice`: "Pictures this tool can change were made as small as they can go while staying readable. Some kinds of picture are left as they are; the questions below say which. To get under the limit, remove pages you do not need, or split the file and send it in parts."
+- `noSmaller`: heading "This file could not be made smaller."; advice "Its pictures are already small, or of a kind this tool leaves alone, and text, drawings and fonts are not made smaller. To get under the limit, remove pages you do not need, or split the file and send it in parts."
+- Result notes: "Pictures were made smaller, so they can look less sharp up close. Text, drawings and fonts keep their quality." / "Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid." / "If the file had a password or restrictions, it still has them."
 
-**Hub words** ("Make smaller and fix", drafts): description "Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded." (150 characters); sentence "Tools that make a PDF file smaller, or small enough for an upload limit."; title unchanged. `claimsDevice` stays true: both tools run in the browser.
+**Hub words** ("Make smaller and fix", drafts): description "Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded." (150 characters); sentence "Tools that make a PDF file smaller, or small enough for an upload limit."; title unchanged; `claimsDevice` stays true.
 
-**Text below each tool (decision 9a).** `SPEC.md` forbids pages "that are the same text with one word swapped". Each of the five Markdown files is written for its own size, 250 to 500 words, marked as a draft, with its own steps and questions:
+**Text below each page.** `SPEC.md` forbids pages "that are the same text with one word swapped". Each Markdown file is written for its own size, 250 to 500 words, marked as a draft:
 
-- **100 KB:** what fits in 100 KB (a page or two of scans, a short text file), why a long scan may stay over and what the smallest-file result means, the 1024 question, and removing pages first;
-- **200 KB:** scanned forms and certificates, how a scan's pictures are shrunk, why the file may look softer, colour scans against grey ones;
-- **500 KB:** documents with a few photos, what stays sharp (text and drawings), why the size can land well under 500 KB;
-- **1 MB:** photo-heavy files and slides, why some pictures are left as they are (CMYK, scans in black and white), the order of steps;
-- **2 MB:** large reports, why a file far over 2 MB may still not fit (fonts, attached files, text), Compress PDF as the other way.
+- **100 KB:** what fits in 100 KB, why a long scan may stay over and what the smallest-file result means, removing pages first;
+- **200 KB:** scanned forms and certificates, how a scan's pictures are shrunk, colour against grey scans;
+- **500 KB:** documents with a few photos, what keeps its quality, why the size can land well under 500 KB;
+- **1 MB:** photo-heavy files and slides, the pictures left as they are, the order of steps;
+- **2 MB:** large reports, why a file far over 2 MB may not fit (fonts, attachments), Compress PDF as the other way.
 
-Common to all, each in its own words: the file is not uploaded; passwords kept; signature. A unit test fails if any sentence of eight words or more appears in two of the five files, or a file is outside 250 to 500 words, and checks the banned words, "100%" and exclamation marks.
+Each also says, in its own words, how the thousands are counted, that the file is not uploaded, that a password is kept, and the signature. **The shared-text test:** in each file every target label and number ("100 KB", "100,000", "1 MB", "1,000,000" and the like) is replaced by one token; the text is split into words, and any run of eight words found in two files fails the test, steps and questions included. It also checks 250 to 500 words, the banned words, "100%" and exclamation marks.
 
-**SEO.** Each page has its own canonical (shared), Open Graph tags, a `WebApplication` and a `BreadcrumbList` (Home, Make smaller and fix, the page), and a sitemap entry; `check:seo` already fails on a duplicated title or description. Compress PDF's related links gain `compress-pdf-to-200kb` (six links).
+**SEO.** Each page has its own canonical, Open Graph tags, `WebApplication` and `BreadcrumbList` (Home, Make smaller and fix, the page) and a sitemap entry; `check:seo` already fails on a duplicated title or description. Compress PDF's related links gain `compress-pdf-to-200kb` (six links); that is a registry line, not Compress PDF's code.
 
-### 10. Requests, page weight and WebAssembly
+### 11. Requests, page weight and WebAssembly
 
-`loads = { read: ['qpdf'], job: ['qpdf', 'fflate'] }`, as Compress PDF. qpdf's WebAssembly is fetched after a pick, never on page load (shared). The page ships the same widget island as every tool; `target.ts` adds well under 1 KB gzip to the widget, and the page stays under 100 KB (`npm run weigh`). The engine chunk is loaded only by the job's worker. `uniform-requests.spec.ts` covers all five pages with the same sets.
+`loads = { read: ['qpdf'], job: ['qpdf', 'fflate'] }`, as Compress PDF. qpdf's WebAssembly is fetched after a pick, never on page load. The job fetches the engine, the `shrink` chunk (a file of its own once two engines import it), `qpdf-json`, `picture`, `resample`, `plain`, `inspect`, `option-values`, qpdf, `fflate`, the worker and the workspace. `target.ts` adds well under 1 KB gzip to the widget; each page stays under 100 KB (`npm run weigh`).
+
+Named in the pull request, as the uniform-requests rules require:
+
+- **Whether a job starts depends on the file's size:** a file at or under the target is held, so no job set is fetched for it. The pick set is fetched as for every file. The size is not file content sent anywhere, but the requests differ by it.
+- **The number of qpdf instances** (one dictionary read, a batch reader per 32 MB in each raw pass, one per write) depends on the file; under the named no-cache exception (one WebAssembly request per qpdf instance, entry 24) the number of WebAssembly requests does too, as for Compress PDF.
+
+`uniform-requests.spec.ts` covers each page with inputs over that page's target, generated by `tests/e2e/target-files.ts` into a temporary folder and served by the host-log harness from there (none committed; files over 2 MB reach it this way), and listed in `tool-files.ts`:
+
+- under the target after compressing (`expect: 'done'`): a scans file a little over the target;
+- over at the floor (new `expect: 'over'`): a JPG page plus a random-bytes attachment larger than the target;
+- a packed text-only file over the target (`expect: 'no-file'`);
+- a protected scans file with its password (`expect: 'done'`);
+- a failing job (the shared `failingJob`, padded over the target where it is under);
+- a held row (`text.pdf`, pick only, the main button unavailable).
+
+Other tools' no-upload forbidden lists add `/compress-to-target-/` and the `shrink` chunk.
 
 ## Threats considered
 
-- **A malicious PDF:** everything Compress PDF already does: the dictionary JSON capped at 64 MB while qpdf writes it, raw data in batches of 32 MB, a JPG's frame checked against its dictionary before decoding, lossless data inflated with a cap at its exact size, the encoder's output walked before use, at most 50 million pixels a picture, `qpdf --check` on the output. New here: the count of candidates (10,000) and the 4 KB floor bound the measuring work, which is fourteen encodes a picture at most; the writes are capped at three; a picture that throws while measured is left alone at every step (size = raw length).
-- **A crafted file that makes the estimate wrong** (streams that qpdf's rewrite grows, encoders that disagree): costs at most two extra writes; the answer is always checked by the written file's real size.
-- **An oversized file:** the shared 100 MB notice; memory as decision 6; Cancel ends the worker.
-- **A hostile file name:** never reaches the engine; the hold sentence shows it as text (React escapes it); the output name is built by the shared code.
-- **A password:** only through `passwordArgsFor`, never in an error or a log; kept as Compress PDF keeps it.
-- **The page's target from the address:** a fixed preset in the built page, checked by `acceptedTarget`; nothing from the address bar is read.
+- **A malicious PDF:** Compress PDF's protections (capped dictionary JSON, 32 MB batches, frame checked before decoding, capped inflate, encoder output walked, 50 million pixels a picture, `qpdf --check`). New here: the **pixel-work budget** (12,000,000,000 pixels a job, decision 5), planned from dictionaries before any raw data is read; the 4 KB floor on stated and real lengths; no picture without a stated length; at most 10,000 candidates; at most three writes; a picture that throws is skipped in every pass.
+- **A crafted file that makes the estimate wrong:** at most two extra writes, each capped at the target or the best so far; `OutputLimit` ends the search with the best file.
+- **An oversized output:** every write goes through `cappedWrite` (write 1 at `2 × input + 16 MB`).
+- **An oversized file:** the shared 100 MB notice; memory as decision 7; Cancel ends the worker.
+- **A hostile file name:** never reaches the engine; the hold sentence shows it as text; the output name is built by shared code.
+- **A password:** only through `passwordArgsFor`, never in an error or log; a file under the target is held before its password is asked.
+- **The page's target:** a fixed preset in the built page, checked by `acceptedTarget`.
 
 No server, so no SSRF or macro threat.
 
 ## Tests
 
-- **Unit, engine** (`tests/unit/compress-to-target.test.ts`; the engine's own step `shrinkToBytes(file, targetBytes, …)`, which `run` calls with the page's target, is also called with targets of a half and a tenth of each fixture's size, as most fixtures are under 100 KB; Node, the browser's qpdf, `@napi-rs/canvas` for decoding and encoding as Compress PDF's tests do, `globalThis.fetch` replaced by a function that throws and records, asserted never called): every fixture with each target; the ladder in order (a file made in the test whose answer is step 1, step 4, step 7, a lossless picture that needs step 8 or later, and one with a soft mask that is never made a JPG); the floor reached, the smallest file given and over the target; an input under the target giving `[]`; a file with no candidate written once; no smaller file giving `[]`; the number of qpdf writes counted (one for a first-guess hit, at most three); measured and written sizes equal for every picture; the 4 KB and 10,000 limits; Compress PDF's left-alone kinds byte for byte (`compress-kinds.pdf`); `compress-password.pdf` keeping its password and restrictions; a missing or unknown target refused before reading; text and content streams kept (`multilingual.pdf`, `pageStreams`); progress never going back; no error holding a password or document text; the bombs (`compress-flate-bomb.pdf`, `compress-json-bomb.pdf`, `compress-bomb-attachment.pdf`) as Compress PDF.
-- **Unit, shared:** `tests/unit/target.test.ts` (the hold, both result headings, the bytes rule); `pixelLimit` with a resolution; Compress PDF's output on every fixture byte for byte before and after the `shrinkJpeg` split; the registry entry, the five pages and the `sizeTarget` preset rule; the five texts.
-- **End to end** (`tests/e2e/compress-to-target.spec.ts`, at 360px and 1280px): each page's heading, sentence, title and button; on `/compress-pdf-to-200kb`, `compress-scans.pdf` from pick to Download with "Picture N of M" and the bar never going back, the result under 200 KB checked with qpdf and PDF.js; on `/compress-pdf-to-100kb` a result over the target with its sentence and Download; `text.pdf` held as already under the target; damaged, not a PDF, password, Cancel, failures from a stand-in engine, the 100 MB and 20,000-page notices, keyboard only.
-- **No upload:** the exact allowlist and secrets in a protected file made in the test (`qz7report.pdf`, over 200 KB, a `SECRET-` string in its text, a field, a link and a picture's details), as Compress PDF's; `/compress-pdf-to-*` in `uniform-requests.spec.ts` with the full PDF picks and jobs, `expect: 'done'`, `'no-file'` and the held case.
-- **Performance:** listing and compressing `compress-scans.pdf` on the 200 KB page blocks the page for no more than 100 ms at a time.
+- **Unit, engine** (`tests/unit/compress-to-target.test.ts`, Node, the browser's qpdf, `@napi-rs/canvas`; `globalThis.fetch` replaced by a function that throws and records, asserted never called; qpdf writes counted). Most fixtures are under 100 KB, so `shrinkToBytes` is also called with targets of a half and a tenth of each fixture's size:
+  - **the invariant**, over every fixture and every target and both fractions: the output is at or under the target, or else the smallest written and at most 0.99 × input, or `[]`; `qpdf --check` passes (with the password where needed); after one write, the estimate for the written step is within 2% of the real size;
+  - steps: JPG-only files made in the test answered at step 1, 4 and 7 with exactly one write (`writes === 1`, `step` as expected); a file whose estimate is off, written two and three times, never more; the chosen step already the smallest estimate, with no further write; `OutputLimit` on write 2 keeping write 1;
+  - **fitting files kept:** an input just over the target whose rewrite fits but saves under 1% is given;
+  - lossless pictures scaled and still lossless at every step, never a JPG, soft masks byte for byte;
+  - the floor giving the smallest file over the target; an input under the target giving `[]`; no candidate, one write; a packed text-only file over the target giving `[]`;
+  - **the pixel budget:** 10,000 truncated 4 KB JPGs claiming large frames on a huge page finishing within the budget (or stopping with the shared failure); a plan over budget measuring steps 1, 4 and 7 only, then dropping the smallest candidates;
+  - the 4 KB floor on real length; no stated length left alone; the 10,000 limit; a picture that throws skipped in every pass;
+  - `compress-kinds.pdf`'s left-alone pictures; `compress-password.pdf` keeping password and restrictions; an unknown or missing target refused before reading; `multilingual.pdf`, `rich.pdf`, `form.pdf`, `tagged.pdf` with decoded content streams (`pageStreams`) and text kept; progress never going back; the three bombs; no error holding the password or document text.
+- **Unit, shared:** `target.test.ts` (the hold, both headings, the byte rule's cases in decision 2); `filter.test.ts` ("200kb" finds the 200 KB page); the registry (entry, five pages, labels in the words, the `sizeTarget` preset rule, catalogue order); the shared-text test; the `check:worker` rule against engine-to-engine imports.
+- **End to end** (`tests/e2e/compress-to-target.spec.ts`, 360px and 1280px): each page's words; on the 200 KB page a scans file from pick to Download, "Picture N of M", the bar never going back, the download checked with qpdf and PDF.js and at most 200,000 bytes; on the 100 KB page an over-target result, asserting the sentence's size and the "was" line's new size are the same text; `text.pdf` held, with no password asked for a small protected file; a packed file with "This file could not be made smaller."; damaged, not a PDF, password, Cancel, failures from a stand-in engine, the notices, keyboard only.
+- **No upload:** on the 200 KB page a protected file made in the test (`qz7report.pdf`, over 200 KB through a large photo, `SECRET-` strings in its text, a link, a field and a picture's details); and an unprotected run on the 100 KB page through the floor path (over-target result, download made); both with the allowlist read from the build.
+- **Performance:** listing and compressing a scans file on the 200 KB page blocks the page for no more than 100 ms at a time.
 
 ## Risks / Trade-offs
 
-- **Time on large scan files** (fourteen encodes a picture, two raw passes): measured in task 3.3, with the fallback in decision 6.
-- **Encoders differ between browsers,** so the same file may land on a different step in Firefox and Chrome; the size check uses the real file, so the answer is always right for that browser.
-- **The floor may leave long scans over 100 KB.** That is the owner's "give the smallest, say so"; the page says what to try.
-- **Grey lossless pictures saved as JPGs become RGB JPGs,** like Compress PDF's grey JPGs (open owner question).
-- **The result can be smaller than needed** when a milder step would have fitted but the estimate said no and the check in step 5 did not try it (at most one milder write is tried).
+- **Time on large scans:** measured in task 3.3, with the levers in decision 7.
+- **Encoders differ between browsers,** so a file may land on a different step in Firefox and Chrome; the answer is always judged by the real file.
+- **The floor may leave long scans, or lossless-heavy files, over 100 KB** ("give the smallest, say so"; lossless pictures stay lossless by the owner's word).
+- **The pixel budget can leave some pictures alone** on very large files; the result is still checked against the target and worded truthfully.
+- **A milder step may not be tried** when write 1 fits and no milder estimate fits within 99%.
 
 ## Open Questions
 
 For the owner, each going ahead on its default (listed in the pull request and added to "Questions waiting for the owner"):
 
-1. Target fixed by each page, with no choice of target on the page. Default: fixed.
-2. Lossless pictures may become JPGs, only after the seven lossless steps, never with a soft mask. Default: allowed.
-3. The floor of 72 pixels to the inch and quality 40. Default: keep.
-4. A target counts in thousands (200 KB = 200,000 bytes). Default: keep.
-5. A file already under the target is not compressed. Default: keep.
-6. The over-target result offered even when only a little smaller. Default: keep.
+1. The target is fixed by each page, with no choice of target on the page. Default: fixed.
+2. The floor of 72 pixels to the inch and quality 40. Default: keep.
+3. A target counts in thousands (200 KB = 200,000 bytes). Default: keep.
+4. A file already under the target is not compressed, and the button says why. Default: keep.
+5. The 1% line: a file that fits the target is always given, whatever it saves; a file still over the target is given only when at least 1% smaller than the original, else "no new file". Default: keep.
+
+Answered at stage 1: lossless pictures are never saved as JPGs (owner, 24 Nov 2026).
 
 Also touched: "Compress PDF keeps passwords", "Grey scans as colour JPGs", "Signed files", "Shared pieces in tool pull requests", the hub drafts.
