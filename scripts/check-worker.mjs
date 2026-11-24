@@ -49,6 +49,7 @@ const lateSources = [
   { what: 'the page drawing and its canvas budget (thumbnail.ts)', path: join('src', 'engines', 'thumbnail.ts') },
   { what: 'the drawing step that draws on pages (stamp.ts)', path: join('src', 'engines', 'stamp.ts') },
   { what: 'the page reading and page update steps (pages.ts)', path: join('src', 'engines', 'pages.ts') },
+  { what: 'the picture steps that make pictures smaller (shrink.ts)', path: join('src', 'engines', 'shrink.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');
@@ -178,6 +179,20 @@ for (const id of engineIds) {
   }
 }
 if (engineImports === 0) problems.push('No import was found in any engine source, so the rule that no engine imports another found nothing to check.');
+// Nor does a shared file under src/engines/ import an engine: it would bring that tool's engine into every tool that
+// shares it.
+const enginesDir = resolve('src', 'engines');
+let sharedImports = 0;
+for (const name of readdirSync(enginesDir).filter((each) => /\.ts$/.test(each))) {
+  const source = readFileSync(join(enginesDir, name), 'utf8');
+  for (const [, specifier] of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*['"`]([^'"`\n]+)['"`]/g)) {
+    sharedImports++;
+    if (!specifier.startsWith('.')) continue;
+    const target = resolve(enginesDir, specifier);
+    if (target === toolsDir || target.startsWith(toolsDir + sep)) problems.push(`src/engines/${name} imports an engine's file (${specifier}); a shared step must not depend on one tool.`);
+  }
+}
+if (sharedImports === 0) problems.push('No import was found in any shared engine file, so the rule that none imports an engine found nothing to check.');
 
 // The picture reader and the picture thumbnail load late, from files of their own, never inside the worker file.
 // picture.ts throws no sentences, so its marker names stand in for them.
