@@ -12,7 +12,7 @@
 // inside `--password=`, never into an error, and never into a file when it
 // holds a line break. Document text never goes into an error message.
 
-import { finished, type Qpdf } from './qpdf';
+import { cappedWrite, finished, type Qpdf } from './qpdf';
 
 export type Dict = Record<string, unknown>;
 export const isRef = (value: unknown): value is string => typeof value === 'string' && /^\d+ \d+ R$/.test(value);
@@ -97,7 +97,7 @@ export const passwordArgsFor = (password: string | undefined): string[] => (pass
  * password goes in the argument file only when it holds no line break, as the
  * file holds one argument per line; otherwise it stays in the in-memory list.
  */
-export function callWithPassword(qpdf: Qpdf, passwordArgs: readonly string[], args: readonly string[]): { code: number } {
+export function callWithPassword(qpdf: Qpdf, passwordArgs: readonly string[], args: readonly string[]): ReturnType<Qpdf['call']> {
   if (args.some((arg) => /[\r\n]/.test(arg))) throw new Error('An argument held a line break.');
   const inFile = passwordArgs.every((arg) => !/[\r\n]/.test(arg));
   const listed = inFile ? [...passwordArgs, ...args] : [...args];
@@ -267,11 +267,20 @@ export function streamUpdateJson(maxObjectId: number, streams: ReadonlyMap<strin
 }
 
 /**
+ * A cap on what `writeUpdate` writes: the most bytes the new file may have, and qpdf's write progress as it goes
+ * (0 to 100, never backwards). A write past the cap throws `OutputLimit` (`cappedWrite` in qpdf.ts).
+ */
+export type WriteLimit = { bytes: number; onWriting?: (percent: number) => void };
+
+/**
  * Writes the file held by a fresh qpdf as /in.pdf with `options` (and the
  * password, so a protected file keeps its password and restrictions), after
  * replacing the streams in `replacements` (each taken out of the map once it
  * is in qpdf's memory), then checks the result with
  * `qpdf --check`, with the password. The data files go under paths made here.
+ * With `limit`, the write goes through `cappedWrite` with qpdf's `--progress`,
+ * and a file past `limit.bytes` throws `OutputLimit`; what qpdf printed is
+ * never passed on. Without it (Compress PDF), the write is as it always was.
  */
 export function writeUpdate(
   qpdf: Qpdf,
@@ -279,6 +288,7 @@ export function writeUpdate(
   maxObjectId: number,
   replacements: Map<string, StreamReplacement>,
   options: readonly string[],
+  limit?: WriteLimit,
 ): Uint8Array {
   const args = ['/in.pdf'];
   if (replacements.size > 0) {
@@ -296,7 +306,9 @@ export function writeUpdate(
     args.push('--update-from-json=/update.json');
   }
   args.push(...options, '/out.pdf');
-  const written = callWithPassword(qpdf, passwordArgs, args);
+  const written = limit
+    ? cappedWrite(qpdf, limit.bytes, (capped) => callWithPassword(capped, passwordArgs, ['--progress', ...args]), limit.onWriting)
+    : callWithPassword(qpdf, passwordArgs, args);
   if (!finished(written.code)) throw new Error(`qpdf could not write the new file (exit ${written.code}).`);
   if (!finished(callWithPassword(qpdf, passwordArgs, ['--check', '/out.pdf']).code)) throw new Error("The new file did not pass qpdf's check.");
   return qpdf.read('/out.pdf');

@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
+import { createQpdf, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
 import {
   callWithArgumentFile,
   callWithPassword,
@@ -260,5 +260,39 @@ describe('writing replaced streams', () => {
     const out = writeUpdate(await holding(fixture('text.pdf'))(), [], 0, new Map(), lossless);
     expect(await pageCount(out)).toBe(3);
     expect(out.length).toBeLessThan(fixture('text.pdf').length);
+  });
+});
+
+describe('a capped write of replaced streams (Compress to a target size)', () => {
+  const lossless = ['--object-streams=generate', '--compress-streams=y', '--recompress-flate', '--compression-level=9', '--remove-unreferenced-resources=yes'];
+
+  it('writes the same file as without the cap, and passes write progress on, never backwards', async () => {
+    const file = fixture('pages-500.pdf');
+    const plain = writeUpdate(await holding(file)(), [], 0, new Map(), lossless);
+    const percents: number[] = [];
+    const capped = writeUpdate(await holding(file)(), [], 0, new Map(), lossless, { bytes: 2 * file.length + 16 * 1024 * 1024, onWriting: (percent) => percents.push(percent) });
+    expect(capped.length).toBe(plain.length);
+    expect(await pageCount(capped)).toBe(500);
+    expect(percents.length).toBeGreaterThan(0);
+    expect(percents).toEqual([...percents].sort((a, b) => a - b));
+    expect(new Set(percents).size).toBe(percents.length);
+    expect(Math.max(...percents)).toBeLessThanOrEqual(100);
+  });
+
+  it('throws OutputLimit past its cap, with nothing qpdf printed in the error or the progress', async () => {
+    const file = fixture('compress-password.pdf');
+    const said: string[] = [];
+    const error = await (async () => writeUpdate(await holding(file)(), ['--password=open-sesame'], 0, new Map(), lossless, { bytes: 1000, onWriting: (percent) => said.push(String(percent)) }))().catch((caught: Error) => caught);
+    expect(error).toBeInstanceOf(OutputLimit);
+    expect((error as Error).message).toBe('The new file would pass its size limit.');
+    expect((error as Error).message).not.toMatch(/qpdf|open-sesame|in\.pdf|out\.pdf|progress/);
+    for (const each of said) expect(each).toMatch(/^\d+(\.\d+)?$/);
+  });
+
+  it('keeps a password and restrictions through the capped write', async () => {
+    const file = fixture('password.pdf');
+    const out = writeUpdate(await holding(file)(), ['--password=open-sesame'], 0, new Map(), lossless, { bytes: 2 * file.length + 16 * 1024 * 1024 });
+    expect((await qpdfOn(out, ['--password=open-sesame', '--check'])).code).toBe(0);
+    expect((await qpdfOn(out, ['--password=open-sesame', '--show-encryption'])).out).toBe((await qpdfOn(file, ['--password=open-sesame', '--show-encryption'])).out);
   });
 });
