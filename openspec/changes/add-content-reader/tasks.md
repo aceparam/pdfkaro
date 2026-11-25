@@ -52,7 +52,7 @@ No dependency, no tool, no page, no component. No registry entry, page text, end
 - [x] 9.5 A predictor row over 1 MiB is `not-decoded`, with a memory test at the limit; LZW input over 256 MiB is `not-decoded`; pass 1 stops as doubt once the edited length passes `maxEditedBytes`; removal needs both pieces empty (or the operator alone with no operands); the inline picture's values are read with a loop; the fixture sweep asserts the error it catches; `window` renamed `lookLimit`.
 - [x] 9.6 Decision 12 tells grayscale's task 0.2 to keep a private copy of `need`, and that `zlib-*.js` will split out (about 759 B by gzip).
 - [x] 9.7 Find why `sign-pdf.test.ts` "reading the chosen picture before the job" failed once under load; fix it only if it is a real fault.
-- [ ] 9.8 Run lint, check, `npm test` and spec in the main tree, and a worktree build with `check:worker` and `weigh`; the end-to-end suite again only if the built files change.
+- [x] 9.8 Run lint, check, `npm test` and spec in the main tree, and a worktree build with `check:worker` and `weigh`; the end-to-end suite again only if the built files change.
 
 ## Workflow follow-up
 
