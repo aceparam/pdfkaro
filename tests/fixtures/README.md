@@ -951,6 +951,46 @@ Measured on 24 Nov 2026, as Crop PDF's above: in Node under the test runner, one
 - **The objects file** (every one of 220,000 objects changed by the destination walk) is the worst case for the working copies: 1.08 GB in Node, 0.76 GB over baseline in Chromium, under the ceiling.
 - **Known, not fixed here:** "Page N of M" has no thousands separator, as on every page tool.
 
+### Grayscale PDF (`src/engines/tools/grayscale-pdf.ts`, with `src/engines/content.ts`)
+
+Each file was run in Node with the same qpdf and fflate the browser uses (`tests/unit/grayscale-pdf.test.ts`), the encrypted ones with `open-sesame`. Every file given back passes `qpdf --check`, is not encrypted, reads the same text at the same places through PDF.js, has the same PDF.js operator list on every page once colour-setting operations are removed, holds the same tokens in each content stream outside the edits of design decision 4 (no edited stream keeps `sc` or `SC`), and is drawn by PDF.js with every pixel neutral; the bomb files and `pages-500.pdf` are only checked with `qpdf --check`. "Changed" counts content streams whose decoded text differs. Sizes in bytes, from a run on 27 Nov 2026.
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 3,821 | Converted: pdf-lib writes its text black as `0 0 0 rg`, which counts (owner question 5); 3 of 3 streams changed |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | 7,178 and 7,181 | 3,859 | Converted, with no password and no restrictions; 3 of 3 changed. Without the password: "A password did not open the file." |
+| `pages-500.pdf` | 198,025 | 107,948 | Converted, every page |
+| `scanned.pdf` | 6,191 | 6,144 | Converted: the scans' RGB pictures repointed at the stand-in, their data unchanged; no content stream changed |
+| `form.pdf` | 3,189 | 2,917 | Converted; fields, values and appearances kept; 1 of 1 changed |
+| `mixed.pdf` | 2,257 | 1,857 | Converted; sizes and turns kept; 4 of 4 changed |
+| `rich.pdf` | 2,064 | 1,918 | Converted; both bookmarks, the link and `note.txt` kept; 2 of 2 changed |
+| `images.pdf` | 1,642 | 1,852 | Converted: its CMYK text and shapes made grey; the JPEG 2000 picture left byte for byte |
+| `tagged.pdf` | 5,118 | 2,835 | Converted; tags, marked content, destinations, thread, fields and links kept; 2 of 2 changed |
+| `multilingual.pdf` | 48,414 | 37,903 | Converted; every page reads the same, its streams the same token by token outside the edits (`tests/unit/multilingual.test.ts`); 5 of 5 changed |
+| `compress-scans.pdf`, `compress-kinds.pdf`, `compress-jpeg-mismatch.pdf`, `compress-small-jpg.pdf`, `compress-lossless.pdf`, `compress-password.pdf` (with `open-sesame`) | | | Converted: pictures repointed, data unchanged; the CMYK JPG, the grey picture and the masks left; no content stream changed |
+| `compress-packed.pdf` | 3,441 | 3,821 | Converted; 3 of 3 changed |
+| `compress-bomb-attachment.pdf`, `compress-flate-bomb.pdf` | | | Converted; the attachment and the picture's data never inflated |
+| `compress-text.pdf`, `chinese-unembedded.pdf` | | | Nothing turned grey: no file ("Nothing in this file was turned grey.") |
+| `grey-only.pdf` | 3,603 | | Nothing turned grey: no file; its RGB groups, soft mask backdrop, `/DefaultRGB`, output intent and colour stored thumbnail do not count |
+| `compress-json-bomb.pdf` | 140,759 | | Fails with "The pages could not be read." after about 15 seconds: its JSON of dictionaries passes the page-reading cap. The page gives the shared failure |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not read the file." |
+
+**Large files, measured over the whole job through `writePageUpdate` and its `--check`.** Node: each file in a process of its own under the test runner, qpdf loaded first on `text.pdf`, peak the process's highest resident memory (the runner's own included). Chromium: the built page through Playwright at 1280 pixels, from pressing the main button to the result, the resident memory of every browser process added up every 0.2 seconds, over its level just before the press (the reading worker is ended when a job starts, so a peak of 0.00 means no higher than before the press). Ceiling: 1.19 GB in Node, 1.36 GB in Chromium. qpdf instances are those the job makes, counted in Node.
+
+| File | Out | Node: time (to writing), peak | Chromium: time, peak over baseline | qpdf instances |
+| --- | --- | --- | --- | --- |
+| `make-large.mjs` (105 MB attachment) | 110,124,287 | 1.6 s (1.1 s), 1.14 GB | 1.8 s, 0.99 GB | 5 |
+| `make-large.mjs --scans` (101.5 MB, 25 JPG scans) | 106,428,654 | 56.1 s (1.3 s), 0.93 GB | 53.6 s, 1.17 GB | 5 |
+| `make-large.mjs --vector` (119 MB, 5 pages of 60 MiB decoded) | 137,250,070 | 87.4 s (43.9 s), 1.22 GB | 77.2 s, 0.27 GB | 9 |
+| `make-many-pages.mjs` (120,000 pages, one shared stream) | 1,229,988 | 24.2 s (18.0 s), 0.70 GB | 15.0 s, 0.77 GB | 5 |
+| `make-many-pages.mjs --coloured` (20,000 pages, own streams) | 3,432,263 | 22.7 s (20.7 s), 0.41 GB | 20.9 s, 0.47 GB | 14 |
+| Crafted, four pages of 63 MiB of `0 0 0 rg ` | `output-limit` | 22.1 s, 0.40 GB | 21.4 s, 0.00 GB | 4 |
+| Crafted, one page of 64 MiB less 4 bytes of `0 0 0 rg ` (179 MiB once edited) | 455,468 | 33.3 s (9.5 s), 0.61 GB | 19.9 s, 0.00 GB | 5 |
+
+Where the time goes (27 Nov 2026): `qpdf --check` alone takes 51.7 s on the original `--scans` file (it decodes every JPG; `--decode-level` does not change it) and 34.2 s on the original `--vector` file (it reads every page's drawing), so most of those two jobs is the check every writing tool runs. One 60 MiB vector page takes about 1.7 s to decode in the content reader, 3.5 s to edit and 4.1 s to deflate at level 9 in fflate. The `--vector` file's pages are 60 MiB decoded by construction, near the 64 MiB a page may decode to; no real map or plan was at hand. The `--vector` and `--scans` files pass or come near the design's one-minute budget for a 100 MB file, mostly in `--check` (design decision 7, "As built").
+
+**qpdf instances:** two for the plain copy and one for reading the pages, one per raw batch of drawing streams and colour profiles (at most 2,000 ids or 32 MB of stated length; a stream over 32 MB alone), and one writer only when a file is written. On the 20,000-page file with its own streams: 10 batches, 14 instances, each made in about 9 ms in Node, with the plain copy (5.8 MB) written into each.
+
 ### Content reader (`src/engines/content.ts`, no tool yet)
 
 Each file was put through the real plain copy (`plainCopy`, the encrypted ones with `open-sesame`), then every page's content streams and every form XObject were read raw with `readRawStreams`, decoded with `decodeContent` and read with `editContent` and the test-only editor (`tests/unit/content.test.ts`, "every fixture through the reader"; a page's streams as `not-last` and `last`, forms `alone`, a shared stream once at its strictest place), with a budget that records. The test asserts each file's counts below, and fails for a fixture with none, so a new fixture must be given them. No run made a request, passed the 64 MiB cap or threw. From a run on 24 Nov 2026.
