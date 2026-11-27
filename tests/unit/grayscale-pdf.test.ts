@@ -522,9 +522,16 @@ describe('the stand-in names resolve wherever a rewritten operator is drawn', ()
     });
     const { output } = await grey(input);
     for (const page of await draw(output!)) expect(allNeutral(page)).toBe(true);
-    // The names were added once to the inherited dictionary, and to the page's own empty one.
-    const entries = await spaceEntries(output!);
-    expect(entries.filter((entry) => '/GreyRGB' in entry)).toHaveLength(2);
+    // The inherited dictionary and the page's own empty one each point at one shared dictionary holding the names.
+    const { objects } = await objectsOf(output!);
+    const shared = Object.entries(objects).filter(([, entry]) => {
+      const value = entry.value as Record<string, unknown> | undefined;
+      return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).join() === '/GreyRGB';
+    });
+    expect(shared).toHaveLength(1);
+    const ref = shared[0]![0].slice(4);
+    const pointing = Object.values(objects).filter((entry) => JSON.stringify(entry.value ?? entry.stream?.dict ?? null).includes(`"/ColorSpace":"${ref}"`));
+    expect(pointing).toHaveLength(2);
     await expectKept(input, output!);
   });
 
@@ -905,5 +912,124 @@ describe('progress, the update cap and fixed sentences', () => {
       expect(error).toBeInstanceOf(Error);
       expect(`${error!.message} ${error!.stack ?? ''}`).not.toMatch(/SECRET/);
     }
+  });
+});
+
+describe('stage 2 findings', () => {
+  it('no drawing stream decoded, an inheritor and a direct RGB named entry: no file, no error (C1)', async () => {
+    const input = pdfOf([
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',
+      { dict: '/Type /XObject /Subtype /Form /BBox [0 0 10 10]', data: latin1('0 g 0 0 1 1 re f') },
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents [] /Resources << /ColorSpace << /CS0 /DeviceRGB >> /ExtGState << /G1 << /SMask << /Type /Mask /S /Luminosity /G 3 0 R >> >> >> >> >>',
+    ]);
+    expect((await grey(input)).outputs).toEqual([]);
+  });
+
+  describe('an ICC CMYK named entry starts white, where the stand-in starts black (C2)', () => {
+    const cmykProfile = () => flated('/N 4', profileAs('CMYK'));
+
+    it('is followed by 0 0 0 0 scn and repointed when every stream that selects it was edited, so a shape painted with no colour set stays white', async () => {
+      const input = build({
+        objects: [cmykProfile()],
+        pages: [{ resources: '<< /ColorSpace << /C0 [/ICCBased 3 0 R] >> >>', contents: ['1 0 0 rg 0 0 200 200 re f /C0 cs 20 20 80 80 re f /C0 CS 0.1 0.2 0.3 0.4 SCN 4 w 0 0 m 200 200 l S'] }],
+      });
+      const { output } = await grey(input);
+      const text = (await contents(output!))[0]!.join('').replace(/\s+/g, ' ');
+      expect(text).toContain('/C0 cs 0 0 0 0 scn');
+      expect(text).toContain('/C0 CS 0 0 0 0 SCN');
+      const [entry] = (await spaceEntries(output!)).filter((each) => '/C0' in each);
+      expect(entry!['/C0']).toMatch(/^\d+ 0 R$/);
+      // The shape painted with the start: white, as the ICC CMYK space starts, not black as the stand-in does.
+      const [page] = await draw(output!);
+      // (80, 160) from the top is (80, 40) on the page: inside the shape, off the diagonal line.
+      for (const value of at(page!, 80, 160)) expect(value).toBeGreaterThanOrEqual(253);
+    });
+
+    it('is left in every dictionary when a stream that can select it is left', async () => {
+      const input = build({
+        objects: [cmykProfile()],
+        pages: [
+          { resources: '<< /ColorSpace << /C0 [/ICCBased 3 0 R] >> >>', contents: ['/C0 cs 20 20 80 80 re f 0.5 0.5 0.5rg'] },
+          { resources: '<< /ColorSpace << /C0 [/ICCBased 3 0 R] >> >>', contents: ['/C0 cs 20 20 80 80 re f 1 0 0 rg 100 100 20 20 re f'] },
+        ],
+      });
+      const { output } = await grey(input);
+      for (const entry of await spaceEntries(output!)) if ('/C0' in entry) expect(entry['/C0']).toEqual(['/ICCBased', expect.stringMatching(/ R$/)]);
+    });
+
+    it('a DeviceCMYK named entry, which starts black like the stand-in, is still repointed with no start written', async () => {
+      const input = build({ pages: [{ resources: '<< /ColorSpace << /C4 /DeviceCMYK >> >>', contents: ['/C4 cs 20 20 80 80 re f'] }] });
+      const { output } = await grey(input);
+      expect((await contents(output!))[0]!.join('').replace(/\s+/g, ' ')).not.toContain('scn');
+      const [entry] = (await spaceEntries(output!)).filter((each) => '/C4' in each);
+      expect(entry!['/C4']).toMatch(/^\d+ 0 R$/);
+    });
+  });
+
+  // Shapes that a quadratic walk turns into minutes or gigabytes: each runs in seconds once the work is linear. The
+  // timeouts are far above the linear time and far below the quadratic one.
+  it('12,000 pages sharing one indirect /Annots of 12,000 notes: each walked once (S1)', { timeout: 60_000 }, async () => {
+    const n = 12_000;
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>'];
+    const firstNote = 5;
+    const firstPage = firstNote + n;
+    objects.push(`<< /Type /Pages /Kids [${Array.from({ length: n }, (_, i) => `${firstPage + i} 0 R`).join(' ')}] /Count ${n} >>`);
+    objects.push({ dict: '', data: latin1('0 g 0 0 1 1 re f') });
+    objects.push(`[${Array.from({ length: n }, (_, i) => `${firstNote + i} 0 R`).join(' ')}]`);
+    for (let i = 0; i < n; i++) objects.push('<< /Type /Annot /Subtype /Square /Rect [0 0 1 1] /C [1 0 0] >>');
+    for (let i = 0; i < n; i++) objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Annots 4 0 R >>');
+    const { output } = await grey(pdfOf(objects));
+    expect(output).toBeDefined();
+  });
+
+  it('6,000 resources dictionaries sharing a soft mask form\'s /ColorSpace of 6,000 entries: one new dictionary, not a copy each (S2)', { timeout: 120_000 }, async () => {
+    const pages = 6_000;
+    const entries = Array.from({ length: 6_000 }, (_, i) => `/N${i} /DeviceGray`).join(' ');
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>'];
+    const firstPage = 6;
+    objects.push(`<< /Type /Pages /Kids [${Array.from({ length: pages }, (_, i) => `${firstPage + i} 0 R`).join(' ')}] /Count ${pages} >>`);
+    objects.push(`<< ${entries} >>`);
+    objects.push({ dict: '/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /ColorSpace 3 0 R >>', data: latin1('0.5 g 0 0 10 10 re f') });
+    objects.push({ dict: '', data: latin1('q /G1 gs Q 1 0 0 rg 0 0 1 1 re f') });
+    for (let i = 0; i < pages; i++) objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 5 0 R /Resources << /ColorSpace 3 0 R /ExtGState << /G1 << /SMask << /Type /Mask /S /Luminosity /G 4 0 R >> >> >> >> >>');
+    const { output } = await grey(pdfOf(objects));
+    const all = Object.values((await objectsOf(output!)).objects).map((entry) => entry.value);
+    const copies = all.filter((value) => value && typeof value === 'object' && !Array.isArray(value) && '/N0' in (value as object));
+    // The soft mask form's own dictionary, untouched, and one new one with its entries and the names.
+    expect(copies).toHaveLength(2);
+    expect(copies.filter((value) => '/GreyRGB' in (value as object))).toHaveLength(1);
+  });
+
+  it('12,000 forms with resources of their own sharing one /ColorSpace of 12,000 RGB entries: eligibility worked out once (S3)', { timeout: 60_000 }, async () => {
+    const forms = 12_000;
+    const entries = Array.from({ length: 12_000 }, (_, i) => `/N${i} /DeviceRGB`).join(' ');
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [4 0 R] /Count 1 >>', `<< ${entries} >>`];
+    // The forms are drawn from the page, so the plain copy (which drops objects nothing refers to) keeps them.
+    const xobjects = Array.from({ length: forms }, (_, i) => `/F${i} ${6 + i} 0 R`).join(' ');
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 5 0 R /Resources << /ColorSpace 3 0 R /XObject << ${xobjects} >> >> >>`);
+    objects.push({ dict: '', data: latin1('/N0 cs 0 0 1 1 re f /F0 Do') });
+    for (let i = 0; i < forms; i++) objects.push({ dict: '/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /ColorSpace 3 0 R >>', data: latin1(`/N${i} cs 0 0 1 1 re f`) });
+    const { output } = await grey(pdfOf(objects));
+    expect(output).toBeDefined();
+    // Every stream selecting a name was edited with its start, so the names were repointed.
+    const spaces = Object.values((await objectsOf(output!)).objects).map((entry) => entry.value as Record<string, unknown> | undefined).find((value) => value && typeof value === 'object' && '/N0' in value);
+    expect(spaces!['/N11999']).toMatch(/^\d+ 0 R$/);
+    const formText = Object.values((await objectsOf(output!)).objects).filter((entry) => entry.stream?.dict['/Subtype'] === '/Form').map((entry) => Buffer.from(entry.stream!.data ?? '', 'base64').toString('latin1'));
+    expect(formText).toHaveLength(forms);
+    expect(formText.every((text) => /cs 0 0 0 scn/.test(text))).toBe(true);
+  });
+
+  // Page i's contents are streams i and i + 1, so a doubt at the end reaches page 1 through every page. The old loop
+  // took one pass over every page per step (43.9 s here against 18.7 s, measured 27 Nov 2026); this checks the outcome.
+  it('20,000 pages chained by shared streams, the last stream in doubt: every page left', { timeout: 180_000 }, async () => {
+    const n = 20_000;
+    const firstStream = 3;
+    const firstPage = firstStream + n + 1;
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>'];
+    objects.push(`<< /Type /Pages /Kids [${Array.from({ length: n }, (_, i) => `${firstPage + i} 0 R`).join(' ')}] /Count ${n} >>`);
+    for (let i = 0; i <= n; i++) objects.push({ dict: '', data: latin1(i === n ? '0.5 0.5 0.5rg\n' : '1 0 0 rg 0 0 1 1 re f\n') });
+    for (let i = 0; i < n; i++) objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents [${firstStream + i} 0 R ${firstStream + i + 1} 0 R] >>`);
+    expect((await grey(pdfOf(objects))).outputs).toEqual([]);
   });
 });

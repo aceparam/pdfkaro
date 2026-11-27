@@ -28,10 +28,9 @@ const marked = 'Qz7 pw#%@ Kv4';
 const outputLimitSentence = 'The new file would be far larger than expected, so it was not made. The file may be damaged. Try another copy of it.';
 const noneHeading = 'Nothing in this file was turned grey.';
 const noneAdvice =
-  'No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.';
+  'No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.';
 const resultNotes = [
-  'Text, shapes and pictures now show in grey, and print in grey on office printers. The text can still be searched. Spot colours, Lab colours, JPEG 2000 pictures and a few other kinds named below the tool stay in colour.',
-  'The original colours are still stored in the file, so programs that take pictures out of it, or check a file for colour, may still find colour. The file stays about the same size; this tool does not make it smaller (Compress PDF does).',
+  "Pages now show in grey, and print in grey on office printers. The text can still be searched. The colours in the pages' drawing and pictures are still stored in the file, and it stays about the same size. A few kinds of colour, such as spot colours, are left as they are; the questions below name them.",
   "Links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
 ];
 const pageTooLarge = 'Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.';
@@ -434,11 +433,12 @@ test.describe('the words below the tool', () => {
       'Is my file uploaded?',
       'Can I still search and copy the text?',
       'Will this make my file smaller?',
-      'It stays about the same size, because the original colours stay stored underneath.',
+      'It stays about the same size, because the colours in the pages’ drawing and pictures stay stored underneath.',
       'Are the colours really gone?',
       'a print shop’s tools may list three or four extra inks',
       'What stays in colour?',
-      'spot colours; Lab colours;',
+      'spot colours, Lab colours, JPEG 2000 pictures, colour emoji or other colour characters in fonts, and attached files',
+      'A few rarer kinds, and parts of a page that could not be read safely, are also left as they are.',
       'Why did it stop on one page?',
       'The page shows an error naming that page.',
       'report-grayscale.pdf',

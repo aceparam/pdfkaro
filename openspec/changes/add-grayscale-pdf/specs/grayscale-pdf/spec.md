@@ -143,6 +143,11 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 - **WHEN** a page fills a rectangle with `0 1 0 0 k`
 - **THEN** it reads `/GreyCMYK cs 0 1 0 0 scn` and is drawn as the grey 0.41
 
+#### Scenario: A named ICC CMYK space starts white
+
+- **WHEN** a stream selects a named ICC CMYK space by `cs` and paints with no colour set
+- **THEN** ` 0 0 0 0 scn` (the space's own start, white) is written after it, and the entry is repointed at the CMYK stand-in (which starts black) only when every stream that can select it was edited, otherwise it is left in every dictionary; a named `DeviceCMYK` entry, which starts black like the stand-in, is repointed with no start written
+
 #### Scenario: A CMYK picture
 
 - **WHEN** a page shows a CMYK picture, once as stored and once with `/Decode [1 0 1 0 1 0 1 0]`
@@ -160,7 +165,7 @@ The colours a reader draws notes, form fields and bookmarks with (`/C`, `/IC`, a
 #### Scenario: Counts are kept
 
 - **WHEN** a colour array has three numbers, or four
-- **THEN** three become three equal numbers, four become `0 0 0` and the black of the grey, each written with at most 4 decimals, and arrays of one or no number, or already neutral, are unchanged
+- **THEN** three become three equal numbers, four become `0 0 0` and the black of the grey, each written with at most 4 decimals, and arrays of one or no number, or already neutral with every number from 0 to 1, are unchanged (a neutral array outside 0 to 1 is clamped)
 
 #### Scenario: A highlight and a field
 
@@ -174,7 +179,7 @@ The colours a reader draws notes, form fields and bookmarks with (`/C`, `/IC`, a
 
 ### Requirement: What is left as it is
 
-The tool SHALL leave exactly as they were the kinds of colour it cannot convert safely and every drawing stream read with doubt. The result notes SHALL name the main kinds and say others are named below the tool, and the text below the tool SHALL name every kind in plain words. (SPEC.md: What we are building, honest about limits; CLAUDE.md: Owner decisions, 24 Nov 2026)
+The tool SHALL leave exactly as they were the kinds of colour it cannot convert safely and every drawing stream read with doubt. The first result note SHALL name spot colours and say the questions below name the others; the text below the tool SHALL name the kinds a visitor recognises and say that rarer kinds and parts not read safely are left too. (SPEC.md: What we are building, honest about limits; CLAUDE.md: Owner decisions, 24 Nov 2026)
 
 #### Scenario: The kinds left
 
@@ -199,7 +204,7 @@ The tool SHALL leave exactly as they were the kinds of colour it cannot convert 
 #### Scenario: The text below the tool names every kind
 
 - **WHEN** the result notes and the text below the tool are read
-- **THEN** the first note names spot colours, Lab colours and JPEG 2000 pictures and says a few other kinds named below the tool stay in colour, and the text below the tool names every kind in the scenarios above in plain words, with colour glyphs in fonts, XFA drawing and attached files
+- **THEN** the first note names spot colours and says the questions below name the others, and the text below the tool names spot colours, Lab colours, JPEG 2000 pictures, colour characters in fonts and attached files, and says that a few rarer kinds, and parts of a page that could not be read safely, are also left as they are (the full list of kinds is in the design, decision 3)
 
 ### Requirement: Drawing instructions are decoded within limits
 
@@ -271,12 +276,12 @@ The new file SHALL keep every page, its searchable text, links, form fields and 
 #### Scenario: What the page says
 
 - **WHEN** the result or the text below the tool is read
-- **THEN** it says that earlier saved versions are not kept, that a digital signature stops being valid, that the original colours stay stored in the file so programs that take pictures out or check a file for colour may still find colour, and that the file stays about the same size and this tool does not make it smaller (Compress PDF does)
+- **THEN** it says that earlier saved versions are not kept, that a digital signature stops being valid, that the colours in the pages' drawing and pictures stay stored in the file so programs that take pictures out or check a file for colour may still find colour, and that the file stays about the same size and this tool does not make it smaller (Compress PDF does, said below the tool)
 
 #### Scenario: Print shops
 
 - **WHEN** the result notes or the text below the tool speak of printing
-- **THEN** they claim grey on screens and office printers only (the first note reads "Text, shapes and pictures now show in grey, and print in grey on office printers. The text can still be searched.…"), and the text below the tool says a print shop's tools may list three or four extra inks
+- **THEN** they claim grey on screens and office printers only (the first note reads "Pages now show in grey, and print in grey on office printers. The text can still be searched.…"), and the text below the tool says a print shop's tools may list three or four extra inks
 
 #### Scenario: A file with bookmarks, a link and an attachment
 
@@ -295,7 +300,7 @@ When nothing in the file would be turned grey (a `/Thumb`, a picture reached onl
 #### Scenario: The grey-only test file
 
 - **WHEN** `grey-only.pdf`, drawn only in grey with a page `/Group /CS /DeviceRGB`, an RGB output intent and a page whose stored thumbnail is an RGB picture, is converted
-- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures."
+- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures."
 
 ### Requirement: Working, done and failed
 
@@ -365,7 +370,7 @@ The whole flow SHALL work with a keyboard alone and with a screen reader. (SPEC.
 
 ### Requirement: Page text and the Privacy draft
 
-The text below the tool SHALL be 250 to 500 words of steps and real questions, marked as a draft for the owner, with nothing from "Banned patterns". The Privacy page draft SHALL say that Grayscale PDF keeps the original colours in the new file. (SPEC.md: SEO, Every tool page; Look and feel; Privacy, limits and security, Whole site)
+The text below the tool SHALL be 250 to 500 words of steps and real questions, marked as a draft for the owner, with nothing from "Banned patterns". The Privacy page draft SHALL say that Grayscale PDF keeps the colours of the pages' drawing and pictures in the new file. (SPEC.md: SEO, Every tool page; Look and feel; Privacy, limits and security, Whole site)
 
 #### Scenario: The text is built
 
@@ -375,4 +380,4 @@ The text below the tool SHALL be 250 to 500 words of steps and real questions, m
 #### Scenario: The Privacy draft
 
 - **WHEN** `/privacy` is built
-- **THEN** it says Grayscale PDF shows colours in grey but keeps the original colours in the new file, and the privacy page test checks that sentence
+- **THEN** it says Grayscale PDF shows colours in grey but keeps the colours of the pages' drawing and pictures in the new file (notes', fields' and bookmarks' colour settings are replaced by grey), and the privacy page test checks that sentence

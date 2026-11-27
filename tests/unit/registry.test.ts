@@ -632,19 +632,19 @@ describe('Grayscale PDF', () => {
       noSmaller: {
         heading: 'Nothing in this file was turned grey.',
         advice:
-          'No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.',
+          'No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.',
       },
     });
     expect(tool.widget?.resultWas).toBeUndefined();
     const notes = tool.widget!.resultNotes;
-    expect(notes).toHaveLength(3);
+    expect(notes).toHaveLength(2);
     // What stays in colour, the colours kept underneath, the size, and the password.
-    expect(notes[0]).toMatch(/Spot colours, Lab colours, JPEG 2000 pictures and a few other kinds named below the tool stay in colour/);
+    expect(notes[0]).toMatch(/A few kinds of colour, such as spot colours, are left as they are; the questions below name them/);
     expect(notes[0]).toMatch(/The text can still be searched/);
-    expect(notes[1]).toMatch(/original colours are still stored in the file/);
-    expect(notes[1]).toMatch(/about the same size/);
-    expect(notes[2]).toMatch(/no password and no restrictions/);
-    expect(notes[2]).toMatch(/digital signature will no longer be valid/);
+    expect(notes[0]).toMatch(/colours in the pages' drawing and pictures are still stored in the file/);
+    expect(notes[0]).toMatch(/about the same size/);
+    expect(notes[1]).toMatch(/no password and no restrictions/);
+    expect(notes[1]).toMatch(/digital signature will no longer be valid/);
     const texts = [...notes, ...Object.values(tool.widget!.noSmaller!)];
     for (const text of texts) {
       expect(text).not.toContain('!');

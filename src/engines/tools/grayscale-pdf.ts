@@ -139,8 +139,13 @@ type Copies = Map<string, { root: unknown; stream: boolean }>;
 // ---------------------------------------------------------------------------
 // Reading drawing instructions.
 
-/** How the editor of one stream knows which names get the starting black. */
-type Eligible = (name: string) => boolean;
+/**
+ * Which names get a starting colour after `cs`, and which: `'rgb'` (three zeros, the start of DeviceRGB, CalRGB and
+ * ICC RGB) or `'cmyk'` (four zeros, the start of an ICC CMYK space, white, where the stand-in starts black).
+ */
+type Start = 'rgb' | 'cmyk';
+type Eligible = (name: string) => Start | undefined;
+const startText: Record<Start, string> = { rgb: '0 0 0', cmyk: '0 0 0 0' };
 /** What the edits of one stream used, set while it is edited (the same answers in both passes). */
 type Uses = { rgb: boolean; cmyk: boolean };
 
@@ -172,8 +177,9 @@ export function colourEditor(names: { rgb: string; cmyk: string }, eligible: Eli
           return { operator: ` ${set} `, counts: false };
         default: {
           // cs and CS: exactly one name.
-          if (run.count !== 1 || run.last[0]!.kind !== 'name') return 'doubt';
-          const name = nameValue(data, run.last[0]!);
+          const operand = run.last[0];
+          if (run.count !== 1 || operand === undefined || operand.kind !== 'name') return 'doubt';
+          const name = nameValue(data, operand);
           if (name === undefined) return 'doubt';
           if (name === '/DeviceRGB') {
             uses.rgb = true;
@@ -183,8 +189,10 @@ export function colourEditor(names: { rgb: string; cmyk: string }, eligible: Eli
             uses.cmyk = true;
             return { operands: ` ${names.cmyk} ` };
           }
-          // The starting black after a name whose RGB entry may be repointed; harmless if it is not.
-          if (eligible(name)) return { after: ` 0 0 0 ${set} `, counts: false };
+          // The original's starting colour after a name whose entry may be repointed; harmless if it is not, as it is
+          // that space's own start (ISO 32000-1 8.6.5 and 8.6.8).
+          const start = eligible(name);
+          if (start) return { after: ` ${startText[start]} ${set} `, counts: false };
           return null;
         }
       }
@@ -200,7 +208,9 @@ export function appearanceEditor(): Editor {
       const count = operator === 'rg' ? 3 : 4;
       if (run.count !== count || run.numbers !== count) return 'doubt';
       const values = run.last.map((operand) => numberValue(data, operand));
-      const grey = operator === 'rg' ? greyOfRgb(values[0]!, values[1]!, values[2]!) : greyOfCmyk(values[0]!, values[1]!, values[2]!, values[3]!);
+      if (values.length !== count) return 'doubt';
+      const [a = 0, b = 0, c = 0, d = 0] = values;
+      const grey = operator === 'rg' ? greyOfRgb(a, b, c) : greyOfCmyk(a, b, c, d);
       return { operands: ` ${writtenText(grey)} `, operator: ' g ' };
     },
   };
@@ -212,13 +222,13 @@ export function neutralColour(value: unknown): number[] | undefined {
   const numbers = value as number[];
   if (numbers.length === 3) {
     const [r, g, b] = numbers as [number, number, number];
-    if (r === g && g === b) return undefined;
+    if (r === g && g === b && r >= 0 && r <= 1) return undefined;
     const grey = written(greyOfRgb(r, g, b));
     return [grey, grey, grey];
   }
   if (numbers.length === 4) {
     const [c, m, y, k] = numbers as [number, number, number, number];
-    if (c === m && m === y) return undefined;
+    if (c === m && m === y && numbers.every((value) => value >= 0 && value <= 1)) return undefined;
     return [0, 0, 0, written(1 - greyOfCmyk(c, m, y, k))];
   }
   return undefined;
@@ -245,7 +255,8 @@ function stringBytes(value: unknown): Uint8Array | undefined {
 
 /** An edited /DA as qpdf's JSON string: the spaces the edit added folded when it holds no string or comment. */
 function daString(bytes: Uint8Array): string {
-  let text = String.fromCharCode(...bytes);
+  let text = '';
+  for (let start = 0; start < bytes.length; start += 0x8000) text += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
   if (!/[(<%]/.test(text)) text = text.replace(/[ \t\r\n\f]+/g, ' ').trim();
   return `u:${text}`;
 }
@@ -284,7 +295,7 @@ type Outcome = { status: 'left' | 'unchanged' } | { status: 'edited'; data: Uint
 type Changes = {
   max: number;
   limit: number;
-  /** What the deflated streams and the edited strings already took of the limit. */
+  /** What the deflated streams' data files take of the limit; the update's text is counted again as it is written. */
   used: number;
   /** New objects: stand-ins, their functions, and indexed and pattern arrays. */
   created: { id: string; entry: unknown }[];
@@ -333,11 +344,14 @@ async function changesFor(
     if (spent > budget) throw new OutputLimit();
   };
   let made = 0;
-  /** The update's own size, counted as each piece is built. */
+  let dataBytes = 0;
+  /** The update's own size, counted as each piece is built (a working copy, a new object, a string, a stream's data). */
   const count = (bytes: number) => {
     made += bytes;
     if (made > limit) throw new OutputLimit();
   };
+  /** A value's size as JSON, as it will be written. */
+  const jsonSize = (value: unknown) => JSON.stringify(value)?.length ?? 4;
 
   const rootOf = (id: string): unknown => {
     const entry = objects.get(id);
@@ -374,7 +388,9 @@ async function changesFor(
   const copyOf = (id: string): unknown => {
     let copy = copies.get(id);
     if (!copy) {
-      copy = { root: structuredClone(rootOf(id)), stream: isStream(id) };
+      const root = rootOf(id);
+      count(jsonSize(root));
+      copy = { root: structuredClone(root), stream: isStream(id) };
       copies.set(id, copy);
     }
     return copy.root;
@@ -560,12 +576,21 @@ async function changesFor(
     if (info.inherits) inheritors.add(id);
     if (info.own) stack.push({ resources: info.own, depth: depth + 1 });
   };
+  // An indirect /Annots array, or an annotation object, shared by many pages is walked once, so the work stays linear.
+  const walkedAnnotLists = new Set<string>();
+  const walkedAnnotations = new Set<string>();
   const walkFrom = (start: string | undefined, page: number | undefined, annots: unknown) => {
     const stack: { resources: string | undefined; depth: number }[] = [{ resources: start, depth: 0 }];
     // A page's annotations' appearance streams.
-    const list = deref(annots);
+    const fresh = !isRef(annots) || !walkedAnnotLists.has(annots);
+    if (isRef(annots)) walkedAnnotLists.add(annots);
+    const list = fresh ? deref(annots) : undefined;
     if (Array.isArray(list)) {
       for (const item of list) {
+        if (isRef(item)) {
+          if (walkedAnnotations.has(item)) continue;
+          walkedAnnotations.add(item);
+        }
         const annotation = dictAt(item);
         const ap = annotation ? dictAt(annotation['/AP']) : undefined;
         if (!ap) continue;
@@ -732,38 +757,58 @@ async function changesFor(
       contentPages.get(id)!.push(index);
     }
   });
-  // Eligibility from dictionaries only (decision 3), known once profiles are read.
-  let eligibleInherited: Set<string> | undefined;
-  const ownEligible = new Map<string, Set<string>>();
+  // Eligibility from dictionaries only (decision 3), known once profiles are read: per colour space dictionary, not
+  // per resources dictionary, so many dictionaries sharing one /ColorSpace cost one pass over its entries.
+  /** The starting colour a direct entry needs once repointed: RGB (three zeros) or ICC CMYK (four zeros); else none. */
+  const startOf = (value: unknown): Start | undefined => {
+    const sorted = sort(value);
+    if (sorted === null || sorted.kind !== 'direct') return undefined;
+    if (sorted.base === 'rgb') return 'rgb';
+    const space = deref(value);
+    return Array.isArray(space) && space[0] === '/ICCBased' ? 'cmyk' : undefined;
+  };
+  const spacesStarts = new Map<string, Map<string, Start>>();
+  /** A colour space dictionary's entries that need a starting colour, once per dictionary. */
+  const startsIn = (spaces: Where): Map<string, Start> => {
+    const key = placeKey(spaces);
+    let starts = spacesStarts.get(key);
+    if (!starts) {
+      starts = new Map();
+      for (const [name, value] of Object.entries(current(spaces) as Dict)) {
+        if (name.startsWith('/Default')) continue;
+        const start = startOf(value);
+        if (start) starts.set(name, start);
+      }
+      spacesStarts.set(key, starts);
+    }
+    return starts;
+  };
+  let inherited: Map<string, Start> | undefined;
+  /** For a stream with no resources of its own: names every owned dictionary holding them gives the same start. */
+  const inheritedStarts = (): Map<string, Start> => {
+    if (inherited) return inherited;
+    const agreed = new Map<string, Start | null>();
+    const seen = new Set<string>();
+    for (const each of resources.values()) {
+      if (!each.owned || !each.spaces) continue;
+      const key = placeKey(each.spaces);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const starts = startsIn(each.spaces);
+      for (const name of Object.keys(current(each.spaces) as Dict)) {
+        if (name.startsWith('/Default')) continue;
+        const start = starts.get(name) ?? null;
+        const before = agreed.get(name);
+        agreed.set(name, before === undefined ? start : before === start ? start : null);
+      }
+    }
+    inherited = new Map([...agreed].filter((entry): entry is [string, Start] => entry[1] !== null));
+    return inherited;
+  };
   const eligibleFor = (drawing: Drawing): Eligible => {
-    if (!eligibleInherited) {
-      const holds = new Map<string, boolean>();
-      for (const each of resources.values()) {
-        if (!each.owned || !each.spaces) continue;
-        for (const [name, value] of Object.entries(current(each.spaces) as Dict)) {
-          const sorted = sort(value);
-          const rgb = sorted !== null && sorted.kind === 'direct' && sorted.base === 'rgb';
-          holds.set(name, (holds.get(name) ?? true) && rgb);
-        }
-      }
-      eligibleInherited = new Set([...holds].filter(([, all]) => all).map(([name]) => name));
-    }
-    if (drawing.own === undefined) {
-      const set = eligibleInherited;
-      return (name) => set.has(name);
-    }
-    let set = ownEligible.get(drawing.own);
-    if (!set) {
-      set = new Set();
-      const spaces = resources.get(drawing.own)!.spaces;
-      if (spaces) for (const [name, value] of Object.entries(current(spaces) as Dict)) {
-        const sorted = sort(value);
-        if (sorted !== null && sorted.kind === 'direct' && sorted.base === 'rgb') set.add(name);
-      }
-      ownEligible.set(drawing.own, set);
-    }
-    const own = set;
-    return (name) => own.has(name);
+    const spaces = drawing.own === undefined ? undefined : resources.get(drawing.own)!.spaces;
+    const starts = drawing.own === undefined ? inheritedStarts() : spaces ? startsIn(spaces) : new Map<string, Start>();
+    return (name) => starts.get(name);
   };
 
   /** One drawing stream decoded, read and edited (decision 4); a stream or a page past the cap stops the job. */
@@ -786,6 +831,7 @@ async function changesFor(
     if (result.kind === 'unchanged') return { status: 'unchanged' };
     const data = zlibDeflate(result.data, Deflate);
     count(data.length);
+    dataBytes += data.length;
     return { status: 'edited', data, counts: result.edits > 0, uses };
   };
   let next = 0;
@@ -820,16 +866,19 @@ async function changesFor(
   for (const drawing of order) if (!outcomes.has(drawing.id)) outcomes.set(drawing.id, { status: 'left' });
   for (const drawing of drawings.values()) if (drawing.left) outcomes.set(drawing.id, { status: 'left' });
 
-  // Every content stream of a page is left when any is, and a shared one for every page that uses it.
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (const page of read.pages) {
-      if (!page.contents.some((id) => outcomes.get(id)?.status === 'left')) continue;
-      for (const id of page.contents) {
-        if (outcomes.get(id)?.status !== 'left') {
-          outcomes.set(id, { status: 'left' });
-          changed = true;
-        }
+  // Every content stream of a page is left when any is, and a shared one for every page that uses it: a worklist
+  // over streams and pages, each page taken once, so the work is linear however the pages share streams.
+  const pagesTaken = new Set<number>();
+  const work = [...contentPages.keys()].filter((id) => outcomes.get(id)?.status === 'left');
+  while (work.length > 0) {
+    const id = work.pop()!;
+    for (const index of contentPages.get(id) ?? []) {
+      if (pagesTaken.has(index)) continue;
+      pagesTaken.add(index);
+      for (const other of read.pages[index]!.contents) {
+        if (outcomes.get(other)?.status === 'left') continue;
+        outcomes.set(other, { status: 'left' });
+        work.push(other);
       }
     }
   }
@@ -838,6 +887,11 @@ async function changesFor(
   // ---- The stand-ins and the new arrays, made only when used.
   let nextId = read.max + 1;
   const created: { id: string; entry: unknown }[] = [];
+  /** A new object, counted against the update's size as it is made. */
+  const create = (id: string, entry: unknown) => {
+    count(id.length + jsonSize(entry));
+    created.push({ id, entry });
+  };
   const standIns: Partial<Record<Base, string>> = {};
   const standIn = (base: Base): string => {
     let id = standIns[base];
@@ -846,8 +900,8 @@ async function changesFor(
       id = `${nextId++} 0 R`;
       const rgb = base === 'rgb';
       const program = new TextEncoder().encode(rgb ? rgbFunction : cmykFunction);
-      created.push({ id: functionId, entry: { stream: { dict: { '/FunctionType': 4, '/Domain': rgb ? [0, 1, 0, 1, 0, 1] : [0, 1, 0, 1, 0, 1, 0, 1], '/Range': [0, 1] }, data: base64(program) } } });
-      created.push({ id, entry: { value: ['/DeviceN', rgb ? ['/GreyR', '/GreyG', '/GreyB'] : ['/GreyC', '/GreyM', '/GreyY', '/GreyK'], '/DeviceGray', functionId] } });
+      create(functionId, { stream: { dict: { '/FunctionType': 4, '/Domain': rgb ? [0, 1, 0, 1, 0, 1] : [0, 1, 0, 1, 0, 1, 0, 1], '/Range': [0, 1] }, data: base64(program) } });
+      create(id, { value: ['/DeviceN', rgb ? ['/GreyR', '/GreyG', '/GreyB'] : ['/GreyC', '/GreyM', '/GreyY', '/GreyK'], '/DeviceGray', functionId] });
       standIns[base] = id;
     }
     return id;
@@ -861,7 +915,7 @@ async function changesFor(
     if (!id) {
       id = `${nextId++} 0 R`;
       const array = sorted.kind === 'indexed' ? ['/Indexed', base, sorted.array[2], sorted.array[3]] : ['/Pattern', base];
-      created.push({ id, entry: { value: array } });
+      create(id, { value: array });
       arrays.set(sorted.key, id);
     }
     return id;
@@ -876,7 +930,10 @@ async function changesFor(
     turned = true;
   }
 
-  // ---- Named entries (decision 3, step 5): CMYK, indexed and pattern always; direct RGB only when safe.
+  // ---- Named entries (decision 3, step 5): DeviceCMYK, indexed and pattern always; a direct entry whose start
+  // differs from the stand-in's (RGB, and ICC CMYK, which starts white) only when every stream that can select it
+  // was edited. inheritorsLeft is file-wide: one left stream with no resources of its own blocks such names in
+  // every dictionary, which is over-cautious and safe.
   const inheritorsLeft = [...inheritors].some((id) => outcomes.get(id)?.status === 'left' || !outcomes.has(id));
   const streamsOwning = new Map<string, string[]>();
   for (const drawing of drawings.values()) {
@@ -890,50 +947,67 @@ async function changesFor(
     if (!streamsOwning.has(own)) streamsOwning.set(own, []);
     streamsOwning.get(own)!.push(...page.contents);
   });
-  // A name's RGB entries are repointed only if every dictionary holding one allows it, so a left stream never
-  // selects a white-starting stand-in by that name.
-  const rgbNameBlocked = new Set<string>();
-  const rgbEntries: { spaces: Where; name: string }[] = [];
+  const inheritedNow = inheritedStarts();
+  // A name's entries needing a start are repointed only if every dictionary holding one allows it, so a left stream
+  // never selects a stand-in that starts differently by that name.
+  const startBlocked = new Set<string>();
+  const startEntries: { spaces: Where; name: string }[] = [];
   for (const [spacesKey, owner] of spaceOwners) {
-    const locked = lockedSpaces.has(spacesKey);
-    const rds = [...owner.resources].map((key) => resources.get(key)!);
-    const owned = [...owner.resources].filter((key) => resources.get(key)!.owned);
+    const keys = [...owner.resources];
+    const locked = lockedSpaces.has(spacesKey) || keys.some((key) => resources.get(key)!.locked);
+    const owned = keys.filter((key) => resources.get(key)!.owned);
+    // Once per colour space dictionary, before its names.
+    const streamsOk = owned.every((key) => (streamsOwning.get(key) ?? []).every((id) => outcomes.get(id)?.status !== 'left'));
+    const starts = startsIn(owner.place);
     for (const [name, value] of Object.entries(current(owner.place) as Dict)) {
       if (name.startsWith('/Default')) continue;
       const sorted = sort(value);
       if (!sorted) continue;
-      if (sorted.kind !== 'direct' || sorted.base !== 'rgb') {
+      const start = starts.get(name);
+      if (!start) {
         if (locked) continue;
         writable(owner.place)![name] = replacement(sorted);
         turned = true;
         continue;
       }
-      if (locked || rds.some((each) => each.locked)) {
-        rgbNameBlocked.add(name);
+      if (locked) {
+        startBlocked.add(name);
         continue;
       }
       if (owned.length === 0) continue;
-      const streamsOk = owned.every((key) => (streamsOwning.get(key) ?? []).every((id) => outcomes.get(id)?.status !== 'left'));
-      const inheritOk = inheritors.size === 0 || (eligibleInherited!.has(name) && !inheritorsLeft);
-      if (!streamsOk || !inheritOk) rgbNameBlocked.add(name);
-      else rgbEntries.push({ spaces: owner.place, name });
+      const inheritOk = inheritors.size === 0 || (inheritedNow.get(name) === start && !inheritorsLeft);
+      if (!streamsOk || !inheritOk) startBlocked.add(name);
+      else startEntries.push({ spaces: owner.place, name });
     }
   }
-  for (const { spaces, name } of rgbEntries) {
-    if (rgbNameBlocked.has(name)) continue;
-    writable(spaces)![name] = standIn('rgb');
+  for (const { spaces, name } of startEntries) {
+    if (startBlocked.has(name)) continue;
+    const sorted = sort((current(spaces) as Dict)[name]);
+    if (!sorted) continue;
+    writable(spaces)![name] = replacement(sorted);
     turned = true;
   }
 
   // ---- Colours readers draw notes, fields and bookmarks with, and /DA strings.
   const visitedAnnotations = new Set<string>();
   const annotationPlaces: Where[] = [...annotations];
+  // A shared indirect /Annots array is listed once, and an annotation reached through many is listed once.
+  const listedAnnotLists = new Set<string>();
+  const listedAnnotations = new Set<string>(annotations.filter((place) => place.path.length === 0).map((place) => place.owner));
   for (const page of read.pages) {
     const annots = page.dict['/Annots'];
+    if (isRef(annots)) {
+      if (listedAnnotLists.has(annots)) continue;
+      listedAnnotLists.add(annots);
+    }
     const listPlace = placeOf({ owner: page.id, path: [] }, '/Annots', annots);
     const list = listPlace ? current(listPlace) : undefined;
     if (!listPlace || !Array.isArray(list)) continue;
     list.forEach((item, index) => {
+      if (isRef(item)) {
+        if (listedAnnotations.has(item)) return;
+        listedAnnotations.add(item);
+      }
       const place = placeOf(listPlace, index, item);
       if (place && isDict(current(place))) annotationPlaces.push(place);
     });
@@ -1034,6 +1108,18 @@ async function changesFor(
     const targets: Where[] = [];
     for (const each of resources.values()) if (each.owned && !each.locked) targets.push(each.place);
     targets.push(...defaultResources);
+    // A dictionary holding only the names, made once and shared by every target with no /ColorSpace and every page
+    // with no resources; and one new dictionary per distinct /ColorSpace shared with a soft-mask-only form (its
+    // entries and the names), never a copy per target.
+    let namesOnly: string | undefined;
+    const namesDictionary = () => {
+      if (!namesOnly) {
+        namesOnly = `${nextId++} 0 R`;
+        create(namesOnly, { value: Object.fromEntries(additions) });
+      }
+      return namesOnly;
+    };
+    const lockedCopies = new Map<string, string>();
     const done = new Set<string>();
     for (const place of targets) {
       const key = placeKey(place);
@@ -1041,20 +1127,29 @@ async function changesFor(
       done.add(key);
       const dict = current(place) as Dict;
       const spaces = dict['/ColorSpace'] === undefined ? undefined : placeOf(place, '/ColorSpace', dict['/ColorSpace']);
-      if (spaces && isDict(current(spaces)) && !lockedSpaces.has(placeKey(spaces))) {
+      const spacesDict = spaces ? current(spaces) : undefined;
+      if (spaces && isDict(spacesDict) && !lockedSpaces.has(placeKey(spaces))) {
         const target = writable(spaces)!;
         for (const [name, id] of additions) target[name] = id;
+      } else if (spaces && isDict(spacesDict)) {
+        const spacesKey = placeKey(spaces);
+        let id = lockedCopies.get(spacesKey);
+        if (!id) {
+          id = `${nextId++} 0 R`;
+          create(id, { value: { ...structuredClone(spacesDict), ...Object.fromEntries(additions) } });
+          lockedCopies.set(spacesKey, id);
+        }
+        writable(place)!['/ColorSpace'] = id;
       } else {
-        // No /ColorSpace, or one shared with a soft-mask-only form: a dictionary of its own, its entries kept.
-        const own: Dict = { ...(spaces && isDict(current(spaces)) ? (current(spaces) as Dict) : {}) };
-        for (const [name, id] of additions) own[name] = id;
-        writable(place)!['/ColorSpace'] = own;
+        writable(place)!['/ColorSpace'] = namesDictionary();
       }
     }
     for (const [index, page] of read.pages.entries()) {
       if (pageResourceKeys[index] !== undefined) continue;
       const dict = writable({ owner: page.id, path: [] })!;
-      dict['/Resources'] = { '/ColorSpace': Object.fromEntries(additions) };
+      const added = { '/ColorSpace': namesDictionary() };
+      count(jsonSize(added));
+      dict['/Resources'] = added;
     }
   }
 
@@ -1068,7 +1163,7 @@ async function changesFor(
     stream.dict = dict;
     copies.delete(id);
   }
-  return { max: nextId - 1, limit, used: made, created, copies, streams };
+  return { max: nextId - 1, limit, used: dataBytes, created, copies, streams };
 }
 
 /** The engine, with the limits given; tests pass small ones. */

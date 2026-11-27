@@ -20,15 +20,15 @@ Yes. The text is not turned into a picture, so you can still search, select and 
 
 ### Will this make my file smaller?
 
-No. It stays about the same size, because the original colours stay stored underneath. To make it smaller, use Compress PDF, or compress it to a target size.
+No. It stays about the same size, because the colours in the pages’ drawing and pictures stay stored underneath. To make it smaller, use Compress PDF, or compress it to a target size.
 
 ### Are the colours really gone?
 
-They show grey on screens and print grey on office printers. But the colour values are still in the file. A program that takes pictures out of a PDF may get them in colour, a program that checks a file for colour may find it, and a print shop’s tools may list three or four extra inks.
+They show grey on screens and print grey on office printers. But the colours in the pages’ drawing and pictures are still in the file. A program that takes pictures out of a PDF may get them in colour, a program that checks a file for colour may find it, and a print shop’s tools may list three or four extra inks.
 
 ### What stays in colour?
 
-The grey is the PDF standard’s mix of red, green and blue, and colours made for printing (CMYK) and colour-managed colours come out close to how they looked. These are left in colour: spot colours; Lab colours; colours with unusual colour profiles; JPEG 2000 pictures; small pictures stored inside a page’s drawing instructions; soft masks, which set how see-through something is; some notes’ looks and patterns that carry no settings of their own; parts of a page that could not be read with certainty; colours in notes’ text styles or set by scripts; drawing in older XFA forms; colour glyphs in fonts; and attached files.
+Colours turn into a grey of about the same lightness. Colours made for printing (CMYK) turn grey too. These are left in colour: spot colours, Lab colours, JPEG 2000 pictures, colour emoji or other colour characters in fonts, and attached files. A few rarer kinds, and parts of a page that could not be read safely, are also left as they are.
 
 ### Do links, forms and bookmarks still work?
 

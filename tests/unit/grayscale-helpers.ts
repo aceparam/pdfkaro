@@ -233,8 +233,12 @@ export function canonical(text: string, names: { rgb: string; cmyk: string } = {
   for (let index = 0; index < out.length; index++) {
     dropped.push(out[index]!);
     const select = out[index];
-    // Exactly three zeros and the operator: a CMYK black has four numbers, so out[index + 4] is not the operator.
-    if ((select === 'cs' || select === 'CS') && out[index + 1] === '0' && out[index + 2] === '0' && out[index + 3] === '0' && out[index + 4] === (select === 'cs' ? 'scn' : 'SCN')) index += 4;
+    // Three zeros and the operator (RGB's start), or four (an ICC CMYK space's start), right after the selection.
+    const operator = select === 'cs' ? 'scn' : 'SCN';
+    if (select === 'cs' || select === 'CS') {
+      if (out[index + 1] === '0' && out[index + 2] === '0' && out[index + 3] === '0' && out[index + 4] === operator) index += 4;
+      else if (out[index + 1] === '0' && out[index + 2] === '0' && out[index + 3] === '0' && out[index + 4] === '0' && out[index + 5] === operator) index += 5;
+    }
   }
   return dropped;
 }

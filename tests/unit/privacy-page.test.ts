@@ -163,13 +163,13 @@ describe('the Privacy page', () => {
   });
 
   describe('Grayscale PDF guard', () => {
-    it('says that Grayscale PDF keeps the original colours in the new file, as the tool page and its result say', () => {
-      const sentence = 'Grayscale PDF shows colours in grey but keeps the original colours in the new file, where a program can still read them.';
+    it('says that Grayscale PDF keeps the colours of the pages’ drawing and pictures in the new file, as the tool page and its result say', () => {
+      const sentence = 'Grayscale PDF shows colours in grey but keeps the colours of the pages’ drawing and pictures in the new file, where a program can still read them.';
       expect(section('What happens to your file').text).toContain(sentence);
       const toolText = readFileSync(new URL('../../src/content/tools/grayscale-pdf.md', import.meta.url), 'utf8');
-      for (const words of ['the original colours stay stored underneath', 'the colour values are still in the file']) expect(toolText).toContain(words);
+      for (const words of ['the colours in the pages’ drawing and pictures stay stored underneath', 'the colours in the pages’ drawing and pictures are still in the file']) expect(toolText).toContain(words);
       const notes = registryTools.find((tool) => tool.id === 'grayscale-pdf')!.widget!.resultNotes.join(' ');
-      expect(notes).toContain('The original colours are still stored in the file');
+      expect(notes).toContain("The colours in the pages' drawing and pictures are still stored in the file");
     });
   });
 

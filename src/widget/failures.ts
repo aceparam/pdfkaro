@@ -29,8 +29,10 @@ export const unsafePageSentence = 'A page of this file could not be resized, so 
  * `PageTooLarge`, Grayscale PDF). A genuine dense map or drawing can reach it, so it names deleting the page or
  * splitting the file, not damage. The number is the only thing from the file in it.
  */
-export function pageTooLargeSentence(page: number): string {
-  return `Page ${number(page)} has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.`;
+export function pageTooLargeSentence(page?: number): string {
+  // One template: with no page (never expected), the same words name "A page".
+  const which = page !== undefined && Number.isSafeInteger(page) && page >= 1 ? `Page ${number(page)}` : 'A page';
+  return `${which} has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.`;
 }
 
 /** What the page says when the engine refuses a text, for a tool with no words of its own for it. */
@@ -69,11 +71,7 @@ export function failureSentence(
   if (kind === 'output-limit') return outputLimitSentence;
   if (kind === 'unsafe-page') return unsafePageSentence;
   // The worker sends the page with this kind; without one (never expected), the sentence names no page.
-  if (kind === 'page-too-large') {
-    return page !== null && Number.isSafeInteger(page) && page >= 1
-      ? pageTooLargeSentence(page)
-      : 'A page has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.';
-  }
+  if (kind === 'page-too-large') return pageTooLargeSentence(page ?? undefined);
   // The page should never send a text the engine refuses; if the two disagree, the first shown text's own words, else the shared ones.
   // A hidden text is never sent, so its words never apply (shownOptions decides what is shown, in one place).
   if (kind === 'text-refused') {
