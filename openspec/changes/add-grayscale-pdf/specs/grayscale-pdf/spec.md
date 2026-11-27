@@ -203,12 +203,17 @@ The tool SHALL leave exactly as they were the kinds of colour it cannot convert 
 
 ### Requirement: Drawing instructions are decoded within limits
 
-Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A stream reached from a page, or a page's content, decoding past 64 MiB SHALL stop the job with `page-too-large`; one no page reaches SHALL be left; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
+Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters measured to reach it after `plainCopy`, others left. A stream reached from a page, or a page's content, decoding past 64 MiB SHALL stop the job with `page-too-large`; one no page reaches SHALL be left; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
 
 #### Scenario: A filter the reader does not decode
 
-- **WHEN** a drawing stream reaches the reader with a filter outside the measured set
+- **WHEN** a drawing stream reaches the reader with a filter outside the measured set (a lone Flate, a lone RunLength, or a chain of two to four steps holding a RunLength)
 - **THEN** that stream is left as it is
+
+#### Scenario: A key readers read differently
+
+- **WHEN** a drawing stream's dictionary holds `/F`, `/FFilter`, `/FDecodeParms` or `/DP`, or its `/DecodeParms` holds `/BPC` or does not match its filter's shape
+- **THEN** that stream is left as it is, and the colour space entries it can draw with are decided as for any left stream
 
 #### Scenario: A decode bomb
 
@@ -236,17 +241,22 @@ Streams SHALL be read in two bounded passes by strict rules, building no token l
 
 #### Scenario: What is doubt
 
-- **WHEN** a stream holds a glued token such as `0.5 0.5 0.5rg`, a control or non-ASCII byte outside a string or name, braces, an unbalanced string, array or dictionary, an operator inside an array or dictionary, `ID` or `EI` outside `BI`, unbalanced `BX` and `EX`, or a wrong operand count for an edited operator
+- **WHEN** a stream holds a glued token such as `0.5 0.5 0.5rg`, a control or non-ASCII byte outside a string, a name with a byte outside 0x21 to 0x7E, braces, a stray `)` or `>`, an unbalanced string, array or dictionary, a dictionary key with no value, a number over 32 bytes, an operator inside an array or dictionary, an unknown operator (between `BX` and `EX` too), `ID` or `EI` outside `BI`, unbalanced `BX` and `EX`, or a wrong operand count for an edited operator
 - **THEN** that stream is byte for byte as before
 
 #### Scenario: Streams in sequence
 
 - **WHEN** a page's content streams split a token, a string or a comment between two streams, or a stream ends with operands waiting
-- **THEN** every content stream of that page is byte for byte as before
+- **THEN** every content stream of that page is byte for byte as before, and a stream shared with another page is left there too
+
+#### Scenario: A stream used in two places
+
+- **WHEN** one content stream is a page's first of two streams and another page's only stream
+- **THEN** it is read once, by the stricter rules of a stream that is not the last, and its verdict holds for both pages
 
 #### Scenario: An inline picture with an unclear end
 
-- **WHEN** a stream holds an inline picture whose data contains `EI` followed by whitespace, a delimiter or its end before its real end (such as `xEI `), or ASCII85 data with a stray `~`
+- **WHEN** a stream holds an inline picture whose data contains `EI` followed by whitespace, a delimiter or its end before its real end (such as `xEI `), ASCII85 data with a stray `~`, a real `EI` followed by a tab, a form feed, a NUL or `/`, data ending in `E` or `EI`, or a look-ahead PDF.js would not accept
 - **THEN** that stream is byte for byte as before
 
 #### Scenario: Only the edits change
@@ -318,7 +328,7 @@ No request SHALL carry the file's contents, its name or its password, and no pag
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test converts `qz7report.pdf`, which needs a password and holds `SECRET-` strings in its text, a link, a destination, a bookmark and a field, and downloads the result
-- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist, with no PDF.js, pdf-lib, `shrink`, `picture` or other engine chunk in the job
+- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist, the job's `content` and `zlib` chunks included, with no PDF.js, pdf-lib, `shrink`, `picture` or other engine chunk in the job
 
 ### Requirement: The same requests for every file
 
@@ -333,6 +343,11 @@ Which of the site's own files the page fetches SHALL depend on the tool only: th
 
 - **WHEN** the pull request is opened
 - **THEN** it says that a job makes one qpdf instance per raw batch (at most 2,000 drawing streams and colour profiles, or 32 MB of their data) besides a fixed few, and a writer only when a file is written, so under the no-cache exception the number of WebAssembly requests depends on the file, with the count measured on the 20,000-page file
+
+#### Scenario: The shared zlib steps become their own file
+
+- **WHEN** the site is built with this tool
+- **THEN** the shared zlib steps are their own built file, `zlib-*.js`, named in the page-weight check, fetched by this tool's jobs and by Image to PDF, Sign PDF, Compress PDF and Compress to a target size wherever they fetched them before inside the picture reader, and the pull request names it
 
 ### Requirement: Keyboard and screen reader
 
