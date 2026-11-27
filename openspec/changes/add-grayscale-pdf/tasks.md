@@ -54,13 +54,13 @@ No dependency. No new component. **Before task 1, the content reader must be mer
 
 ## 8. Screenshots
 
-- [ ] 8.1 Take screenshots of `/grayscale-pdf` at 360px and 1280px, light, of: empty; file read; password field; working; result with its notes; nothing turned grey; failed. Dark, at 360px and 1280px: empty, file read, result. At 360px, 200% text: the result, with nothing overflowing sideways. Put them in `.github/pr-screenshots/grayscale/`. Verify by looking at each, and against "Banned patterns".
+- [x] 8.1 Take screenshots of `/grayscale-pdf` at 360px and 1280px, light, of: empty; file read; password field; working; result with its notes; nothing turned grey; failed. Dark, at 360px and 1280px: empty, file read, result. At 360px, 200% text: the result, with nothing overflowing sideways. Put them in `.github/pr-screenshots/grayscale/`. Verify by looking at each, and against "Banned patterns".
 
 ## 9. Checks and review
 
 - [x] 9.1 `LICENSES.md`: confirm no change is needed, as no dependency is added.
-- [ ] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, `check:csp`, `check:seo`, end-to-end tests, `npm audit` and `npm run spec`. Verify each passes.
-- [ ] 9.3 Write this tool's hand checks for issue #7 (`issue-7-hand-checks.md` in this change):
+- [x] 9.2 Run lint, the type check, unit tests, the build, `weigh`, `check:worker`, `check:base`, `check:csp`, `check:seo`, end-to-end tests, `npm audit` and `npm run spec`. Verify each passes.
+- [x] 9.3 Write this tool's hand checks for issue #7 (`issue-7-hand-checks.md` in this change):
   - results opened in Chrome, Firefox, Adobe Reader and macOS Preview, and printed on a black-and-white and a colour office printer: grey everywhere, text selectable, fields typed in grey;
   - text drawn after `cs` with no colour set, in Acrobat and Chrome: black, not white;
   - a form left unedited that inherits a repointed name and holds `sc`, and a stream left because of doubt, in Acrobat and Chrome;
