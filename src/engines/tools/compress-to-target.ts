@@ -34,11 +34,11 @@ import {
   statedLength,
   type Candidate,
   type DecodedJpeg,
-  type Fflate,
   type PictureDecoder,
 } from '../shrink';
 import type { JpegCanvasMaker } from '../thumbnail';
 import type { Engine, EngineModule, EngineTools, Inspector, Progress } from '../types';
+import type { Fflate } from '../zlib';
 import { acceptedTarget } from '../../widget/option-values';
 
 /** What this tool's reading and its job load, before any file is read: chosen by tool, never by a file (types.ts). */

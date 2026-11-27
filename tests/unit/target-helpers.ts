@@ -5,7 +5,7 @@
 import { deflateSync } from 'node:zlib';
 import { createCanvas } from '@napi-rs/canvas';
 import { walkJpeg } from '../../src/engines/picture';
-import { zlibDeflate } from '../../src/engines/shrink';
+import { zlibDeflate } from '../../src/engines/zlib';
 import type { JpegCanvasMaker } from '../../src/engines/thumbnail';
 import { Deflate } from 'fflate';
 

@@ -1151,7 +1151,9 @@ describe('reading the chosen picture before the job', () => {
     expect(await inspectPicture('picture', picture('huge.png'), tools)).toEqual({ kind: 'ready', pixels: 256_000_000 });
     expect(await inspectPicture('drawing', picture('alpha.png'), tools)).toEqual({ kind: 'damaged' });
     expect(await inspectPicture('__proto__', picture('alpha.png'), tools)).toEqual({ kind: 'damaged' });
-  });
+    // About 2 s of work alone: huge.png's data (768 MB once inflated) is counted three times, 0.66 s each. Under a
+    // CPU three times busy it took 6.5 s and passed the 5 s default, so it has a timeout sized for its work.
+  }, 30_000);
 
   it('asks for fflate for a JPG as for a PNG', async () => {
     let asked = 0;

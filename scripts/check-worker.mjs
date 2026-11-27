@@ -50,6 +50,8 @@ const lateSources = [
   { what: 'the drawing step that draws on pages (stamp.ts)', path: join('src', 'engines', 'stamp.ts') },
   { what: 'the page reading and page update steps (pages.ts)', path: join('src', 'engines', 'pages.ts') },
   { what: 'the picture steps that make pictures smaller (shrink.ts)', path: join('src', 'engines', 'shrink.ts') },
+  { what: 'the content reader (content.ts)', path: join('src', 'engines', 'content.ts') },
+  { what: 'the shared zlib steps (zlib.ts)', path: join('src', 'engines', 'zlib.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');

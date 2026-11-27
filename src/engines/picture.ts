@@ -15,6 +15,7 @@
 // so Image to PDF's engine and thumbnails, which share this file, would fetch one more file than before.
 import type { PictureMime, PictureRule, PictureTable } from '../widget/option-values';
 import type { PictureOutcome } from './types';
+import { inflateLimited, type InflateClass } from './zlib';
 
 export type { PictureOutcome } from './types';
 
@@ -433,9 +434,6 @@ export function pngDataFits(bytes: Uint8Array, fflate: { Inflate: InflateClass }
   return ended;
 }
 
-/** fflate's streaming inflater, the one part of fflate used here. */
-export type InflateClass = new (ondata: (chunk: Uint8Array, final: boolean) => void) => { push(chunk: Uint8Array, final?: boolean): void };
-
 /**
  * A PNG's colour profile from its iCCP chunk, inflated with limits on what goes
  * in and what comes out, and checked against the picture as pdf-lib stores it:
@@ -455,36 +453,6 @@ export function pngProfile(bytes: Uint8Array, fflate: { Inflate: InflateClass })
   if (zlib.length < 3 || (zlib[0]! & 0x0f) !== 8 || ((zlib[0]! << 8) | zlib[1]!) % 31 !== 0 || (zlib[1]! & 0x20) !== 0) return undefined;
   const inflated = inflateLimited(zlib.subarray(2), fflate.Inflate, maxProfileBytes);
   return inflated && profileFits(inflated, 3) ? inflated : undefined;
-}
-
-/**
- * Inflates raw deflate data, pushing it in small pieces so no one piece can
- * make much more than a megabyte, and stops as soon as the output passes `limit`.
- */
-export function inflateLimited(data: Uint8Array, Inflate: InflateClass, limit: number): Uint8Array | undefined {
-  const parts: Uint8Array[] = [];
-  let size = 0;
-  let ended = false;
-  const inflater = new Inflate((chunk, final) => {
-    size += chunk.length;
-    if (size > limit) throw new TooLong();
-    parts.push(chunk.slice());
-    if (final) ended = true;
-  });
-  const piece = 1024;
-  try {
-    for (let at = 0; at < data.length && !ended; at += piece) inflater.push(data.subarray(at, at + piece), at + piece >= data.length);
-  } catch {
-    return undefined;
-  }
-  if (!ended) return undefined;
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

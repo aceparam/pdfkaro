@@ -35,7 +35,7 @@ const loadedLater = [
   { name: 'pdf.worker.min', type: 'mjs', why: "PDF.js's own worker, started by the tool worker in the same step as PDF.js, after every pick on a PDF tool's page" },
   { name: 'pdfjs-data', type: 'js', why: "PDF.js's fonts and decoders, one fixed set, loaded with PDF.js after every pick on a PDF tool's page" },
   { name: 'fflate', type: 'js', why: "fflate's inflater, deflater and zip step: loaded at every pick on Image to PDF and Sign PDF, and at the start of every job of Split, Compress, PDF to JPG and PNG, Image to PDF and Sign PDF, whatever the file; pdf-lib imports it" },
-  { name: 'picture', type: 'js', why: "reads a JPG or PNG without decoding it, for Image to PDF and Sign PDF's signature picture; shared by their engines and Image to PDF's thumbnails" },
+  { name: 'picture', type: 'js', why: "reads a JPG or PNG without decoding it, for Image to PDF and Sign PDF's signature picture; shared by their engines and Image to PDF's thumbnails; it also holds the shared zlib steps (zlib.ts), which the bundler puts here" },
   { name: 'picture-thumbnail', type: 'js', why: "draws a picture's thumbnail with the browser's image decoder, started after every pick on Image to PDF's pages, whatever the file" },
   { name: 'pdflib', type: 'js', why: 'pdf-lib, which the worker loads at the start of every Image to PDF, Add page numbers, Watermark or Sign PDF job, before the engine reads the file' },
   { name: 'stamp', type: 'js', why: 'the drawing step (stamp.ts) that Add page numbers, Watermark and Sign PDF share; a file of its own' },

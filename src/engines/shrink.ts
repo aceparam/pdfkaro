@@ -9,11 +9,12 @@
 // decoder, the canvas and fflate come from `tools`.
 
 import { outlineDepthLimit } from './outline';
-import { inflateLimited, jpegForPdf, walkJpeg, type InflateClass } from './picture';
+import { jpegForPdf, walkJpeg } from './picture';
 import { isDict, isRef, type Dict, type ObjectEntry, type StreamReplacement } from './qpdf-json';
 import { fittedSize, scaleDown, unpredict } from './resample';
 import type { JpegCanvasMaker } from './thumbnail';
 import type { EngineTools } from './types';
+import { inflateLimited, isZlib, zlibDeflate, type DeflateClass, type Fflate, type InflateClass } from './zlib';
 
 /** How sharp a picture may be, in pixels to the inch across the file's largest page. */
 export const pixelsPerInch = 150;
@@ -205,10 +206,6 @@ export function newDictionary(old: Dict, size: { width: number; height: number }
 export type Decoded = { image: unknown; close(): void };
 /** The browser's image decoder, at `width` by `height`, with colours left as they are. */
 export type PictureDecoder = { decode(bytes: Uint8Array, width: number, height: number, options?: { colours?: 'none' }): Promise<Decoded> };
-/** fflate's streaming deflater. */
-export type DeflateClass = new (options: { level: 9 }, ondata: (chunk: Uint8Array, final: boolean) => void) => { push(chunk: Uint8Array, final?: boolean): void };
-/** fflate's streaming inflater and deflater. */
-export type Fflate = { Inflate: InflateClass; Deflate: DeflateClass };
 type DrawingContext = { drawImage(image: unknown, x: number, y: number, width: number, height: number): void; imageSmoothingQuality?: string };
 
 /** A tool from the worker or a test, by name; throws when it was not given. */
@@ -217,46 +214,6 @@ export async function need<T>(tools: EngineTools, name: string): Promise<T> {
   if (!make) throw new Error(`${name} was not given to the engine.`);
   return (await make()) as T;
 }
-
-/** The Adler-32 checksum zlib puts after its data. */
-function adler32(data: Uint8Array): number {
-  let a = 1;
-  let b = 0;
-  for (let at = 0; at < data.length; ) {
-    const end = Math.min(data.length, at + 5552);
-    for (; at < end; at++) {
-      a += data[at]!;
-      b += a;
-    }
-    a %= 65521;
-    b %= 65521;
-  }
-  return ((b << 16) | a) >>> 0;
-}
-
-/** Data deflated at level 9 by fflate, framed as zlib data, which /FlateDecode reads. */
-export function zlibDeflate(data: Uint8Array, Deflate: DeflateClass): Uint8Array {
-  const parts: Uint8Array[] = [];
-  const deflater = new Deflate({ level: 9 }, (chunk) => parts.push(chunk));
-  const piece = 1024 * 1024;
-  if (data.length === 0) deflater.push(data, true);
-  for (let at = 0; at < data.length; at += piece) deflater.push(data.subarray(at, at + piece), at + piece >= data.length);
-  const size = parts.reduce((sum, part) => sum + part.length, 0);
-  const out = new Uint8Array(2 + size + 4);
-  // CMF 0x78 (deflate, 32 KB window) and FLG 0xDA (best compression), which check as a multiple of 31.
-  out[0] = 0x78;
-  out[1] = 0xda;
-  let at = 2;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  new DataView(out.buffer).setUint32(at, adler32(data));
-  return out;
-}
-
-/** Whether data starts with a zlib header for deflate with no preset dictionary. */
-const isZlib = (data: Uint8Array) => data.length >= 2 && (data[0]! & 0x0f) === 8 && (data[0]! >> 4) <= 7 && ((data[0]! << 8) | data[1]!) % 31 === 0 && (data[1]! & 0x20) === 0;
 
 /** The sentence thrown when a picture step is asked to do what it cannot. */
 const cannotRedo = 'A picture step was given a picture it cannot redo.';
