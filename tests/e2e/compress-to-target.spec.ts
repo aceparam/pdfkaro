@@ -476,7 +476,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
     for (const name of [engineFile, /\/shrink-/, /\/fflate-/, /\/plain-/, /\/inspect-/, /\/option-values-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/pdflib-/, /\/pages-/, /\/stamp-/, /\/compress-pdf-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/merge-pdf-/, /\/picture-thumbnail-/]) {
+    for (const other of [/\/pdflib-/, /\/pages-/, /\/stamp-/, /\/compress-pdf-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/merge-pdf-/, /\/picture-thumbnail-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, consoleText);

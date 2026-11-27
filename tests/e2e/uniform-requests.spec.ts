@@ -135,6 +135,17 @@ const inputs: Record<string, Input[]> = {
     { label: 'text.pdf with Letter chosen', files: ['text.pdf'], paper: 'letter', job: true, expect: 'done' },
   ],
   ...targetPages,
+  // Grayscale reads every object and the drawing streams in raw batches: a JPEG 2000 picture left as it is (a file
+  // given for its CMYK colours), a file with nothing to turn grey, a form, every script, and the page-reading cap failing.
+  '/grayscale-pdf': [
+    ...pdfPicks,
+    ...pdfJobs,
+    failingJob,
+    { label: 'images.pdf (JPEG 2000 left; CMYK turned grey)', files: ['images.pdf'], job: true, expect: 'done' },
+    { label: 'grey-only.pdf (nothing turned grey)', files: ['grey-only.pdf'], job: true, expect: 'no-file' },
+    { label: 'form.pdf', files: ['form.pdf'], job: true },
+    { label: 'multilingual.pdf', files: ['multilingual.pdf'], job: true, expect: 'done' },
+  ],
   '/compress-pdf': [
     ...pdfPicks,
     ...pdfJobs,

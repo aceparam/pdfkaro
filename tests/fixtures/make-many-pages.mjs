@@ -7,20 +7,26 @@
 // - pdfkaro-shared-image.pdf: 5,000 pages that each show the same 1 MB image.
 //   Split with no cuts, each part carries its own copy of the image, so the
 //   parts add up to about 5 GB: the worst case for memory.
+// - With --coloured, instead: pdfkaro-many-coloured.pdf, 20,000 pages each with its own content stream in its own
+//   RGB colour, for Grayscale PDF's measurements of raw batches and qpdf instances (add-grayscale-pdf, task 3.3).
 
 import { randomBytes } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const folder = resolve(process.argv[2] ?? tmpdir());
+const coloured = process.argv[2] === '--coloured';
+const folder = resolve((coloured ? process.argv[3] : process.argv[2]) ?? tmpdir());
 if ((folder + '/').startsWith(resolve('.') + '/')) {
   console.error('That folder is inside the repo. Give one outside it, so the files are not committed.');
   process.exit(1);
 }
 
-/** Writes a PDF of `pages` pages, each drawn by the same content stream, with the given shared resources. */
-async function write(path, pages, { content, resources = '<< >>', extra = [] }) {
+/**
+ * Writes a PDF of `pages` pages, each drawn by the same content stream, with the given shared resources; or, with
+ * `own`, each page drawn by its own content stream, `own(n)` for page n.
+ */
+async function write(path, pages, { content, resources = '<< >>', extra = [], own }) {
   const out = createWriteStream(path);
   let offset = 0;
   const offsets = [];
@@ -49,9 +55,15 @@ async function write(path, pages, { content, resources = '<< >>', extra = [] }) 
   await object(3, `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`);
   for (const [index, body] of extra.entries()) await object(4 + index, body);
   for (let n = 0; n < pages; n++) {
-    await object(firstPage + n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources ${resources} /Contents 3 0 R >>`);
+    await object(firstPage + n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources ${resources} /Contents ${own ? firstPage + pages + n : 3} 0 R >>`);
   }
-  const count = firstPage + pages;
+  if (own) {
+    for (let n = 0; n < pages; n++) {
+      const text = own(n);
+      await object(firstPage + pages + n, `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`);
+    }
+  }
+  const count = firstPage + pages * (own ? 2 : 1);
   const xref = offset;
   let table = `xref\n0 ${count}\n0000000000 65535 f \n`;
   for (let n = 1; n < count; n++) table += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
@@ -59,6 +71,12 @@ async function write(path, pages, { content, resources = '<< >>', extra = [] }) 
   await put(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   await new Promise((done) => out.end(done));
   console.log(path);
+}
+
+if (coloured) {
+  const part = (n, k) => (((n * k) % 1000) / 1000).toFixed(3);
+  await write(join(folder, 'pdfkaro-many-coloured.pdf'), 20_000, { content: '', own: (n) => `${part(n, 7)} ${part(n, 13)} ${part(n, 29)} rg 20 20 160 160 re f 0 0 1 RG 4 w 20 100 m 180 100 l S` });
+  process.exit(0);
 }
 
 await write(join(folder, 'pdfkaro-many-pages.pdf'), 120_000, { content: '0 0 0 rg 20 20 160 160 re f' });

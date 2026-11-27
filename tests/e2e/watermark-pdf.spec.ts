@@ -555,7 +555,7 @@ test.describe('nothing is uploaded', () => {
     // The engine, the drawing step (in one file, shared with Add page numbers) and pdf-lib were fetched, and nothing of another tool's.
     for (const name of [/\/watermark-pdf-/, /\/stamp-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     expect(holding(fetched, 'A drawing used an object that cannot be written.').length).toBe(1);
-    for (const other of [/\/add-page-numbers-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/]) {
+    for (const other of [/\/add-page-numbers-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, consoleText);

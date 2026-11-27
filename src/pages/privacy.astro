@@ -45,6 +45,8 @@ import { draftSentence, footerPage, siteName } from '../site';
   <p>
     Crop PDF does not remove what it cuts off. It stays in the new file, where anyone who has the file can get it back, and some programs can still find, copy or read aloud the text in it.
   </p>
+  {/* Draft words for the owner (add-grayscale-pdf): tied to its design, section 10, and to tests/unit/grayscale-pdf.test.ts (pictures' data and colour values unchanged). */}
+  <p>Grayscale PDF shows colours in grey but keeps the original colours in the new file, where a program can still read them.</p>
   <p>
     Pictures from PDF to JPG and PDF to PNG hold only the drawn page, with what was typed in its form fields as the page shows it, and no title, author or date. Image to PDF copies no details of your
     pictures, such as the camera, date or place, into the PDF.

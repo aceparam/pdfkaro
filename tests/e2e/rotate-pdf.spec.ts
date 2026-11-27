@@ -289,7 +289,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     expect(fetched.some((path) => /\/rotate-pdf-/.test(path))).toBe(true);
-    for (const other of [/\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
+    for (const other of [/\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
 
     const held = await traces(page, context);
     expect(held).toMatchObject({ local: 0, session: 0, databases: 0, caches: 0, opfs: [], cookies: [] });
