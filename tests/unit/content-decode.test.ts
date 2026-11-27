@@ -9,6 +9,7 @@ import { decodeContent, maxContentBytes, type DecodedContent, type Spend } from 
 import type { Dict } from '../../src/engines/qpdf-json';
 import {
   BudgetRefused,
+  alignedQuietStream,
   ascii85,
   asciiHex,
   dictOf,
@@ -410,6 +411,14 @@ describe('bytes after the end of Flate data', () => {
     return [value, performance.now() - started];
   };
 
+  it('blocks that make nothing, lined up with the pieces, never end the data at a prefix: refused', () => {
+    const { raw, whole } = alignedQuietStream();
+    expect(whole).toBe('0 0 9 9 re f\n1 0 0 rg 0 0 50 50 re f\n');
+    const [result, took] = timed(() => decode(Uint8Array.from([0x78, 0x9c, ...raw, 0, 0, 0, 0]), lone('FlateDecode')));
+    expect(result).toEqual({ kind: 'not-decoded' });
+    expect(took).toBeLessThan(1000);
+  });
+
   it('a lone Flate with 16 MiB of trailing bytes decodes in under a second', () => {
     const data = join(flate(content), new Uint8Array(16 * 1024 * 1024).fill(0x41));
     const [result, took] = timed(() => decode(data, lone('FlateDecode')));
@@ -499,18 +508,32 @@ describe('the 64 MiB cap and the budget', () => {
     expect(pieces.total).toBe(big.length);
   });
 
-  it('a small stream allocates little: 10,000 small streams decode quickly', () => {
+  it('a small stream allocates little: no buffer over 4 KiB, under 64 KiB in all, counted rather than timed', () => {
     const small = flate(latin1('q 1 0 0 rg 0 0 9 9 re f Q'));
     const smallChain = runLength(flate(latin1('q 1 0 0 rg 0 0 9 9 re f Q')));
-    decode(small, lone('FlateDecode'));
-    const started = performance.now();
-    for (let index = 0; index < 5000; index++) {
-      decode(small, lone('FlateDecode'));
-      decode(smallChain, chain('RunLengthDecode', 'FlateDecode'));
+    // Every Uint8Array the reader makes, by its length, through a stand-in for the global constructor while it runs.
+    // fflate keeps its own reference, so only the reader's buffers are counted.
+    const sizes: number[] = [];
+    const Real = globalThis.Uint8Array;
+    class Counting extends Real {
+      constructor(...args: unknown[]) {
+        super(...(args as [number]));
+        if (typeof args[0] === 'number') sizes.push(args[0]);
+      }
     }
-    const each = ((performance.now() - started) * 1000) / 10_000;
-    console.info(`a small stream: ${Math.round(each)} µs a decode`);
-    expect(each).toBeLessThan(200);
+    let results: DecodedContent[];
+    globalThis.Uint8Array = Counting as unknown as Uint8ArrayConstructor;
+    try {
+      results = [decode(small, lone('FlateDecode')), decode(smallChain, chain('RunLengthDecode', 'FlateDecode'))];
+    } finally {
+      globalThis.Uint8Array = Real;
+    }
+    expect(results.map((result) => result.kind)).toEqual(['decoded', 'decoded']);
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(4096);
+    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeLessThan(64 * 1024);
+    // The decoded data holds no larger buffer behind it.
+    expect((results[0] as { data: Uint8Array }).data.buffer.byteLength).toBe(25);
   });
 
   it("stops at once with the caller's own error when the budget refuses", () => {

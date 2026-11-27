@@ -4,7 +4,7 @@
 // doubt. Expected outputs are worked out here from the inputs, never from the module's own exports.
 
 import { createRequire } from 'node:module';
-import { deflateSync } from 'node:zlib';
+import { constants as zlibConstants, deflateRawSync, deflateSync, inflateRawSync } from 'node:zlib';
 import { afterAll, beforeAll, expect } from 'vitest';
 import { editContent, type Edit, type Editor, type OperandRun, type Place, type Read, type Spend } from '../../src/engines/content';
 import { freshQpdf, plainCopy } from '../../src/engines/plain';
@@ -318,3 +318,27 @@ const wasm = require.resolve('@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
 export const qpdfTools: EngineTools = { qpdf: () => createQpdf(async () => require('@neslinesli93/qpdf-wasm'), wasm) };
 /** The real plain copy of a file. */
 export const plainOf = async (file: Uint8Array, password?: string) => (await plainCopy(qpdfTools, file, password)).plain;
+
+/**
+ * Raw deflate data that makes `0 0 9 9 re f\n`, then about 70 KiB of blocks that make nothing (empty stored blocks,
+ * and empty fixed blocks before them), lined up so each 1 KiB piece ends on a block boundary, then
+ * `1 0 0 rg 0 0 50 50 re f\n` in the final block. Every reader decodes both parts; a pusher that ends the data with an
+ * empty final push after the quiet stretch would stop at the first.
+ */
+export function alignedQuietStream(): { raw: Uint8Array; whole: string } {
+  const stored = [0x00, 0x00, 0x00, 0xff, 0xff];
+  const fixedThenStored = [0x02, 0x00, 0x00, 0x00, 0xff, 0xff];
+  const fill = (bytes: number): number[] => {
+    for (let six = 0; six <= bytes / 6; six++) {
+      if ((bytes - 6 * six) % 5 !== 0) continue;
+      return [...Array.from({ length: six }, () => fixedThenStored).flat(), ...Array.from({ length: (bytes - 6 * six) / 5 }, () => stored).flat()];
+    }
+    throw new Error('no fill');
+  };
+  const first = deflateRawSync(Buffer.from('0 0 9 9 re f\n'), { finishFlush: zlibConstants.Z_SYNC_FLUSH });
+  const parts = [...first, ...fill(1024 - first.length)];
+  for (let piece = 0; piece < 70; piece++) parts.push(...fill(1024));
+  const raw = Uint8Array.from([...parts, ...deflateRawSync(Buffer.from('1 0 0 rg 0 0 50 50 re f\n'))]);
+  const whole = new TextDecoder().decode(inflateRawSync(raw));
+  return { raw, whole };
+}

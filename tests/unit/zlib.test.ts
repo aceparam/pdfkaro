@@ -8,7 +8,8 @@ import { deflateSync, inflateSync } from 'node:zlib';
 import { Deflate, Inflate } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { maxProfileBytes } from '../../src/engines/picture';
-import { inflateLimited, inflatePrefix, quietInput, zlibDeflate } from '../../src/engines/zlib';
+import { inflateLimited, inflatePrefix, pushPieces, quietInput, zlibDeflate } from '../../src/engines/zlib';
+import { alignedQuietStream } from './content-helpers';
 
 const fetched: unknown[] = [];
 const realFetch = globalThis.fetch;
@@ -148,5 +149,41 @@ describe('bytes after the end of the deflate data', () => {
     const padded = (blocks: number) => Uint8Array.from([...Array.from({ length: blocks }, () => empty).flat(), ...last]);
     expect(inflateLimited(padded(1000), Inflate, 100)).toEqual(new TextEncoder().encode('end'));
     expect(inflateLimited(padded(20_000), Inflate, 100)).toBeUndefined();
+  });
+});
+
+describe('blocks that make nothing, lined up with the pieces', () => {
+  const { raw, whole } = alignedQuietStream();
+
+  it('every reader decodes both parts', () => {
+    expect(whole).toBe('0 0 9 9 re f\n1 0 0 rg 0 0 50 50 re f\n');
+  });
+
+  it('pushPieces never ends the data at the prefix: the piece after the quiet stretch, pushed as final, is refused', () => {
+    let made = 0;
+    let ended = false;
+    const inflater = new Inflate((chunk, final) => {
+      made += chunk.length;
+      if (final) ended = true;
+    });
+    const started = performance.now();
+    expect(() => pushPieces(inflater, raw, () => made)).toThrow();
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(ended).toBe(false);
+  });
+
+  it('inflateLimited gives nothing rather than the prefix', () => {
+    expect(inflateLimited(raw, Inflate, 1_000_000)).toBeUndefined();
+  });
+
+  it('inflatePrefix gives nothing rather than a short start', () => {
+    expect(inflatePrefix(Uint8Array.from([0x78, 0x9c, ...raw]), Inflate, 20)).toBeUndefined();
+  });
+
+  it('at the end of the input, the last piece is final as before: a quiet stretch reaching the end is read', () => {
+    const hello = new Uint8Array(deflateSync(Buffer.from('hello'))).subarray(2);
+    const data = new Uint8Array(hello.length + quietInput + 100);
+    data.set(hello);
+    expect(inflateLimited(data, Inflate, 100)).toEqual(new TextEncoder().encode('hello'));
   });
 });

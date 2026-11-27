@@ -69,7 +69,12 @@ Each decode step SHALL work in pieces with its output capped at 64 MiB, checked 
 
 ### Requirement: Bytes after the end of Flate data are cut short
 
-Every inflating step, in the content reader and the shared zlib steps, SHALL stop pushing input once 66.5 KiB in a row makes no output, then end with an empty final push that succeeds only for data that reached its final block, so bytes after the end take no time growing with their square. (SPEC.md: Privacy, limits and security)
+Every inflating step, in the content reader and the shared zlib steps, SHALL, once 66.5 KiB of input in a row makes no output, push the next piece as the final one and nothing after it: data that had already ended is read as it was, data whose final block ends in that piece is read whole, and any other data is refused, so bytes after the end take no time growing with their square and the data is never cut short at a prefix. (SPEC.md: Privacy, limits and security)
+
+#### Scenario: Blocks that make nothing, lined up with the pieces
+
+- **WHEN** Flate data makes some drawing, then about 70 KiB of empty blocks lined up with the 1 KiB pieces, then more drawing that zlib reads
+- **THEN** the reader, the shared inflate with a cap and the first-bytes step each refuse it, in under a second, and none gives the first part alone
 
 #### Scenario: Bytes after the end of Flate data
 
@@ -97,8 +102,8 @@ A predictor row over 1 MiB and LZW input over 256 MiB SHALL be reported as not d
 
 #### Scenario: A small stream
 
-- **WHEN** 10,000 small streams are decoded one after another
-- **THEN** each takes under 200 µs, as a step's pieces start at 4 KiB and are made only when written to
+- **WHEN** a small stream, alone and in a two-step chain, is decoded with every buffer the reader makes counted
+- **THEN** none is over 4 KiB and they come to under 64 KiB, as a step's pieces start at 4 KiB and are made only when written to
 
 ### Requirement: Drawing instructions are read with certainty or left
 

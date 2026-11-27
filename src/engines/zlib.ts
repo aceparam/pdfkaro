@@ -29,26 +29,28 @@ export const quietInput = 68_096;
  * copies all the input still pending, so trailing bytes would take time
  * growing with their square (16 MiB took 42 s, 32 MiB 564 s). No block holds
  * back output for more than a stored block's 65,535 bytes and its header, so
- * once `quietInput` bytes (66.5 KiB) in a row have made nothing, the data is
- * taken to end there: an empty final push follows, which fflate accepts only
- * when the stream has reached its final block and refuses with a throw
- * otherwise, and nothing more is pushed. A stream padded with that many empty
- * stored blocks is refused, which is safe. `made` counts the output so far;
- * `stopped` ends the pushing early.
+ * once `quietInput` bytes (66.5 KiB) in a row have made nothing, the next
+ * piece is pushed as the final one and nothing more is pushed. fflate then
+ * returns at once if the stream had already ended (the bytes after it are
+ * trailing, ignored), finishes it if its final block ends within that piece,
+ * and throws otherwise, so the data is refused. The next piece, not an empty
+ * one: fflate accepts an empty final push whenever no input is pending, even
+ * in the middle of a stream, so blocks that make nothing, lined up with the
+ * pieces, could otherwise cut a stream short at a prefix. A stream holding
+ * that many such blocks before more data is refused, which is safe. When no
+ * piece is left, the last one was already pushed as final. `made` counts the
+ * output so far; `stopped` ends the pushing early.
  */
 export function pushPieces(inflater: Inflater, data: Uint8Array, made: () => number, stopped: () => boolean = () => false): void {
   const piece = 1024;
   let quiet = 0;
   for (let at = 0; at < data.length && !stopped(); at += piece) {
     const before = made();
-    const last = at + piece >= data.length;
+    const last = at + piece >= data.length || quiet >= quietInput;
     inflater.push(data.subarray(at, at + piece), last);
     if (last) return;
     if (made() !== before) quiet = 0;
-    else if ((quiet += piece) >= quietInput) {
-      inflater.push(new Uint8Array(0), true);
-      return;
-    }
+    else quiet += piece;
   }
 }
 
