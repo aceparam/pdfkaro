@@ -81,6 +81,20 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'working', unit: 'picture', done: 3, total: 40 } })).toBe(true);
   });
 
+  it('takes a page number with a page-too-large failure only, as a whole number from 1 (Grayscale PDF)', () => {
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large', page: 14 })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large', page: 120_000 })).toBe(true);
+    for (const page of [0, -1, 1.5, '14', Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53, null]) {
+      expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large', page }), String(page)).toBe(false);
+    }
+    // With any other kind a page is refused.
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'output-limit', page: 14 })).toBe(false);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'engine', page: 14 })).toBe(false);
+    // And no other field goes with a failure.
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large', page: 14, text: 'x' })).toBe(false);
+  });
+
   it('ignores anything else, including a failure that carries a message', () => {
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'TypeError: x is undefined' })).toBe(false);
     expect(isFromWorker({ type: 'done', requestId: 1, outputs: ['text'] })).toBe(false);

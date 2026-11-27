@@ -62,6 +62,7 @@ export const options: Record<string, (pages: number) => Record<string, unknown>>
   'resize-pdf': () => ({ paper: 'letter' }),
   'compress-pdf': () => ({}),
   'compress-to-target': () => ({ target: '100kb' }),
+  'grayscale-pdf': () => ({}),
   'pdf-to-images': () => ({ format: 'jpg' }),
   'add-page-numbers': () => ({ position: 'bottom-centre' }),
   'watermark-pdf': () => ({ text: 'DRAFT' }),

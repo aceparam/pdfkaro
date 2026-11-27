@@ -272,6 +272,7 @@ describe('numbering the shared test set', { timeout: 60_000 }, () => {
       'compress-scans.pdf',
       'compress-small-jpg.pdf',
       'compress-text.pdf',
+      'grey-only.pdf',
       'multilingual.pdf',
     ]);
     for (const name of others) {

@@ -146,7 +146,7 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 #### Scenario: A CMYK picture
 
 - **WHEN** a page shows a CMYK picture, once as stored and once with `/Decode [1 0 1 0 1 0 1 0]`
-- **THEN** both are drawn neutral and within about 15 on average of the original's drawing through the luminosity formula, so an inverted picture fails the test
+- **THEN** both are drawn neutral, within 25 on average of the original's drawing through the luminosity formula (PDF.js draws the original through its own CMYK model), and more than 80 from the other picture's original, so an inverted picture fails the test
 
 #### Scenario: The stand-in name is already used
 

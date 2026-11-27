@@ -175,16 +175,18 @@ export const maxBatchBytes = 32 * 1024 * 1024;
 
 /**
  * Batches of stream ids whose stated sizes add up to at most `limit`, in the
- * order given, each holding at most `objectsPerCall` ids; a stream larger than
- * the limit, or of no known size, goes in a batch of its own.
+ * order given, each holding at most `ids` ids (`objectsPerCall` unless asked:
+ * the ids go to qpdf in an argument file, so Grayscale PDF asks for 2,000); a
+ * stream larger than the limit, or of no known size, goes in a batch of its own.
  */
-export function rawBatches(streams: readonly { id: string; length: number | undefined }[], limit = maxBatchBytes): string[][] {
+export function rawBatches(streams: readonly { id: string; length: number | undefined }[], limit = maxBatchBytes, ids = objectsPerCall): string[][] {
+  if (!Number.isInteger(ids) || ids < 1) throw new Error('A batch must hold at least one stream.');
   const batches: string[][] = [];
   let current: string[] = [];
   let bytes = 0;
   for (const { id, length } of streams) {
     const size = length !== undefined && Number.isFinite(length) && length >= 0 ? length : Number.POSITIVE_INFINITY;
-    if (current.length > 0 && (bytes + size > limit || current.length >= objectsPerCall)) {
+    if (current.length > 0 && (bytes + size > limit || current.length >= ids)) {
       batches.push(current);
       current = [];
       bytes = 0;

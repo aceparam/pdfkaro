@@ -63,7 +63,8 @@ export type FromWorker =
   | { type: 'progress'; requestId: number; progress: Progress }
   /** `parts` says how many files the one output, a zip, holds. */
   | { type: 'done'; requestId: number; outputs: Uint8Array[]; parts?: number }
-  | { type: 'failed'; requestId: number; kind: FailureKind }
+  /** `page` only with kind `'page-too-large'`: the page whose drawing is too large, a whole number from 1, and nothing else from the file. */
+  | { type: 'failed'; requestId: number; kind: FailureKind; page?: number }
   /** A thumbnail: PNG bytes, or null when the page could not be drawn. Never a failure of the tool. */
   | { type: 'thumbnail'; requestId: number; image: Uint8Array | null }
   /**
@@ -185,6 +186,7 @@ const failureKinds: FailureKind[] = [
   'picture-refused',
   'picture-too-large',
   'password-refused',
+  'page-too-large',
 ];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */
@@ -204,7 +206,10 @@ export function isFromWorker(value: unknown): value is FromWorker {
         (value.parts === undefined || (Number.isInteger(value.parts) && (value.parts as number) > 1))
       );
     case 'failed':
-      return failureKinds.includes(value.kind as FailureKind);
+      if (!failureKinds.includes(value.kind as FailureKind) || !hasOnly(value, ['type', 'requestId', 'kind', 'page'])) return false;
+      // A page number goes with a page-too-large failure only, as a whole number from 1.
+      if (value.page === undefined) return true;
+      return value.kind === 'page-too-large' && Number.isSafeInteger(value.page) && (value.page as number) >= 1;
     case 'thumbnail':
       return value.image === null || value.image instanceof Uint8Array;
     case 'prepared':

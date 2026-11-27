@@ -75,6 +75,14 @@ describe('the tool client', () => {
     expect(workers[0]!.ended).toBe(true);
   });
 
+  it("carries a page-too-large failure's page number in the error, and no page for any other kind", async () => {
+    const { client, workers } = setup();
+    const job = client.run([file], [undefined], {}, () => {});
+    workers[0]!.reply({ type: 'failed', requestId: workers[0]!.sent[0]!.requestId, kind: 'page-too-large', page: 14 });
+    await expect(job).rejects.toMatchObject({ kind: 'page-too-large', page: 14 });
+    expect(new ToolError('output-limit', 14).page).toBeUndefined();
+  });
+
   it('cancels by ending the worker, and starts a fresh one next time', async () => {
     const { client, workers } = setup();
     const job = client.run([file], [undefined], {}, () => {});

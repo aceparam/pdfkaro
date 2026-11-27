@@ -66,6 +66,8 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'PictureTooLarge') return 'picture-too-large';
   // An engine refused the new password it was sent (option-values.ts's `PasswordRefused`). Known by name, as above; its message holds nothing of it.
   if (error instanceof Error && error.name === 'PasswordRefused') return 'password-refused';
+  // A page's drawing instructions decode past the content reader's cap (content.ts's `PageTooLarge`). Known by name, as above.
+  if (error instanceof Error && error.name === 'PageTooLarge') return 'page-too-large';
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
   if (outOfMemory(error)) return 'memory';
   return 'engine';
@@ -378,7 +380,10 @@ export function createHandler(deps: WorkerDeps) {
       // A reading failure is posted only once the pick set has settled (held to a limit), so the page never ends a
       // worker for it while the set's files are still arriving.
       if (phase === 'read') await settledOrHeld();
-      deps.post({ type: 'failed', requestId, kind: failureKind(error) });
+      const kind = failureKind(error);
+      // Only the page number goes with a page-too-large failure: its field read alone, never its message or stack.
+      const page = kind === 'page-too-large' ? (error as { page?: unknown }).page : undefined;
+      deps.post(typeof page === 'number' && Number.isSafeInteger(page) && page >= 1 ? { type: 'failed', requestId, kind, page } : { type: 'failed', requestId, kind });
     }
   };
 }

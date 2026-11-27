@@ -26,9 +26,15 @@ export type WorkerLike = {
 };
 
 export class ToolError extends Error {
-  constructor(readonly kind: FailureKind | 'cancelled') {
+  /** The page a `page-too-large` failure names, as the worker sent it; undefined for every other failure. */
+  readonly page: number | undefined;
+  constructor(
+    readonly kind: FailureKind | 'cancelled',
+    page?: number,
+  ) {
     super(kind);
     this.name = 'ToolError';
+    this.page = kind === 'page-too-large' ? page : undefined;
   }
 }
 
@@ -353,7 +359,7 @@ export class ToolClient {
         return;
       case 'failed':
         this.pending.delete(data.requestId);
-        request.reject(new ToolError(data.kind));
+        request.reject(new ToolError(data.kind, data.page));
         // A worker whose engine could not be fetched keeps that failure (the
         // browser remembers a failed module), and one that ran out of memory
         // keeps its memory. Stop using it, so that the next try starts a fresh

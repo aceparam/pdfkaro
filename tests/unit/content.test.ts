@@ -910,6 +910,7 @@ const fixtureCounts: Record<string, Counts | string> = {
   'damaged-cut.pdf': 'qpdf could not read the file.',
   'damaged-xref.pdf': 'qpdf could not read the file.',
   'form.pdf': { pages: 1, forms: 5, streams: 6, edited: 5, unchanged: 1 },
+  'grey-only.pdf': { pages: 2, forms: 2, streams: 4, edited: 4 },
   'images.pdf': { pages: 1, forms: 0, streams: 1, edited: 1 },
   'mixed.pdf': { pages: 4, forms: 0, streams: 4, unchanged: 4 },
   'multilingual.pdf': { pages: 5, forms: 0, streams: 5, edited: 5 },

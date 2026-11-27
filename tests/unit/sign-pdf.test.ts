@@ -877,6 +877,7 @@ describe('signing the shared test set with a typed name on the last page', { tim
       'compress-scans.pdf',
       'compress-small-jpg.pdf',
       'compress-text.pdf',
+      'grey-only.pdf',
       'multilingual.pdf',
     ]);
     for (const name of others) {

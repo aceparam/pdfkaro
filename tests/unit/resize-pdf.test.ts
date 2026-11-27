@@ -117,6 +117,7 @@ const expected: Record<string, { a4: [number, number] | 'none' | 'fails'; letter
   'compress-flate-bomb.pdf': { a4: [1, 1], letter: [1, 1] },
   'compress-jpeg-mismatch.pdf': { a4: [2, 2], letter: [2, 2] },
   'compress-json-bomb.pdf': { a4: 'fails', letter: 'fails' },
+  'grey-only.pdf': { a4: [2, 2], letter: [2, 2] },
   'compress-kinds.pdf': { a4: [7, 7], letter: [7, 7] },
   'compress-lossless.pdf': { a4: 'none', letter: [1, 1] },
   'compress-packed.pdf': { a4: 'none', letter: [3, 3] },
