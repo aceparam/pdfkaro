@@ -9,8 +9,8 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { inspectPdf, readPdf } from '../../src/engines/inspect';
-import { createQpdf, finished, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
-import { inspect, isEncrypted, run, unprotectArgs, unprotectedBytes, unprotectLimit } from '../../src/engines/tools/unlock-pdf';
+import { createQpdf, finished, oneFileLimit as unprotectLimit, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
+import { inspect, isEncrypted, run, unprotectArgs, unprotectedBytes } from '../../src/engines/tools/unlock-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { certificatePdf } from './unlock-helpers';
 

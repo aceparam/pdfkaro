@@ -127,6 +127,43 @@ export function cappedWrite(
 }
 
 /**
+ * The size budget for a tool that writes one PDF again as one new file: twice the input and 16 MB. Encryption adds
+ * at most 32 bytes to each string and stream; decrypting and repacking remove bytes. Shared by Protect with a
+ * password, Remove a password and Compress to a target size's first write.
+ */
+export function oneFileLimit(size: number): number {
+  return 2 * size + 16 * 1024 * 1024;
+}
+
+/** qpdf's arguments for one rewrite: the input's password arguments, /in.pdf, the tool's own options, then /out.pdf. */
+export function rewriteArgs(passwordArgs: readonly string[], extraArgs: readonly string[]): string[] {
+  return ['--progress', ...passwordArgs, '/in.pdf', ...extraArgs, '--', '/out.pdf'];
+}
+
+/**
+ * Writes `bytes` again as one new file on a fresh qpdf of its own, with the tool's own options, capped at `limit`
+ * (`oneFileLimit` unless given). The writer lives only in this function, and the capped write removes /in.pdf
+ * before /out.pdf is read, so the input is let go before the output is held. Throws `OutputLimit` past the cap,
+ * "A password did not open the file." when qpdf said the password was missing or wrong, and the tool's own fixed
+ * `failed` sentence for any other unfinished write. The password arguments go only into qpdf's in-memory argument
+ * list; what qpdf printed is never passed on.
+ */
+export async function rewrite(
+  tools: EngineTools,
+  bytes: Uint8Array,
+  passwordArgs: readonly string[],
+  extraArgs: readonly string[],
+  onWriting: (percent: number) => void,
+  { failed, limit = oneFileLimit(bytes.length) }: { failed: string; limit?: number },
+): Promise<Uint8Array> {
+  const writer = await qpdfFrom(tools);
+  writer.write('/in.pdf', bytes);
+  const written = cappedWrite(writer, limit, (qpdf) => qpdf.call(rewriteArgs(passwordArgs, extraArgs)), onWriting);
+  if (!finished(written.code)) throw new Error(saidInvalidPassword(written.printed) ? 'A password did not open the file.' : failed);
+  return writer.read('/out.pdf');
+}
+
+/**
  * Makes a fresh qpdf. `load` brings in the Emscripten factory (late, so the
  * script is fetched only when needed); `wasm` is the address or path of
  * `qpdf.wasm`.

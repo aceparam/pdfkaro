@@ -21,7 +21,7 @@
 
 import { inspectPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
-import { cappedWrite, finished, saidInvalidPassword } from '../qpdf';
+import { finished, oneFileLimit, rewrite, rewriteArgs, saidInvalidPassword } from '../qpdf';
 import { isDict, passwordArgsFor } from '../qpdf-json';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 import { acceptedPassword, PasswordRefused } from '../../widget/option-values';
@@ -31,45 +31,30 @@ export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf'] };
 
 type Options = { passwords?: unknown; newPassword?: unknown };
 
-/** The new file is held to twice the input and 16 MB. Encryption adds at most 32 bytes to each string and stream. */
-export function protectLimit(size: number): number {
-  return 2 * size + 16 * 1024 * 1024;
+/** qpdf's own options for the one write: object streams generated, the new password for opening and permissions. */
+function encryptArgs(password: string): string[] {
+  return ['--object-streams=generate', '--encrypt', `--user-password=${password}`, `--owner-password=${password}`, '--bits=256'];
 }
 
 /** qpdf's arguments for the one write: the input's own password if any, then the new one for opening and permissions. */
 export function protectArgs(old: string | undefined, password: string): string[] {
-  return [
-    '--progress',
-    ...passwordArgsFor(old),
-    '/in.pdf',
-    '--object-streams=generate',
-    '--encrypt',
-    `--user-password=${password}`,
-    `--owner-password=${password}`,
-    '--bits=256',
-    '--',
-    '/out.pdf',
-  ];
+  return rewriteArgs(passwordArgsFor(old), encryptArgs(password));
 }
 
 /**
- * The file written with the new password, capped at `limit`. The writer lives only in this function, and the
- * capped write removes /in.pdf before /out.pdf is read, so the input is let go before the output is held.
+ * The file written with the new password, capped at `limit` (twice the input and 16 MB unless given; encryption adds
+ * at most 32 bytes to each string and stream), by the shared one-file rewrite, which lets the input go before the
+ * output is held.
  */
-export async function protectedBytes(
+export function protectedBytes(
   tools: EngineTools,
   file: Uint8Array,
   old: string | undefined,
   password: string,
   onWriting: (percent: number) => void,
-  limit: number = protectLimit(file.length),
+  limit: number = oneFileLimit(file.length),
 ): Promise<Uint8Array> {
-  const writer = await freshQpdf(tools, file);
-  const written = cappedWrite(writer, limit, (qpdf) => qpdf.call(protectArgs(old, password)), onWriting);
-  if (!finished(written.code)) {
-    throw new Error(saidInvalidPassword(written.printed) ? 'A password did not open the file.' : 'qpdf could not write the protected file.');
-  }
-  return writer.read('/out.pdf');
+  return rewrite(tools, file, passwordArgsFor(old), encryptArgs(password), onWriting, { failed: 'qpdf could not write the protected file.', limit });
 }
 
 /** Every permission qpdf reports for an encrypted file. */
