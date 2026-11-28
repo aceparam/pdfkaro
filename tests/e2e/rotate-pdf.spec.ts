@@ -134,7 +134,9 @@ test.describe('turning pages', () => {
     await pick(page, 'text.pdf');
     await everyRight(page).click();
     await expect(status(page)).toHaveText('Every page is now turned right.');
-    expect(await captions(page)).toEqual(['Page 1, turned right', 'Page 2, turned right', 'Page 3, turned right']);
+    // "Turn every page" says so at once, and the pages show their new turns from the next frame on, a chunk of 50 a
+    // frame (ToolWorkspace's turnFront, #17), so the captions are read until they have caught up.
+    await expect.poll(() => captions(page)).toEqual(['Page 1, turned right', 'Page 2, turned right', 'Page 3, turned right']);
     await expect(turnLine(page)).toHaveText(`Every page will be turned. ${how}`);
     await everyRight(page).click();
     await expect(status(page)).toHaveText('Every page is now turned half round.');
