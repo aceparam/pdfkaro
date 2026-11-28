@@ -1020,6 +1020,55 @@ describe('stage 2 findings', () => {
     expect(formText.every((text) => /cs 0 0 0 scn/.test(text))).toBe(true);
   });
 
+  it('20,000 annotations sharing one /AP whose states dictionary holds 20,000 entries: each read once (R2-1)', { timeout: 60_000 }, async () => {
+    // Measured 27 Nov 2026: 2.7 s; the walk per annotation took 41.5 s at 10,000 (the reviewer's figure).
+    const n = 20_000;
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'];
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R /Annots [${Array.from({ length: n }, (_, i) => `${8 + i} 0 R`).join(' ')}] >>`);
+    objects.push({ dict: '', data: latin1('0 g 0 0 1 1 re f') });
+    objects.push({ dict: '/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << >>', data: latin1('0 0 1 rg 0 0 1 1 re f') });
+    objects.push(`<< ${Array.from({ length: n }, (_, i) => `/S${i} 5 0 R`).join(' ')} >>`);
+    objects.push('<< /N 6 0 R >>');
+    for (let i = 0; i < n; i++) objects.push('<< /Type /Annot /Subtype /Square /Rect [0 0 1 1] /AP 7 0 R /AS /S0 >>');
+    const { output } = await grey(pdfOf(objects));
+    // The one appearance stream was reached and edited.
+    const forms = Object.values((await objectsOf(output!)).objects).filter((entry) => entry.stream?.dict['/Subtype'] === '/Form');
+    expect(forms.map((entry) => Buffer.from(entry.stream!.data ?? '', 'base64').toString('latin1')).join()).toContain('/GreyRGB cs');
+  });
+
+  it('20,000 pages each with resources of their own sharing one /Pattern dictionary of 20,000 entries: walked once (R2-2)', { timeout: 60_000 }, async () => {
+    // A shared /Pattern dictionary, as qpdf's own page listing does not expand patterns (a shared /XObject dictionary
+    // costs P × M in readPages' qpdf JSON, a follow-up for every page tool). Measured 27 Nov 2026: 3.9 s, against
+    // 115.6 s for the walk per resources dictionary.
+    const n = 20_000;
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${Array.from({ length: n }, (_, i) => `${6 + i} 0 R`).join(' ')}] /Count ${n} >>`];
+    objects.push({ dict: '', data: latin1('/Pattern cs /P0 scn 0 0 1 1 re f') });
+    objects.push(`<< ${Array.from({ length: n }, (_, i) => `/P${i} 5 0 R`).join(' ')} >>`);
+    objects.push({ dict: '/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 1 1] /XStep 1 /YStep 1 /Resources << >>', data: latin1('1 0 0 rg 0 0 1 1 re f') });
+    for (let i = 0; i < n; i++) objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Resources << /Pattern 4 0 R >> >>');
+    const { output } = await grey(pdfOf(objects));
+    const pattern = Object.values((await objectsOf(output!)).objects).find((entry) => entry.stream?.dict['/PatternType'] === 1)!;
+    expect(Buffer.from(pattern.stream!.data ?? '', 'base64').toString('latin1')).toContain('/GreyRGB cs');
+  });
+
+  it('a shared /XObject dictionary met again names the same first page for its forms', async () => {
+    // Pages 2 and 3 share /XObject 4 0 R, whose form decodes past the small cap given; page 1 draws nothing of it.
+    const small = makeRun({ maxContentBytes: 40 });
+    const input = pdfOf([
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [6 0 R 7 0 R 8 0 R] /Count 3 >>',
+      { dict: '', data: latin1('q Q') },
+      '<< /Big 5 0 R >>',
+      { dict: '/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << >>', data: latin1('1 0 0 rg 0 0 1 1 re f 0 0 1 rg 0 0 1 1 re f 0 1 0 rg 0 0 1 1 re f') },
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Resources << >> >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Resources << /XObject 4 0 R >> >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Resources << /XObject 4 0 R >> >>',
+    ]);
+    const error = await failure(grey(input, { engine: small }));
+    expect(error).toBeInstanceOf(PageTooLarge);
+    expect((error as PageTooLarge).page).toBe(2);
+  });
+
   // Page i's contents are streams i and i + 1, so a doubt at the end reaches page 1 through every page. The old loop
   // took one pass over every page per step (43.9 s here against 18.7 s, measured 27 Nov 2026); this checks the outcome.
   it('20,000 pages chained by shared streams, the last stream in doubt: every page left', { timeout: 180_000 }, async () => {

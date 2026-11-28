@@ -412,6 +412,17 @@ async function changesFor(
     return value !== null && typeof value === 'object' ? { owner: parent.owner, path: [...parent.path, key] } : undefined;
   };
 
+  /**
+   * Whether a dictionary value is to be walked: a direct one always (its size is the file's own), a reference only the
+   * first time `seen` meets it, so a shared dictionary named by many objects costs one walk.
+   */
+  const firstTime = (seen: Set<string>, value: unknown): boolean => {
+    if (!isRef(value)) return true;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  };
+
   // ---- One walk over every object (decision 3), iterative, direct values to `walkDepth`.
   const references = new Map<string, number>(); // bit 1: through /Thumb, 2: a soft mask's /G, 4: anything else
   const resourcePlaces: Where[] = [];
@@ -421,6 +432,8 @@ async function changesFor(
   const appearances = new Set<string>();
   const type3Fonts: Where[] = [];
   const annotations: Where[] = [];
+  const seenAppearanceDicts = new Set<string>();
+  const seenStateDicts = new Set<string>();
   for (const [id, entry] of objects) {
     const root = 'value' in entry ? entry.value : entry.stream.dict;
     if ('stream' in entry) {
@@ -448,12 +461,13 @@ async function changesFor(
           if (place && isDict(current(place))) resourcePlaces.push(place);
         }
         if (key === '/AP') {
-          const ap = dictAt(item);
+          // A shared appearance dictionary, or states dictionary, is read once however many annotations name it.
+          const ap = firstTime(seenAppearanceDicts, item) ? dictAt(item) : undefined;
           if (ap) {
             for (const state of ['/N', '/R', '/D']) {
               const each = ap[state];
               if (isRef(each) && isStream(each)) appearances.add(each);
-              else {
+              else if (firstTime(seenStateDicts, each)) {
                 const states = dictAt(each);
                 if (states) for (const one of Object.values(states)) if (isRef(one) && isStream(one)) appearances.add(one);
               }
@@ -579,6 +593,14 @@ async function changesFor(
   // An indirect /Annots array, or an annotation object, shared by many pages is walked once, so the work stays linear.
   const walkedAnnotLists = new Set<string>();
   const walkedAnnotations = new Set<string>();
+  const walkedAppearanceDicts = new Set<string>();
+  const walkedStateDicts = new Set<string>();
+  // A shared /XObject, /Pattern, /Font or /CharProcs dictionary is walked once: every stream it names is reached the
+  // first time, from the first page that meets it, and a later meeting could reach nothing new or name another page.
+  const walkedXObjects = new Set<string>();
+  const walkedPatterns = new Set<string>();
+  const walkedFonts = new Set<string>();
+  const walkedCharProcs = new Set<string>();
   const walkFrom = (start: string | undefined, page: number | undefined, annots: unknown) => {
     const stack: { resources: string | undefined; depth: number }[] = [{ resources: start, depth: 0 }];
     // A page's annotations' appearance streams.
@@ -592,12 +614,18 @@ async function changesFor(
           walkedAnnotations.add(item);
         }
         const annotation = dictAt(item);
-        const ap = annotation ? dictAt(annotation['/AP']) : undefined;
+        // Pages are walked in order, so a shared appearance or states dictionary first met here has every stream it
+        // names reached from this page; meeting it again could reach nothing new.
+        const ap = annotation && firstTime(walkedAppearanceDicts, annotation['/AP']) ? dictAt(annotation['/AP']) : undefined;
         if (!ap) continue;
         for (const state of ['/N', '/R', '/D']) {
           const each = ap[state];
-          const ids = isRef(each) && isStream(each) ? [each] : Object.values(dictAt(each) ?? {}).filter((one): one is string => isRef(one) && isStream(one));
-          for (const id of ids) reachStream(id, page, stack, 0);
+          if (isRef(each) && isStream(each)) {
+            reachStream(each, page, stack, 0);
+            continue;
+          }
+          if (!firstTime(walkedStateDicts, each)) continue;
+          for (const one of Object.values(dictAt(each) ?? {})) if (isRef(one) && isStream(one)) reachStream(one, page, stack, 0);
         }
       }
     }
@@ -606,12 +634,14 @@ async function changesFor(
       if (key === undefined || walkedResources.has(key) || depth > drawDepth) continue;
       walkedResources.add(key);
       const dict = current(resources.get(key)!.place) as Dict;
-      for (const id of Object.values(dictAt(dict['/XObject']) ?? {})) if (isRef(id) && forms.has(id)) reachStream(id, page, stack, depth);
-      for (const id of Object.values(dictAt(dict['/Pattern']) ?? {})) if (isRef(id) && patterns.has(id)) reachStream(id, page, stack, depth);
-      for (const value of Object.values(dictAt(dict['/Font']) ?? {})) {
-        const font = dictAt(value);
-        if (!font || !isName(font['/Subtype'], '/Type3')) continue;
-        for (const proc of Object.values(dictAt(font['/CharProcs']) ?? {})) if (isRef(proc) && glyphs.has(proc)) reachStream(proc, page, stack, depth);
+      if (firstTime(walkedXObjects, dict['/XObject'])) for (const id of Object.values(dictAt(dict['/XObject']) ?? {})) if (isRef(id) && forms.has(id)) reachStream(id, page, stack, depth);
+      if (firstTime(walkedPatterns, dict['/Pattern'])) for (const id of Object.values(dictAt(dict['/Pattern']) ?? {})) if (isRef(id) && patterns.has(id)) reachStream(id, page, stack, depth);
+      if (firstTime(walkedFonts, dict['/Font'])) {
+        for (const value of Object.values(dictAt(dict['/Font']) ?? {})) {
+          const font = dictAt(value);
+          if (!font || !isName(font['/Subtype'], '/Type3') || !firstTime(walkedCharProcs, font['/CharProcs'])) continue;
+          for (const proc of Object.values(dictAt(font['/CharProcs']) ?? {})) if (isRef(proc) && glyphs.has(proc)) reachStream(proc, page, stack, depth);
+        }
       }
     }
   };
@@ -628,12 +658,18 @@ async function changesFor(
   // A stream owning a locked dictionary is left (no stand-in name can be added there); so is a form or Type 3 font
   // without resources of its own that a soft-mask-only form can draw (it would draw with the locked dictionary).
   for (const drawing of drawings.values()) if (drawing.own && resources.get(drawing.own)!.locked) drawing.left = true;
+  // Marking is the same however often a shared dictionary is met, so each is read once here too.
+  const lockedXObjects = new Set<string>();
+  const lockedFonts = new Set<string>();
+  const lockedCharProcs = new Set<string>();
   for (const each of resources.values()) {
     if (!each.locked) continue;
     const dict = current(each.place) as Dict;
-    for (const id of Object.values(dictAt(dict['/XObject']) ?? {})) if (isRef(id) && inheritors.has(id) && drawings.has(id)) drawings.get(id)!.left = true;
+    if (firstTime(lockedXObjects, dict['/XObject'])) for (const id of Object.values(dictAt(dict['/XObject']) ?? {})) if (isRef(id) && inheritors.has(id) && drawings.has(id)) drawings.get(id)!.left = true;
+    if (!firstTime(lockedFonts, dict['/Font'])) continue;
     for (const value of Object.values(dictAt(dict['/Font']) ?? {})) {
       const font = dictAt(value);
+      if (!firstTime(lockedCharProcs, font?.['/CharProcs'])) continue;
       for (const proc of Object.values(dictAt(font?.['/CharProcs']) ?? {})) if (isRef(proc) && inheritors.has(proc) && drawings.has(proc)) drawings.get(proc)!.left = true;
     }
   }
