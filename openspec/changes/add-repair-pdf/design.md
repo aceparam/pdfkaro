@@ -120,6 +120,14 @@ As `pages.ts` (PR #39) and `shrink.ts` (PR #41) were moved before the tools that
 - `certificateEncrypted(printed)` in `src/engines/inspect.ts` (qpdf's "unsupported encryption" words, as `unlock-pdf.ts` matches them today) and an `inspectPdfNamingCertificates` inspector (or an option to `inspectPdf`) returning `unsupported` for it; Remove a password moved onto it.
 - Proof: every output of the three tools byte-identical on every fixture (the trailer `/ID` aside where qpdf writes a fresh one), their tests changing only in import lines; the review panel's stage 2 as for any change. Repair imports these; until that pull request is merged nothing here calls them shared.
 
+**As built** (commit 11fdf90, stage 2 approved by all five reviewers): `rewrite(tools, bytes, passwordArgs, extraArgs, onWriting, { failed, limit = oneFileLimit(bytes.length) })` takes a sixth argument, the tool's own fixed sentence for an unfinished write (a wrong password always gives "A password did not open the file.") and an optional cap; `rewriteArgs(passwordArgs, extraArgs)` is exported (`['--progress', ...passwordArgs, '/in.pdf', ...extraArgs, '--', '/out.pdf']`), and Protect's `protectArgs` and Remove a password's `unprotectArgs` are built on it. `protectedBytes` and `unprotectedBytes` stay as thin calls to `rewrite`; `protectLimit` and `unprotectLimit` are gone. Compress to a target size uses only `oneFileLimit` (for its first write's cap): its writes are qpdf JSON updates through `writeUpdate`, not rewrites. The two tools' tests also scan the code of `rewrite`, `rewriteArgs` and the certificate check for the forbidden options and the console, and capture the arguments the real write passes to qpdf.
+
+Notes for Repair's own build (software architect, stage 2):
+
+- (a) `RepairFailed` cannot come straight out of `rewrite`, which throws a plain `Error` with the `failed` sentence. This change widens `failed` to `string | (() => Error)` (a function is called to make the error thrown), keeping strings as today, so Protect and Remove a password are unchanged.
+- (b) Each `rewrite` call says which bytes its limit is measured from (the visitor's input, the rebuilt bytes, pdf-lib's saved bytes or the plain copy) and passes `limit` explicitly, never the default: two default rewrites in a row, each `2 × its own input + 16 MiB`, would allow about `4 × input + 48 MB`. Which bytes each limit follows is set in task 2.3, checked against the genuine large files in task 3.3, and named in the pull request.
+- (c) Every `rewrite` call makes its own qpdf instance and copies its `bytes` into it, so the copy cap of decision 5 adds `bytes.length` before each `rewrite` call, as it does for each raw batch.
+
 ## Decisions
 
 ### 1. The approach: our pre-pass, pdf-lib's reader under guards, qpdf to write and check
