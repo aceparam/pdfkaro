@@ -12,6 +12,7 @@ import { inspectPdf, readPdf } from '../../src/engines/inspect';
 import { createQpdf, finished, oneFileLimit as unprotectLimit, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
 import { inspect, isEncrypted, run, unprotectArgs, unprotectedBytes } from '../../src/engines/tools/unlock-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
+import { sharedStepCode, withSilentConsole } from './rewrite-helpers';
 import { certificatePdf } from './unlock-helpers';
 
 const require = createRequire(import.meta.url);
@@ -169,6 +170,16 @@ describe('the arguments and the source', () => {
     for (const forbidden of ['--show-encryption', '--allow-weak-crypto', '--remove-restrictions', 'callWithArgumentFile', 'callWithPassword', 'console.']) {
       expect(source, forbidden).not.toContain(forbidden);
       for (const arg of [...unprotectArgs(undefined), ...unprotectArgs(P)]) expect(arg.startsWith(forbidden)).toBe(false);
+    }
+  });
+
+  it('nor do the shared steps it runs: the one-file rewrite, its arguments and the certificate check', () => {
+    const steps = sharedStepCode();
+    for (const [name, code] of Object.entries(steps)) {
+      expect(code, name).toContain(name);
+      for (const forbidden of ['--show-encryption', '--allow-weak-crypto', '--remove-restrictions', '--cleartext-metadata', '--allow-insecure', 'callWithArgumentFile', 'callWithPassword', 'console.']) {
+        expect(code, `${name}: ${forbidden}`).not.toContain(forbidden);
+      }
     }
   });
 
@@ -375,6 +386,23 @@ describe('only the typed password', () => {
     expect(check).toEqual(['--check', '/in.pdf']);
     const all = instances.flat(2);
     expect(all.filter((arg) => arg.includes(open))).toEqual([`--password=${open}`, `--password=${open}`]);
+  });
+
+  it('the real write passes qpdf exactly unprotectArgs, with no forbidden option, and nothing reaches the console', async () => {
+    const forbidden = ['--show-encryption', '--allow-weak-crypto', '--remove-restrictions', '--cleartext-metadata', '--allow-insecure'];
+    for (const given of [undefined, open]) {
+      const { instances, given: spiedTools } = spied();
+      const file = fixture(given === undefined ? 'restricted.pdf' : 'password.pdf');
+      let output: Uint8Array | undefined;
+      const said = await withSilentConsole(async () => {
+        output = (await unprotect(file, [given], spiedTools)).output;
+      });
+      expect(said).toEqual([]);
+      await expectUnprotected(output);
+      const writing = instances[1]![0]!;
+      expect(writing).toEqual(unprotectArgs(given));
+      for (const arg of instances.flat(2)) for (const option of forbidden) expect(arg.startsWith(option), arg).toBe(false);
+    }
   });
 
   it('a wrong password gives the fixed sentence, and no other password is tried', async () => {
