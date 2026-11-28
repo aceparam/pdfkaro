@@ -20,12 +20,15 @@ Make the files with `tests/unit/repair-helpers.ts` (`damagedKinds()`; a short sc
 - [ ] The page in Chrome, Firefox, Safari and Edge, and on Android Chrome and iOS Safari at phone size: choose a damaged file, repair it, download it.
 - [ ] A screen reader (VoiceOver and NVDA or TalkBack) on the page: the file's row once read ("damaged-xref.pdf, 3 pages, 5.9 KB."), the password field and its note, progress, the result heading and both notes, the "no damage found" heading and advice, the too-damaged words with "Choose another file", and the damaged notice for a file with no pages.
 - [ ] The multilingual file damaged (`damagedCopy(multilingual.pdf)` from the helpers) and repaired: a reader of each script (Hindi, Telugu, Arabic, Chinese) checks that every sentence reads as in the original.
+- [ ] iOS Safari and desktop Safari refuse the 2 GB object-stream bomb and the round 3 object-stream file (`hostile.objectStreamCopies(20_000, 1 MiB)` from the helpers) with "The file was not repaired." and the shared words, without the tab crashing or reloading.
+- [ ] A damaged picture on the qpdf route that qpdf's check passes without decoding (for example a JPG or picture data cut short in a file whose table is sound): the page says "This file has no damage this tool can find." Judge whether that is acceptable, as the design records it as known behaviour.
 - [ ] A 110 MB damaged file (`make-large.mjs`, then `damagedCopy`) on a phone: the 100 MB notice shows, and the job either finishes or says the browser ran out of memory (owner question 10).
 
 ## The link from every other tool
 
 - [ ] On each browser and phone above, a damaged file on Merge PDF shows, after "Leave this file out", the sentence "Repair PDF may be able to recover it. On that page, choose the file again." and the link "Go to Repair PDF" on its own line, easy to tap and apart from the button; following it opens Repair PDF in the same tab with no file listed and no leave-page prompt; Back shows Merge PDF with no file.
 - [ ] The same on one page tool (Split PDF), one one-file tool (Compress PDF) and Remove a password.
+- [ ] On a phone with a hardware keyboard (an iPad or Android tablet with a keyboard, or a phone with a Bluetooth keyboard), a keyboard-only pass of the damaged notice on Merge PDF: Tab reaches "Leave this file out", then "Go to Repair PDF", each with a visible focus outline, and Enter follows the link.
 - [ ] A screen reader on the damaged notice: the heading, then the sentence about Repair PDF; Tab reaches the button first and the link next, each with a visible focus outline.
 
 ## Words for the owner to review

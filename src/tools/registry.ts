@@ -269,7 +269,8 @@ export type ToolWidgetWords = {
   zipLimitAdvice?: string;
   /**
    * The verb in the sentence for a page with too much drawing on it (`pageTooLargeSentence` in src/widget/failures.ts):
-   * "Page 14 has too much drawing on it to repair here. … and repair the rest." Left out: "convert" (Grayscale PDF).
+   * "Page 14 has too much drawing on it to repair here. … and repair the rest." Every tool whose engine can stop with
+   * `PageTooLarge` names its own (the registry test); left out, the neutral "work on".
    */
   pageTooLargeAction?: string;
   /**
@@ -1065,6 +1066,7 @@ export const tools: Tool[] = [
       multiple: false,
       resultPages: 'input',
       memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      pageTooLargeAction: 'convert',
       items: 'files',
       itemControls: false,
       outputs: 'one',
@@ -1132,7 +1134,7 @@ export const tools: Tool[] = [
       },
       // Passwords are dropped (the owner's decision of 28 Nov 2026, "Drop them").
       resultNotes: [
-        "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back, and if the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it.",
+        "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back. If the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it.",
         "Links, form fields, bookmarks, attached files and the document's details that could be read are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
       ],
     },

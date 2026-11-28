@@ -31,7 +31,7 @@ import { decodeContent, decodesContent, maxContentBytes, PageTooLarge } from '..
 import { certificateEncrypted, readPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
 import { cappedWrite, finished, oneFileLimit, OutputLimit, rewrite, type Qpdf } from '../qpdf';
-import { callWithArgumentFile, entryText, isDict, isRef, opening, passwordArgsFor, rawBatches, readDictionaries, readRawStreams, type Dict, type ObjectEntry } from '../qpdf-json';
+import { callWithArgumentFile, entryText, isDict, isRef, maxDictionaryJson, opening, passwordArgsFor, rawBatches, readDictionaries, readRawStreams, type Dict, type ObjectEntry } from '../qpdf-json';
 import { rebuild } from '../rebuild';
 import type { Engine, EngineModule, EngineTools, InspectOutcome, Inspector } from '../types';
 import { inflateReadable, isZlib, type Fflate } from '../zlib';
@@ -81,6 +81,13 @@ export type Limits = {
   sweepCeiling: number;
   /** A page's drawing, decoded, past which the job stops (`PageTooLarge`). */
   pageDecode: number;
+  /**
+   * The most recovered bytes of damaged Flate streams the sweep keeps over a job: `min(keptCeiling, 2 × plain copy +
+   * 16 MiB)`. Past it, a further damaged stream is emptied, as damage in other filters is.
+   */
+  keptCeiling: number;
+  /** The shared cap on qpdf's JSON of dictionaries; past it the sweep has nothing to list and is skipped. */
+  listingCap: number;
 };
 
 export const limits: Limits = {
@@ -94,6 +101,8 @@ export const limits: Limits = {
   sweepMultiple: 200,
   sweepCeiling: 2 * 1024 ** 3,
   pageDecode: maxContentBytes,
+  keptCeiling: 256 * 1024 * 1024,
+  listingCap: maxDictionaryJson,
 };
 
 /** The most qpdf instances a job makes: a backstop, as the copy bound is always reached first. */
@@ -117,6 +126,8 @@ type Token = {
   refusedObjectStreams: number;
   /** Objects pdf-lib could not parse and skipped by the pre-pass's record. */
   skipped: number;
+  /** Objects pdf-lib parsed that ended before the pre-pass's record, whose rest was skipped by it. */
+  skippedAfter: number;
   k: number;
   streamDecode: number;
   callDecode: number;
@@ -140,7 +151,7 @@ const stop = (token: Token, why: Stop): never => {
 };
 
 /** What the guards found in a pdf-lib call, for tests and measurements: reads and copies against the work budget. */
-export type GuardRecord = Readonly<Pick<Token, 'input' | 'decodedObjectStreams' | 'reads' | 'copied' | 'decoded' | 'stopped' | 'refusedObjectStreams' | 'skipped'>>;
+export type GuardRecord = Readonly<Pick<Token, 'input' | 'decodedObjectStreams' | 'reads' | 'copied' | 'decoded' | 'stopped' | 'refusedObjectStreams' | 'skipped' | 'skippedAfter'>>;
 
 /** The hooks a guard needs on pdf-lib's classes; a test fails when one moves. */
 export type Hooks = {
@@ -168,6 +179,7 @@ export function pdflibHooks(lib: typeof PdfLib): Hooks {
   const parserProto = lib.PDFParser.prototype as unknown as Record<string, unknown>;
   for (const [what, place, key] of [
     ['PDFParser.tryToParseInvalidIndirectObject', parserProto, 'tryToParseInvalidIndirectObject'],
+    ['PDFParser.parseIndirectObject', parserProto, 'parseIndirectObject'],
     ['ByteStream.next', byteStream, 'next'],
     ['ByteStream.slice', byteStream, 'slice'],
     ['DecodeStream.ensureBuffer', decodeStream, 'ensureBuffer'],
@@ -285,6 +297,24 @@ export function guardPdflib(lib: typeof PdfLib): void {
     return undefined;
   };
 
+  // An object that parses but leaves bytes before its end (`4 0 obj 5 xxxx… endobj`): pdf-lib's skipJibberish would
+  // walk them byte by byte, throwing at almost every byte. Once the object is parsed, the reader moves on to where the
+  // pre-pass ended it, so what is left inside one object is never walked.
+  const parseObject = hooks.parser.parseIndirectObject as (this: unknown, ...args: unknown[]) => Promise<unknown>;
+  hooks.parser.parseIndirectObject = async function (this: unknown, ...args: unknown[]) {
+    const token = current;
+    const bytes = (this as { bytes: { offset(): number; moveTo(offset: number): void } }).bytes;
+    const start = bytes.offset();
+    const parsed = await parseObject.apply(this, args);
+    const end = token?.ends?.get(start);
+    if (token && end !== undefined && bytes.offset() < end) {
+      if (token.stopped) throw new Stopped();
+      token.skippedAfter++;
+      bytes.moveTo(end);
+    }
+    return parsed;
+  };
+
   // Cross-reference streams: only /Root, /Info, /Encrypt and /ID are taken; their entries are never decoded or read.
   const forStream = hooks.xrefStreamParser.forStream as Fn;
   hooks.xrefStreamParser.forStream = (raw: unknown) => {
@@ -327,6 +357,7 @@ function tokenFor(input: number, given: Limits, ends?: ReadonlyMap<number, numbe
   return {
     ends,
     skipped: 0,
+    skippedAfter: 0,
     input,
     decodedObjectStreams: 0,
     limit: given.k * input,
@@ -432,7 +463,9 @@ export async function readWithPdflib(
  * Counts the pages from the catalog's /Pages with an iterative walk and a visited set (decision 5): each /Kids entry
  * is followed once, a node already reached is dropped from the /Kids it was met in, and each page-tree node's /Count
  * is set to the pages found below it, so qpdf, writing the file, sees each page once and counts as this walk does.
- * The walk takes at most twice as many steps as there are objects. A leaf with /Type /Page, or with no /Kids, counts.
+ * Each node is entered once and each /Kids entry looked at once (the visited sets), so the walk takes time in
+ * proportion to the objects and their /Kids arrays, which are part of the file; no step budget can cut it short and
+ * lose pages. A leaf with /Type /Page, or with no /Kids, counts.
  * pdf-lib's own walks are recursive with no visited set, so they are never called.
  */
 export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): number {
@@ -447,7 +480,6 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
   const seen = new Set<string>();
   const seenDirect = new WeakSet<object>();
   const key = (ref: PdfLib.PDFRef) => `${ref.objectNumber} ${ref.generationNumber}`;
-  let steps = 2 * (context.enumerateIndirectObjects().length + 1);
   const first = catalog.get(pagesName);
   if (first === undefined) return 0;
   if (first instanceof PDFRef) seen.add(key(first));
@@ -486,7 +518,7 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
     return 0;
   };
   total += enter(first);
-  while (frames.length > 0 && steps-- > 0) {
+  while (frames.length > 0) {
     const frame = frames[frames.length - 1]!;
     if (frame.next < frame.kids.length) {
       const pages = enter(frame.kids[frame.next++]);
@@ -626,6 +658,12 @@ const onlyCheckLines = (printed: string) => printed.split('\n').every((line) => 
 /** The cap on a plain copy, from the visitor's file: decrypting and unpacking object streams can grow it. */
 export const plainLimit = (input: number) => 8 * input + 16 * 1024 * 1024;
 
+/**
+ * What the sweep may keep of damaged Flate streams over the whole job, counted as each is stored. Every kept byte is
+ * held until the update is written, so this, not the decoding budget, bounds the sweep's memory.
+ */
+export const keptBudget = (plain: number, given: Limits) => Math.min(given.keptCeiling, oneFileLimit(plain));
+
 /** The sweep's decoding budget over the whole job. */
 const sweepBudget = (plain: number, given: Limits) => Math.min(given.sweepCeiling, given.sweepBase + given.sweepMultiple * plain);
 
@@ -650,7 +688,7 @@ function judgeOf(dict: Dict): 'flate' | 'content' | 'plain' | 'none' {
   return decodesContent(dict, () => undefined) ? 'content' : 'none';
 }
 
-/** The page objects of the plain copy, in order, from the catalog's /Pages: an iterative walk, each node once. */
+/** The page objects of the plain copy, in order, from the catalog's /Pages: an iterative walk, each node and each indirect /Kids array once. */
 function pagesOf(objects: ReadonlyMap<string, ObjectEntry>, trailer: Dict | null): string[] {
   const value = (id: unknown): unknown => {
     if (!isRef(id)) return id;
@@ -661,15 +699,22 @@ function pagesOf(objects: ReadonlyMap<string, ObjectEntry>, trailer: Dict | null
   if (!isDict(catalog)) return [];
   const pages: string[] = [];
   const seen = new Set<string>();
+  // An indirect /Kids array is walked once, however many nodes name it; a direct one belongs to its node. So the walk
+  // takes time in proportion to the objects and their arrays, with no step budget to cut it short and lose pages.
+  const seenArrays = new Set<string>();
   const stack: unknown[] = [catalog['/Pages']];
-  let steps = objects.size + 1;
-  while (stack.length > 0 && steps-- > 0) {
+  while (stack.length > 0) {
     const id = stack.pop();
     if (!isRef(id) || seen.has(id)) continue;
     seen.add(id);
     const node = value(id);
     if (!isDict(node)) continue;
-    const kids = value(node['/Kids']);
+    const kidsValue = node['/Kids'];
+    if (isRef(kidsValue)) {
+      if (seenArrays.has(kidsValue)) continue;
+      seenArrays.add(kidsValue);
+    }
+    const kids = value(kidsValue);
     if (node['/Type'] === '/Page' || !Array.isArray(kids)) {
       if (node['/Type'] !== '/Pages') pages.push(id);
       continue;
@@ -691,8 +736,10 @@ async function sweep(
   Inflate: Fflate['Inflate'],
   given: Limits,
   onWriting: (percent: number) => void,
+  writeLimit: number,
 ): Promise<Uint8Array> {
-  const dicts = readDictionaries(await fresh(plain), []);
+  // Past the listing cap there is nothing to list: no stream is judged and no page changed, and the update is empty.
+  const dicts = readDictionaries(await fresh(plain), [], given.listingCap);
   const objects = dicts?.objects ?? new Map<string, ObjectEntry>();
   const update = new Map<string, unknown>();
   const isStream = (id: unknown) => isRef(id) && 'stream' in (objects.get(id) ?? {});
@@ -753,10 +800,18 @@ async function sweep(
     if (page !== undefined) throw new PageTooLarge(page);
   };
   const replacements = new Map<string, { dict: Dict; data: Uint8Array }>();
-  const replace = (id: string, dict: Dict, data: Uint8Array) => {
-    const kept: Dict = { ...dict };
-    for (const key of ['/Filter', '/DecodeParms', '/Length', '/DL']) delete kept[key];
-    replacements.set(id, { dict: kept, data });
+  // Recovered bytes kept until the update is written. Past the budget, a further damaged stream is emptied, as damage
+  // in other filters is, rather than failing the job: a genuine file with several large damaged pictures still gives
+  // a file that passes the check, and memory stays bounded.
+  let kept = 0;
+  const keepBudget = keptBudget(plain.length, given);
+  const replace = (id: string, dict: Dict, recovered: Uint8Array) => {
+    let data = recovered;
+    if (kept + data.length > keepBudget) data = new Uint8Array(0);
+    kept += data.length;
+    const keptDict: Dict = { ...dict };
+    for (const key of ['/Filter', '/DecodeParms', '/Length', '/DL']) delete keptDict[key];
+    replacements.set(id, { dict: keptDict, data });
   };
   for await (const batch of readRawStreams(() => fresh(plain), [], batches)) {
     for (const [id, raw] of batch) {
@@ -803,7 +858,7 @@ async function sweep(
   qpdf.write('/update.json', new TextEncoder().encode(`${opening(dicts?.max ?? 0)}${entries.join(',')}}]}`));
   const written = cappedWrite(
     qpdf,
-    oneFileLimit(plain.length),
+    writeLimit,
     (capped) => callWithArgumentFile(capped, ['--progress', '/in.pdf', '--update-from-json=/update.json', '--object-streams=disable', '/out.pdf']),
     onWriting,
   );
@@ -869,7 +924,7 @@ export function makeRun(given: Limits = limits, { route }: { route?: 'pdflib' } 
     if (reads === 'sound') return [];
     const readable = reads === 'yes';
     // The plain copy, held in an object so it can be let go once the sweep has written its update.
-    const held: { plain?: Uint8Array } = {};
+    const held: { plain?: Uint8Array; swept?: Uint8Array } = {};
     if (readable) {
       try {
         meter.add(file.length);
@@ -890,12 +945,15 @@ export function makeRun(given: Limits = limits, { route }: { route?: 'pdflib' } 
     }
 
     const { Inflate } = await need<Fflate>(tools, 'fflate');
-    const swept = await sweep(held.plain, fresh, meter, Inflate, given, writing(25, 35));
+    // The update and the final write are both capped from the plain copy's size, so the caps do not compound.
+    const writeLimit = oneFileLimit(held.plain.length);
+    held.swept = await sweep(held.plain, fresh, meter, Inflate, given, writing(25, 35), writeLimit);
     delete held.plain;
 
-    // The final write, with object streams, and a fresh qpdf's check.
-    meter.add(swept.length);
-    const out = await rewrite(tools, swept, [], ['--object-streams=generate'], writing(35, 50), { failed: () => new RepairFailed(), limit: oneFileLimit(swept.length) });
+    // The final write, with object streams, and a fresh qpdf's check; the swept copy is let go before the check.
+    meter.add(held.swept.length);
+    const out = await rewrite(tools, held.swept, [], ['--object-streams=generate'], writing(35, 50), { failed: () => new RepairFailed(), limit: writeLimit });
+    delete held.swept;
     onProgress({ stage: 'writing', percent: 55 });
     const final = await fresh(out);
     if (!finished(final.call(['--check', '/in.pdf']).code)) throw new RepairFailed();

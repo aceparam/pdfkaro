@@ -26,11 +26,12 @@ export const unsafePageSentence = 'A page of this file could not be resized, so 
 
 /**
  * What the page says when page `page`'s drawing instructions are too large to work on here (content.ts's
- * `PageTooLarge`): Grayscale PDF converts, Repair PDF repairs (`action`, the tool's `pageTooLargeAction`). A genuine
+ * `PageTooLarge`): Grayscale PDF converts, Repair PDF repairs (`action`, the tool's `pageTooLargeAction`; every tool that
+ * can stop with it names its own, which the registry test checks, so the neutral default is never shown). A genuine
  * dense map or drawing can reach it, so it names deleting the page or splitting the file, not damage. The number is
  * the only thing from the file in it.
  */
-export function pageTooLargeSentence(page?: number, action = 'convert'): string {
+export function pageTooLargeSentence(page?: number, action = 'work on'): string {
   // One template: with no page (never expected), the same words name "A page".
   const which = page !== undefined && Number.isSafeInteger(page) && page >= 1 ? `Page ${number(page)}` : 'A page';
   return `${which} has too much drawing on it to ${action} here. Delete that page, or split the file, and ${action} the rest.`;

@@ -51,10 +51,10 @@ describe('the sentence for a page that could not be placed safely', () => {
 
 describe('the sentence for a page whose drawing is too large (Grayscale PDF)', () => {
   it('names the page, with a thousands separator, and the advice to delete or split, not damage', () => {
-    expect(failureSentence('page-too-large', {}, {}, {}, 14)).toBe(
+    expect(failureSentence('page-too-large', { pageTooLargeAction: 'convert' }, {}, {}, 14)).toBe(
       'Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.',
     );
-    expect(failureSentence('page-too-large', { memoryAdvice: 'Try on a computer.' }, {}, {}, 12_000)).toBe(
+    expect(failureSentence('page-too-large', { memoryAdvice: 'Try on a computer.', pageTooLargeAction: 'convert' }, {}, {}, 12_000)).toBe(
       'Page 12,000 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.',
     );
     expect(pageTooLargeSentence(14)).not.toMatch(/damaged/);
@@ -64,12 +64,13 @@ describe('the sentence for a page whose drawing is too large (Grayscale PDF)', (
     expect(failureSentence('page-too-large', { pageTooLargeAction: 'repair' }, {}, {}, 14)).toBe(
       'Page 14 has too much drawing on it to repair here. Delete that page, or split the file, and repair the rest.',
     );
-    expect(pageTooLargeSentence(14)).toBe('Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
-    expect(pageTooLargeSentence(14, 'convert')).toBe(pageTooLargeSentence(14));
+    expect(pageTooLargeSentence(14, 'convert')).toBe('Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
+    // The shared default is neutral; every tool that can stop with it names its own verb (registry test).
+    expect(pageTooLargeSentence(14)).toBe('Page 14 has too much drawing on it to work on here. Delete that page, or split the file, and work on the rest.');
   });
 
   it('names no page when none came', () => {
-    expect(failureSentence('page-too-large', {})).toBe('A page has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
+    expect(failureSentence('page-too-large', { pageTooLargeAction: 'convert' })).toBe('A page has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
     expect(failureSentence('page-too-large', {}, {}, {}, 0)).not.toMatch(/Page 0/);
   });
 

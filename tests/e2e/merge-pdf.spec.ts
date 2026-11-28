@@ -10,7 +10,7 @@ import { type FileChooser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { expectRepairLink, repairLink, repairSentence } from './repair-link';
 import { expectNothingStored, headersRead, violations, watch } from './no-upload';
-import { toolFiles } from './tool-files';
+import { pageFiles, toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -317,7 +317,8 @@ test.describe('problems', () => {
     expect(asked[0]!.body).toBeNull();
     expect(new URL(asked[0]!.url).search).toBe('');
     expect(new URL(asked[0]!.url).hash).toBe('');
-    expect(violations(seen, new URL(baseURL!).origin, secrets, [...toolFiles('merge-pdf').all, ...seen.map((request) => new URL(request.url).pathname)])).toEqual([]);
+    // Exactly Merge PDF's own files after a pick, and what the Repair PDF page fetches before any pick.
+    expect(violations(seen, new URL(baseURL!).origin, secrets, [...toolFiles('merge-pdf').all, ...pageFiles('repair-pdf')])).toEqual([]);
     const repairPage = await page.evaluate(() => ({ state: history.state, name: window.name, address: location.href, html: document.documentElement.outerHTML }));
     expect(repairPage.state).toBeNull();
     expect(repairPage.name).toBe('');

@@ -428,6 +428,37 @@ export const hostile = {
     let at = 0;
     return bytesOf(out.replace(/@{10}/g, () => String(end - starts[at++]!).padStart(10, ' ')));
   },
+  /**
+   * A value followed by junk inside one object (stage 2 review, M2): the object parses, and what follows it up to its
+   * `endobj` is junk pdf-lib would walk byte by byte. `number`: `4 0 obj 5 xxxx… endobj`; `spaced`: `5 x x x…`;
+   * `dict`: `<< /A 1 >> xxxx…`. With a page before it, no table.
+   */
+  junkAfterValue: (size: number, kind: 'number' | 'spaced' | 'dict') => {
+    const value = kind === 'dict' ? '<< /A 1 >>' : '5';
+    const junk = kind === 'spaced' ? repeatTo('x ', size) : repeatTo('x', size);
+    return bytesOf(`${handPdf(onePage(streamBody('0 0 m')), { table: false })}5 0 obj ${value} ${junk} endobj\n`);
+  },
+  /**
+   * Damaged Flate pictures whose recovered data the sweep would keep (stage 2 review, M1): `count` pictures each
+   * unpacking to `bytes` of zeros but cut 64 bytes short of its end, on one page, ending with junk after `%%EOF` so it is
+   * read on the qpdf route (`table`), or with no table (the pdf-lib route).
+   */
+  cutPictures: (bomb: string, count: number, bytes: number, table: boolean, padding = 0) => {
+    const cut = bomb.slice(0, bomb.length - 64);
+    // An unfiltered stream of `padding` random bytes, which the sweep does not read, raises its decoding budget.
+    let seed = 99;
+    const pad = Array.from({ length: padding }, () => String.fromCharCode((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 24)).join('');
+    const resources = [...Array.from({ length: count }, (_, at) => `/I${at} ${5 + at} 0 R`), ...(padding ? [`/P ${5 + count} 0 R`] : [])].join(' ');
+    const bodies = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources << /XObject << ${resources} >> >> >>`,
+      streamBody('q 10 0 0 10 0 0 cm /I0 Do Q'),
+      ...Array.from({ length: count }, () => streamBody(cut, `/Type /XObject /Subtype /Image /Width 1024 /Height ${Math.ceil(bytes / 1024)} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode`)),
+      ...(padding ? [streamBody(pad, '/Type /XObject /Subtype /Form /BBox [0 0 1 1]')] : []),
+    ];
+    return bytesOf(`${handPdf(bodies, { table })}${table ? 'junk after the end' : ''}`);
+  },
   /** Many tiny Flate streams, each a page's drawing, with a table (qpdf route), for the copy bound. */
   tinyStreams: (count: number) => {
     const bodies = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, at) => `${3 + 2 * at} 0 R`).join(' ')}] /Count ${count} >>`];

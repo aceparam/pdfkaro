@@ -658,6 +658,19 @@ describe('Grayscale PDF', () => {
   });
 });
 
+describe('the verb for a page with too much drawing', () => {
+  it('is named by every tool whose engine can stop with PageTooLarge, Grayscale PDF as "convert"', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    for (const each of tools.filter((tool) => tool.runsIn === 'browser')) {
+      const source = readFileSync(join(__dirname, '../../src/engines/tools', `${each.id}.ts`), 'utf8');
+      if (/\bPageTooLarge\b/.test(source)) expect(each.widget?.pageTooLargeAction, each.id).toMatch(/^[a-z][a-z ]+[a-z]$/);
+    }
+    expect(tools.find((each) => each.id === 'grayscale-pdf')?.widget?.pageTooLargeAction).toBe('convert');
+    expect(tools.find((each) => each.id === 'repair-pdf')?.widget?.pageTooLargeAction).toBe('repair');
+  });
+});
+
 describe('Repair PDF', () => {
   const tool = tools.find((each) => each.id === 'repair-pdf')!;
 

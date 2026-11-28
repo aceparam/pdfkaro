@@ -310,6 +310,10 @@ describe('the guards on pdf-lib 2.11.1', () => {
     expect('record' in offsets && offsets.record!.refusedObjectStreams).toBe(1);
     const skipped = await read(bytesOf(handPdf(['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>', '<< /A ] >>'], { table: false })));
     expect('record' in skipped && skipped.record!.skipped).toBe(1);
+    // An object that parses but leaves junk before its end: the reader moves on to where the pre-pass ended it.
+    const after = await read(hostile.junkAfterValue(64 * 1024, 'number'));
+    expect('record' in after && after.record!.skippedAfter).toBe(1);
+    expect('record' in after && after.record!.reads).toBeLessThan(10_000);
   });
 
   it('leaves out objects pdf-lib could not make sense of, without the pre-pass too', async () => {
@@ -334,6 +338,51 @@ describe('the guards on pdf-lib 2.11.1', () => {
     expect('record' in over && over.record!.stopped).toBe('decode');
     const under = await readWithPdflib(pdflib, stage(30 * M), stage(30 * M).length, undefined, false, big);
     expect(under.kind).not.toBe('stopped');
+  });
+});
+
+describe('a file past the listing cap', () => {
+  const unlisted = makeRun({ ...limits, listingCap: 1024 });
+  it('is written as read with no sweep: a broken table alone gives a file, a damaged drawing is too damaged', async () => {
+    const [out] = await one(fixture('damaged-xref.pdf'), undefined, unlisted);
+    expect(await passesCheck(out!)).toBe(true);
+    expect(await qpdfPages(out!)).toBe(3);
+    const damaged = (await damagedKinds()).find((kind) => kind.name === 'bytes changed in a compressed drawing stream')!;
+    expect(await failure(() => one(damaged.bytes, undefined, unlisted))).toBeInstanceOf(RepairFailed);
+    // With the listing, the same file is repaired.
+    expect(await one(damaged.bytes)).toHaveLength(1);
+  });
+});
+
+describe('counting pages', () => {
+  // Stage 2 review: a tree with many /Kids entries pointing to nothing must not use up a budget and lose the pages.
+  const dangling = () => {
+    const kids = [...Array.from({ length: 60 }, (_, at) => `${100 + at} 0 R`), '3 0 R', '4 0 R'].join(' ');
+    return bytesOf(
+      handPdf(['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${kids}] /Count 62 >>`, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>'], { table: false }),
+    );
+  };
+
+  it('counts both pages of a tree whose /Kids holds 60 references to nothing, in the reading and the forced pdf-lib route', async () => {
+    expect(await inspect(dangling(), undefined, tools)).toEqual({ kind: 'ready', pages: 2 });
+    const [out] = await one(dangling());
+    expect(await qpdfPages(out!)).toBe(2);
+    const forced = makeRun(limits, { route: 'pdflib' });
+    const withTable = bytesOf(handPdf(['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${[...Array.from({ length: 60 }, (_, at) => `${100 + at} 0 R`), '3 0 R', '4 0 R'].join(' ')}] /Count 62 >>`, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>']));
+    const [forcedOut] = await one(withTable, undefined, forced);
+    expect(await qpdfPages(forcedOut!)).toBe(2);
+  });
+
+  it('sweeps every page of a long tree: the drawing cap is checked on the last page too', { timeout: 120_000 }, async () => {
+    // 6,000 references to nothing first, which used up the old walk's budget before the last page.
+    const kids = [...Array.from({ length: 6000 }, (_, at) => `${10_000 + at} 0 R`), ...Array.from({ length: 3000 }, (_, at) => `${3 + at} 0 R`)].join(' ');
+    const bodies = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${kids}] /Count 3000 >>`];
+    for (let at = 0; at < 2999; at++) bodies.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] >>');
+    bodies.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 9 9] /Contents ${3 + 3000} 0 R >>`);
+    bodies.push(streamBody(deflated(Buffer.alloc(65 * M, 0x20)), '/Filter /FlateDecode'));
+    const error = await failure(() => one(bytesOf(handPdf(bodies, { table: false }))));
+    expect(error).toBeInstanceOf(PageTooLarge);
+    expect((error as PageTooLarge).page).toBe(3000);
   });
 });
 

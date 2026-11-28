@@ -100,3 +100,25 @@ export function toolFiles(toolId: string): ToolFiles {
     job: job.map(address).sort(),
   };
 }
+
+/**
+ * What a page fetches before any pick, read from its built HTML in dist/ (`<slug>.html`): the page's own address, every local file its
+ * markup names (stylesheets, scripts, the island and its renderer, icons), and what those scripts import statically.
+ */
+export function pageFiles(slug: string): string[] {
+  const files = built();
+  const html = readFileSync(join(assets, '..', `${slug}.html`), 'utf8');
+  const named = new Set<string>();
+  for (const match of html.matchAll(/(?:href|src|component-url|renderer-url|before-hydration-url)\s*=\s*["']([^"']+)["']/g)) {
+    const path = match[1]!.split(/[?#]/)[0]!;
+    if (!path.startsWith('/') || path.startsWith('//')) continue;
+    named.add(path);
+  }
+  const out = new Set<string>([`/${slug}`]);
+  for (const path of named) {
+    out.add(path);
+    const name = path.startsWith('/_astro/') ? path.slice('/_astro/'.length) : undefined;
+    if (name && files.includes(name) && name.endsWith('.js')) for (const each of staticClosure(name, files)) out.add(address(each));
+  }
+  return [...out].sort();
+}

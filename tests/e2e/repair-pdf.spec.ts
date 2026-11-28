@@ -34,7 +34,7 @@ const tooDamaged = 'This file is too damaged to repair. If you have another copy
 const damagedAdvice = 'No pages could be found in it. If you have another copy of the file, try that one.';
 const unsupportedAdvice = 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.';
 const resultNotes = [
-  "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back, and if the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it.",
+  "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back. If the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it.",
   "Links, form fields, bookmarks, attached files and the document's details that could be read are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
 ];
 const pageTooLarge = 'Page 14 has too much drawing on it to repair here. Delete that page, or split the file, and repair the rest.';

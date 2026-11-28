@@ -11,6 +11,7 @@ import { rebuild } from '../../src/engines/rebuild';
 import {
   instanceBound,
   inspect,
+  keptBudget,
   limits,
   makeInspect,
   makeRun,
@@ -30,7 +31,9 @@ import {
   latin1,
   manyPages,
   onePage,
+  passesCheck,
   password,
+  qpdfOn,
   qpdfPages,
   streamBody,
   tools,
@@ -43,6 +46,15 @@ const M = 1024 * 1024;
 
 // No request, and no console line from anything the engine runs.
 noRequestsOrLogs();
+
+/** The decoded lengths of the pictures in a file, as qpdf reads them, in object order. */
+async function pictureLengths(bytes: Uint8Array): Promise<number[]> {
+  const { out } = await qpdfOn(bytes, ['--json=2', '--json-key=qpdf', '--json-stream-data=inline', '--decode-level=generalized']);
+  const objects = (JSON.parse(out) as { qpdf: [unknown, Record<string, { stream?: { dict: Record<string, unknown>; data?: string } }>] }).qpdf[1];
+  return Object.values(objects)
+    .filter((entry) => entry.stream?.dict['/Subtype'] === '/Image')
+    .map((entry) => Buffer.from(entry.stream!.data ?? '', 'base64').length);
+}
 
 const one = async (file: Uint8Array, given?: string, engine = run): Promise<Uint8Array[]> => engine([file.slice()], { passwords: [given] }, () => {}, tools);
 /** The error a call ends with, or undefined. */
@@ -99,6 +111,9 @@ describe('hostile files in fixed time and bounded memory', () => {
     ['round 2 (c): overlapping object-stream offsets over ((((…))))', () => hostile.overlappingOffsets(20_000), 5_000],
     ['round 3: object-stream entries that are streams reaching one endstream', () => hostile.objectStreamCopies(20_000, M), 5_000],
     ['round 3: top-level objects copying to one shared endstream', () => hostile.topLevelCopies(20_000, M), 5_000],
+    ['stage 2 M2: a number followed by 4 MB of junk inside one object', () => hostile.junkAfterValue(4 * M, 'number'), 3_000],
+    ['stage 2 M2: a number followed by 4 MB of spaced junk inside one object', () => hostile.junkAfterValue(4 * M, 'spaced'), 3_000],
+    ['stage 2 M2: a dictionary followed by 4 MB of junk inside one object', () => hostile.junkAfterValue(4 * M, 'dict'), 3_000],
   ];
   for (const [name, make, limit] of cases) {
     it(`reads ${name} quickly`, { timeout: 60_000 }, async () => {
@@ -150,6 +165,34 @@ describe('hostile files in fixed time and bounded memory', () => {
       expect(Array.isArray(picture.outcome) || ['OutputLimit', 'RepairFailed'].includes(picture.outcome as string), `picture, table ${table}: ${String(picture.outcome)}`).toBe(true);
       expect(picture.ms).toBeLessThan(120_000);
       expect(picture.grew).toBeLessThan(growthBound);
+    }
+  });
+
+  it('keeps recovered bytes of damaged pictures within their budget, on both routes, and empties the rest', { timeout: 600_000 }, async () => {
+    // 33 pictures each unpacking to 60 MiB of zeros, cut 64 bytes short: the sweep would keep about 2 GB of them.
+    const bomb = await zeroBomb(60 * M);
+    for (const table of [true, false]) {
+      // With 10 MB of random padding, as the review's file had, so the decoding budget is 2 GiB and the kept budget decides.
+      const file = hostile.cutPictures(bomb, 33, 60 * M, table, 10 * M);
+      expect(keptBudget(file.length, limits)).toBeLessThan(60 * M);
+      const over = await measured(() => one(file));
+      expect(Array.isArray(over.outcome), `over, table ${table}: ${String(over.outcome)}`).toBe(true);
+      const [out] = over.outcome as Uint8Array[];
+      expect(await passesCheck(out!)).toBe(true);
+      // Every picture was emptied: none keeps its recovered zeros.
+      expect(await pictureLengths(out!)).toEqual(Array.from({ length: 33 }, () => 0));
+      expect(over.grew, `over, table ${table}`).toBeLessThan(growthBound);
+    }
+    // Under the budget, a damaged picture keeps what still unpacks.
+    const small = await zeroBomb(4 * M);
+    for (const table of [true, false]) {
+      const file = hostile.cutPictures(small, 2, 4 * M, table);
+      const under = await measured(() => one(file));
+      const [out] = under.outcome as Uint8Array[];
+      const lengths = await pictureLengths(out!);
+      expect(lengths).toHaveLength(2);
+      for (const length of lengths) expect(length).toBeGreaterThan(3 * M);
+      expect(under.grew).toBeLessThan(growthBound);
     }
   });
 

@@ -728,7 +728,9 @@ describe('drawing instructions are decoded within limits', () => {
     expect((error as PageTooLarge).page).toBe(2);
     expect(error!.message).toBe('A page has too much drawing on it to work on here.');
     expect(failureKind(error)).toBe('page-too-large');
-    expect(failureSentence('page-too-large', {}, {}, {}, (error as PageTooLarge).page)).toBe('Page 2 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
+    // With Grayscale PDF's own words from the registry: unchanged byte for byte.
+    const words = (await import('../../src/tools/registry')).tools.find((tool) => tool.id === 'grayscale-pdf')!.widget!;
+    expect(failureSentence('page-too-large', words, {}, {}, (error as PageTooLarge).page)).toBe('Page 2 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
   });
 
   it('a page of two streams of 40 MiB each stops the same way', { timeout: 120_000 }, async () => {

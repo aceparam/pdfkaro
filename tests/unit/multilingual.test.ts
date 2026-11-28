@@ -27,6 +27,8 @@ import { run as rotate } from '../../src/engines/tools/rotate-pdf';
 import { run as sign } from '../../src/engines/tools/sign-pdf';
 import { run as split } from '../../src/engines/tools/split-pdf';
 import { run as unlock } from '../../src/engines/tools/unlock-pdf';
+import { run as repair } from '../../src/engines/tools/repair-pdf';
+import { damagedCopy } from './repair-helpers';
 import { run as watermark } from '../../src/engines/tools/watermark-pdf';
 import { canonical } from './grayscale-helpers';
 import { jsonOf, makeQpdf, pageStreams, texts } from './stamp-helpers';
@@ -196,6 +198,12 @@ describe('the tools no other loop covers keep the text and content of every page
   it('Protect with a password, then Remove a password with it: every page as it was', async () => {
     const [protectedFile] = await runOn(protect, [multilingual], { newPassword, passwords: [undefined] });
     const [output] = await runOn(unlock, [protectedFile!], { passwords: [newPassword] });
+    await expectKept(multilingual, output!, [1, 2, 3, 4, 5]);
+  });
+
+  it('Repair PDF, on a damaged copy (its startxref pointing into its first object): every page as it was (add-repair-pdf)', async () => {
+    const [output] = await runOn(repair, [damagedCopy(multilingual)], { passwords: [undefined] });
+    expect(output).toBeDefined();
     await expectKept(multilingual, output!, [1, 2, 3, 4, 5]);
   });
 
