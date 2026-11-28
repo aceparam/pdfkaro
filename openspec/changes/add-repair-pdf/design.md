@@ -2,13 +2,16 @@
 
 ## Context
 
-See `proposal.md` for why. What shapes the approach:
+See `proposal.md` for why. **The owner decided on 28 Nov 2026** (`CLAUDE.md`, "Owner decisions"): a plain link from every tool's damaged notice for now ("Plain link now"); files qpdf cannot read are repaired by our own pre-pass and pdf-lib's reader, then written by qpdf, with no new dependency and no new qpdf build ("pdf-lib + pre-pass"); a repaired file has no password and no restrictions ("Drop them").
 
-- Every PDF tool reads a file with `inspectPdf` (`src/engines/inspect.ts`): `qpdf --show-npages`, and anything but a password failure is `damaged`. The damaged notice (`unreadableNotice` in `src/widget/failures.ts`, drawn in `ToolWorkspace.tsx`) offers only "Choose another file" / "Leave this file out". `tool-page`'s "Damaged file state" already says a published Repair PDF is linked "with the file carried over"; nothing can carry a file between pages yet ("Handover between tools" is unbuilt, and forbids storage, `window.name` and the address).
-- qpdf is `@neslinesli93/qpdf-wasm` 0.3.1 (qpdf 12.2.0), one fresh instance per step (`freshQpdf`), with `cappedWrite`, `--check` after every write, and JSON updates that do not reach objects inside object streams (so updates run on a copy written with `--object-streams=disable`, as `plainCopy` does).
-- pdf-lib (`@cantoo/pdf-lib` 2.11.1) ships as its own chunk, `pdflib-*.js` (about 243 KB by gzip, `fflate` with it), loaded through `tools.pdflib`. Until now it has only built new documents (Image to PDF, the drawing step in `stamp.ts`); it has never parsed a visitor's file.
+What shapes the approach:
+
+- Every PDF tool reads a file with `inspectPdf` (`src/engines/inspect.ts`): `qpdf --show-npages`, and anything but a password failure is `damaged`. The damaged notice (`unreadableNotice` in `src/widget/failures.ts`, drawn in `ToolWorkspace.tsx`) offers only "Choose another file" / "Leave this file out". Nothing can carry a file between pages yet ("Handover between tools" is unbuilt, and forbids storage, `window.name` and the address).
+- qpdf is `@neslinesli93/qpdf-wasm` 0.3.1 (qpdf 12.2.0), one fresh instance per step (`freshQpdf`), with `cappedWrite`, `--check` after every write, and JSON updates that do not reach objects inside object streams (so updates run on a copy written with `--object-streams=disable`, as `plainCopy` does). `createQpdf` collects standard output byte by byte into a string, so nothing large may ever be asked for on standard output.
+- The one-file output limit (`2 × size + 16 MiB`) and a capped decrypting rewrite are copied today in `unlock-pdf.ts`, `protect-pdf.ts` and `compress-to-target.ts`; Unlock alone tells certificate encryption from damage. Both move first (section "Before this change").
+- pdf-lib (`@cantoo/pdf-lib` 2.11.1) ships as its own chunk, `pdflib-*.js` (about 243 KB by gzip, `fflate` with it), loaded through `tools.pdflib`. Until now it has only built new documents; it has never parsed a visitor's file. `tool-engines` ("The library for each job") names qpdf for tools that repair, so this change modifies that requirement.
 - PDF.js 6.5.438 runs in its own worker for thumbnails and drawing, with fixed helper data.
-- The content reader (`src/engines/content.ts`) decodes and edits drawing instructions with caps; `src/engines/zlib.ts` holds capped inflate steps.
+- The content reader (`src/engines/content.ts`) decodes the filters that reach it with caps; `src/engines/zlib.ts` holds capped inflate steps (`pushPieces`, `inflateLimited`).
 
 ## Measurements
 
@@ -77,173 +80,222 @@ Findings:
    - 200,000 nested arrays: refused cleanly in 14 ms; 2 million tiny objects (51 MB): 31.7 s, 1.05 GB; one array of 20 million numbers (40 MB): 7.4 s, 1.27 GB.
 8. **The `/DP` bug is not `plainCopy`'s alone.** Any qpdf write with its default stream compression gives an unfiltered stream that carries `/DP` a `/Filter /FlateDecode` and keeps `/DP` (`--object-streams=generate` and `=disable` alike; not with `--compress-streams=n`). Every writing tool does it.
 
+### Added after the stage 1 review (28 Nov 2026)
+
+9. **The stage 1 security review measured more of pdf-lib's reader** (its figures, quoted here, re-measured in task 3.3):
+   - four scans stay quadratic after a pre-pass that only closes objects and streams: an unclosed literal string (`parseString`), an unclosed hex string, runs of junk (`skipJibberish`, which tries `matchIndirectObjectHeader` and `parseRawInt` at each byte, also inside objects), and extra `stream` words (`findEndOfStreamFallback`, used whenever `/Length` is missing, wrong or indirect);
+   - a cross-reference stream whose `/Type` is indirect slips past a byte-level pre-pass; with `/W [0 0 0]` and `/Size 50000000` pdf-lib takes 21.9 s and 3.3 GB;
+   - 2,000 object-stream entries all at offset 0 of a 20,000-number array: 12.8 s and 2.1 GB, under any decode cap;
+   - `getPageCount`, `getPages` and `getForm` walk the page tree recursively with no visited set: 1.7 KB of `/Kids` gives 16.7 million pages, and a loop overflows the stack;
+   - asking qpdf for filtered stream data on standard output buffers it byte by byte in `createQpdf`; a 2 GB Flate bomb exhausts the tab;
+   - `save()` decodes `/Metadata` (`readCatalogPDFAConformance`), and `readCatalogMetadataXml` swallows a decode error: a 1 GB metadata bomb in a 1 MB file peaks at 1.13 GB;
+   - a filter chain of six Flate stages turns 82 KB into 513 MB, so a per-stream byte cap must count every stage;
+   - a byte cap is not a memory cap: 16 MiB of `0 ` in an object stream peaks at 624 MB, 60 MiB at 2.0 GB.
+10. **Every hook the defences need is reachable on pdf-lib 2.11.1's exported classes** (checked in a scratch worktree with its own `npm ci`): `PDFParser.prototype.skipJibberish`, `findEndOfStreamFallback`, `parseIndirectObject`, `tryToParseInvalidIndirectObject`; `PDFObjectParser.prototype.parseString`, `parseHexString`, `findEndOfStreamFallback`; `PDFXRefStreamParser.forStream`; `PDFObjectStreamParser.prototype.parseOffsetsAndObjectNumbers` and `forStream`; `DecodeStream.prototype.ensureBuffer` through an instance from `decodePDFRawStream`. Whether each defence makes its case linear is measured in tasks 3.1 and 3.3; if one cannot be, the build stops and the question goes back to the owner (task 2.4).
+
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Recover, in the browser, at least what desktop qpdf recovers from the common kinds of damage, with no new dependency.
+- Recover, in the browser, at least what desktop qpdf recovers from the common kinds of damage, with no new dependency (owner, 28 Nov 2026).
 - Never give a file that fails `qpdf --check`; say plainly what cannot be recovered.
 - Keep everything an undamaged file holds (the fidelity of qpdf's own rewrite).
-- Bound time and memory before pdf-lib sees a hostile file.
-- Link other tools' damaged state to Repair PDF without breaking the no-storage rule.
+- Bound time and memory for every hostile case found so far, with a named defence and a test each, before and while pdf-lib reads the file.
+- Link other tools' damaged notice to Repair PDF without storing anything (owner, 28 Nov 2026, "Plain link now").
 
 **Non-Goals:**
 
 - Carrying the file from another tool (the shared handover, its own change).
-- A new or rebuilt qpdf (owner question 2).
+- A new or rebuilt qpdf (owner, 28 Nov 2026).
 - Recovering lost content, guessing passwords, certificate encryption, files turned away by the type check.
 - Fixing the `/DP` bug (decision 9).
 
+## Before this change: the one-file rewrite step (its own small pull request)
+
+As `pages.ts` (PR #39) and `shrink.ts` (PR #41) were moved before the tools that needed them, with no change in behaviour and so no OpenSpec change, one pull request goes first:
+
+- `oneFileLimit(size)` (`2 × size + 16 MiB`) and `rewrite(tools, bytes, passwordArgs, extraArgs, onWriting)` (a fresh qpdf, `cappedWrite` at that limit, `/in.pdf` let go) in `src/engines/qpdf.ts`; Protect with a password, Remove a password and Compress to a target size moved onto them;
+- `certificateEncrypted(printed)` in `src/engines/inspect.ts` (qpdf's "unsupported encryption" words, as `unlock-pdf.ts` matches them today) and an `inspectPdfNamingCertificates` inspector (or an option to `inspectPdf`) returning `unsupported` for it; Remove a password moved onto it.
+- Proof: every output of the three tools byte-identical on every fixture (the trailer `/ID` aside where qpdf writes a fresh one), their tests changing only in import lines; the review panel's stage 2 as for any change. Repair imports these; until that pull request is merged nothing here calls them shared.
+
 ## Decisions
 
-### 1. The approach: our pre-pass, pdf-lib's reader, qpdf to write and check
+### 1. The approach: our pre-pass, pdf-lib's reader under guards, qpdf to write and check
 
-Chosen because it is the only measured route that recovers everything desktop qpdf does (and more) with what the site already ships, and keeps every object a sound file holds.
+Decided by the owner on 28 Nov 2026 after these measurements. `tool-engines` "The library for each job" says a tool that repairs uses qpdf; this change modifies it (delta in this change): repair reads a file qpdf cannot open with `@cantoo/pdf-lib` after our pre-pass, and qpdf writes and checks the result. qpdf stays the writer and the judge.
 
-Alternatives considered:
-
-- **qpdf alone:** recovers nothing that needs recovery in this build (finding 1).
-- **A qpdf WebAssembly build whose recovery works:** likely the best single engine (qpdf's own reconstruction, no second parser), and could also give the patched build the uniform-requests no-cache exception needs. But it means building and shipping our own binary or finding another maintained one: a dependency and supply-chain decision for the owner (question 2), and a build pipeline the repo does not have. Not blocking: if the owner wants it, it replaces steps 2 and 3 of decision 2 later.
-- **PDF.js reading, `extractPages` writing:** lossy (finding 3) and fails on cut-off files (finding 2).
-- **PDF.js reading, pdf-lib or qpdf writing:** PDF.js exposes no raw objects through its API; reaching its worker-side `XRef` would tie us to its internals and still fails on cut-off files.
-- **Our own full reconstruction parser** (a new cross-reference table over the original bytes for qpdf): qpdf would still die on a wrong `/Length` (finding 1), so we would also rewrite stream dictionaries, and we would need our own decryption for damaged encrypted files. pdf-lib already does both.
+Alternatives weighed, for the record: qpdf alone (recovers nothing that needs recovery, finding 1); a qpdf build whose recovery works (declined by the owner: a new binary dependency and build pipeline); PDF.js's `extractPages` (lossy, finding 3; fails on cut-off files, finding 2); PDF.js reading with another writer (no raw objects in its API); our own full reader (needs our own decryption and stream-dictionary rewriting; pdf-lib has both). If the guards of decision 4 cannot make every known hostile case linear, the build stops and the choice goes back to the owner (task 2.4).
 
 ### 2. The engine (`src/engines/tools/repair-pdf.ts`)
 
-`loads = { read: ['qpdf', 'pdflib'], job: ['qpdf', 'pdflib', 'fflate'] }`. One file. Imports `rebuild`, `qpdf`, `qpdf-json`, `plain` (for `passwordFrom`, `freshQpdf`), `inspect`, `zlib`, never another engine, `stamp`, `shrink`, `picture` or `content`.
+`loads = { read: ['qpdf', 'pdflib'], job: ['qpdf', 'pdflib', 'fflate'] }`. One file. Imports `qpdf` (`oneFileLimit`, `rewrite`, `cappedWrite`), `qpdf-json` (`readDictionaries`, `readRawStreams`, `rawBatches`, `streamUpdateJson`), `pages` (`writePageUpdate`, `sizeLimit`), `plain` (`passwordFrom`, `freshQpdf`), `inspect` (`readPdf`, `certificateEncrypted`), `zlib` (`inflateReadable`) and `content` (`decodeContent`, for non-Flate filters in the sweep); never another engine, `stamp`, `shrink` or `picture`. The built chunks its sets fetch are named in the allowlists: `pages-*`, `plain-*`, `inspect-*`, `zlib-*`, `content-*` as built (task 4.1).
 
 **`inspect(file, password, tools)`:**
 
-1. `readPdf` (qpdf). `ready` with pages, `needs-password` or `wrong-password` as every tool. A certificate-encrypted file (`/Adobe.PubSec`, told from qpdf's printed text as Remove a password does) is `unsupported`.
-2. Otherwise the repair read: `rebuild` (decision 3), then pdf-lib's `load` with the decode guard (decision 4): `EncryptedPDFError` → load again with `password: ''`; "NEEDS PASSWORD" → `needs-password`; with a password given, "Password incorrect" → `wrong-password`; at least one page → `ready` with pdf-lib's page count; else `damaged`.
+1. `readPdf` (qpdf). `ready` with pages, `needs-password` or `wrong-password` as every tool; `certificateEncrypted` → `unsupported`.
+2. Otherwise the repair read: `rebuild` (decision 3), which also reports whether any trailer names `/Encrypt`; then pdf-lib's `load` under the guards (decision 4). With no password and an `/Encrypt` seen, the first parse is `password: ''` (skipping the parse that can only end in `EncryptedPDFError`; L3); "NEEDS PASSWORD" → `needs-password`; with a password, "Password incorrect" → `wrong-password`; "unknown encryption method" or "unsupported encryption algorithm" → `unsupported`; otherwise pages counted by our own walk (decision 5): at least one → `ready` with that count; none → `damaged`. These message strings are pinned by the password tests, so a pdf-lib upgrade that changes them fails.
+3. Only the count leaves `inspect`; pdf-lib's document and the rebuilt bytes are let go before it returns. A large damaged file is therefore parsed twice, once here and once in the job; both are timed in task 3.3.
 
-**`run(files, options, onProgress, tools)`**, progress "Reading the file" (`{ stage: 'reading', unit: 'file', done: 0, total: 1 }`), then writing:
+**`run(files, options, onProgress, tools)`:** "Reading the file" (`{ stage: 'reading', unit: 'file', done: 0, total: 1 }`), then writing (decision 7):
 
-1. **qpdf route.** A fresh qpdf runs `--check` (with `--password=` when given). Exit 0 with nothing printed after the check's own lines, a file starting with `%PDF-` at byte 0 and `%%EOF` in its last 1,024 bytes: `[]` (nothing to repair). Exit 0 or 3 otherwise, or exit 2 from a stream that cannot be decoded while the file itself opens (`--show-npages` succeeds): the plain copy is qpdf's `--decrypt --object-streams=disable` write (`cappedWrite`), then the sweep.
-2. **pdf-lib route** (qpdf cannot open it): `rebuild`, then `load` (with the password; guard on), then every `PDFInvalidObject` removed from `context`, then `save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false })`, the document and the rebuilt bytes let go, then qpdf's `--object-streams=disable` write of pdf-lib's bytes (`cappedWrite`) as the plain copy, then the sweep.
-3. **Sweep** (decision 6) on the plain copy, as one JSON update when anything changes.
-4. **Final write**: `--object-streams=generate` (`cappedWrite`, limit `2 × input + 16 MB`, the shared one-file rule), then a fresh qpdf's `--check`; not finished → the job fails as too damaged (`RepairFailed`, the `too-damaged` failure kind, decision 8).
+1. **qpdf route.** A fresh qpdf runs `--check` (with `--password=` when given). Exit 0 with nothing printed after the check's own lines, a file starting with `%PDF-` at byte 0 and `%%EOF` in its last 1,024 bytes: `[]` (nothing to repair; found only after the main button, named in the pull request and the hand checks). Exit 0 or 3 otherwise, or exit 2 while `--show-npages` succeeds: the plain copy is `rewrite(…, ['--decrypt', '--object-streams=disable'])`.
+2. **pdf-lib route** (qpdf cannot open it): `rebuild`, `load` under the guards with the password, every `PDFInvalidObject` removed from `context`, `save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false, objectsPerTick: Infinity })` under the same guards, the guards' record checked after `load` and again after `save` (a refusal → `OutputLimit`), the document and rebuilt bytes let go, then `rewrite(…, ['--object-streams=disable'])` of pdf-lib's bytes as the plain copy.
+3. **Sweep** (decision 6) on the plain copy, always written as an update even when nothing changes.
+4. **Final write**: `rewrite(…, ['--object-streams=generate'])`, then a fresh qpdf's `--check`; not finished → `RepairFailed` (the `too-damaged` failure kind, decision 8).
+5. The output's page count (qpdf `--show-npages`) equals the count `inspect` gave on every one of the 36 kinds (asserted in the tests).
 
 No password goes anywhere but `--password=` and pdf-lib's `password` option. qpdf's and pdf-lib's printed text stays in the worker.
 
 ### 3. The linear pre-pass (`src/engines/rebuild.ts`)
 
-A shared engine file only so its tests stand alone; only Repair imports it. It takes the bytes and gives new bytes for pdf-lib, in one forward pass with a bounded look-ahead, so its time is linear in the file's size:
+Its own source file only so its tests stand alone; only Repair imports it, so the build inlines it into `repair-pdf-*.js` and no chunk of its own exists (named in `check-worker.mjs`'s `lateSources` with its own sentences; not added to the forbidden lists). One forward pass with a bounded look-ahead, time linear in the input:
 
-- finds object headers `<int> <int> obj` (whitespace and comments as PDF allows) at token boundaries outside strings, stream bodies and comments;
-- for a dictionary followed by `stream`, takes the body up to the first `endstream` before the next object header (found by the same forward scan, never by searching from each stream to the end); with none, closes the stream before that header;
-- closes an object with no `endobj` before the next header or the end;
-- turns each cross-reference stream (`/Type /XRef`, names compared decoded) into a `trailer` dictionary holding only its `/Root`, `/Info`, `/Encrypt` and `/ID`, so pdf-lib never unpacks or reads its entries (a reconstruction needs none);
-- adds `%PDF-1.7` in front when no `%PDF-` is in the first 1,024 bytes (only reached by a test, as the page's type check turns such files away; owner question 9);
-- copies everything else byte for byte, counting the output against the size budget.
+- **Objects:** finds `<int> <int> obj` at token boundaries outside strings, comments and stream bodies; closes an object with no `endobj` before the next header or the end.
+- **Strings:** inside an object, follows literal strings with pdf-lib's own rules (nested parentheses, backslash escapes) and hex strings; one still open at the object's end is closed there (H1).
+- **Runs:** outside strings and stream bodies, a run of whitespace or comments over 4 KiB becomes one space, and a run of digits over 32 (no valid PDF number is that long) is cut to 32 (H1, `skipJibberish` and `parseRawInt`).
+- **Streams:** for a dictionary followed by `stream`, the body runs to the first `endstream` before the next object header (found by the same forward scan). A direct `/Length` that ends exactly at that `endstream` is trusted and left (L4); otherwise a direct, correct `/Length` is written into the dictionary before its `>>`, so pdf-lib never needs `findEndOfStreamFallback` (H1). A stream with no `endstream` is closed before the next header.
+- **Between objects:** only `trailer` dictionaries (kept whole) and whitespace survive; old `xref` tables, `startxref` values and other junk are dropped, as pdf-lib needs none of them.
+- **Header:** `%PDF-1.7` added in front when no `%PDF-` is in the first 1,024 bytes (only reached by a test; the page's type check turns such files away, owner question 9).
+- **Knowledge passed on:** whether any trailer names `/Encrypt` (L3).
+- **Unchanged files:** when nothing above changes a byte, it returns the input itself, not a copy (read-time memory).
+- Everything copied is counted against the size budget. It decodes nothing.
 
-It does not decode anything. Tested with every damaged kind above and crafted sizes where a quadratic scan cannot finish (200,000 unclosed objects and streams within a fixed time).
+### 4. Guards around every pdf-lib call
 
-### 4. Capping pdf-lib's own unpacking
+pdf-lib's reader is guarded at run time, on its exported classes, pinned to 2.11.1 by tests that fail if a hook moves:
 
-pdf-lib unpacks object streams (and would unpack cross-reference streams, which decision 3 removes) with decoders that grow without limit. For one job, `capDecoding(lib, limit, budget)` (in `repair-pdf.ts`) finds `DecodeStream.prototype` through an instance made by the exported `decodePDFRawStream`, wraps `ensureBuffer` so a request past 64 MiB, or past what is left of the job's budget (the shared `sizeLimit` rule), throws, and records that it did. It is restored in `finally`, so no other step sees it; each job runs in a fresh worker anyway. After `load`, a recorded refusal stops the job with `OutputLimit` (the shared `output-limit` words) rather than giving a file silently missing a stream's objects.
+- **Installed once per worker, per-call tokens (A1, M3).** `guardPdflib(lib)` (in `repair-pdf.ts`) wraps the hooks below once, idempotently. Each repair call to pdf-lib (`load`, `save`) runs through `withGuards(budget, fn)`, which sets a module-level current token holding that call's budget and record, and calls are serialised through a module-level promise chain, so two overlapping reads (a wrong password, then the right one, typed quickly) never share or reset each other's token. `parseSpeed: Infinity` on `load` and `objectsPerTick: Infinity` on `save` also keep each call from yielding to timers (L1; measured in Chromium in task 3.3).
+- **Decoders (M1, H6).** `DecodeStream.prototype.ensureBuffer` (reached through an instance from `decodePDFRawStream`) adds the size it allocates (the power-of-two size it grows to) to the token's running total; a growth past 64 MiB for one stream, or past the call's decode budget, throws and is recorded. Every stage of a filter chain grows its own buffer, so a six-stage chain is counted six times. The guard is on for `save()` too, so `readCatalogPDFAConformance` decoding `/Metadata` is bounded, and the record (not pdf-lib's swallowed error) is checked after each call.
+- **The decoded budget (M2).** Object-stream contents become many small JavaScript objects (16 MiB of `0 ` peaks at 624 MB). The call's decode budget is set from a Chromium measurement of the densest object-stream content (task 3.3) so it stays under the ceiling; the expected figure is 12 to 16 MiB in all per call. The 120,000-page and 110 MB damaged files are measured through the pdf-lib route against it; if a genuine large file does not fit, owner question 10 takes it.
+- **Cross-reference streams (H2).** `PDFXRefStreamParser.forStream` is replaced, for every repair call, by a stub that merges only `/Root`, `/Info`, `/Encrypt` and `/ID` of the stream's dictionary into the trailer and never decodes or reads its entries, whatever `/Type` looked like in the bytes.
+- **Object-stream offsets (H3).** `PDFObjectStreamParser.prototype.parseOffsetsAndObjectNumbers` is wrapped: `/N` at most a quarter of the decoded length, offsets strictly increasing and inside the decoded data; otherwise that object stream is refused (its objects lost, recorded, not a job failure).
+- **Scans (H1, second line).** `PDFParser.prototype.skipJibberish` and `PDFObjectParser.prototype.findEndOfStreamFallback` are wrapped with a per-call byte budget (a multiple of the input's size); past it the object is given up (recorded). The pre-pass should keep them from being reached; the wrap bounds them if it does not.
+- **Console (L2).** Every console method is replaced by a no-op for the duration of each call and restored after.
+- **Never the recursive walks (H4).** No repair code calls `getPageCount`, `getPages`, `getForm` or any API that walks the page tree; decision 5 counts pages.
+- The wrappers do nothing outside a repair token, so no other step in the worker sees them; each job runs in a fresh worker anyway.
 
-This works for encrypted files too, where our own capped decoders (`content.ts`) could not see the plain data before pdf-lib decrypts it. A unit test pinned to pdf-lib 2.11.1 checks that the guard is reached (a 65 MiB object stream is refused, a 63 MiB one is not), so an upgrade that moves `ensureBuffer` fails the tests. Alternative considered: unpacking object streams ourselves in the pre-pass and handing pdf-lib uncompressed copies; rejected because it cannot work for encrypted files and doubles the code that reads object streams. `software-architect` and `security-reviewer` should look hardest here.
+Alternative considered and rejected: unpacking object streams ourselves before pdf-lib (cannot see encrypted files' plain data; doubles the code reading object streams).
 
-### 5. Passwords and what is kept
+### 5. Counting pages (H4)
 
-The plain copy is decrypted on both routes, so the new file has no password and no restrictions (owner question 3). pdf-lib's `load` keeps the newest copy of each object, so earlier saved versions go, and a signature stops being valid (the result note says so). Objects nothing reaches are dropped by qpdf's write, as on every tool. Free entries in the old table are not read, so an object deleted in a later save comes back only if something still points to it.
+An iterative walk over pdf-lib's context from the catalog's `/Pages`, with a visited set of references and a node cap equal to the number of objects in the context: each `/Kids` entry is followed once; a node already visited is skipped; a leaf with `/Type /Page` (or no `/Kids`) counts. Linear in the objects; loops and shared subtrees count once. qpdf's `--show-npages` on the output confirms the count in the job.
 
-### 6. The sweep
+### 6. Passwords and what is kept
 
-On the plain copy (JSON updates do not reach object streams):
+The plain copy is decrypted on both routes, so the new file has no password and no restrictions (owner, 28 Nov 2026). pdf-lib keeps the newest copy of each object found, so earlier saved versions go and a signature stops being valid. **If the newest save was lost in the damage, the repaired file can hold parts of an earlier saved version** (an older copy of an object is then the newest found): a result note and the page text say so, and it is one of the Privacy facts. Objects nothing reaches are dropped by qpdf's write. Free entries of the old table are not read, so an object deleted in a later save comes back only if something still points to it.
 
-1. One fresh qpdf lists every object with `--json=2 --json-key=qpdf --json-stream-data=none` (the `pages` key fails on such files, so only `qpdf` is asked for). Its size is counted against the budget before it is parsed, as `readValues` does.
-2. **Missing drawing:** every page dictionary whose `/Contents` is, or holds, something that is not a stream gets those entries removed (no `/Contents` left means a blank page of its size).
-3. **Damaged streams:** each stream is tried with `--show-object=N --filtered-stream-data` in batches on fresh instances (one instance breaks after a few hundred calls; batch size measured in task 2.3, as `rawBatches` was). For each that fails: a lone `/FlateDecode` with no `/DecodeParms` keeps what `fflate`'s `Inflate` gives before the error, through a capped step in `zlib.ts` (`inflateReadable`, 64 MiB, the budget); any other filter or chain gets empty data. Either way `/Filter`, `/DecodeParms` and `/Length` are dropped from its dictionary and qpdf compresses it again. JPG and JPEG 2000 data is never decoded by qpdf's check and is left.
-4. The update is written with `streamUpdateJson` and `writePageUpdate`'s capped write.
+### 7. The sweep
 
-Pages lost entirely are not reported by page number (owner question 5); the result shows the pages found.
+On the plain copy (JSON updates do not reach object streams). **Nothing decoded is ever asked for on qpdf's standard output (H5).**
 
-### 7. Progress, memory, instances and time
+1. **Listing:** `readDictionaries` (capped JSON of every object's dictionary, no stream data).
+2. **Missing drawing:** every page dictionary whose `/Contents` is, or holds, something that is not a stream gets those entries removed (none left: a blank page of its size).
+3. **Damaged streams:** each stream's raw data is fetched with `readRawStreams` in `rawBatches` (budgeted by bytes and ids) and judged by our own capped decoders: a lone `/FlateDecode` with no `/DecodeParms` through `inflateReadable` (64 MiB, the budget); the chains `content.ts`'s `decodeContent` takes through it; filters neither takes (predictors, DCT, JPX, JBIG2, CCITT, Crypt) are not judged and left to qpdf's check. A stream that decodes to the cap is not called damaged and is left. A damaged Flate stream keeps what came out before the error; any other damaged stream gets empty data; `/Filter`, `/DecodeParms` and `/Length` are dropped from its dictionary and qpdf compresses it again.
+4. **A page's drawing past 64 MiB decoded** stops the job with the shared `page-too-large` kind and the page's number, as Grayscale does, because qpdf's check would read it whole into memory; Repair's sentence uses its own verb ("repair") through `pageTooLargeSentence(page, action)` with an action word in the registry (Grayscale's words unchanged).
+5. **Instances (M4):** at most 64 qpdf instances per job in all (check, plain copy, listing, raw batches, update, final write, check); a file that would need more stops with the shared `output-limit` words. The bound is named in the pull request.
+6. The update is always written (`streamUpdateJson`, `writePageUpdate`'s capped write), even when empty, so the instance count does not say whether the sweep changed anything.
 
-- "Reading the file" until the plain copy exists; writing percentages from `cappedWrite` for the plain copy (0–40), the sweep (40–60) and the final write (60–100).
-- Memory: the input, pdf-lib's document and its saved bytes are let go before the next step; measured in task 3.3 against the Chromium ceiling. The 110 MB file's 1.27 GB Node peak (finding 6) is over the 1.19 GB the other tools are held to; letting go earlier is expected to bring it under, and if not the change is updated before the pull request.
-- qpdf instances: route A: check, plain write, JSON list, `ceil(streams / batch)`, update write, final write, check. Route B adds pdf-lib's parse and one more write. The count depends on the file (named in the proposal).
-- Time: linear in the input; the shared `--check` dominates on scans (finding 6). A crafted file of millions of objects takes tens of seconds (finding 7; owner question 8). Cancel ends the worker.
+Pages lost entirely are not named (owner question 5); the result shows the pages found.
 
-### 8. The registry entry (words are drafts for the owner)
+### 8. Progress, memory, instances and time
 
-`id: 'repair-pdf'`, group `smaller`, after `grayscale-pdf`, browser, phase 2, `accepts: ['application/pdf']`, related `compress-pdf`, `merge-pdf`, `split-pdf`, `pdf-to-jpg`, `unlock-pdf`.
-
-- name "Repair PDF"; summary "Recover what can still be read from a damaged PDF."; title "Repair a damaged PDF in your browser - PDFkaro" (46 characters); description "Recover the pages and parts of a damaged PDF that can still be read, in a new file that opens. The file stays on your device and is not uploaded." (145); heading "Repair a damaged PDF"; sentence "Recover what can still be read from a damaged PDF. Your file stays on your device."
-- widget: picker "Choose a PDF file", add "Choose another file", action "Repair and download", writing "Writing the repaired file", done "Your repaired file is ready", failed "The file was not repaired.", `tooFewFiles` "Choose a PDF file to repair.", `outputSuffix: 'repaired'`, one file, `resultPages: 'input'`, `items: 'files'`, `outputs: 'one'`, memory advice "Try on a computer.";
-- `damagedAdvice`: "No pages could be found in it. If you have another copy of the file, try that one.";
-- `unsupportedAdvice`: "It is locked to certain people's certificates, not a password. Ask the person who sent it for a copy without that.";
-- `noSmaller`: "This file has no damage this tool can find." / "No new file was made. You can use your file as it is. If it still does not open in one program, try another.";
-- result notes: "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back, so check the new file before you rely on it." and "Links, form fields, bookmarks, attached files and the document's details that could be read are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them."
-- The "Make smaller and fix" hub description and sentence gain repairing a damaged file.
-- **A file found too damaged only by the job** (the final `--check` still fails after the sweep; none of the 36 measured files did) fails with a new error class `RepairFailed` in `repair-pdf.ts`, mapped by name in `worker-core.ts` to a new shared failure kind, `too-damaged`, whose sentence (`tooDamagedSentence` in `failures.ts`) is "This file is too damaged to repair. If you have another copy of it, try that one." It rides along with this tool, as `page-too-large` did with Grayscale, and is named in the pull request. The shared `engine` sentence ("Something went wrong. Try again.") was rejected: trying again gives the same result.
+- **Progress:** "Reading the file" until the plain copy exists; the writes fill 0 to 50 (plain copy 0–25, sweep 25–35, final write 35–50); the final `--check` shows 55 when it starts and 95 when it ends; 100 when the file is ready, as Protect does.
+- **Memory:** the input, pdf-lib's document and its saved bytes are let go before the next step; peaks measured in Chromium in task 3.3 for the read step and the job. If the 110 MB damaged file's job peak (1.27 GB in Node before these fixes) stays over the ceiling the other tools are held to, it becomes owner question 10 with the default "accept for now", as Grayscale's question 9 did.
+- **qpdf instances:** qpdf route: check, plain copy, listing, `ceil(streams / batch)` raw batches, update, final write, check. pdf-lib route: one fewer check, the same after. What the count can tell the host, under the no-cache exception: whether qpdf could read the file (the route), and roughly how many streams it holds (the batches); not whether the sweep changed anything (always written). Whether repair was needed shows anyway: a file with nothing to repair stops after one instance.
+- **Time:** linear in the input on every known case (decision 4); millions of objects take tens of seconds (finding 7; owner question 8). Cancel ends the worker.
 
 ### 9. The `/DP` bug stays its own change
 
-Finding 8 shows it comes from qpdf's ordinary compression, so every writing tool has it and the fix (rename `/DP` to `/DecodeParms`, or leave such streams uncompressed, before any write) belongs in one shared place with its own tests across every tool. Putting it in Repair would fix it for Repair only and hide a shared change in a tool pull request. Repair inherits the bug like every tool until that change lands; a Repair unit test records the current behaviour so the shared change updates it.
+Finding 8 shows it comes from qpdf's ordinary compression, so every writing tool has it; the fix belongs in one shared place with its own tests across every tool. Repair inherits it until then; a Repair unit test records the current behaviour so the shared change updates it.
 
-### 10. The damaged-notice link (tasks group 8, owner question 1)
+### 10. The registry entry (words are drafts for the owner)
 
-With default A: `[slug].astro` passes `repairHref` (from `repairLink(tool)` in `src/tools/queries.ts`: `withBase('/repair-pdf')` when Repair is published and the tool accepts PDFs and is not Repair; else `undefined`). `unreadableNotice` gains an optional sentence; `ToolWorkspace` draws "Repair PDF may be able to recover it. On that page, choose the file again." and a plain link "Go to Repair PDF" between the advice and the button. Same tab, no `target`, nothing appended to the address, nothing stored. Components still import nothing from `src/tools/` but types and `filter` (the address comes as a prop).
+`id: 'repair-pdf'`, group `smaller`, after `grayscale-pdf`, browser, phase 2, `accepts: ['application/pdf']`, related `compress-pdf`, `merge-pdf`, `split-pdf`, `pdf-to-jpg`, `unlock-pdf`.
 
-Why not carry the file now, and why not a new tab: same-tab navigation ends the page's memory; the only carriers are storage, `window.name`, the address and session history, which "Handover between tools" forbids (session history can be written to disk for session restore). A new tab opened with `window.open` and given the bytes by `postMessage` (exact origin both ways, `event.source` checked) keeps the file in memory only; it is the shared handover that next steps need too, with its own security and privacy review, in its own change (`add-tool-handover`).
+- name "Repair PDF"; summary "Recover what can still be read from a damaged PDF."; title "Repair a damaged PDF in your browser - PDFkaro" (46 characters); description "Recover what can still be read from a damaged PDF. The file stays on your device and is not uploaded. You get it in a new file." (127); heading "Repair a damaged PDF"; sentence "Recover what can still be read from a damaged PDF. Your file stays on your device."
+- widget: picker "Choose a PDF file", add "Choose another file", action "Repair and download", writing "Writing the repaired file", done "Your repaired file is ready", failed "The file was not repaired.", `tooFewFiles` "Choose a PDF file to repair.", `outputSuffix: 'repaired'`, one file, `resultPages: 'input'`, `items: 'files'`, `outputs: 'one'`, memory advice "Try on a computer.", page-too-large action "repair";
+- **one wording for "another copy"** in both places: "If you have another copy of the file, try that one.";
+- `damagedAdvice`: "No pages could be found in it. If you have another copy of the file, try that one.";
+- `unsupportedAdvice`: Remove a password's existing sentence, "It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection." (`registry.ts`, Unlock's entry);
+- `noSmaller`: "This file has no damage this tool can find." / "No new file was made. You can use your file as it is. If it does not open in one program, try opening it in another.";
+- result notes: "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back, and if the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it." and "Links, form fields, bookmarks, attached files and the document's details that could be read are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them."
+- The "Make smaller and fix" hub description and sentence gain repairing a damaged file.
+- **A file found too damaged only by the job** (none of the 36 measured did) fails with `RepairFailed`, mapped by name in `worker-core.ts` to a new shared failure kind `too-damaged`, sentence "This file is too damaged to repair. If you have another copy of the file, try that one." (`tooDamagedSentence`). Its failed state offers **"Choose another file"** (removes the file and moves focus to the picker), not "Go back to your file", since going back can only fail again: a small rider in `ToolWorkspace.tsx` choosing the action by failure kind. Rides along, named in the pull request, as `page-too-large` did with Grayscale.
 
-### 11. Page text (`src/content/tools/repair-pdf.md`)
+### 11. The damaged-notice link (group 8, owner, 28 Nov 2026, "Plain link now"; same pull request as the registry entry)
 
-A draft, 250 to 500 words: how to use it (choose the file, give its password if asked, repair, check the new file); questions: "What kinds of damage can it fix?" (a broken or missing table, a cut-off file, wrong lengths, junk around the file, damaged parts inside), "Why are some pages missing or blank?", "Why does the new file have no password?", "My file opens here but not in one program", "Is my file uploaded?". No promise that every file can be repaired.
+- **Address from the registry:** `repairLink(tools)` in `src/tools/queries.ts` finds Repair PDF's page among the published pages (`allPages(tools)`, as `toListItem` builds its links, with `withBase`), and gives `undefined` when it is not published, the tool does not accept PDFs, or the tool is Repair; `[slug].astro` passes it to the widget as `repairHref`. Components import nothing new from `src/tools/`.
+- **Order and look:** in the damaged notice, after the advice and **after** the "Leave this file out" / "Choose another file" button in DOM and Tab order (Merge must not lose its other files by a stray press), on its own line: the sentence "Repair PDF may be able to recover it. On that page, choose the file again." and the link "Go to Repair PDF", a plain underlined link at least 44px tall by padding, clearly apart from the button. Same tab, no `target`, nothing added to the address, nothing stored, no leave-page prompt (following it leaves the page and its listed files, as any link does).
+- **Announcement:** `unreadableNotice` adds the Repair sentence to the status announcement when a link is shown.
+- **Referrer:** following it is a plain `GET` of the Repair page; the browser's default referrer policy sends the tool page's address to the host. Owner question 11.
+- Why not carry the file now: same-tab navigation ends the page's memory; the only carriers are storage, `window.name`, the address and session history, which "Handover between tools" forbids. A new tab given the bytes by `postMessage` is the shared handover (`add-tool-handover`), its own change.
 
-### 12. The Privacy page draft
+### 12. Page text (`src/content/tools/repair-pdf.md`)
 
-Facts listed for the owner's wording, not written as approved text: pdf-lib is fetched after a pick on this page; a file other tools cannot read is read by pdf-lib in the tool worker; following the Repair link from another tool asks the host for the Repair page, which can tell it a damaged file was picked; nothing of the file goes with the link.
+A draft, 250 to 500 words: how to use it (choose the file, give its password if asked, repair, check the new file); questions: "What kinds of damage can it fix?", "Why are some pages missing or blank?", "Why does some of the file look older?" (a lost last save), "Why does the new file have no password?", "My file still does not open in one program", "Is my file uploaded?". No promise that every file can be repaired.
+
+### 13. The Privacy page draft
+
+Visible draft sentences on `src/pages/privacy.astro`, as `add-compress-to-target` added its own, with a guard in `tests/unit/privacy-page.test.ts`: every PDF tool's damaged notice links to Repair PDF; following it asks GitHub for that page, which tells GitHub that a damaged file was picked and on which tool page (owner question 11); nothing of the file, its name or its password goes with it; the file must be chosen again there; on Repair PDF the program that reads damaged files is fetched after a pick whatever the file; how many times the browser asks for qpdf can tell GitHub whether the file could be read normally and roughly how many parts it has; a repaired file can hold parts of an earlier saved version when the last save was lost. The owner approves or rewords them; the page stays a draft.
 
 ## Effect on page weight and on when WebAssembly is fetched
 
-- Before a pick: no change on any page. `/repair-pdf` ships the same island as every tool (expected about 79 KB, measured in task 4.1). The damaged-notice link adds a few hundred bytes to the shared widget chunk, loaded after a pick.
-- After a pick on `/repair-pdf`: qpdf and its WebAssembly (as every PDF tool), PDF.js's set (as every PDF tool), pdf-lib's chunk and `fflate` (new for a read set, about 243 KB by gzip). The most fetched after a pick rises from 2,041.3 KB to an expected 2.3 MB, measured in task 4.1.
+- Before a pick: no change on any page. `/repair-pdf` ships the same island as every tool (expected about 79 KB, measured in task 4.1). The damaged-notice link and the too-damaged action add a few hundred bytes to the shared widget chunk, loaded after a pick.
+- After a pick on `/repair-pdf`: qpdf and its WebAssembly, PDF.js's set, pdf-lib's chunk and `fflate` (new for a read set, about 243 KB by gzip). The most fetched after a pick rises from 2,041.3 KB to an expected 2.3 MB, measured in task 4.1.
 - WebAssembly is still fetched only after a pick.
 
 ## Threats considered
 
-| Threat | Handling |
+Each hostile case has a named defence, a scenario under "Bounded work on hostile files", a unit test on a 1 to 4 MB file in fixed time, and a Chromium measurement in task 3.3.
+
+| Threat | Defence |
 | --- | --- |
-| A malicious PDF given to pdf-lib's parser, first time on this site | Linear pre-pass (decision 3) removes the measured quadratic paths; decode guard (decision 4); `PDFInvalidObject` dropped; every write capped; fresh worker per job; Cancel; tests at sizes a quadratic path cannot finish |
-| Object-stream or cross-reference-stream bombs | Cross-reference streams never unpacked; object streams capped at 64 MiB each and the job budget, then `output-limit` |
-| Deep nesting | pdf-lib refuses 200,000 nested arrays in 14 ms; deeper nesting in qpdf is as for every tool |
-| Many objects or huge arrays | Linear but slow (finding 7); progress and Cancel; owner question 8 |
-| Damaged stream data | Flate prefix capped through `zlib.ts`; others emptied; JSON listing size counted before parsing |
-| A file that passes qpdf but crashes a reader | Out of scope; qpdf's check is the bar, as for every tool |
-| Oversized file | No fixed limit; the shared 100 MB notice; memory measured |
-| Hostile file name | Never passed to an engine, a library, a URL or the console, as for every tool; output name built by the shared rule |
-| Passwords | Only `--password=` and pdf-lib's option; never in errors, sentences or logs; forgotten as every tool's |
-| Library warnings naming file content | pdf-lib's `console.warn` (positions and object numbers only, with `warnOnInvalidObjects` off) is silenced for the call, so nothing reaches the console |
-| The link | A plain same-origin address from the registry, nothing of the file in it, nothing stored |
-| Server tools (SSRF, macros) | Not applicable: no server |
+| Unclosed objects and streams (finding 7) | Pre-pass closes them (decision 3) |
+| Unclosed literal and hex strings (H1) | Pre-pass closes them at the object's end with pdf-lib's rules |
+| Junk and digit runs (H1) | Pre-pass collapses runs; `skipJibberish` wrapped with a byte budget |
+| Extra `stream` words, wrong or indirect `/Length` (H1) | Pre-pass writes a direct correct `/Length`; `findEndOfStreamFallback` wrapped with a byte budget |
+| Cross-reference stream entries, indirect `/Type` (H2) | `PDFXRefStreamParser.forStream` stubbed for every repair call |
+| Object-stream offset amplification (H3) | `parseOffsetsAndObjectNumbers` wrapped: increasing, in range, `/N` ≤ length / 4 |
+| Recursive page walks (H4) | Never called; our iterative visited-set walk |
+| Decoded data on qpdf's standard output (H5) | Raw data through `readRawStreams`, judged by our capped decoders |
+| `/Metadata` bomb in `save()` (H6) | Guards on for `save()`; record checked after it |
+| Filter chains (M1) | Every decoder stage's allocation counted |
+| Dense object streams (M2) | Decode budget set from Chromium measurement |
+| Overlapping reads sharing a guard (M3, A1) | Wrappers once per worker, per-call tokens, serialised calls |
+| Unbounded qpdf instances (M4) | At most 64 per job, then `output-limit` |
+| Timer clamping (L1) | `parseSpeed` and `objectsPerTick` Infinity |
+| Library console output (L2) | Every console method silenced per call |
+| Repeated parses (L3) | `/Encrypt` known from the pre-pass; repeats counted in the time bounds |
+| A good `/Length` distrusted (L4) | Trusted when `endstream` follows it |
+| Deep nesting | pdf-lib refuses 200,000 nested arrays in 14 ms |
+| A drawing stream past 64 MiB | `page-too-large`, as Grayscale |
+| Oversized file | No fixed limit; the shared 100 MB notice; memory measured, owner question 10 if over |
+| Hostile file name | Never passed to an engine, library, URL or console; output name by the shared rule |
+| Passwords | Only `--password=` and pdf-lib's option; never in errors, sentences or logs |
+| The link | Registry address, nothing of the file in it, nothing stored; request named (owner question 11) |
+| Server tools (SSRF, macros) | Not applicable |
 
 ## Tests
 
-- `tests/unit/rebuild.test.ts`: each damaged kind closed as expected; strings, comments and stream bodies holding `obj` and `endobj`; names with `#` escapes; cross-reference streams turned into trailers; a missing header; linear time on 200,000 unclosed objects and streams and 2 million `obj` tokens in stream data; output counted against the budget.
-- `tests/unit/repair-pdf.test.ts` (with `repair-helpers.ts` building the 36 kinds from the fixtures in memory): every outcome of the measurement table at least as good, `qpdf --check` passing; the fidelity check on every good fixture forced through the pdf-lib route; damaged protected files (AES-256, AES-128, RC4) with no, wrong and right passwords; restrictions only; a certificate-encrypted file; nothing to repair on `text.pdf`; junk before the header giving a file; the guard at 63 and 65 MiB and the 2 GB bomb; `PDFInvalidObject` dropped; the sweep's three cases; `globalThis.fetch` replaced and never called; no error holding text, names or the password; progress order; the `/DP` behaviour recorded.
-- `engine-loads` shard: `repair-pdf` against every fixture, asking for `qpdf` and `pdflib` when reading and `qpdf`, `pdflib`, `fflate` in the job.
-- `tests/e2e/repair-pdf.spec.ts`: the page; `damaged-xref.pdf` and `damaged-cut.pdf` read and repaired (download checked with qpdf and PDF.js); `text.pdf` with no new file; the password flow on a damaged protected file; a too-damaged file; not a PDF; Cancel; failures from a stand-in engine; the large-file notice; keyboard only; 360px and 1280px.
-- No-upload and uniform-requests tests as the spec lists.
-- Group 8: `failures.ts`, `queries.ts` and component tests for the link; the other tools' e2e damaged scenarios updated; a test that following the link stores nothing.
+- `tests/unit/rebuild.test.ts`: each damaged kind; strings, comments and stream bodies holding `obj`, `endobj`, `stream` and parentheses; escapes and nesting; names with `#`; trailers kept, tables dropped; `/Length` trusted or rewritten; runs collapsed; the input returned itself when unchanged; linear time on 1 to 4 MB files of unclosed objects, streams, literal and hex strings, junk and digit runs, and extra `stream` words.
+- `tests/unit/repair-pdf.test.ts` (with `repair-helpers.ts` building the 36 kinds in memory): every outcome at least the recorded one, `qpdf --check` passing, and the output page count equal to `inspect`'s; fidelity on every good fixture forced through the pdf-lib route; damaged AES-256, AES-128 and RC4 files with no, wrong and right passwords, pinning pdf-lib's message strings; unknown encryption → `unsupported`; restrictions only; certificate encryption; `text.pdf` giving `[]`; junk before the header giving a file; every hostile case of the threats table in fixed time and bounded memory, including the H2 `/W [0 0 0]` file, the H3 offsets file, a 1.7 KB `/Kids` bomb and a `/Kids` loop, 2 GB Flate bombs in a drawing stream and a picture on both routes, a 1 GB `/Metadata` bomb, a six-stage chain, 16 MiB of `0 ` in an object stream, and two overlapping inspects (wrong then right password) on a bomb file, each refused by its own token; `PDFInvalidObject` dropped; the sweep's cases; the instance cap; nothing on standard output decoded; `globalThis.fetch` and every console method replaced and asserted never called; no error holding text, a name or the password; progress order; the `/DP` behaviour recorded.
+- `engine-loads` shard: `repair-pdf` against every fixture.
+- `tests/e2e/repair-pdf.spec.ts` and the group 8 tests as the tasks list them; the no-upload test on every route.
 
 ## Risks / Trade-offs
 
-- [pdf-lib internals: the guard depends on `DecodeStream.prototype.ensureBuffer`] → pinned version, a unit test that fails if it moves, restored after each job.
-- [pdf-lib's reader may accept garbage as objects] → qpdf writes and checks everything after it; the result must pass `qpdf --check`.
-- [Two parsers that disagree: pdf-lib keeps the last copy of an object; a reader using the original table might show an older one] → the newest copy is what a repaired file should hold; the result note asks the visitor to check the file.
-- [An object deleted in a later save may come back if still referenced] → rare; recorded in the README.
-- [Memory on 100 MB damaged files over the ceiling] → let go of each step's data early; measured; the change is updated if still over.
-- [Following the link tells the host a damaged file was picked] → named; the owner words the Privacy sentence.
-- [Default A shows a link that does not carry the file] → the words say so; the handover change replaces it.
+- [Six runtime wraps of pdf-lib 2.11.1's parser make this close to maintaining a fork] → each is pinned by a test that fails if the hook moves or stops being reached; pdf-lib stays pinned; any upgrade re-runs the hostile tests. If stage 2 finds a case no wrap can bound, the choice goes back to the owner.
+- [pdf-lib's reader may accept garbage as objects] → qpdf writes and checks everything after it.
+- [The newest copy of an object wins; if the last save was lost, older content shows] → said in a result note, the page text and the Privacy facts.
+- [Memory on 100 MB damaged files] → let go early; parsed twice (read and job) and timed; owner question 10 if over the ceiling.
+- [Following the link tells the host a damaged file was picked, and where] → owner question 11; Privacy draft says so.
+- [The link does not carry the file] → the words say so; the handover change replaces it.
+- [Nothing to repair is known only after the main button] → named in the pull request and the hand checks; not moved.
 
 ## Migration Plan
 
-None: a new page and a link in an existing notice. Rollback is reverting the pull request; no stored state.
+One small pull request first (section "Before this change"). Then this change: a new page and a link in an existing notice, in one pull request. Rollback is reverting it; no stored state.
 
 ## Open Questions
 
-None that change the specs, the approach or the tasks. The owner questions are in the proposal; question 1 gates tasks group 8 only.
+None that change the specs, the approach or the tasks. The owner questions left are in the proposal.

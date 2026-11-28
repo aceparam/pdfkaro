@@ -13,7 +13,7 @@ The tool SHALL be served at `/repair-pdf` with the title, heading and sentence b
 #### Scenario: The page is opened
 
 - **WHEN** a visitor opens `/repair-pdf`
-- **THEN** the title is "Repair a damaged PDF in your browser - PDFkaro", the heading "Repair a damaged PDF", the sentence "Recover what can still be read from a damaged PDF. Your file stays on your device.", the picker reads "Choose a PDF file", and nothing else of the tool is shown
+- **THEN** the title is "Repair a damaged PDF in your browser - PDFkaro", the description ends "You get it in a new file.", the heading is "Repair a damaged PDF", the sentence "Recover what can still be read from a damaged PDF. Your file stays on your device.", the picker reads "Choose a PDF file", and nothing else of the tool is shown
 
 #### Scenario: The home page and the hub list it
 
@@ -55,7 +55,7 @@ When qpdf cannot read the file for any reason but a password, the page SHALL rea
 
 ### Requirement: A file that needs a password
 
-When the file needs a password, damaged or not, the page SHALL ask for it in a labelled field naming the file, with the note that the password stays in the browser; a wrong one SHALL be reported and the field kept, and another file can be chosen instead. A file encrypted for certificates SHALL be called saved in a way this tool cannot read, with advice to ask the sender. No password SHALL be guessed. (SPEC.md: States every tool handles, Password needed; Scope notes, Unlock)
+When the file needs a password, damaged or not, the page SHALL ask for it in a labelled field naming the file, with the note that the password stays in the browser; a wrong one SHALL be reported and the field kept. A file encrypted for certificates or in a way the reader does not know SHALL be called saved in a way this tool cannot read, with Remove a password's advice. No password SHALL be guessed. (SPEC.md: States every tool handles; Scope notes, Unlock)
 
 #### Scenario: A protected file is chosen
 
@@ -72,14 +72,19 @@ When the file needs a password, damaged or not, the page SHALL ask for it in a l
 - **WHEN** a visitor chooses a damaged copy of `restricted.pdf`
 - **THEN** no password is asked for, and the file is listed with 3 pages
 
+#### Scenario: Certificate or unknown encryption
+
+- **WHEN** a visitor chooses a file encrypted for certificates, or a damaged file whose encryption method the reader does not know
+- **THEN** the page says it is saved in a way this tool cannot read, with "It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection."
+
 ### Requirement: How a file is repaired
 
-A file qpdf can read SHALL be written again by qpdf. Any other SHALL be read object by object from its start, ignoring its cross-reference table and leaving out objects that make no sense, then written by qpdf. Parts of pages that point to nothing SHALL be removed, a damaged Flate stream SHALL keep what still unpacks, other damaged streams SHALL be emptied. The file SHALL pass `qpdf --check` or not be given. (SPEC.md: Architecture and tech stack; Definition of done; owner questions 5, 6)
+A file qpdf can read SHALL be written again by qpdf; any other SHALL be read object by object from its start, ignoring its cross-reference table and leaving out what makes no sense, then written by qpdf. Parts of pages pointing to nothing SHALL be removed, a damaged Flate stream SHALL keep what still unpacks, other damaged streams SHALL be emptied. The file SHALL pass `qpdf --check` or not be given. (SPEC.md: Architecture; Definition of done; CLAUDE.md: Owner decisions, 28 Nov 2026)
 
 #### Scenario: The damaged kinds measured for this change
 
 - **WHEN** the engine repairs each of the 36 damaged files the unit tests make from `text.pdf`, `rich.pdf` and `pages-500.pdf` (wrong cross-reference offsets, a wrong or missing `startxref`, a missing table, trailer, tail or `/Root`, files cut off in four places, junk or inserted bytes, a missing header, a wrong or missing stream `/Length`, damaged compressed, object and cross-reference streams, a broken page dictionary, a missing `endobj`, a page tree pointing to a missing object, every line ending changed to CR LF, 4 KB zeroed, a wrong `/Prev`)
-- **THEN** every result passes `qpdf --check`, and holds at least the pages, page text, bookmarks, link and attachment recorded for that file in the fixtures README, which are at least what desktop qpdf 12.4.2 recovered when this change was planned
+- **THEN** every result passes `qpdf --check`, holds at least the pages, page text, bookmarks, link and attachment recorded for that file in the fixtures README, which are at least what desktop qpdf 12.4.2 recovered when this change was planned, and has as many pages as the page said before the job
 
 #### Scenario: A file qpdf reads with warnings
 
@@ -96,9 +101,14 @@ A file qpdf can read SHALL be written again by qpdf. Any other SHALL be read obj
 - **WHEN** a file is cut off so that a page's drawing stream is gone but the page itself was found
 - **THEN** that page is kept as a blank page of its size, and the result passes `qpdf --check`
 
+#### Scenario: A page with too much drawing
+
+- **WHEN** a page's drawing instructions unpack past 64 MiB
+- **THEN** the job stops with "Page N has too much drawing on it to repair here. Delete that page, or split the file, and repair the rest.", naming the page
+
 ### Requirement: What the new file keeps
 
-The new file SHALL keep every page and object that could be found and is still reached from the document, with undamaged page contents byte for byte: text, links, fields and values, notes, bookmarks, attachments, tags, destinations, threads, language, output intents and details. Only the newest saved version SHALL be kept. It SHALL have no password and no restrictions. (SPEC.md: Definition of done, Each tool; owner question 3, extending the owner's decision of 13 Nov 2026)
+The new file SHALL keep every page and object that could be found and is still reached from the document, with undamaged page contents byte for byte: text, links, fields and values, notes, bookmarks, attachments, tags, destinations, threads, language, output intents and details. Only the newest copy of each object found SHALL be kept. It SHALL have no password and no restrictions. (SPEC.md: Definition of done, Each tool; CLAUDE.md: Owner decisions, 28 Nov 2026)
 
 #### Scenario: A rich file with a broken table
 
@@ -115,9 +125,14 @@ The new file SHALL keep every page and object that could be found and is still r
 - **WHEN** the engine repairs a damaged copy of `password.pdf` with `open-sesame`
 - **THEN** the result opens with no password, has no restrictions, and its text reads as the original's
 
+#### Scenario: The last save was lost
+
+- **WHEN** a file with an incremental update is cut off inside that update
+- **THEN** the result holds the earlier version of the changed objects, and the result note says that parts of an earlier version may show
+
 ### Requirement: A file with nothing to repair
 
-When qpdf reads the file with no warning, `qpdf --check` passes, the file starts with `%PDF-` and ends with `%%EOF`, no new file SHALL be made, and the page SHALL say "This file has no damage this tool can find." with "No new file was made. You can use your file as it is. If it still does not open in one program, try another." (CLAUDE.md: owner question 4 of this change)
+When qpdf reads the file with no warning, `qpdf --check` passes, the file starts with `%PDF-` and ends with `%%EOF`, no new file SHALL be made, and the page SHALL say "This file has no damage this tool can find." with "No new file was made. You can use your file as it is. If it does not open in one program, try opening it in another." This is found only after the main button. (CLAUDE.md: owner question 4 of this change)
 
 #### Scenario: A sound file
 
@@ -131,12 +146,12 @@ When qpdf reads the file with no warning, `qpdf --check` passes, the file starts
 
 ### Requirement: A file too damaged to repair
 
-When no page can be found in the file, the page SHALL show the damaged notice naming the file, with the advice "No pages could be found in it. If you have another copy of the file, try that one.", and no link to Repair PDF. When the repaired file would still fail `qpdf --check`, the job SHALL give no file and say "This file is too damaged to repair. If you have another copy of it, try that one." (SPEC.md: States every tool handles, Damaged file and Failed; What we are building, rule 4)
+When no page can be found, the page SHALL show the damaged notice naming the file, with "No pages could be found in it. If you have another copy of the file, try that one." and no Repair link. When the repaired file would still fail `qpdf --check`, the job SHALL give no file, say "This file is too damaged to repair. If you have another copy of the file, try that one." and offer "Choose another file". (SPEC.md: States every tool handles; What we are building, 4)
 
 #### Scenario: The repaired file would still fail the check
 
 - **WHEN** a stand-in engine fails a job as too damaged
-- **THEN** the page says "The file was not repaired." with "This file is too damaged to repair. If you have another copy of it, try that one." and "Go back to your file", and no file is given
+- **THEN** the page says "The file was not repaired." with "This file is too damaged to repair. If you have another copy of the file, try that one." and a "Choose another file" button, which removes the file and moves focus to the picker, and no file is given
 
 #### Scenario: No page can be found
 
@@ -145,12 +160,12 @@ When no page can be found in the file, the page SHALL show the damaged notice na
 
 ### Requirement: Working, done and failed
 
-The job SHALL show "Reading the file", then writing progress, with Cancel working throughout. The result SHALL show `<name>-repaired.pdf`, its size, the pages found, Download, "Start again" and two notes. A failed job SHALL say "The file was not repaired." with what happened, one thing to try, and "Go back to your file". (SPEC.md: Tool page anatomy, 6; States every tool handles; Details that apply everywhere)
+The job SHALL show "Reading the file", then a bar whose writes fill it to half and whose final check moves it from 55 to 95, with Cancel working throughout. The result SHALL show `<name>-repaired.pdf`, its size, the pages found, Download, "Start again" and two notes. Other failures SHALL say "The file was not repaired." with what happened, one thing to try, and "Go back to your file". (SPEC.md: Tool page anatomy, 6; States every tool handles; Details that apply everywhere)
 
 #### Scenario: A repaired file
 
 - **WHEN** a visitor repairs `damaged-xref.pdf`
-- **THEN** the result heading is "Your repaired file is ready", the file is `damaged-xref-repaired.pdf` with its size and "3 pages", and the notes say that what was lost in the damage cannot be brought back and to check the file, and that the file has no password and no restrictions
+- **THEN** the bar never goes back, reaches 50 when the last write ends, shows 55 while the file is checked and 95 after, and the result heading is "Your repaired file is ready", the file `damaged-xref-repaired.pdf` with its size and "3 pages", and the notes say that what was lost cannot be brought back, that parts of an earlier version may show, to check the file, and that it has no password and no restrictions
 
 #### Scenario: Cancel
 
@@ -164,17 +179,62 @@ The job SHALL show "Reading the file", then writing progress, with Cancel workin
 
 ### Requirement: Bounded work on hostile files
 
-The pass that closes open objects SHALL take time in proportion to the file's size. Each object stream SHALL be unpacked by a capped step, at most 64 MiB each and within the job's budget, before the reader parses it; cross-reference stream entries SHALL NOT be unpacked; every write SHALL be capped. A file past a budget SHALL stop with the shared `output-limit` words, and Cancel SHALL end the work at any point. (SPEC.md: Privacy, limits and security; Definition of done)
+The pre-pass SHALL decode nothing and take time in proportion to the file. pdf-lib's decoders SHALL be capped during every repair `load` and `save` at 64 MiB a stream and a per-call budget counting every decoder stage; cross-reference stream entries SHALL NOT be read. Every known slow case SHALL be bounded, every write capped, at most 64 qpdf instances used; past a budget the job SHALL stop with the `output-limit` words. (SPEC.md: Privacy, limits and security; Definition of done)
 
 #### Scenario: An object-stream bomb
 
 - **WHEN** the engine is given a 1.9 MB file whose one object stream unpacks to 2 GB
 - **THEN** it stops with `output-limit` before 64 MiB is unpacked, and memory does not grow past the cap
 
-#### Scenario: Unclosed objects
+#### Scenario: Unclosed objects, streams and strings
 
-- **WHEN** the engine is given 200,000 objects that are never closed (4 MB)
-- **THEN** it finishes reading in a time that grows in proportion to the file, under the limit set in its unit test, where an unguarded read takes minutes
+- **WHEN** the engine is given a 1 to 4 MB file of objects, streams, literal strings or hex strings that never close
+- **THEN** it finishes reading within the fixed time of its unit test, in time that grows in proportion to the file
+
+#### Scenario: Runs of junk and extra stream words
+
+- **WHEN** the engine is given a 1 to 4 MB file of junk or digit runs between and inside objects, or of streams with missing, wrong or indirect `/Length` and many `stream` words in their data
+- **THEN** it finishes within the fixed time of its unit test
+
+#### Scenario: A cross-reference stream bomb
+
+- **WHEN** the engine is given a cross-reference stream with an indirect `/Type`, `/W [0 0 0]` and `/Size 50000000`
+- **THEN** its entries are never read, only its `/Root`, `/Info`, `/Encrypt` and `/ID` are used, and the read finishes within its fixed time
+
+#### Scenario: Object-stream offsets
+
+- **WHEN** an object stream lists 2,000 entries all at offset 0, or more entries than a quarter of its unpacked length
+- **THEN** that object stream is refused, and the read finishes within its fixed time and memory
+
+#### Scenario: A page-tree bomb or loop
+
+- **WHEN** a 1.7 KB file's `/Kids` would multiply into millions of pages, or a `/Kids` entry points back to its parent
+- **THEN** each page object is counted once, the read finishes within its fixed time, and nothing overflows
+
+#### Scenario: Bombs in drawing and picture streams
+
+- **WHEN** a drawing stream or a picture unpacks to 2 GB, on the qpdf route and on the pdf-lib route
+- **THEN** nothing decoded is collected from qpdf's output, the sweep's own decoding stops at 64 MiB, and the job ends with a file or a named failure within its memory bound
+
+#### Scenario: A metadata bomb and filter chains
+
+- **WHEN** a 1 MB file's `/Metadata` unpacks to 1 GB, or a stream has six Flate stages turning 82 KB into 513 MB
+- **THEN** the guard refuses it during `save` or `load`, the refusal is seen after the call although pdf-lib swallowed it, and the job stops with `output-limit`
+
+#### Scenario: Dense object streams
+
+- **WHEN** an object stream holds 16 MiB of `0 `
+- **THEN** the per-call decode budget, set from a Chromium measurement, stops it before the worker passes the memory ceiling
+
+#### Scenario: Two reads at once
+
+- **WHEN** a wrong password and then the right one are typed quickly for a damaged protected file holding an object-stream bomb, so two reads overlap
+- **THEN** each read is refused by its own budget, neither resets the other's, and the page shows the outcome of the latest read
+
+#### Scenario: Too many qpdf instances
+
+- **WHEN** a file would need more than 64 qpdf instances to sweep
+- **THEN** the job stops with the shared `output-limit` words
 
 ### Requirement: Large files
 
@@ -187,16 +247,21 @@ A file over 100 MB, or over 20,000 pages, SHALL show the shared notice and still
 
 ### Requirement: Nothing is uploaded
 
-No request SHALL carry the file's contents, its name or its password, and no page or worker SHALL log them; the reader's own warnings SHALL NOT reach the console. The tool's no-upload test SHALL repair a damaged protected file and damaged copies of fixtures with marked strings and find none of them in any request, header, title, storage, address or console, with an exact allowlist of the site's own files read from the build. (SPEC.md: Privacy, limits and security, Browser tools)
+No request SHALL carry the file's contents, its name or its password, and no page or worker SHALL log them; every console method SHALL be silent while pdf-lib runs. The no-upload test SHALL cover every route with marked strings and find none of them in any request, header, title, storage, address or console, with an exact allowlist of the site's own files read from the build. (SPEC.md: Privacy, limits and security, Browser tools)
 
-#### Scenario: The no-upload test
+#### Scenario: The pdf-lib route with a password
 
 - **WHEN** the end-to-end test repairs `qz7report.pdf`, a damaged file that needs a password and holds `SECRET-` strings in its text, a link, a destination, a bookmark and a field, and downloads the result
-- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist, with pdf-lib in the read and job sets and no other engine's chunk
+- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist
+
+#### Scenario: The qpdf route, the sweep and no new file
+
+- **WHEN** the test repairs a marked file with junk before `%PDF-`, a marked file with a damaged Flate drawing stream, and a sound marked file that gives no new file
+- **THEN** the same holds for each
 
 ### Requirement: The same requests for every file
 
-Which site files the page fetches SHALL depend on the tool only: the read set (qpdf, pdf-lib, `fflate`) and draw set after every pick, whatever the file, and the job set in every job. The qpdf instance count SHALL depend on the file only as named, and following the Repair PDF link from another tool SHALL be named as a difference that follows the visitor's choice. (SPEC.md: Privacy, limits and security; CLAUDE.md: Owner decisions, 22 Nov 2026)
+Which site files the page fetches SHALL depend on the tool only: the read set (qpdf, pdf-lib, `fflate`) and draw set after every pick, whatever the file, and the job set in every job. What the qpdf instance count can reveal SHALL be named, and following the Repair PDF link from another tool SHALL be named as a difference that follows the visitor's choice. (SPEC.md: Privacy, limits and security; CLAUDE.md: Owner decisions, 22 Nov 2026)
 
 #### Scenario: The uniform-requests test
 
@@ -206,7 +271,7 @@ Which site files the page fetches SHALL depend on the tool only: the read set (q
 #### Scenario: The differences are named
 
 - **WHEN** the pull request is opened
-- **THEN** it names the qpdf instance count by route and the Repair page request that follows the link, under the uniform-requests owner question, with the facts listed for the Privacy draft
+- **THEN** it says the qpdf instance count can tell whether the file could be read normally and roughly how many streams it holds, but not whether the sweep changed anything, and that following the link asks for the Repair page, under the uniform-requests owner question
 
 ### Requirement: Keyboard and screen reader
 
@@ -224,9 +289,14 @@ The whole flow SHALL work with a keyboard alone and with a screen reader. (SPEC.
 
 ### Requirement: Page text and the Privacy draft
 
-The text below the tool SHALL be 250 to 500 words, marked as a draft, answering what damage it can and cannot fix, why pages may be missing or blank, why the file has no password, and why a sound file may still fail in one program. It SHALL NOT promise every file can be repaired or hold anything banned. The Privacy draft SHALL gain this tool's request facts for the owner. (SPEC.md: Tool page anatomy, 7; SEO; Look and feel; Privacy, limits and security)
+The text below the tool SHALL be 250 to 500 words, marked as a draft, answering what damage it can fix, why pages may be missing or blank or look older, why the file has no password, and why it may still not open in one program. It SHALL NOT promise every file can be repaired. The Privacy page SHALL gain visible draft sentences on the Repair link and this tool's requests. (SPEC.md: Tool page anatomy, 7; SEO; Look and feel; Privacy, limits and security)
 
 #### Scenario: The text is checked
 
 - **WHEN** the built page is read with scripts off
-- **THEN** the text is there, between 250 and 500 words, marked as a draft, with no banned word, "100%" or exclamation mark, and no sentence saying every file can be repaired
+- **THEN** the text is there, between 250 and 500 words, marked as a draft, with a question "My file still does not open in one program", no banned word, "100%" or exclamation mark, and no sentence saying every file can be repaired
+
+#### Scenario: The Privacy draft
+
+- **WHEN** the built Privacy page is read
+- **THEN** it says, as draft sentences, that the damaged notice links to Repair PDF, that following it asks GitHub for that page, which tells GitHub a damaged file was picked and on which tool page, that nothing of the file, its name or its password goes with it, that the file must be chosen again, what the number of qpdf requests can tell, and that a repaired file can hold parts of an earlier saved version
