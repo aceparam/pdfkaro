@@ -1069,6 +1069,76 @@ describe('stage 2 findings', () => {
     expect((error as PageTooLarge).page).toBe(2);
   });
 
+  const type3 = (procs: string) => `<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [1 0 0 1 0 0] /CharProcs ${procs} /Encoding << /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1] >>`;
+
+  it('20,000 Type 3 fonts sharing one /CharProcs of 20,000 entries: read once (R3-1 a)', { timeout: 60_000 }, async () => {
+    const n = 20_000;
+    // 1 catalog, 2 pages, 3 page, 4 content, 5 glyph, 6 /CharProcs (n entries), 7 the /Font dictionary, 8.. fonts
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'];
+    objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R /Resources << /Font 7 0 R >> >>');
+    objects.push({ dict: '', data: latin1('BT /F0 1 Tf (a) Tj ET') });
+    objects.push({ dict: '', data: latin1('1 0 d0 1 0 0 rg 0 0 1 1 re f') });
+    objects.push(`<< ${Array.from({ length: n }, (_, i) => `/g${i} 5 0 R`).join(' ')} >>`);
+    objects.push(`<< ${Array.from({ length: n }, (_, i) => `/F${i} ${8 + i} 0 R`).join(' ')} >>`);
+    for (let i = 0; i < n; i++) objects.push(type3('6 0 R'));
+    const { output } = await grey(pdfOf(objects));
+    const glyph = Object.values((await objectsOf(output!)).objects).map((entry) => Buffer.from(entry.stream?.data ?? '', 'base64').toString('latin1')).find((text) => text.includes('d0'));
+    expect(glyph).toContain('/GreyRGB cs');
+  });
+
+  it('one Type 3 font with a direct /CharProcs of 20,000 entries named by 20,000 pages with their own /Font: read once (R3-1 b)', { timeout: 60_000 }, async () => {
+    const n = 20_000;
+    // 1 catalog, 2 pages, 3 content, 4 glyph, 5 the font, 6.. pages
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${Array.from({ length: n }, (_, i) => `${6 + i} 0 R`).join(' ')}] /Count ${n} >>`];
+    objects.push({ dict: '', data: latin1('BT /F 1 Tf (a) Tj ET') });
+    objects.push({ dict: '', data: latin1('1 0 d0 1 0 0 rg 0 0 1 1 re f') });
+    objects.push(type3(`<< ${Array.from({ length: n }, (_, i) => `/g${i} 4 0 R`).join(' ')} >>`));
+    for (let i = 0; i < n; i++) objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 3 0 R /Resources << /Font << /F 5 0 R >> >> >>');
+    const { output } = await grey(pdfOf(objects));
+    expect(output).toBeDefined();
+  });
+
+  it('20,000 fields sharing one /DA string object of 100 KB: read and written once, in its own object', { timeout: 60_000 }, async () => {
+    const n = 20_000;
+    const da = `/Helv 12 Tf ${'0 g '.repeat(25_000)}1 0 0 rg`;
+    // 1 catalog, 2 pages, 3 page, 4 content, 5 the /DA string, 6.. fields
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [' + Array.from({ length: n }, (_, i) => `${6 + i} 0 R`).join(' ') + '] >> >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'];
+    objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R >>');
+    objects.push({ dict: '', data: latin1('0 g 0 0 1 1 re f') });
+    objects.push(`(${da})`);
+    for (let i = 0; i < n; i++) objects.push(`<< /FT /Tx /T (f${i}) /DA 5 0 R >>`);
+    const { output } = await grey(pdfOf(objects));
+    const all = Object.values((await objectsOf(output!)).objects).map((entry) => entry.value);
+    const strings = all.filter((value) => typeof value === 'string' && value.includes('Helv'));
+    expect(strings).toHaveLength(1);
+    expect(strings[0]).toMatch(/0\.3 g$/);
+    // Each field still names the one string object.
+    expect(all.filter((value) => value && typeof value === 'object' && typeof (value as Record<string, unknown>)['/DA'] === 'string' && /^\d+ 0 R$/.test((value as Record<string, string>)['/DA']!))).toHaveLength(n);
+  });
+
+  it('10,000 notes sharing one /C array of 1,000,000 numbers, and 20,000 fields sharing one /Kids array: each read once', { timeout: 60_000 }, async () => {
+    const notes = 10_000;
+    const long = `[${'0.5 '.repeat(1_000_000)}]`;
+    // 1 catalog, 2 pages, 3 page, 4 content, 5 the long array, 6.. notes
+    const objects: (string | { dict: string; data: Uint8Array })[] = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'];
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R /Annots [${Array.from({ length: notes }, (_, i) => `${6 + i} 0 R`).join(' ')}] >>`);
+    objects.push({ dict: '', data: latin1('1 0 0 rg 0 0 1 1 re f') });
+    objects.push(long);
+    for (let i = 0; i < notes; i++) objects.push('<< /Type /Annot /Subtype /Square /Rect [0 0 1 1] /C 5 0 R >>');
+    expect((await grey(pdfOf(objects))).output).toBeDefined();
+
+    const fields = 20_000;
+    // 1 catalog, 2 pages, 3 page, 4 content, 5 the shared /Kids array, 6 a kid, 7.. fields
+    const form: (string | { dict: string; data: Uint8Array })[] = [`<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [${Array.from({ length: fields }, (_, i) => `${7 + i} 0 R`).join(' ')}] >> >>`, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'];
+    form.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R >>');
+    form.push({ dict: '', data: latin1('1 0 0 rg 0 0 1 1 re f') });
+    form.push(`[${Array.from({ length: fields }, () => '6 0 R').join(' ')}]`);
+    form.push('<< /FT /Tx /T (kid) /DA (/Helv 12 Tf 1 0 0 rg) >>');
+    for (let i = 0; i < fields; i++) form.push(`<< /FT /Tx /T (f${i}) /Kids 5 0 R >>`);
+    const { output } = await grey(pdfOf(form));
+    expect(Object.values((await objectsOf(output!)).objects).some((entry) => (entry.value as Record<string, unknown> | undefined)?.['/DA'] === 'u:/Helv 12 Tf 0.3 g')).toBe(true);
+  });
+
   // Page i's contents are streams i and i + 1, so a doubt at the end reaches page 1 through every page. The old loop
   // took one pass over every page per step (43.9 s here against 18.7 s, measured 27 Nov 2026); this checks the outcome.
   it('20,000 pages chained by shared streams, the last stream in doubt: every page left', { timeout: 180_000 }, async () => {

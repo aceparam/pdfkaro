@@ -338,6 +338,58 @@ The stage 2 panel's findings, fixed on 27 Nov 2026 (tests in `tests/unit/graysca
 - **Pages left together:** "every content stream of a page is left when any is" is a worklist over streams and pages, each page taken once (linear; the old loop took one pass per step of a chain of shared streams: 43.9 s against 18.7 s on 20,000 chained pages).
 - **R2-1 (second round), shared appearance dictionaries:** an `/AP` dictionary, and a states dictionary inside it, reached by reference from many annotations are read once, in the walk over every object and in the page walk. 20,000 annotations sharing one `/AP` whose states hold 20,000 entries: 2.7 s (the reviewer measured 41.5 s at 10,000 before; the old code fails the test's 60 s limit).
 - **R2-2 (second round), shared resource sub-dictionaries:** a `/XObject`, `/Pattern`, `/Font` or `/CharProcs` dictionary reached by reference from many resources dictionaries is walked once in the page walk and once in the soft-mask loop. Skipping a repeat changes nothing: reaching a stream and marking it left are the same however often it is met, and pages are walked in order, so the first page named for a stream is the first that meets the dictionary (a test checks a shared `/XObject` names page 2 on old and new code alike). 20,000 pages sharing one `/Pattern` dictionary of 20,000 entries: 3.9 s, against 115.6 s before. With a shared `/XObject` dictionary of 20,000 entries the job still takes about 90 s, 85 s of it in `readPages`, whose qpdf pages JSON lists every page's pictures (Left for later).
+- **R3-1 (third round), shared Type 3 pieces:** a `/CharProcs` dictionary shared by many Type 3 fonts is read once when glyphs are listed (glyphs keep the first font's resources, first wins, as before; the unused `glyphFonts` map, which the last font overwrote, is removed); and a font object named by many `/Font` dictionaries is read once, with its direct `/CharProcs`, in the page walk and the soft-mask loop. 20,000 fonts sharing one `/CharProcs` of 20,000 entries: 4.9 s (old code 115 s); one font with a direct `/CharProcs` of 20,000 entries named by 20,000 pages: 3.8 s (old 115 s).
+- **The sweep (third round)** found and fixed six more shapes:
+  - a `/DA` string object shared by many fields or notes is read, edited and written once, in its own object, not copied into each holder (20,000 fields × a 100 KB `/DA`: 2.0 s; the old code stopped with `output-limit`);
+  - `neutralColour` checks the length before reading an array's items, so a long `/C` array shared by 10,000 notes is never scanned (old code: over 60 s);
+  - a `/Kids` or `/Fields` array shared by reference is listed once;
+  - an AcroForm named by several catalogs is taken once, and a `/DR` `/ColorSpace` shared by reference is read once;
+  - each raw batch reads its own entries for colour profiles, not every profile candidate;
+  - and a picture's `/Filter` shared by reference is checked for JPEG 2000 once.
+
+  Tests: "stage 2 findings" in `tests/unit/grayscale-pdf.test.ts`; the R3-1, `/DA` and `/C`-with-`/Kids` tests each fail on the code before this round (timeouts at 60 s, or `output-limit`).
+
+**Every loop, checked (third round).** Line numbers are in `src/engines/tools/grayscale-pdf.ts` as of this round. "Readers' output" means bounded by `readPages`' pages JSON, itself capped at 64 MB (`maxPagesJson`): a `/Contents` array shared by many pages is already listed once per page there, the shared `readPages` cost (Left for later).
+
+| Lines | Loop | Why it is linear |
+| --- | --- | --- |
+| 390 | `copyOf`: clone and count | once per object (`copies` map) |
+| 439–483 | walk over every object | each object once; direct values of that object only (depth ≤ 32); references are recorded, not followed |
+| 465–479 | `/AP` and states in that walk | `firstTime` on the `/AP` and states references |
+| 500 | resources places | once each, keyed by place (`resources` map) |
+| 509 | `pageResources` | at most 64 steps up `/Parent` per page, visited set |
+| 525, 545, 659–665 | soft-mask-only forms | once per form |
+| 532–541 | Type 3 glyph list | `firstTime` on `/CharProcs` reference (R3-1 a) |
+| 581–585 | content streams per page | readers' output |
+| 609–653 | page walk | `/Annots` list and annotation references, `/AP` and states, each resources dictionary (`walkedResources`), `/XObject`, `/Pattern`, `/Font`, each font object, `/CharProcs`: each by `firstTime` on its reference; direct ones sit inside a container walked once; `reachStream` once per stream |
+| 657 | streams no page reaches | once per stream |
+| 667 | locked owners | once per drawing |
+| 673–686 | soft-mask loop | locked resources once each; `/XObject`, `/Font`, each font object, `/CharProcs` by `firstTime` |
+| 688 | colour space owners | once per resources dictionary |
+| 695–710 | catalogs, AcroForms, `/DR` | once per object; AcroForms deduplicated by place |
+| 711–718 | names in use | once per colour space dictionary; `/DR` `/ColorSpace` by `firstTime` |
+| 719 | `freeName` | twice, each at most the names in use |
+| 729–761 | ICC candidates | once per picture, shading and colour space dictionary entry; `noteProfile` depth ≤ 1, `/Range` length checked before its items |
+| 745 | `isJpx` | memoised by `/Filter` reference |
+| 794 | `sort` | constant work per call (its `JSON.stringify` only for a direct indexed or pattern array, inside its own container, met a fixed number of times) |
+| 815, 884, 932–946 | page sums and pages left together | readers' output; the worklist takes each page once |
+| 832, 848 | starts per colour space dictionary, inherited starts | cached by colour space dictionary place |
+| 909 | profiles in a batch | over the batch's own entries |
+| 916 | streams in a batch | each stream once |
+| 986 | pictures and shadings repointed | once per site |
+| 997–1012 | inheritors, streams owning each resources dictionary | once per stream; readers' output for page contents |
+| 1015–1041 | named entries | once per colour space dictionary; `streamsOk` once per dictionary; each resources dictionary belongs to one |
+| 1043 | entries to repoint | once each |
+| 1055–1075 | annotations listed | shared `/Annots` and annotation references by visited sets |
+| 1084–1107 | `/DA` | memoised by reference (written in its own object once) |
+| 1109–1122 | colours of notes and `/MK` | each annotation once; `neutralColour` length first, so constant per call |
+| 1124–1137 | bookmarks | each item once (`seenItems`), at most `treeLimit` |
+| 1146–1167 | fields | `/Fields` and `/Kids` arrays by `firstTime`; each field once (`seenFields`), at most `treeLimit` |
+| 1174 | edited streams | once each |
+| 1203–1233 | stand-in names | once per resources dictionary; one new dictionary per locked colour space dictionary; pages with no resources once each |
+| 1236, 1238 | `/Thumb`, stream dictionaries | once per page, once per stream |
+| writer (`makeRun`) | update entries | once per created object, copy and stream |
+
 - **C1:** inherited eligibility is worked out when first needed, also by the name step, so a file whose drawing streams are all undecoded no longer throws.
 - **C2:** ICC CMYK named entries start white (decision 3, "As built").
 - **Smaller fixes:** `/DA` text built in chunks; the page-too-large sentence and its no-page form from one template; a neutral colour array outside 0 to 1 is clamped (no longer left); no non-null assertions on operand runs; `inheritorsLeft` is file-wide (one left stream with no resources of its own blocks such names everywhere: over-cautious, safe).

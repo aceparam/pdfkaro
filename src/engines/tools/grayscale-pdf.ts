@@ -218,7 +218,9 @@ export function appearanceEditor(): Editor {
 
 /** A colour array a reader draws with (`/C`, `/IC`, `/BG`, `/BC`) made neutral, keeping its count; undefined when unchanged. */
 export function neutralColour(value: unknown): number[] | undefined {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'number' && Number.isFinite(item))) return undefined;
+  // The length first, so a long array (shared by reference across many notes) is never scanned.
+  if (!Array.isArray(value) || (value.length !== 3 && value.length !== 4)) return undefined;
+  if (!value.every((item) => typeof item === 'number' && Number.isFinite(item))) return undefined;
   const numbers = value as number[];
   if (numbers.length === 3) {
     const [r, g, b] = numbers as [number, number, number];
@@ -524,16 +526,18 @@ async function changesFor(
   const thumbOnly = (id: string) => (references.get(id) ?? 0) === 1;
   /** Type 3 glyph streams, each with its font's own resources (or none). */
   const glyphs = new Map<string, string | undefined>();
-  const glyphFonts = new Map<string, Where>();
+  // A /CharProcs dictionary shared by many fonts is read once: its glyphs keep the first font's resources (first wins,
+  // as before), so a later font naming it could change nothing.
+  const readCharProcs = new Set<string>();
   for (const font of type3Fonts) {
     const fontDict = current(font) as Dict;
-    const own = ownResources(font);
+    if (!firstTime(readCharProcs, fontDict['/CharProcs'])) continue;
     const procs = dictAt(fontDict['/CharProcs']);
     if (!procs) continue;
+    const own = ownResources(font);
     for (const proc of Object.values(procs)) {
       if (!isRef(proc) || !isStream(proc)) continue;
       if (!glyphs.has(proc)) glyphs.set(proc, own);
-      glyphFonts.set(proc, font);
     }
   }
 
@@ -601,6 +605,7 @@ async function changesFor(
   const walkedPatterns = new Set<string>();
   const walkedFonts = new Set<string>();
   const walkedCharProcs = new Set<string>();
+  const walkedFontObjects = new Set<string>();
   const walkFrom = (start: string | undefined, page: number | undefined, annots: unknown) => {
     const stack: { resources: string | undefined; depth: number }[] = [{ resources: start, depth: 0 }];
     // A page's annotations' appearance streams.
@@ -638,6 +643,8 @@ async function changesFor(
       if (firstTime(walkedPatterns, dict['/Pattern'])) for (const id of Object.values(dictAt(dict['/Pattern']) ?? {})) if (isRef(id) && patterns.has(id)) reachStream(id, page, stack, depth);
       if (firstTime(walkedFonts, dict['/Font'])) {
         for (const value of Object.values(dictAt(dict['/Font']) ?? {})) {
+          // A font object named by many /Font dictionaries is read once, its direct /CharProcs with it.
+          if (!firstTime(walkedFontObjects, value)) continue;
           const font = dictAt(value);
           if (!font || !isName(font['/Subtype'], '/Type3') || !firstTime(walkedCharProcs, font['/CharProcs'])) continue;
           for (const proc of Object.values(dictAt(font['/CharProcs']) ?? {})) if (isRef(proc) && glyphs.has(proc)) reachStream(proc, page, stack, depth);
@@ -662,12 +669,14 @@ async function changesFor(
   const lockedXObjects = new Set<string>();
   const lockedFonts = new Set<string>();
   const lockedCharProcs = new Set<string>();
+  const lockedFontObjects = new Set<string>();
   for (const each of resources.values()) {
     if (!each.locked) continue;
     const dict = current(each.place) as Dict;
     if (firstTime(lockedXObjects, dict['/XObject'])) for (const id of Object.values(dictAt(dict['/XObject']) ?? {})) if (isRef(id) && inheritors.has(id) && drawings.has(id)) drawings.get(id)!.left = true;
     if (!firstTime(lockedFonts, dict['/Font'])) continue;
     for (const value of Object.values(dictAt(dict['/Font']) ?? {})) {
+      if (!firstTime(lockedFontObjects, value)) continue;
       const font = dictAt(value);
       if (!firstTime(lockedCharProcs, font?.['/CharProcs'])) continue;
       for (const proc of Object.values(dictAt(font?.['/CharProcs']) ?? {})) if (isRef(proc) && inheritors.has(proc) && drawings.has(proc)) drawings.get(proc)!.left = true;
@@ -685,9 +694,13 @@ async function changesFor(
   // The AcroForm, its /DR, and the catalog.
   const catalogs = [...objects.keys()].filter((id) => isName((rootOf(id) as Dict | undefined)?.['/Type'], '/Catalog') && !isStream(id));
   const acroForms: Where[] = [];
+  // An AcroForm named by several catalogs is taken once.
+  const seenAcroForms = new Set<string>();
   for (const id of catalogs) {
     const place = placeOf({ owner: id, path: [] }, '/AcroForm', (rootOf(id) as Dict)['/AcroForm']);
-    if (place && isDict(current(place))) acroForms.push(place);
+    if (!place || !isDict(current(place)) || seenAcroForms.has(placeKey(place))) continue;
+    seenAcroForms.add(placeKey(place));
+    acroForms.push(place);
   }
   const defaultResources: Where[] = [];
   for (const form of acroForms) {
@@ -696,8 +709,11 @@ async function changesFor(
   }
   const usedNames = new Set<string>();
   for (const { place } of spaceOwners.values()) for (const key of Object.keys(current(place) as Dict)) usedNames.add(key);
+  const seenDefaultSpaces = new Set<string>();
   for (const dr of defaultResources) {
-    const spaces = dictAt((current(dr) as Dict)['/ColorSpace']);
+    const value = (current(dr) as Dict)['/ColorSpace'];
+    if (!firstTime(seenDefaultSpaces, value)) continue;
+    const spaces = dictAt(value);
     if (spaces) for (const key of Object.keys(spaces)) usedNames.add(key);
   }
   const freeName = (base: string) => {
@@ -724,12 +740,20 @@ async function changesFor(
     if ((space[0] === '/Indexed' && space.length === 4) || (space[0] === '/Pattern' && space.length === 2)) noteProfile(space[1], depth + 1);
   };
   const imageSites: Where[] = [];
+  // Whether a picture's /Filter names JPEG 2000; a /Filter array shared by reference is read once.
+  const jpxByReference = new Map<string, boolean>();
+  const isJpx = (value: unknown): boolean => {
+    if (isRef(value) && jpxByReference.has(value)) return jpxByReference.get(value)!;
+    const filter = deref(value);
+    const jpx = filter === '/JPXDecode' || (Array.isArray(filter) && filter.includes('/JPXDecode'));
+    if (isRef(value)) jpxByReference.set(value, jpx);
+    return jpx;
+  };
   for (const [id, entry] of objects) {
     if (!('stream' in entry)) continue;
     const dict = entry.stream.dict;
     if (!isName(dict['/Subtype'], '/Image') || dict['/ImageMask'] === true || thumbOnly(id)) continue;
-    const filter = deref(dict['/Filter']);
-    if (filter === '/JPXDecode' || (Array.isArray(filter) && filter.includes('/JPXDecode'))) continue;
+    if (isJpx(dict['/Filter'])) continue;
     if (!('/ColorSpace' in dict)) continue;
     imageSites.push({ owner: id, path: [] });
   }
@@ -881,9 +905,9 @@ async function changesFor(
     // The ids this batch was asked for: one qpdf could not read gives nothing, and its streams are left.
     const asked = new Set(batches[batchIndex++]);
     // Profiles come first: their data space, from the first 20 bytes.
-    for (const [id] of profileCandidates) {
-      const raw = batch.get(id);
-      if (!raw) continue;
+    // Over this batch's own entries, so many batches never each walk every profile.
+    for (const [id, raw] of [...batch]) {
+      if (!profileCandidates.has(id)) continue;
       batch.delete(id);
       const dict = (objects.get(id) as { stream: { dict: Dict } }).stream.dict;
       const head = dict['/Filter'] === undefined ? (raw.length >= 20 ? raw.subarray(0, 20) : undefined) : inflatePrefix(raw, Inflate, 20);
@@ -1049,12 +1073,28 @@ async function changesFor(
     });
   }
   /** A /DA string's rg or k made a g; one read with doubt is left. */
+  /** A /DA string's text with its rg or k made a g, or null when it is left. */
+  const editedDa = (bytes: Uint8Array | undefined): string | null => {
+    const result = bytes ? editContent(bytes, appearanceEditor(), 'alone', spend) : undefined;
+    return result && result.kind === 'edited' && result.edits > 0 ? daString(result.data) : null;
+  };
+  // A /DA held directly is edited where it sits; one shared by reference (a string object) is read, edited and
+  // written once, in its own object, however many holders name it.
+  const doneDa = new Set<string>();
   const editDa = (place: Where) => {
-    const bytes = stringBytes(deref((current(place) as Dict)['/DA']));
-    if (!bytes) return;
-    const result = editContent(bytes, appearanceEditor(), 'alone', spend);
-    if (result.kind !== 'edited' || result.edits === 0) return;
-    const text = daString(result.data);
+    const value = (current(place) as Dict)['/DA'];
+    if (isRef(value)) {
+      if (doneDa.has(value)) return;
+      doneDa.add(value);
+      const text = typeof valueOf(value) === 'string' ? editedDa(stringBytes(valueOf(value))) : null;
+      if (text === null) return;
+      count(value.length + text.length);
+      copies.set(value, { root: text, stream: false });
+      turned = true;
+      return;
+    }
+    const text = editedDa(stringBytes(value));
+    if (text === null) return;
     count(text.length);
     writable(place)!['/DA'] = text;
     turned = true;
@@ -1098,11 +1138,14 @@ async function changesFor(
   }
   // /DA strings: the AcroForm's, and every field's and widget's through the whole /Fields tree.
   const seenFields = new Set<string>();
+  const listedFieldArrays = new Set<string>();
   for (const form of acroForms) {
     editDa(form);
     const fields = deref((current(form) as Dict)['/Fields']);
     const stack: { place: Where; depth: number }[] = [];
     const pushAll = (list: unknown, parent: Where, key: string, depth: number) => {
+      // A /Kids or /Fields array shared by reference is listed once.
+      if (!firstTime(listedFieldArrays, list)) return;
       const listPlace = placeOf(parent, key, list);
       const items = listPlace ? current(listPlace) : undefined;
       if (!listPlace || !Array.isArray(items) || depth > walkDepth) return;
