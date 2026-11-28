@@ -144,6 +144,14 @@ function stepsOf(dict: Dict, resolve: Resolve): Step[] | undefined {
   return steps.some((step) => step.name === 'runlength') ? steps : undefined;
 }
 
+/**
+ * Whether `decodeContent` would decode a stream with this dictionary at all: its filters are one of the shapes it
+ * takes. For a caller that must tell a shape it does not take from data that breaks a step (Repair PDF's sweep).
+ */
+export function decodesContent(dict: Dict, resolve: Resolve): boolean {
+  return stepsOf(dict, resolve) !== undefined;
+}
+
 /** The largest piece a step's output grows by. */
 const pieceSize = 1024 * 1024;
 /** The first piece; each later one twice the one before, up to `pieceSize`, so a small stream allocates little. */

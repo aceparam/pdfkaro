@@ -68,6 +68,8 @@ export function failureKind(error: unknown): FailureKind {
   if (error instanceof Error && error.name === 'PasswordRefused') return 'password-refused';
   // A page's drawing instructions decode past the content reader's cap (content.ts's `PageTooLarge`). Known by name, as above.
   if (error instanceof Error && error.name === 'PageTooLarge') return 'page-too-large';
+  // A repaired file would still fail qpdf's check (Repair PDF's `RepairFailed`). Known by name, as above.
+  if (error instanceof Error && error.name === 'RepairFailed') return 'too-damaged';
   // Not every RangeError: a stack overflow or a bad offset in a damaged file is the engine's failure, not memory.
   if (outOfMemory(error)) return 'memory';
   return 'engine';

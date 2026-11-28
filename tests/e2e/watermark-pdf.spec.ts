@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { changed, pictures, texts } from '../unit/stamp-helpers';
@@ -405,7 +406,7 @@ test.describe('problems with the file', () => {
     await open(page);
     await pick(page, 'damaged-xref.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-xref.pdf is damaged and cannot be read.' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+    await expectRepairLink(page);
     await expect(field(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
@@ -555,7 +556,7 @@ test.describe('nothing is uploaded', () => {
     // The engine, the drawing step (in one file, shared with Add page numbers) and pdf-lib were fetched, and nothing of another tool's.
     for (const name of [/\/watermark-pdf-/, /\/stamp-/, /\/pdflib-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     expect(holding(fetched, 'A drawing used an object that cannot be written.').length).toBe(1);
-    for (const other of [/\/add-page-numbers-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/, /\/grayscale-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/add-page-numbers-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, consoleText);

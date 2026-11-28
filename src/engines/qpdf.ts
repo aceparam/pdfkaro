@@ -144,8 +144,8 @@ export function rewriteArgs(passwordArgs: readonly string[], extraArgs: readonly
  * Writes `bytes` again as one new file on a fresh qpdf of its own, with the tool's own options, capped at `limit`
  * (`oneFileLimit` unless given). The writer lives only in this function, and the capped write removes /in.pdf
  * before /out.pdf is read, so the input is let go before the output is held. Throws `OutputLimit` past the cap,
- * "A password did not open the file." when qpdf said the password was missing or wrong, and the tool's own fixed
- * `failed` sentence for any other unfinished write. The password arguments go only into qpdf's in-memory argument
+ * "A password did not open the file." when qpdf said the password was missing or wrong, and, for any other unfinished
+ * write, the tool's own fixed `failed` sentence, or the error `failed` makes when it is a function. The password arguments go only into qpdf's in-memory argument
  * list; what qpdf printed is never passed on.
  */
 export async function rewrite(
@@ -154,12 +154,16 @@ export async function rewrite(
   passwordArgs: readonly string[],
   extraArgs: readonly string[],
   onWriting: (percent: number) => void,
-  { failed, limit = oneFileLimit(bytes.length) }: { failed: string; limit?: number },
+  { failed, limit = oneFileLimit(bytes.length) }: { failed: string | (() => Error); limit?: number },
 ): Promise<Uint8Array> {
   const writer = await qpdfFrom(tools);
   writer.write('/in.pdf', bytes);
   const written = cappedWrite(writer, limit, (qpdf) => qpdf.call(rewriteArgs(passwordArgs, extraArgs)), onWriting);
-  if (!finished(written.code)) throw new Error(saidInvalidPassword(written.printed) ? 'A password did not open the file.' : failed);
+  if (!finished(written.code)) {
+    if (saidInvalidPassword(written.printed)) throw new Error('A password did not open the file.');
+    // A function makes the tool's own error (Repair PDF's `RepairFailed`); a string is the tool's fixed sentence.
+    throw typeof failed === 'string' ? new Error(failed) : failed();
+  }
   return writer.read('/out.pdf');
 }
 

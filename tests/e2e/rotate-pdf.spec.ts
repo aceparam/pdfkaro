@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
 import { toolFiles } from './tool-files';
 
@@ -218,6 +219,7 @@ test.describe('problems with the file', () => {
     await open(page);
     await pick(page, 'damaged-cut.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-cut.pdf is damaged and cannot be read.' })).toBeVisible();
+    await expectRepairLink(page);
     await expect(cells(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.getByText('Choose a PDF file')).toBeVisible();
@@ -291,7 +293,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     expect(fetched.some((path) => /\/rotate-pdf-/.test(path))).toBe(true);
-    for (const other of [/\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
+    for (const other of [/\/repair-pdf-/, /\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
 
     const held = await traces(page, context);
     expect(held).toMatchObject({ local: 0, session: 0, databases: 0, caches: 0, opfs: [], cookies: [] });

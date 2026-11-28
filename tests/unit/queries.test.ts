@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Group, Tool, ToolWidgetWords } from '../../src/tools/registry';
-import { acceptsFor, allPages, findPage, groupOf, groupsWithItems, hubLink, hubPages, pageWords, relatedItems } from '../../src/tools/queries';
+import { acceptsFor, allPages, findPage, groupOf, groupsWithItems, hubLink, hubPages, pageWords, relatedItems, repairLink } from '../../src/tools/queries';
+import { tools as registryTools } from '../../src/tools/registry';
 
 const group = (id: Group['id'], name: string, slug: Group['slug']): Group => ({
   id,
@@ -190,5 +191,31 @@ describe('groupOf and hubLink', () => {
 
   it('throw for a tool whose group is not in the registry', () => {
     expect(() => groupOf(groups.slice(0, 1), tools[1]!)).toThrow(/merge/);
+  });
+});
+
+describe('the damaged notice’s link to Repair PDF', () => {
+  const merge = registryTools.find((tool) => tool.id === 'merge-pdf')!;
+  const repair = registryTools.find((tool) => tool.id === 'repair-pdf')!;
+  const images = registryTools.find((tool) => tool.id === 'images-to-pdf')!;
+
+  it('gives Repair PDF’s address under the base, with nothing else in it, once it is published', () => {
+    expect(repairLink(registryTools, merge, '/')).toBe('/repair-pdf');
+    expect(repairLink(registryTools, merge, '/pdfkaro/')).toBe('/pdfkaro/repair-pdf');
+  });
+
+  it('gives none while Repair PDF is not published', () => {
+    expect(repairLink(registryTools.filter((tool) => tool.id !== 'repair-pdf'), merge, '/')).toBeUndefined();
+  });
+
+  it('gives none for a tool that does not take PDFs, and none on Repair PDF itself', () => {
+    expect(repairLink(registryTools, images, '/')).toBeUndefined();
+    expect(repairLink(registryTools, repair, '/')).toBeUndefined();
+  });
+
+  it('gives every other PDF tool the same address', () => {
+    for (const tool of registryTools.filter((each) => each.accepts.includes('application/pdf') && each.id !== 'repair-pdf')) {
+      expect(repairLink(registryTools, tool, '/'), tool.id).toBe('/repair-pdf');
+    }
   });
 });

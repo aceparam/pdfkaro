@@ -81,6 +81,11 @@ describe('messages from the worker', () => {
     expect(isFromWorker({ type: 'progress', requestId: 1, progress: { stage: 'working', unit: 'picture', done: 3, total: 40 } })).toBe(true);
   });
 
+  it('takes the too-damaged failure (Repair PDF), with no page', () => {
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'too-damaged' })).toBe(true);
+    expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'too-damaged', page: 3 })).toBe(false);
+  });
+
   it('takes a page number with a page-too-large failure only, as a whole number from 1 (Grayscale PDF)', () => {
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large' })).toBe(true);
     expect(isFromWorker({ type: 'failed', requestId: 1, kind: 'page-too-large', page: 14 })).toBe(true);

@@ -79,7 +79,7 @@ When the file needs a password, damaged or not, the page SHALL ask for it in a l
 
 ### Requirement: How a file is repaired
 
-A file qpdf can read SHALL be written again by qpdf; any other SHALL be read object by object from its start, ignoring its cross-reference table and leaving out what makes no sense, then written by qpdf. Parts of pages pointing to nothing SHALL be removed, a damaged Flate stream SHALL keep what still unpacks, other damaged streams SHALL be emptied. The file SHALL pass `qpdf --check` or not be given. (SPEC.md: Architecture; Definition of done; CLAUDE.md: Owner decisions, 28 Nov 2026)
+A file qpdf can read SHALL be written again by qpdf; any other SHALL be read object by object from its start, ignoring its cross-reference table, then written by qpdf. When its dictionaries fit the shared listing cap, broken page parts SHALL be removed and damaged streams kept within budget or emptied, as the scenarios say. The file SHALL pass `qpdf --check` or not be given. (SPEC.md: Architecture; Definition of done; CLAUDE.md: Owner decisions, 28 Nov 2026)
 
 #### Scenario: The damaged kinds measured for this change
 
@@ -95,6 +95,21 @@ A file qpdf can read SHALL be written again by qpdf; any other SHALL be read obj
 
 - **WHEN** a page's compressed drawing stream has bytes changed part way through
 - **THEN** the page keeps the drawing that unpacks before the damage, the other pages are unchanged, and the result passes `qpdf --check`
+
+#### Scenario: A damaged stream in another filter
+
+- **WHEN** a stream in a filter other than Flate that the engine's own capped decoders read (as drawing streams are read) cannot be read to its end
+- **THEN** the stream is emptied, and the result passes `qpdf --check`
+
+#### Scenario: Damaged pictures past the budget for kept bytes
+
+- **WHEN** a file holds 33 Flate pictures each unpacking to 60 MiB, every one cut short, read on either route
+- **THEN** the recovered bytes kept over the job stay within `min(256 MiB, 2 × the plain copy + 16 MiB)`, the pictures past it are emptied, the result passes `qpdf --check`, and memory stays within its bound
+
+#### Scenario: Dictionaries past the listing cap
+
+- **WHEN** a file's JSON of dictionaries passes the shared listing cap (64 MB, about 400,000 objects)
+- **THEN** the file is written as it was read, with no sweep; when the result passes `qpdf --check` it is given, otherwise the job says the file is too damaged
 
 #### Scenario: A page whose drawing is missing
 

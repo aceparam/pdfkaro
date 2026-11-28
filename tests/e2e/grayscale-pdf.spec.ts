@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFArray, PDFDocument, PDFName, PDFString, StandardFonts, rgb } from '@cantoo/pdf-lib';
 import { type BrowserContext, type ConsoleMessage, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -391,7 +392,7 @@ test.describe('problems with the file', () => {
       await openPage(page);
       await pick(page, name);
       await expect(page.getByRole('heading', { name: `${name} is damaged and cannot be read.` })).toBeVisible({ timeout: 30000 });
-      await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+      await expectRepairLink(page);
       await expect(mainButton(page)).toHaveCount(0);
       await page.getByRole('button', { name: 'Choose another file' }).click();
       await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
@@ -543,10 +544,11 @@ test.describe('nothing is uploaded', () => {
     await headersRead(seen);
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
-    // The engine was fetched with qpdf, fflate, the content reader inside it, the shared zlib steps and the page reading.
-    for (const name of [/\/grayscale-pdf-/, /\/qpdf-/, /\/fflate-/, /\/zlib-/, /\/inspect-/, /\/plain-/, /\/pages-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
+    // The engine was fetched with qpdf, fflate, the content reader (its own file since Repair PDF imports it too), the
+    // shared zlib steps and the page reading.
+    for (const name of [/\/grayscale-pdf-/, /\/content-/, /\/qpdf-/, /\/fflate-/, /\/zlib-/, /\/inspect-/, /\/plain-/, /\/pages-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
     // Nothing of pdf-lib, the drawing step, the picture reader or steps, the option values or another tool.
-    for (const other of [/\/stamp-/, /\/option-values-/, /\/pdflib-/, /\/picture-/, /\/shrink-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/merge-pdf-/, /\/sign-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/stamp-/, /\/option-values-/, /\/pdflib-/, /\/picture-/, /\/shrink-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/merge-pdf-/, /\/sign-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, heard.said);

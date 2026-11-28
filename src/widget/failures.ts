@@ -25,15 +25,24 @@ export const outputLimitSentence = 'The new file would be far larger than expect
 export const unsafePageSentence = 'A page of this file could not be resized, so no new file was made. The file may be damaged. Try another copy of it.';
 
 /**
- * What the page says when page `page`'s drawing instructions are too large to convert here (content.ts's
- * `PageTooLarge`, Grayscale PDF). A genuine dense map or drawing can reach it, so it names deleting the page or
- * splitting the file, not damage. The number is the only thing from the file in it.
+ * What the page says when page `page`'s drawing instructions are too large to work on here (content.ts's
+ * `PageTooLarge`): Grayscale PDF converts, Repair PDF repairs (`action`, the tool's `pageTooLargeAction`; every tool that
+ * can stop with it names its own, which the registry test checks, so the neutral default is never shown). A genuine
+ * dense map or drawing can reach it, so it names deleting the page or splitting the file, not damage. The number is
+ * the only thing from the file in it.
  */
-export function pageTooLargeSentence(page?: number): string {
+export function pageTooLargeSentence(page?: number, action = 'work on'): string {
   // One template: with no page (never expected), the same words name "A page".
   const which = page !== undefined && Number.isSafeInteger(page) && page >= 1 ? `Page ${number(page)}` : 'A page';
-  return `${which} has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.`;
+  return `${which} has too much drawing on it to ${action} here. Delete that page, or split the file, and ${action} the rest.`;
 }
+
+/**
+ * What the page says when a repaired file would still fail qpdf's check (Repair PDF's `RepairFailed`). Going back to
+ * the file can only fail again, so the failure offers "Choose another file". One wording for "another copy", as in
+ * Repair PDF's damaged notice.
+ */
+export const tooDamagedSentence = 'This file is too damaged to repair. If you have another copy of the file, try that one.';
 
 /** What the page says when the engine refuses a text, for a tool with no words of its own for it. */
 export const textRefusedSentence = 'The text could not be used. Check it and try again.';
@@ -57,7 +66,7 @@ export const pictureTooLargeAdvice = 'Choose a smaller picture.';
  */
 export function failureSentence(
   kind: FailureKind,
-  words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options'>,
+  words: Pick<ToolWidgetWords, 'memoryAdvice' | 'zipLimitAdvice' | 'options' | 'pageTooLargeAction'>,
   choices: Choices = {},
   pictures: Readonly<Record<string, PictureEntry>> = {},
   page: number | null = null,
@@ -71,7 +80,8 @@ export function failureSentence(
   if (kind === 'output-limit') return outputLimitSentence;
   if (kind === 'unsafe-page') return unsafePageSentence;
   // The worker sends the page with this kind; without one (never expected), the sentence names no page.
-  if (kind === 'page-too-large') return pageTooLargeSentence(page ?? undefined);
+  if (kind === 'page-too-large') return pageTooLargeSentence(page ?? undefined, words.pageTooLargeAction);
+  if (kind === 'too-damaged') return tooDamagedSentence;
   // The page should never send a text the engine refuses; if the two disagree, the first shown text's own words, else the shared ones.
   // A hidden text is never sent, so its words never apply (shownOptions decides what is shown, in one place).
   if (kind === 'text-refused') {
@@ -120,18 +130,29 @@ export function refusedSentence(names: readonly string[], words: Pick<ToolWidget
 }
 
 /**
+ * What the damaged notice says before its link to Repair PDF, until files can be handed over between tools in memory
+ * (the owner's decision of 28 Nov 2026, "Plain link now"), and the link's words.
+ */
+export const repairSentence = 'Repair PDF may be able to recover it. On that page, choose the file again.';
+export const repairLinkLabel = 'Go to Repair PDF';
+
+/**
  * The heading, the one thing to try, and the words a screen reader hears, for a file that cannot be read:
  * damaged, or saved in a way the tool cannot read. The advice is the tool's own, from the registry; a tool
- * with none (the PDF tools) says the heading alone, as it always did.
+ * with none (the PDF tools) says the heading alone, as it always did. `repair` is true when the notice links to
+ * Repair PDF (a damaged file, on a tool given its address): the sentence before the link is said last.
  */
 export function unreadableNotice(
   name: string,
   status: 'damaged' | 'unsupported',
   words: Pick<ToolWidgetWords, 'damagedAdvice' | 'unsupportedAdvice'>,
-): { heading: string; advice?: string; announcement: string } {
+  repair = false,
+): { heading: string; advice?: string; repair?: string; announcement: string } {
   const heading = status === 'damaged' ? `${name} is damaged and cannot be read.` : `${name} is saved in a way this tool cannot read.`;
   const advice = status === 'damaged' ? words.damagedAdvice : words.unsupportedAdvice;
-  return advice ? { heading, advice, announcement: `${heading} ${advice}` } : { heading, announcement: heading };
+  const linked = repair && status === 'damaged' ? repairSentence : undefined;
+  const announcement = [heading, advice, linked].filter(Boolean).join(' ');
+  return { heading, ...(advice ? { advice } : {}), ...(linked ? { repair: linked } : {}), announcement };
 }
 
 /** The heading of the notice for a very large picture, with its pixels in millions, rounded down: "huge.png has 256 million pixels". */

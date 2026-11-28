@@ -32,6 +32,8 @@ import { draftSentence, footerPage, siteName } from '../site';
   <p>After you choose a file, the page fetches the programs that read and write PDFs. They come from this site. These requests carry nothing from your file: not its contents, not its name and not a password.</p>
   {/* Draft words for the owner (add-uniform-requests): tied to its claim table and to tests/e2e/uniform-requests.spec.ts. */}
   <p>Which programs the page fetches does not depend on what your file holds. This is true for a damaged file, a protected file or a file of the wrong kind too.</p>
+  {/* Draft words for the owner (add-repair-pdf, design section 13): tied to its loads and tests/e2e/uniform-requests.spec.ts. */}
+  <p>On the Repair PDF page, the program that reads damaged files is fetched after you choose a file, whatever the file holds.</p>
   {/* Draft words for the owner (add-compress-to-target, design decision 11): a file at or under the page's size is held, so no job set is fetched for it. */}
   <p>
     On the Compress PDF to 100 KB, 200 KB, 500 KB, 1 MB and 2 MB pages, a file already at or under the page’s size starts no job, so the programs a job needs are not fetched for it.
@@ -47,6 +49,8 @@ import { draftSentence, footerPage, siteName } from '../site';
   </p>
   {/* Draft words for the owner (add-grayscale-pdf): tied to its design, section 10, and to tests/unit/grayscale-pdf.test.ts (pictures' data and colour values unchanged). */}
   <p>Grayscale PDF shows colours in grey but keeps the colours of the pages’ drawing and pictures in the new file, where a program can still read them.</p>
+  {/* Draft words for the owner (add-repair-pdf, design section 13): tied to its decision 6 and tests/unit/repair-pdf.test.ts (a cut-off last save). */}
+  <p>A file made by Repair PDF can hold parts of an earlier saved version of your file, when its last save was lost in the damage.</p>
   <p>
     Pictures from PDF to JPG and PDF to PNG hold only the drawn page, with what was typed in its form fields as the page shows it, and no title, author or date. Image to PDF copies no details of your
     pictures, such as the camera, date or place, into the PDF.
@@ -135,6 +139,16 @@ import { draftSentence, footerPage, siteName } from '../site';
     From your browser’s requests, GitHub can tell which tool page you opened and when you chose a file: in practice your first file, and later ones once your browser’s copies of
     the programs are about 10 minutes old, or if your browser keeps no copies. It may be able to tell when you started a job. GitHub does not receive your file, its name or a password. Your
     browser may ask for a program more than once, and in a few cases how often it asks can depend on your file. If a page of your file is slow to show, asking again can tell GitHub that.
+  </p>
+  {/* Draft words for the owner (add-repair-pdf, design section 13 and its owner question 11): tied to the link test in tests/e2e/merge-pdf.spec.ts. */}
+  <p>
+    When a tool cannot read a PDF because it is damaged, it shows a link to Repair PDF. Following it asks GitHub for the Repair PDF page, which can tell GitHub that a damaged file was chosen and,
+    through the address your browser sends with the request, on which tool page. Nothing of your file goes with it: not its contents, not its name and not a password. You choose the file again on
+    the Repair PDF page.
+  </p>
+  {/* Draft words for the owner (add-repair-pdf, design section 13): the qpdf instance count, under the uniform-requests question. */}
+  <p>
+    On the Repair PDF page, how many times your browser asks for the program that writes PDFs can tell GitHub whether your file could be read in the usual way, and roughly how many parts it holds.
   </p>
   {/* Draft words for the owner (add-compress-to-target, design decision 11): whether a job's programs are fetched on those pages depends on the file's size. */}
   <p>

@@ -268,6 +268,12 @@ export type ToolWidgetWords = {
   /** For a tool that gives several files: the one thing to try when they would not fit in one zip. */
   zipLimitAdvice?: string;
   /**
+   * The verb in the sentence for a page with too much drawing on it (`pageTooLargeSentence` in src/widget/failures.ts):
+   * "Page 14 has too much drawing on it to repair here. … and repair the rest." Every tool whose engine can stop with
+   * `PageTooLarge` names its own (the registry test); left out, the neutral "work on".
+   */
+  pageTooLargeAction?: string;
+  /**
    * A toggle on each page, for a tool that lists pages. `kind` says what the
    * toggles mean, which decides the option sent to the engine, which pages have
    * none and the line that says what the main button will give. `label` is its
@@ -353,9 +359,9 @@ export const groups: Group[] = [
     name: 'Make smaller and fix',
     slug: 'make-smaller-and-fix',
     title: 'Make a PDF smaller - PDFkaro',
-    // Grey added with Grayscale PDF (add-grayscale-pdf), drafts for the owner.
-    description: 'Make a PDF smaller, small enough for an upload limit, or grey, in your browser. The file stays on your device and is not uploaded.',
-    sentence: 'Tools that make a PDF file smaller, small enough for an upload limit, or grey.',
+    // Grey added with Grayscale PDF (add-grayscale-pdf), repair with Repair PDF (add-repair-pdf), drafts for the owner.
+    description: 'Make a PDF smaller, small enough for an upload limit or grey, or repair a damaged one, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that make a PDF file smaller, small enough for an upload limit or grey, or repair a damaged one.',
     claimsDevice: true,
   },
   {
@@ -1060,6 +1066,7 @@ export const tools: Tool[] = [
       multiple: false,
       resultPages: 'input',
       memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      pageTooLargeAction: 'convert',
       items: 'files',
       itemControls: false,
       outputs: 'one',
@@ -1073,6 +1080,62 @@ export const tools: Tool[] = [
       resultNotes: [
         "Pages now show in grey, and print in grey on office printers. The text can still be searched. The colours in the pages' drawing and pictures are still stored in the file, and it stays about the same size. A few kinds of colour, such as spot colours, are left as they are; the questions below name them.",
         "Links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
+      ],
+    },
+  },
+  {
+    // The fourth row of "Make smaller and fix". A file qpdf reads is written again by qpdf; any other is read by our own
+    // pre-pass and pdf-lib's reader under guards, then written and checked by qpdf; passwords are dropped (the owner's
+    // decisions of 28 Nov 2026). The words are drafts for the owner's review.
+    id: 'repair-pdf',
+    group: 'smaller',
+    runsIn: 'browser',
+    phase: 2,
+    accepts: ['application/pdf'],
+    related: ['compress-pdf', 'merge-pdf', 'split-pdf', 'pdf-to-jpg', 'unlock-pdf'],
+    pages: [
+      {
+        slug: 'repair-pdf',
+        name: 'Repair PDF',
+        summary: 'Recover what can still be read from a damaged PDF.',
+        title: 'Repair a damaged PDF in your browser - PDFkaro',
+        description: 'Recover what can still be read from a damaged PDF. The file stays on your device and is not uploaded. You get it in a new file.',
+        heading: 'Repair a damaged PDF',
+        sentence: 'Recover what can still be read from a damaged PDF. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      // One wording for "another copy" here and in the too-damaged sentence (tooDamagedSentence in failures.ts).
+      damagedAdvice: 'No pages could be found in it. If you have another copy of the file, try that one.',
+      // Remove a password's sentence, for a file protected with a certificate or in a way the reader does not know.
+      unsupportedAdvice: 'It is protected in a way this tool cannot remove, such as with a certificate. Ask whoever sent it for a copy without this protection.',
+      actionLabel: 'Repair and download',
+      writingLabel: 'Writing the repaired file',
+      doneHeading: 'Your repaired file is ready',
+      failedHeading: 'The file was not repaired.',
+      tooFewFiles: 'Choose a PDF file to repair.',
+      outputSuffix: 'repaired',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer.',
+      pageTooLargeAction: 'repair',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // A file with no damage this tool can find gives no new file (owner question 4 of add-repair-pdf, default).
+      noSmaller: {
+        heading: 'This file has no damage this tool can find.',
+        advice: 'No new file was made. You can use your file as it is. If it does not open in one program, try opening it in another.',
+      },
+      // Passwords are dropped (the owner's decision of 28 Nov 2026, "Drop them").
+      resultNotes: [
+        "The new file holds every page and part that could be read. Anything lost in the damage, such as missing pages, text or pictures, cannot be brought back. If the file's last save was lost, parts of an earlier version may show. Check the new file before you rely on it.",
+        "Links, form fields, bookmarks, attached files and the document's details that could be read are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
       ],
     },
   },

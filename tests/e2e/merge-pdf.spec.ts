@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { type FileChooser, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { headersRead, violations, watch } from './no-upload';
-import { toolFiles } from './tool-files';
+import { expectRepairLink, repairLink, repairSentence } from './repair-link';
+import { expectNothingStored, headersRead, violations, watch } from './no-upload';
+import { pageFiles, toolFiles } from './tool-files';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '../fixtures');
@@ -262,7 +263,7 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['text.pdf', 'mixed.pdf', 'damaged-cut.pdf']);
     await expect(page.getByRole('heading', { name: 'damaged-cut.pdf is damaged and cannot be read.' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+    await expectRepairLink(page, 'Leave this file out');
     await noSidewaysScroll(page);
     await page.getByRole('button', { name: 'Leave this file out' }).click();
     expect(await listed(page)).toEqual(['text.pdf', 'mixed.pdf']);
@@ -276,6 +277,69 @@ test.describe('problems', () => {
     await expect(page.getByRole('button', { name: 'Leave this file out' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose PDF files' })).toBeVisible();
+  });
+
+  test('the link to Repair PDF: the status says the notice and the sentence; Tab reaches the button first, then the link', async ({ page }) => {
+    await open(page);
+    await pick(page, ['text.pdf', 'damaged-cut.pdf']);
+    const heading = page.getByRole('heading', { name: 'damaged-cut.pdf is damaged and cannot be read.' });
+    await expect(page.locator('[role=status]').first()).toHaveText(`damaged-cut.pdf is damaged and cannot be read. ${repairSentence}`);
+    await heading.focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Leave this file out' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(repairLink(page)).toBeFocused();
+    expect(await repairLink(page).evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
+  });
+
+  test('following the link carries nothing of the file: a plain GET, nothing stored, nothing in the address or history, and nothing after Back', async ({ page, context, baseURL }) => {
+    const marked = 'qz7damaged.pdf';
+    const secrets = [marked, 'qz7damaged', encodeURIComponent(marked)];
+    await open(page);
+    const seen = watch(context, page);
+    await picker(page).setInputFiles({ name: marked, mimeType: 'application/pdf', buffer: readFileSync(fixture('damaged-cut.pdf')) });
+    await expect(page.getByRole('heading', { name: `${marked} is damaged and cannot be read.` })).toBeVisible({ timeout: 30000 });
+    expect(seen.filter((request) => /\/repair-pdf$/.test(new URL(request.url).pathname))).toEqual([]);
+    expect(await page.evaluate(() => history.state)).toBeNull();
+    let leftPrompt = false;
+    page.on('dialog', (dialog) => {
+      leftPrompt = true;
+      void dialog.dismiss();
+    });
+    await repairLink(page).click();
+    await page.waitForURL(/\/repair-pdf$/);
+    await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+    expect(leftPrompt).toBe(false);
+    await headersRead(seen);
+    const asked = seen.filter((request) => /\/repair-pdf$/.test(new URL(request.url).pathname));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.method).toBe('GET');
+    expect(asked[0]!.body).toBeNull();
+    expect(new URL(asked[0]!.url).search).toBe('');
+    expect(new URL(asked[0]!.url).hash).toBe('');
+    // Exactly Merge PDF's own files after a pick, and what the Repair PDF page fetches before any pick.
+    expect(violations(seen, new URL(baseURL!).origin, secrets, [...toolFiles('merge-pdf').all, ...pageFiles('repair-pdf')])).toEqual([]);
+    const repairPage = await page.evaluate(() => ({ state: history.state, name: window.name, address: location.href, html: document.documentElement.outerHTML }));
+    expect(repairPage.state).toBeNull();
+    expect(repairPage.name).toBe('');
+    for (const secret of secrets) {
+      expect(repairPage.address).not.toContain(secret);
+      expect(repairPage.html).not.toContain(secret);
+    }
+    // Repair PDF opens with no file listed.
+    await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
+    await expect(items(page)).toHaveCount(0);
+    await expectNothingStored(page, context);
+    await page.goBack();
+    await page.waitForURL(/\/merge-pdf$/);
+    await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+    const back = await page.evaluate(() => ({ state: history.state, name: window.name, html: document.documentElement.outerHTML }));
+    expect(back.state).toBeNull();
+    expect(back.name).toBe('');
+    for (const secret of secrets) expect(back.html).not.toContain(secret);
+    await expect(page.locator('label', { hasText: 'Choose PDF files' })).toBeVisible();
+    await expect(items(page)).toHaveCount(0);
+    await expectNothingStored(page, context);
   });
 
   test('one good file and one damaged file leave one file, which asks for one more', async ({ page }) => {

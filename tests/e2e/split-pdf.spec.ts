@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument } from '@cantoo/pdf-lib';
 import { type Download, type Page } from '@playwright/test';
 import { expect, test, watchPolicy } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { unzipSync } from 'fflate';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
 import { toolFiles } from './tool-files';
@@ -281,7 +282,7 @@ test.describe('problems with the file', () => {
     await pick(page, 'damaged-cut.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-cut.pdf is damaged and cannot be read.' })).toBeVisible();
     await expect(cells(page)).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+    await expectRepairLink(page);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.getByText('Choose a PDF file')).toBeVisible();
   });

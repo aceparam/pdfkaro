@@ -15,6 +15,8 @@ type Props = {
   words: ToolWidgetWords;
   /** The page's preset: engine options every job starts from, such as PDF to JPG's format. */
   preset?: Record<string, string | number | boolean>;
+  /** Repair PDF's address, for the damaged notice: given only once it is published, on a tool that takes PDFs other than itself. */
+  repairHref?: string;
 };
 
 export type FileBatch = { id: number; files: File[] };
@@ -23,7 +25,7 @@ export type FileBatch = { id: number; files: File[] };
  * The one island on every tool page. Before a file is picked it is only the
  * file picker; after, it loads the workspace, which does the rest.
  */
-export function ToolWidget({ toolId, accepts, words, preset }: Props) {
+export function ToolWidget({ toolId, accepts, words, preset, repairHref }: Props) {
   const [batch, setBatch] = useState<FileBatch | null>(null);
   const [returned, setReturned] = useState(false);
   const [message, setMessage] = useState('');
@@ -73,7 +75,7 @@ export function ToolWidget({ toolId, accepts, words, preset }: Props) {
         </>
       ) : (
         <Suspense fallback={<p>Getting ready</p>}>
-          <ToolWorkspace toolId={toolId} accepts={accepts} words={words} preset={preset} firstFiles={batch.files} onEmpty={onEmpty} />
+          <ToolWorkspace toolId={toolId} accepts={accepts} words={words} preset={preset} repairHref={repairHref} firstFiles={batch.files} onEmpty={onEmpty} />
         </Suspense>
       )}
       <p role="status" className={message ? styles.message : 'visually-hidden'}>

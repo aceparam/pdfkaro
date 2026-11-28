@@ -39,7 +39,9 @@ export type FailureKind =
   | 'picture-too-large'
   | 'password-refused'
   /** A page's drawing instructions decode past the content reader's cap (content.ts's `PageTooLarge`, Grayscale PDF). */
-  | 'page-too-large';
+  | 'page-too-large'
+  /** The file is too damaged to repair: the repaired file would still fail qpdf's check (Repair PDF's `RepairFailed`). */
+  | 'too-damaged';
 
 /** What a picture option's chosen picture is: being read, ready, damaged, saved in a way the tool cannot read, or turned away by the page for its type. */
 export type PictureStatus = 'reading' | 'ready' | 'damaged' | 'unsupported' | 'refused';

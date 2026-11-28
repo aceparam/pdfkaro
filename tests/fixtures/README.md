@@ -991,6 +991,77 @@ Where the time goes (27 Nov 2026): `qpdf --check` alone takes 51.7 s on the orig
 
 **qpdf instances:** two for the plain copy and one for reading the pages, one per raw batch of drawing streams and colour profiles (at most 2,000 ids or 32 MB of stated length; a stream over 32 MB alone), and one writer only when a file is written. On the 20,000-page file with its own streams: 10 batches, 14 instances, each made in about 9 ms in Node, with the plain copy (5.8 MB) written into each.
 
+### Repair PDF (`src/engines/tools/repair-pdf.ts`, with `src/engines/rebuild.ts`)
+
+Each file was run in Node with the same qpdf, pdf-lib and fflate the browser uses (`tests/unit/repair-pdf.test.ts`), the encrypted ones with `open-sesame`. Every file given back passes `qpdf --check`, is not encrypted, and has as many pages as the reading said. A file qpdf reads with no warning, starting with `%PDF-` and ending with `%%EOF`, has nothing to repair and gives no file. Sizes in bytes, from a run on 28 Nov 2026.
+
+| File | Reading | Outcome |
+| --- | --- | --- |
+| `damaged-xref.pdf` | Ready, 3 pages (read the repair way) | Repaired: 3,536 bytes, 3 pages, the text of `text.pdf` |
+| `damaged-cut.pdf` | Ready, 198 pages (read the repair way) | Repaired: 38,458 bytes, 198 pages |
+| `warning.pdf` | Ready, 3 pages | Written again by qpdf: 3,536 bytes, 3 pages, no warning left |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | Needs a password, then ready; ready with no password | Nothing to repair: no file |
+| Every other fixture, `compress-*.pdf` included | Ready, as qpdf reads it | Nothing to repair: no file. `compress-json-bomb.pdf` takes about 3.8 s (qpdf's check) |
+| `not-a-pdf.pdf` | Damaged (no page found). On the page it is turned away first, as it does not start like a PDF | A run fails with `RepairFailed` (too damaged) |
+
+Forced through the pdf-lib route (a test-only option), every sound fixture but two gives a file with the same catalog keys, document details, page contents, fields, bookmarks and attachments as qpdf's own rewrite. `compress-json-bomb.pdf` is refused there by the decode budget (`output-limit`), as a crafted file; `compress-bomb-attachment.pdf`'s 1 GB attachment is more than qpdf's JSON reading, used to compare, holds.
+
+**The 36 damaged kinds** (built in memory by `tests/unit/repair-helpers.ts` from `text.pdf`, `rich.pdf`, a classic-table copy of `rich.pdf` written by qpdf, and `pages-500.pdf`, with `damaged-cut.pdf` as it is). "Desktop qpdf" is libqpdf 12.4.2 as measured when the change was planned (design, "Measurements"). Kept text counts the result's pages whose text is a source page's, matched in order. Every result passes `qpdf --check`.
+
+| Damage | Desktop qpdf 12.4.2 | Repair PDF: pages, kept text, bookmarks, link, attachment |
+| --- | --- | --- |
+| every xref entry 7 bytes off (= `damaged-xref.pdf`) | full | 3, 3 |
+| every xref entry 7 bytes off, rich content | full | 2, 2, 2, 1, 1 |
+| `startxref` into the middle of an object | full | 3, 3 |
+| the same, cross-reference stream file | full | 2, 2, 2, 1, 1 |
+| `startxref` past the end of the file | full | 3, 3 |
+| xref table removed, trailer and `startxref` kept | full | 3, 3 |
+| xref, trailer, `startxref` and `%%EOF` all removed | 2/3 pages, fails check | 3, 3 |
+| trailer dictionary removed | full, fails check | 3, 3 |
+| no `%%EOF` | full | 3, 3 (written again by qpdf) |
+| no `%%EOF`, cross-reference stream file | full | 2, 2, 2, 1, 1 (written again by qpdf) |
+| no `startxref` and no `%%EOF`, cross-reference stream file | no bookmarks or link, fails check | 2, 2, 2, 1, 1 |
+| cut off in the middle of the xref table | full, fails check | 3, 3 |
+| cut off at 90% (classic table, rich content) | full, fails check | 2, 2, 2, 1, 1 |
+| cut off at 90% (cross-reference stream) | no bookmarks or link, fails check | 2, 2, 2, 1, 1 |
+| `pages-500.pdf` cut off at 60% | 302 pages, fails check | 302, 301 |
+| `damaged-cut.pdf` (40% of 500 pages) | 198 pages, fails check | 198, 197 |
+| 250 bytes of junk before `%PDF` | full | 3, 3 (written again by qpdf) |
+| the same, cross-reference stream file | full | 2, 2, 2, 1, 1 (written again by qpdf) |
+| junk after `%%EOF` | full | 3, 3 (written again by qpdf: the file does not end with `%%EOF`) |
+| 102 bytes inserted after the header | full | 3, 3 |
+| the same, cross-reference stream file | full | 2, 2, 2, 1, 1 |
+| no `%PDF` header line | full | 3, 3 (`%PDF-1.7` added in front) |
+| a stream `/Length` 40 bytes too long | full | 3, 3 |
+| a stream `/Length` 20 bytes too short | full | 3, 3 |
+| a stream with no `/Length` | full | 3, 3 |
+| bytes changed in a compressed drawing stream | 2/3, fails check | 3, 2 (the damaged page keeps what still unpacks) |
+| bytes changed in a compressed object stream | no bookmarks or link | 2, 0, 0, 0, 1 (the pages' parts in the object stream are lost; the attachment kept) |
+| bytes changed in the compressed cross-reference stream | no bookmarks or link | 2, 2, 2, 1, 1 |
+| a page dictionary's closing `>>` blanked | 2 pages | 2, 2 |
+| one `endobj` blanked | full | 3, 3 |
+| trailer has no `/Root` | fails | 3, 3 |
+| page tree points to a missing object | 2/3 | 2, 2 (qpdf reads it with a line its check prints: written again by qpdf) |
+| every LF made CR LF (text-mode transfer), classic | 3 pages, no text, fails check | 3, 1 |
+| the same, cross-reference stream file | 1/2 pages, fails check | 2, 1 |
+| 4 KB zeroed in the middle of `pages-500.pdf` | 489 pages | 489, 488 |
+| an incremental update whose `/Prev` is 13 bytes off | full | 3, 3 |
+
+**Large files** (28 Nov 2026), each with its `startxref` pointed into its first object, so qpdf cannot read it and the pre-pass and pdf-lib do. Node: each file in a process of its own under the test runner, peak the process's highest resident memory (the runner's own included). Chromium: the built page through Playwright at 1280 pixels, the resident memory of every browser process added up every 0.1 seconds, over its level just before the pick (reading) or the press (job). Ceiling: 1.19 GB in Node, 1.36 GB in Chromium. Instances and bytes copied into them counted in Node.
+
+| File | Out | Node: read, job, peak | Chromium: read, job, peaks over baseline | qpdf instances, bytes copied into them |
+| --- | --- | --- | --- | --- |
+| `make-large.mjs` (110 MB, a 105 MB attachment) | 110,124,053 | 0.24 s, 4.1 s, 1.37 GB | 0.8 s (0.30 GB), 7.4 s (1.23 GB) | 8, 8.0 × the input |
+| `make-large.mjs --scans` (106 MB, 25 JPG scans) | 106,428,549 | 0.25 s, 52.7 s, 0.93 GB | 0.8 s (0.25 GB), 48.1 s (0.96 GB) | 7, 7.0 × |
+| `make-many-pages.mjs` (120,000 pages, one shared stream) | 1,130,725 | 2.3 s, 21.9 s, 0.69 GB | 2.2 s (0.27 GB), 13.9 s (0.42 GB) | 7, 6.3 × |
+| `make-many-pages.mjs --coloured` (20,000 pages, own streams) | 2,967,989 | 0.6 s, 15.8 s, 0.40 GB | 1.1 s (0.20 GB), 14.4 s (0.28 GB) | 16 (10 raw batches of 2,000), 16.1 × |
+
+The 110 MB file's Node peak (1.37 GB) is over the 1.19 GB the other tools are held to in Node; its Chromium peak is under the Chromium ceiling. Most of the `--scans` job is the final `qpdf --check`, as for every writing tool. The longest main-thread task in Chromium was 92 ms. pdf-lib's guards add about 0.5 s to the 120,000-page parse (1.15 s to 1.65 s in Node) and nothing measurable on the 110 MB file; reading with `parseSpeed: Infinity` saves about 1.5 s against pdf-lib's default on 120,000 objects.
+
+**Crafted files at the bounds** (Node, 28 Nov 2026): 150,000 Flate drawing streams over 3,000 pages (79 MB): 208 s, 81 qpdf instances, 6.6 GB copied into them (83.9 × the input; the copy bound is 100 × the input and 512 MiB), peak 1.42 GB, a file given. 200,000 drawing streams on 200,000 pages (97 MB): 62 s, peak 1.68 GB; its JSON of dictionaries passes the 64 MB cap, so it is not swept.
+
+**Hostile files** (`tests/unit/repair-hostile.test.ts`; reading step in Chromium, the built page): every one of the threats table ends within 0.8 to 3.2 s as damaged, ready, or with the shared `output-limit` words, at most 0.37 GB over the baseline. Jobs: the 2 GB drawing bomb stops with `page-too-large` (0.8 s on the pdf-lib route; 4.4 s at +0.86 GB on the qpdf route, where qpdf's first check reads the drawing until its own heap runs out); the 1 GB `/Metadata` bomb stops with `output-limit` in 0.3 s; the 2 GB picture bomb and the cross-reference stream bomb give a file in under a second; 15 MiB of `0 ` in an object stream gives a file (read 3.1 s at +0.37 GB, job +0.59 GB), 16 MiB stops at the decode budget.
+
 ### Content reader (`src/engines/content.ts`, no tool yet)
 
 Each file was put through the real plain copy (`plainCopy`, the encrypted ones with `open-sesame`), then every page's content streams and every form XObject were read raw with `readRawStreams`, decoded with `decodeContent` and read with `editContent` and the test-only editor (`tests/unit/content.test.ts`, "every fixture through the reader"; a page's streams as `not-last` and `last`, forms `alone`, a shared stream once at its strictest place), with a budget that records. The test asserts each file's counts below, and fails for a fixture with none, so a new fixture must be given them. No run made a request, passed the 64 MiB cap or threw. From a run on 24 Nov 2026.

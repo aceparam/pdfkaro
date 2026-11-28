@@ -7,7 +7,8 @@
 // files, each asked for once. A slow mode holds PDF.js's files back past the thumbnail limit for the cases that
 // need it. Every request also passes the no-upload watcher. (add-uniform-requests, design.md decision 11)
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from '@playwright/test';
@@ -20,6 +21,7 @@ import { widgetPages } from './pages';
 import { acrossInputs, recordProblems, type InputRecord } from './request-record';
 import { targetFiles, targetPassword } from './target-files';
 import { toolFiles } from './tool-files';
+import { hostile } from '../unit/repair-helpers';
 import { sizeTargets, type SizeTargetKey } from '../../src/widget/option-values';
 import { overHeading, pageTarget, underHeading } from '../../src/widget/target';
 
@@ -57,6 +59,11 @@ type Input = {
   expect?: 'done' | 'no-file' | 'over';
   /** A pick only, of a file already at or under the page's target: held, the main button unavailable, no job set fetched. */
   held?: true;
+  /**
+   * A file PDF.js cannot draw but the tool reads (Repair PDF and a file cut off part way): the pick has shown its
+   * outcome once its row says its pages, as no thumbnail comes. The phase still waits for every file it expects.
+   */
+  noThumbnail?: true;
 };
 
 const pdfPicks: Input[] = [
@@ -73,6 +80,12 @@ const pdfJobs: Input[] = [
 /** A file read as ready whose job fails in the browser, on the pages where one does (the drawing step's JSON cap). */
 const failingJob: Input = { label: 'compress-json-bomb.pdf (the job fails)', files: ['compress-json-bomb.pdf'], job: true };
 const asPicks = (inputs: Input[]) => inputs.map((input) => ({ ...input, job: false }));
+/**
+ * Repair PDF's failing job: a damaged file read as ready (one page) whose catalog's /Metadata unpacks to 1 GB, so the
+ * job stops when pdf-lib's writer decodes it, under the guards. Made once, outside the repo.
+ */
+const repairFailing = join(tmpdir(), 'pdfkaro-repair-metadata-bomb-v1.pdf');
+if (!existsSync(repairFailing)) writeFileSync(repairFailing, hostile.metadataBomb(1024 * 1024 * 1024));
 
 /**
  * Each target page's inputs, over that page's target (target-files.ts): a file that fits once compressed, one still
@@ -145,6 +158,17 @@ const inputs: Record<string, Input[]> = {
     { label: 'grey-only.pdf (nothing turned grey)', files: ['grey-only.pdf'], job: true, expect: 'no-file' },
     { label: 'form.pdf', files: ['form.pdf'], job: true },
     { label: 'multilingual.pdf', files: ['multilingual.pdf'], job: true, expect: 'done' },
+  ],
+  // Repair reads every pick the repair way when qpdf cannot: a damaged file is ready here. Jobs on both routes (a broken
+  // table, a cut-off file), a sound file with nothing to repair, and a damaged file whose job fails under the guards.
+  '/repair-pdf': [
+    ...pdfPicks,
+    { label: 'damaged-xref.pdf', files: ['damaged-xref.pdf'], job: true, expect: 'done' },
+    { label: 'damaged-cut.pdf (no thumbnail: PDF.js cannot open it)', files: ['damaged-cut.pdf'], job: true, expect: 'done', noThumbnail: true },
+    { label: 'text.pdf (no damage found; no new file)', files: ['text.pdf'], job: true, expect: 'no-file' },
+    { label: 'rich.pdf (no damage found; no new file)', files: ['rich.pdf'], job: true, expect: 'no-file' },
+    { label: 'password.pdf with its password (no damage found; no new file)', files: ['password.pdf'], password, job: true, expect: 'no-file' },
+    { label: 'a damaged file whose /Metadata unpacks to 1 GB (the job fails; no thumbnail)', files: [repairFailing], job: true, noThumbnail: true },
   ],
   '/compress-pdf': [
     ...pdfPicks,
@@ -298,7 +322,7 @@ async function runInput(browser: Browser, log: HostLog, slug: string, input: Inp
     let from = begin();
     await picker(page).setInputFiles(picked);
     // Read only once the pick has shown its outcome, so nothing it asks for later is missed.
-    await expect(pickShown(page)).toBeVisible({ timeout: limit });
+    await expect(input.noThumbnail ? page.locator('astro-island ol > li', { hasText: /\d pages?, / }) : pickShown(page)).toBeVisible({ timeout: limit });
     await end('the pick', from, files.pick);
 
     if (input.held) {
