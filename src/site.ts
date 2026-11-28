@@ -25,7 +25,7 @@ export function withBase(base: string, path: string): string {
 /**
  * The site's origin when no SITE_ORIGIN is set: the address `npm run preview` and the
  * end-to-end tests serve. A local or CI build can then never point a canonical tag at a
- * real domain. playwright.config.ts writes the same address as its baseURL.
+ * real domain. playwright.config.ts takes it as its baseURL and the port its server runs on.
  */
 export const defaultOrigin = 'http://localhost:4321';
 

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices, firefox } from '@playwright/test';
+import { defaultOrigin } from './src/site.ts';
 
 // The Content Security Policy checks (csp.spec.ts) also run in Firefox. This project has no grepInvert, so
 // csp.spec.ts's @desktop tests (the tag on every page) run in it too, by intent. CI installs Firefox; elsewhere it
@@ -11,15 +12,23 @@ const otherEngines = [{ name: 'firefox', browser: firefox, device: devices['Desk
   .map(({ name, device }) => ({ name, use: { ...device, viewport: { width: 1280, height: 800 } }, testMatch: /csp\.spec\.ts/ }));
 
 // End-to-end tests run against the built site, at a phone width and a desktop width.
+
+// The tests need the server they start themselves, serving `dist/`. They never reuse one already
+// listening: a dev server on the same port serves other files, and another run's server stops when
+// that run ends, which failed tests that fetch files late (thumbnails, engines) at random. A port in
+// use fails the run at once (with `strictPort` in astro.config.mjs for the preview server).
+// The address is defaultOrigin, which a build with no SITE_ORIGIN writes into its canonical tags, so
+// the end-to-end tests can check that each canonical is the address shown.
+const origin = defaultOrigin;
+const port = new URL(origin).port;
+
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    // Must equal defaultOrigin in src/site.ts, the origin a build with no SITE_ORIGIN writes into its
-    // canonical tags, so the end-to-end tests can check that each canonical is the address shown.
-    baseURL: 'http://localhost:4321',
+    baseURL: origin,
     trace: 'off',
   },
   projects: [
@@ -31,9 +40,9 @@ export default defineConfig({
     ...otherEngines,
   ],
   webServer: {
-    command: 'npm run preview -- --port 4321 --ignore-lock',
-    url: 'http://localhost:4321',
-    reuseExistingServer: !process.env.CI,
+    command: `npm run preview -- --port ${port} --ignore-lock`,
+    url: origin,
+    reuseExistingServer: false,
     env: { ASTRO_TELEMETRY_DISABLED: '1' },
   },
 });
