@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawingRefusedSentence, failureSentence, pageTooLargeSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, pageTooLargeSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, repairLinkLabel, repairSentence, textRefusedSentence, tooDamagedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -58,6 +58,14 @@ describe('the sentence for a page whose drawing is too large (Grayscale PDF)', (
       'Page 12,000 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.',
     );
     expect(pageTooLargeSentence(14)).not.toMatch(/damaged/);
+  });
+
+  it('uses the tool’s own verb when it has one (Repair PDF), and Grayscale PDF’s words are unchanged', () => {
+    expect(failureSentence('page-too-large', { pageTooLargeAction: 'repair' }, {}, {}, 14)).toBe(
+      'Page 14 has too much drawing on it to repair here. Delete that page, or split the file, and repair the rest.',
+    );
+    expect(pageTooLargeSentence(14)).toBe('Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
+    expect(pageTooLargeSentence(14, 'convert')).toBe(pageTooLargeSentence(14));
   });
 
   it('names no page when none came', () => {
@@ -136,6 +144,19 @@ describe('a file that cannot be read', () => {
 
   it('says the heading alone for a tool with no advice, as the PDF tools always did', () => {
     expect(unreadableNotice('report.pdf', 'damaged', {})).toEqual({ heading: 'report.pdf is damaged and cannot be read.', announcement: 'report.pdf is damaged and cannot be read.' });
+  });
+
+  it('adds the sentence about Repair PDF, said last, when the notice links to it, and only for a damaged file', () => {
+    expect(repairSentence).toBe('Repair PDF may be able to recover it. On that page, choose the file again.');
+    expect(repairLinkLabel).toBe('Go to Repair PDF');
+    expect(unreadableNotice('appendix.pdf', 'damaged', {}, true)).toEqual({
+      heading: 'appendix.pdf is damaged and cannot be read.',
+      repair: repairSentence,
+      announcement: `appendix.pdf is damaged and cannot be read. ${repairSentence}`,
+    });
+    expect(unreadableNotice('appendix.pdf', 'damaged', { damagedAdvice: 'Try another copy.' }, true).announcement).toBe(`appendix.pdf is damaged and cannot be read. Try another copy. ${repairSentence}`);
+    expect(unreadableNotice('odd.pdf', 'unsupported', {}, true)).toEqual({ heading: 'odd.pdf is saved in a way this tool cannot read.', announcement: 'odd.pdf is saved in a way this tool cannot read.' });
+    expect(unreadableNotice('appendix.pdf', 'damaged', {}, false).repair).toBeUndefined();
   });
 });
 
@@ -308,5 +329,13 @@ describe('a new password the engine refuses', () => {
     expect(failureSentence('text-refused', { options: [{ ...password, refusedSentence: 'Not this.' }] })).toBe(textRefusedSentence);
     // The choices never hold a password, and even a value typed under its key is not said.
     expect(failureSentence('password-refused', { options: [password] }, { newPassword: 'Qz7#Kw' })).not.toContain('Qz7');
+  });
+});
+
+describe('a file too damaged to repair (Repair PDF)', () => {
+  it('says so with one wording for another copy, and nothing from the file', () => {
+    expect(tooDamagedSentence).toBe('This file is too damaged to repair. If you have another copy of the file, try that one.');
+    expect(failureSentence('too-damaged', {})).toBe(tooDamagedSentence);
+    expect(failureSentence('too-damaged', { memoryAdvice: 'Try on a computer.' })).toBe(tooDamagedSentence);
   });
 });

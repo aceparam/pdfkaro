@@ -105,6 +105,20 @@ export function relatedItems(tools: Tool[], tool: Tool, base: string, current: T
   });
 }
 
+/** The id of the tool every PDF tool's damaged notice links to, once it is published. */
+export const repairToolId = 'repair-pdf';
+
+/**
+ * The address of Repair PDF's page, under the base, for the damaged notice of `tool`: a plain address from the
+ * registry with nothing of any file in it. Undefined when Repair PDF is not published, when `tool` does not take
+ * PDFs, and on Repair PDF itself.
+ */
+export function repairLink(tools: Tool[], tool: Tool, base: string): string | undefined {
+  if (tool.id === repairToolId || !tool.accepts.includes('application/pdf')) return undefined;
+  const repair = allPages(tools).find((entry) => entry.tool.id === repairToolId);
+  return repair ? toListItem(repair.page, base).href : undefined;
+}
+
 /** The keys of the widget words a page may say differently from its tool's. */
 export const pageWordKeys = ['actionLabel', 'resultNotes', 'outputExtension'] as const satisfies readonly (keyof PageWords)[];
 

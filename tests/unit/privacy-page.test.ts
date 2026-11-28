@@ -173,6 +173,33 @@ describe('the Privacy page', () => {
     });
   });
 
+  describe('Repair PDF guard', () => {
+    // add-repair-pdf, design section 13 and its owner question 11: the link, what following it tells GitHub, the
+    // program fetched on its page, the qpdf request count, and an earlier version in a repaired file.
+    const repair = registryTools.find((tool) => tool.id === 'repair-pdf');
+
+    it('names Repair PDF as the registry does', () => {
+      expect(repair?.pages[0]?.name).toBe('Repair PDF');
+    });
+
+    it('says what following the damaged notice’s link tells GitHub, that nothing of the file goes with it, and that the file is chosen again', () => {
+      const link = section('Who serves the site').paragraphs.find((paragraph) => paragraph.includes('link to Repair PDF'));
+      expect(link).toBeDefined();
+      for (const words of ['a damaged file was chosen', 'on which tool page', 'Nothing of your file goes with it', 'not its name and not a password', 'You choose the file again']) expect(link).toContain(words);
+    });
+
+    it('says what the number of requests for the PDF program can tell, and that the reading program is fetched whatever the file', () => {
+      expect(section('Who serves the site').text).toContain('whether your file could be read in the usual way, and roughly how many parts it holds');
+      expect(section('What happens to your file').text).toContain('On the Repair PDF page, the program that reads damaged files is fetched after you choose a file, whatever the file holds.');
+    });
+
+    it('says a repaired file can hold parts of an earlier version, as the result notes and the page text say', () => {
+      expect(section('What happens to your file').text).toContain('A file made by Repair PDF can hold parts of an earlier saved version of your file, when its last save was lost in the damage.');
+      expect(repair!.widget!.resultNotes.join(' ')).toContain('parts of an earlier version may show');
+      expect(readFileSync(new URL('../../src/content/tools/repair-pdf.md', import.meta.url), 'utf8')).toContain('the new file can show parts of the earlier version');
+    });
+  });
+
   describe('target size guard', () => {
     // add-compress-to-target, design decision 11: a file at or under a target page's size starts no job, so whether a
     // job's programs are fetched there depends on the file's size, and the page says so in both places.

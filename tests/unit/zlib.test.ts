@@ -8,7 +8,7 @@ import { deflateSync, inflateSync } from 'node:zlib';
 import { Deflate, Inflate } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { maxProfileBytes } from '../../src/engines/picture';
-import { inflateLimited, inflatePrefix, pushPieces, quietInput, zlibDeflate } from '../../src/engines/zlib';
+import { inflateLimited, inflatePrefix, inflateReadable, pushPieces, quietInput, zlibDeflate } from '../../src/engines/zlib';
 import { alignedQuietStream } from './content-helpers';
 
 const fetched: unknown[] = [];
@@ -185,5 +185,80 @@ describe('blocks that make nothing, lined up with the pieces', () => {
     const data = new Uint8Array(hello.length + quietInput + 100);
     data.set(hello);
     expect(inflateLimited(data, Inflate, 100)).toEqual(new TextEncoder().encode('hello'));
+  });
+});
+
+describe('inflating what can still be read (Repair PDF)', () => {
+  // Varied enough that the deflate data spans many pieces, so output comes out before the end.
+  const text = new TextEncoder().encode(Array.from({ length: 6000 }, (_, at) => `${(at * 7919) % 1000} ${(at * 104_729) % 997} m (${at}) Tj\n`).join(''));
+  const raw = new Uint8Array(deflateSync(text, { level: 9 })).subarray(2);
+  const nothing = () => {};
+
+  it('gives the whole stream when it is whole', () => {
+    const read = inflateReadable(raw, Inflate, 1 << 20, nothing);
+    expect(read).toEqual({ kind: 'whole', data: text });
+  });
+
+  it('keeps what came out before the data was cut off', () => {
+    const read = inflateReadable(raw.subarray(0, Math.floor(raw.length / 2)), Inflate, 1 << 20, nothing);
+    expect(read.kind).toBe('cut');
+    if (read.kind !== 'cut') return;
+    expect(read.data.length).toBeGreaterThan(0);
+    expect(read.data.length).toBeLessThan(text.length);
+    expect(read.data).toEqual(text.subarray(0, read.data.length));
+  });
+
+  it('keeps what came out before bytes changed part way through', () => {
+    // Several deflate blocks, so the first ones come out before the damage.
+    const blocks = new Uint8Array(deflateSync(Buffer.from(Uint8Array.from({ length: 400_000 }, (_, at) => (at * 7919) % 251)), { level: 1 })).subarray(2);
+    const corrupted = blocks.slice();
+    for (let at = Math.floor(corrupted.length * 0.6); at < Math.floor(corrupted.length * 0.6) + 64; at++) corrupted[at] = 0xff;
+    const read = inflateReadable(corrupted, Inflate, 1 << 20, nothing);
+    const whole = inflateSync(Buffer.concat([Buffer.from([0x78, 0x01]), Buffer.from(blocks)]));
+    expect(read.kind).not.toBe('too-large');
+    if (read.kind === 'too-large') return;
+    // What came out before the damage is the stream's own start; a little after it may be garbage before the error.
+    const sure = Math.floor(whole.length * 0.4);
+    expect(read.data.length).toBeGreaterThan(sure);
+    expect(Buffer.from(read.data.subarray(0, sure)).equals(whole.subarray(0, sure))).toBe(true);
+  });
+
+  it('gives nothing, cut, for data that is not deflate at all', () => {
+    expect(inflateReadable(new Uint8Array([0xff, 0xff, 0xff, 0xff]), Inflate, 100, nothing)).toEqual({ kind: 'cut', data: new Uint8Array(0) });
+  });
+
+  it('ignores bytes after the end of the stream, as inflateLimited does', () => {
+    const padded = new Uint8Array(raw.length + 100_000);
+    padded.set(raw);
+    expect(inflateReadable(padded, Inflate, 1 << 20, nothing)).toEqual({ kind: 'whole', data: text });
+  });
+
+  it('stops at the limit and keeps nothing', () => {
+    const bomb = new Uint8Array(deflateSync(Buffer.alloc(80 * 1024 * 1024), { level: 9 })).subarray(2);
+    let largest = 0;
+    class Counting extends Inflate {
+      constructor(ondata: (chunk: Uint8Array, final: boolean) => void) {
+        super((chunk, final) => {
+          largest = Math.max(largest, chunk.length);
+          ondata(chunk, final);
+        });
+      }
+    }
+    expect(inflateReadable(bomb, Counting, 64 * 1024 * 1024, nothing)).toEqual({ kind: 'too-large' });
+    expect(largest).toBeLessThan(2 * 1024 * 1024);
+  });
+
+  it('passes every byte made to the budget first, and stops with its error', () => {
+    let spent = 0;
+    const read = inflateReadable(raw, Inflate, 1 << 20, (bytes) => (spent += bytes));
+    expect(read.kind).toBe('whole');
+    expect(spent).toBe(text.length);
+    class Over extends Error {}
+    expect(() =>
+      inflateReadable(raw, Inflate, 1 << 20, (bytes) => {
+        spent += bytes;
+        if (spent > text.length + 1000) throw new Over();
+      }),
+    ).toThrow(Over);
   });
 });

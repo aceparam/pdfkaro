@@ -6,7 +6,7 @@ import { ToolShell } from '../components/ToolShell/ToolShell';
 import { ToolWidget } from '../components/ToolWidget/ToolWidget';
 import { ToolList } from '../components/ToolList/ToolList';
 import { groups, tools } from '../tools/registry';
-import { allPages, groupOf, hubLink, hubPages, pageWords, relatedItems } from '../tools/queries';
+import { allPages, groupOf, hubLink, hubPages, pageWords, relatedItems, repairLink } from '../tools/queries';
 import type { HubPage, PageWithTool } from '../tools/queries';
 import { toolStructuredData } from '../tools/seo';
 import { siteName } from '../site';
@@ -61,7 +61,18 @@ const group = entry && groupOf(groups, entry.tool);
         related={relatedItems(tools, entry.tool, base, entry.page)}
         group={hubLink(group, base)}
       >
-        {words && <ToolWidget client:load toolId={entry.tool.id} accepts={entry.page.accepts ?? entry.tool.accepts} words={words} preset={entry.page.preset} />}
+        {
+          words && (
+            <ToolWidget
+              client:load
+              toolId={entry.tool.id}
+              accepts={entry.page.accepts ?? entry.tool.accepts}
+              words={words}
+              preset={entry.page.preset}
+              repairHref={repairLink(tools, entry.tool, base)}
+            />
+          )
+        }
         {Below && (
           <Fragment slot="below">
             <Below />

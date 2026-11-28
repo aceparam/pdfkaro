@@ -84,6 +84,56 @@ export function inflateLimited(data: Uint8Array, Inflate: InflateClass, limit: n
   return out;
 }
 
+/**
+ * What `inflateReadable` gives: the whole stream; what came out before the data
+ * failed or ran out (`cut`, possibly nothing); or `too-large`, once the output
+ * would pass the limit.
+ */
+export type Readable = { kind: 'whole'; data: Uint8Array } | { kind: 'cut'; data: Uint8Array } | { kind: 'too-large' };
+
+/**
+ * Inflates raw deflate data as `inflateLimited` does, pushing it in small
+ * pieces (`pushPieces`, `quietInput`), but keeps what came out before an error
+ * or before the data ran out, for a step that recovers what it can from a
+ * damaged stream (Repair PDF). Every byte made is passed to `spend` first;
+ * `spend` throwing stops the inflate with its own error. Past `limit`, it gives
+ * `too-large` and keeps nothing.
+ */
+export function inflateReadable(data: Uint8Array, Inflate: InflateClass, limit: number, spend: (bytes: number) => void): Readable {
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  let ended = false;
+  let spent: unknown;
+  const inflater = new Inflate((chunk, final) => {
+    if (size + chunk.length > limit) throw new TooLong();
+    try {
+      spend(chunk.length);
+    } catch (error) {
+      spent = error;
+      throw error;
+    }
+    size += chunk.length;
+    parts.push(chunk.slice());
+    if (final) ended = true;
+  });
+  let tooLong = false;
+  try {
+    pushPieces(inflater, data, () => size, () => ended);
+  } catch (error) {
+    if (spent !== undefined) throw spent;
+    if (error instanceof TooLong) tooLong = true;
+  }
+  if (tooLong) return { kind: 'too-large' };
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  // `ended` is set by the final push only, which fflate makes only for a stream that reached its final block.
+  return ended ? { kind: 'whole', data: out } : { kind: 'cut', data: out };
+}
+
 /** The Adler-32 checksum zlib puts after its data. */
 function adler32(data: Uint8Array): number {
   let a = 1;

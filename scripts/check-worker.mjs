@@ -52,6 +52,7 @@ const lateSources = [
   { what: 'the picture steps that make pictures smaller (shrink.ts)', path: join('src', 'engines', 'shrink.ts') },
   { what: 'the content reader (content.ts)', path: join('src', 'engines', 'content.ts') },
   { what: 'the shared zlib steps (zlib.ts)', path: join('src', 'engines', 'zlib.ts') },
+  { what: "Repair PDF's pre-pass (rebuild.ts)", path: join('src', 'engines', 'rebuild.ts') },
 ];
 for (const { what, path } of lateSources) {
   const source = readFileSync(path, 'utf8');
@@ -163,6 +164,23 @@ for (const id of engineIds) {
   }
 }
 if (stampImporters === 0) problems.push('No engine imports the drawing step, so the rule on who may import it found nothing to check.');
+
+// Repair PDF's pre-pass (rebuild.ts) rewrites a file for pdf-lib's reader: only an engine whose read set lists pdf-lib
+// may import it (read from the sources), and it is inlined into that engine's file, with no file of its own.
+const prepassSentence = 'The pre-pass was given something other than bytes.';
+let prepassImporters = 0;
+for (const id of engineIds) {
+  const source = readFileSync(join('src', 'engines', 'tools', `${id}.ts`), 'utf8');
+  if (!/from\s+['"]\.\.\/rebuild['"]/.test(source)) continue;
+  prepassImporters++;
+  const read = /export const loads[^=]*=\s*\{\s*read:\s*\[([^\]]*)\]/.exec(source);
+  if (!read || !/['"]pdflib['"]/.test(read[1])) problems.push(`${id} imports the pre-pass (rebuild.ts), but its read set does not list pdf-lib.`);
+  const engineFile = files.find((each) => new RegExp(`^${id}-[A-Za-z0-9_-]{8}\\.js$`).test(each));
+  if (!engineFile || !readFileSync(join(assets, engineFile), 'utf8').includes(prepassSentence)) problems.push(`The pre-pass (rebuild.ts) is not inlined into ${id}'s own file.`);
+}
+if (prepassImporters === 0) problems.push('No engine imports the pre-pass (rebuild.ts), so the rule on who may import it found nothing to check.');
+const prepassHolders = files.filter((name) => /\.js$/.test(name) && readFileSync(join(assets, name), 'utf8').includes(prepassSentence));
+if (prepassHolders.length !== 1) problems.push(`Expected the pre-pass (rebuild.ts) in one file, found ${prepassHolders.length}.`);
 
 // No engine imports another engine (read from the sources): what two tools share lives outside src/engines/tools/
 // (shrink.ts, pages.ts, plain.ts and so on), so loading one tool never brings another tool's engine with it.

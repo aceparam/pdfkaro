@@ -364,6 +364,18 @@ describe('how a tool draws its thumbnails', () => {
   });
 });
 
+describe('a file too damaged to repair', () => {
+  it('is known by its name (Repair PDF’s RepairFailed), its message taken for nothing', async () => {
+    const { RepairFailed } = await import('../../src/engines/tools/repair-pdf');
+    expect(failureKind(new RepairFailed())).toBe('too-damaged');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'RepairFailed' }))).toBe('too-damaged');
+    expect(failureKind(new Error(new RepairFailed().message))).toBe('engine');
+    const { handle, posted } = setup({ run: async () => { throw new RepairFailed(); } });
+    await handle({ type: 'run', requestId: 5, toolId: 'repair-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(posted).toEqual([{ message: { type: 'failed', requestId: 5, kind: 'too-damaged' }, transfer: undefined }]);
+  });
+});
+
 describe('a page whose drawing is too large', () => {
   it('is known by its name (content.ts), its message taken for nothing, and only its page number goes to the page', async () => {
     const { PageTooLarge } = await import('../../src/engines/content');

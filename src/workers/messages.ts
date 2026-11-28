@@ -187,6 +187,7 @@ const failureKinds: FailureKind[] = [
   'picture-too-large',
   'password-refused',
   'page-too-large',
+  'too-damaged',
 ];
 
 /** True when a message the page received has the shape of a `FromWorker` message. */

@@ -5,7 +5,7 @@ import { createToolWorker } from '../../hooks/tool-worker';
 import { useFileDrop } from '../../hooks/useFileDrop';
 import { useToolRun } from '../../hooks/useToolRun';
 import { fileCount, formatSize, number, pageCount, progressLine, resultDetail, showMoreLabel, shownAnnouncement } from '../../widget/format';
-import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../widget/failures';
+import { failureSentence, pixelsAdvice, pixelsHeading, refusedSentence, repairLinkLabel, unreadableNotice, workingLine } from '../../widget/failures';
 import { gridItems, pageOf } from '../../widget/items';
 import {
   chosenPicture,
@@ -55,6 +55,8 @@ type Props = {
   words: ToolWidgetWords;
   /** The page's preset, passed on to every job. */
   preset?: Record<string, string | number | boolean>;
+  /** Repair PDF's address, for the damaged notice's link; undefined where no link is shown. */
+  repairHref?: string;
   firstFiles: File[];
   /**
    * Called when no file is left, so the widget shows the picker alone again.
@@ -90,7 +92,7 @@ function detailFor(file: FileEntry, listPages = true, held = false): string {
 }
 
 /** Everything after the first pick: the list, problems, progress, the result. */
-export default function ToolWorkspace({ toolId, accepts, words, preset, firstFiles, onEmpty }: Props) {
+export default function ToolWorkspace({ toolId, accepts, words, preset, repairHref, firstFiles, onEmpty }: Props) {
   const [announcement, setAnnouncementText] = useState('Getting ready');
   // The same words twice in a row would not change the page, so a screen
   // reader would not say them again; a no-break space tells the two apart.
@@ -201,7 +203,8 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
   const problem = held ? undefined : currentProblem(state);
   const problemKey = problem ? `${problem.id}:${problem.status}${problem.checking ? ':checking' : ''}` : '';
   // A file that cannot be read: its heading and the tool's advice, worked out once per render.
-  const unreadableWords = problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? unreadableNotice(problem.name, problem.status, words) : undefined;
+  const unreadableWords =
+    problem && (problem.status === 'damaged' || problem.status === 'unsupported') ? unreadableNotice(problem.name, problem.status, words, repairHref !== undefined) : undefined;
   const unreadableSaid = unreadableWords?.announcement;
   const previousProblem = useRef('');
   useEffect(() => {
@@ -651,9 +654,17 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
         <Notice heading={words.failedHeading} headingRef={failedRef}>
           <p>{failureSentence(state.failure, words, state.choices, state.pictures, state.failedPage)}</p>
           <div>
-            <button type="button" className="button-secondary" onClick={run.backToFiles}>
-              {words.multiple ? 'Go back to your files' : 'Go back to your file'}
-            </button>
+            {state.failure === 'too-damaged' ? (
+              // Going back to a file too damaged to repair can only fail again: the file is removed, and the picker,
+              // shown again with no file left, takes focus.
+              <button type="button" className="button-secondary" onClick={() => state.files.forEach((file) => removeFile(file.id))}>
+                Choose another file
+              </button>
+            ) : (
+              <button type="button" className="button-secondary" onClick={run.backToFiles}>
+                {words.multiple ? 'Go back to your files' : 'Go back to your file'}
+              </button>
+            )}
           </div>
         </Notice>
       ) : null}
@@ -865,6 +876,16 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, firstFil
                   {others > 0 ? 'Leave this file out' : 'Choose another file'}
                 </button>
               </div>
+              {unreadableWords.repair && repairHref ? (
+                // After the button, so a stray press never costs Merge PDF its other files; a plain link in the same
+                // tab, with nothing of the file in its address.
+                <p className={styles.repair}>
+                  {unreadableWords.repair}{' '}
+                  <a className={styles.repairLink} href={repairHref}>
+                    {repairLinkLabel}
+                  </a>
+                </p>
+              ) : null}
             </Notice>
           ) : null}
 

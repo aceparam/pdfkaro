@@ -1,3 +1,4 @@
+import { tooDamagedSentence } from '../../src/widget/failures';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { footerLinks } from '../../src/site';
@@ -308,9 +309,10 @@ describe('Images to PDF', () => {
       if (each.id === 'images-to-pdf') continue;
       expect(each.widget?.refusedAdvice).toBeUndefined();
       expect(each.widget?.listPages).toBeUndefined();
-      // Remove a password (Unlock PDF) also names a file it cannot read: one protected with a certificate.
-      if (each.id !== 'unlock-pdf') expect(each.widget?.unsupportedAdvice).toBeUndefined();
-      expect(each.widget?.damagedAdvice).toBeUndefined();
+      // Remove a password (Unlock PDF) also names a file it cannot read: one protected with a certificate. Repair PDF
+      // names the same, and says what to try with a file it finds no page in.
+      if (each.id !== 'unlock-pdf' && each.id !== 'repair-pdf') expect(each.widget?.unsupportedAdvice).toBeUndefined();
+      if (each.id !== 'repair-pdf') expect(each.widget?.damagedAdvice).toBeUndefined();
     }
   });
 });
@@ -497,8 +499,8 @@ describe('Compress PDF', () => {
       if (each.id !== 'compress-to-target') expect(each.widget?.resultWas).toBeUndefined();
       // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
       // Crop PDF gives no new file when no page is cut; Resize pages when every page is already the chosen size.
-      // Grayscale PDF gives no new file when nothing in the file would be turned grey.
-      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf', 'compress-to-target', 'grayscale-pdf'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
+      // Grayscale PDF gives no new file when nothing in the file would be turned grey; Repair PDF when it finds no damage.
+      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf', 'compress-to-target', 'grayscale-pdf', 'repair-pdf'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
     }
   });
 });
@@ -581,12 +583,13 @@ describe('Compress to a target size', () => {
     ]);
   });
 
-  it('names upload limits in the "Make smaller and fix" hub words', () => {
+  it('names upload limits, grey and repair in the "Make smaller and fix" hub words', () => {
     const smaller = groups.find((group) => group.id === 'smaller')!;
     expect(smaller.description).toBe(
-      'Make a PDF smaller, small enough for an upload limit, or grey, in your browser. The file stays on your device and is not uploaded.',
+      'Make a PDF smaller, small enough for an upload limit or grey, or repair a damaged one, in your browser. The file stays on your device and is not uploaded.',
     );
-    expect(smaller.sentence).toBe('Tools that make a PDF file smaller, small enough for an upload limit, or grey.');
+    expect(smaller.description.length).toBeLessThan(155);
+    expect(smaller.sentence).toBe('Tools that make a PDF file smaller, small enough for an upload limit or grey, or repair a damaged one.');
     expect(smaller.claimsDevice).toBe(true);
   });
 });
@@ -651,6 +654,80 @@ describe('Grayscale PDF', () => {
       // Grey is claimed for office printers only, never for print shops.
       if (/print in grey/.test(text)) expect(text).toMatch(/print in grey on office printers/);
       expect(text).not.toMatch(/print shop|\bpress(es)?\b/i);
+    }
+  });
+});
+
+describe('Repair PDF', () => {
+  const tool = tools.find((each) => each.id === 'repair-pdf')!;
+
+  it('is the fourth row of "Make smaller and fix", right after Grayscale PDF, taking one PDF with no options', () => {
+    expect(tool).toMatchObject({ group: 'smaller', runsIn: 'browser', phase: 2, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['compress-pdf', 'merge-pdf', 'split-pdf', 'pdf-to-jpg', 'unlock-pdf']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('repair-pdf')).toBe(ids.indexOf('grayscale-pdf') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'repair-pdf',
+        name: 'Repair PDF',
+        summary: 'Recover what can still be read from a damaged PDF.',
+        title: 'Repair a damaged PDF in your browser - PDFkaro',
+        description: 'Recover what can still be read from a damaged PDF. The file stays on your device and is not uploaded. You get it in a new file.',
+        heading: 'Repair a damaged PDF',
+        sentence: 'Recover what can still be read from a damaged PDF. Your file stays on your device.',
+      },
+    ]);
+    const page = tool.pages[0]!;
+    expect(page.title.length).toBeLessThan(60);
+    expect(page.description.length).toBeLessThan(155);
+    expect(page.description).toMatch(/in a new file\.$/);
+    expect(tool.widget?.options).toBeUndefined();
+  });
+
+  it('has the widget words of the design, with words for no damage found, a damaged file and two notes', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      outputSuffix: 'repaired',
+      outputs: 'one',
+      resultPages: 'input',
+      actionLabel: 'Repair and download',
+      writingLabel: 'Writing the repaired file',
+      doneHeading: 'Your repaired file is ready',
+      failedHeading: 'The file was not repaired.',
+      tooFewFiles: 'Choose a PDF file to repair.',
+      memoryAdvice: 'Try on a computer.',
+      pageTooLargeAction: 'repair',
+      damagedAdvice: 'No pages could be found in it. If you have another copy of the file, try that one.',
+      noSmaller: {
+        heading: 'This file has no damage this tool can find.',
+        advice: 'No new file was made. You can use your file as it is. If it does not open in one program, try opening it in another.',
+      },
+    });
+    // Remove a password's own sentence, word for word.
+    const unlock = tools.find((each) => each.id === 'unlock-pdf')!;
+    expect(tool.widget?.unsupportedAdvice).toBe(unlock.widget?.unsupportedAdvice);
+    expect(tool.widget?.resultWas).toBeUndefined();
+    const notes = tool.widget!.resultNotes;
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toMatch(/cannot be brought back/);
+    expect(notes[0]).toMatch(/parts of an earlier version may show/);
+    expect(notes[0]).toMatch(/Check the new file/);
+    expect(notes[1]).toMatch(/digital signature will no longer be valid/);
+    expect(notes[1]).toMatch(/no password and no restrictions/);
+    // One wording for "another copy", in the damaged notice and the too-damaged sentence alike.
+    expect(tool.widget!.damagedAdvice).toContain('If you have another copy of the file, try that one.');
+    expect(tooDamagedSentence).toContain('If you have another copy of the file, try that one.');
+    const texts = [...notes, ...Object.values(tool.widget!.noSmaller!), tool.widget!.damagedAdvice!, tool.widget!.unsupportedAdvice!, ...Object.values(tool.pages[0]!)];
+    for (const text of texts) {
+      expect(text).not.toContain('!');
+      // No page says "unlock" (the owner's decision of 22 Nov 2026), and nothing promises every file can be repaired.
+      expect(String(text)).not.toMatch(/unlock/i);
+      expect(String(text)).not.toMatch(/\bany (damaged )?file\b|\bevery (damaged )?file\b|100%/i);
     }
   });
 });
@@ -792,11 +869,11 @@ describe('Remove a password (Unlock PDF)', () => {
 describe('PDF to JPG and PDF to PNG', () => {
   const tool = tools.find((each) => each.id === 'pdf-to-images')!;
 
-  it('is one tool with two pages under Convert from PDF, taking one PDF, after Grayscale PDF, each page setting its format', () => {
+  it('is one tool with two pages under Convert from PDF, taking one PDF, after Repair PDF, each page setting its format', () => {
     expect(tool).toMatchObject({ group: 'from-pdf', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
     const ids = tools.map((each) => each.id);
-    // The first entry of the next group, after the last of "Make smaller and fix" (Grayscale PDF, add-grayscale-pdf).
-    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('grayscale-pdf') + 1);
+    // The first entry of the next group, after the last of "Make smaller and fix" (Repair PDF, add-repair-pdf).
+    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('repair-pdf') + 1);
     expect(tool.pages.map(({ slug, name, preset }) => ({ slug, name, preset }))).toEqual([
       { slug: 'pdf-to-jpg', name: 'PDF to JPG', preset: { format: 'jpg' } },
       { slug: 'pdf-to-png', name: 'PDF to PNG', preset: { format: 'png' } },
