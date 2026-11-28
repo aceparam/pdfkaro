@@ -69,12 +69,17 @@ WebAssembly and engine code SHALL be fetched when the visitor picks a file, not 
 
 ### Requirement: The library for each job
 
-Engines SHALL use the library that the tech stack table in `SPEC.md` names for the job, or the owner's later choice. A different choice MUST be justified in the change's design. (SPEC.md: Architecture and tech stack; CLAUDE.md: Owner decisions, 13 Nov 2026)
+Engines SHALL use the library that the tech stack table in `SPEC.md` names for the job, or the owner's later choice. A different choice MUST be justified in the change's design. (SPEC.md: Architecture and tech stack; CLAUDE.md: Owner decisions, 13 Nov 2026 and 28 Nov 2026)
 
 #### Scenario: A page-structure tool is designed
 
 - **WHEN** a tool merges, splits, rotates, deletes, reorders, encrypts, decrypts or repairs
 - **THEN** it uses qpdf compiled to WebAssembly
+
+#### Scenario: A file qpdf cannot read is repaired
+
+- **WHEN** Repair PDF is given a file qpdf cannot open
+- **THEN** it reads the file with `@cantoo/pdf-lib` after our own pre-pass, with pdf-lib's decoders and parser guarded, and qpdf writes and checks the result, by the owner's decision of 28 Nov 2026
 
 #### Scenario: A drawing tool is designed
 
