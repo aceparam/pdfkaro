@@ -21,9 +21,9 @@
 // The file is written afresh, so earlier saved versions inside it are not kept
 // and a digital signature stops being valid, as the page says.
 
-import { readPdf } from '../inspect';
+import { inspectPdfNamingCertificates } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
-import { cappedWrite, finished, saidInvalidPassword, type Qpdf } from '../qpdf';
+import { finished, oneFileLimit, rewrite, rewriteArgs, saidInvalidPassword, type Qpdf } from '../qpdf';
 import { isDict, passwordArgsFor } from '../qpdf-json';
 import type { Engine, EngineModule, EngineTools, Inspector } from '../types';
 import { outOfMemory } from '../../widget/memory';
@@ -33,14 +33,12 @@ export const loads: EngineModule['loads'] = { read: ['qpdf'], job: ['qpdf'] };
 
 type Options = { passwords?: unknown };
 
-/** The new file is held to twice the input and 16 MB, as Protect's is. Decrypting removes bytes. */
-export function unprotectLimit(size: number): number {
-  return 2 * size + 16 * 1024 * 1024;
-}
+/** qpdf's own option for the one write: the file written with no encryption. */
+const decrypt = ['--decrypt'];
 
 /** qpdf's arguments for the one write: the typed password if any, then the file written with no encryption. */
 export function unprotectArgs(password: string | undefined): string[] {
-  return ['--progress', ...passwordArgsFor(password), '/in.pdf', '--decrypt', '--', '/out.pdf'];
+  return rewriteArgs(passwordArgsFor(password), decrypt);
 }
 
 const unreadable = 'qpdf could not read the file.';
@@ -73,20 +71,17 @@ export async function isEncrypted(tools: EngineTools, bytes: Uint8Array, passwor
 }
 
 /**
- * The file written with no encryption, capped at `limit`. The writer lives only in this function, and the capped
- * write removes /in.pdf before /out.pdf is read, so the input is let go before the output is held.
+ * The file written with no encryption, capped at `limit` (twice the input and 16 MB unless given; decrypting removes
+ * bytes), by the shared one-file rewrite, which lets the input go before the output is held.
  */
-export async function unprotectedBytes(
+export function unprotectedBytes(
   tools: EngineTools,
   file: Uint8Array,
   password: string | undefined,
   onWriting: (percent: number) => void,
-  limit: number = unprotectLimit(file.length),
+  limit: number = oneFileLimit(file.length),
 ): Promise<Uint8Array> {
-  const writer = await freshQpdf(tools, file);
-  const written = cappedWrite(writer, limit, (qpdf) => qpdf.call(unprotectArgs(password)), onWriting);
-  if (!finished(written.code)) throw new Error(saidInvalidPassword(written.printed) ? wrongPassword : 'qpdf could not write the unprotected file.');
-  return writer.read('/out.pdf');
+  return rewrite(tools, file, passwordArgsFor(password), decrypt, onWriting, { failed: 'qpdf could not write the unprotected file.', limit });
 }
 
 const notChecked = 'The unprotected file did not pass its check.';
@@ -124,12 +119,4 @@ export const run: Engine<Options> = async (files, options, onProgress, tools) =>
   return [out];
 };
 
-/**
- * Reads the file as every PDF tool does, with one qpdf call. A file qpdf calls damaged because its encryption is
- * of a kind it cannot open, such as a certificate, is named as one this tool cannot read instead. The match on
- * qpdf's words picks the wording only: such a file is refused either way.
- */
-export const inspect: Inspector = async (file, password, tools) => {
-  const { outcome, printed } = await readPdf(file, password, tools);
-  return outcome.kind === 'damaged' && /unsupported encryption/i.test(printed) ? { kind: 'unsupported' } : outcome;
-};
+export const inspect: Inspector = inspectPdfNamingCertificates;

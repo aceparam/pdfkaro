@@ -26,3 +26,19 @@ export async function readPdf(file: Uint8Array, password: string | undefined, to
 }
 
 export const inspectPdf: Inspector = async (file, password, tools) => (await readPdf(file, password, tools)).outcome;
+
+/**
+ * Whether what qpdf printed, reading a file, says its encryption is of a kind qpdf cannot open, such as a
+ * certificate (`/Adobe.PubSec`): qpdf calls it "unsupported encryption filter". The printed text stays in the worker.
+ */
+export const certificateEncrypted = (printed: string) => /unsupported encryption/i.test(printed);
+
+/**
+ * Reads the file as `inspectPdf` does, with one qpdf call. A file qpdf calls damaged because its encryption is of a
+ * kind it cannot open, such as a certificate, is named as one the tool cannot read instead. The match on qpdf's words
+ * picks the wording only: such a file is refused either way.
+ */
+export const inspectPdfNamingCertificates: Inspector = async (file, password, tools) => {
+  const { outcome, printed } = await readPdf(file, password, tools);
+  return outcome.kind === 'damaged' && certificateEncrypted(printed) ? { kind: 'unsupported' } : outcome;
+};

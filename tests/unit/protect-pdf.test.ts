@@ -7,10 +7,11 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { PDFDict, PDFDocument, PDFName, PDFString, StandardFonts } from '@cantoo/pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { createQpdf, finished, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
-import { inspect, protectArgs, protectedBytes, protectLimit, run, strongEncryption } from '../../src/engines/tools/protect-pdf';
+import { createQpdf, finished, oneFileLimit as protectLimit, OutputLimit, type Qpdf } from '../../src/engines/qpdf';
+import { inspect, protectArgs, protectedBytes, run, strongEncryption } from '../../src/engines/tools/protect-pdf';
 import type { EngineTools, Progress } from '../../src/engines/types';
 import { PasswordRefused } from '../../src/widget/option-values';
+import { sharedStepCode, withSilentConsole } from './rewrite-helpers';
 import { pageStreams } from './stamp-helpers';
 
 const require = createRequire(import.meta.url);
@@ -160,6 +161,47 @@ describe('the arguments', () => {
     for (const option of forbidden) {
       expect(source).not.toContain(option);
       for (const arg of [...protectArgs(undefined, P), ...protectArgs(oldPassword, P)]) expect(arg.startsWith(option)).toBe(false);
+    }
+  });
+
+  it('nor do the shared steps it runs: the one-file rewrite and its arguments, which also never use the console', () => {
+    const { rewrite, rewriteArgs } = sharedStepCode();
+    for (const [name, code] of Object.entries({ rewrite, rewriteArgs })) {
+      expect(code, name).toContain(name);
+      for (const option of [...forbidden, '--remove-restrictions', 'callWithArgumentFile', 'callWithPassword', 'console.']) expect(code, `${name}: ${option}`).not.toContain(option);
+    }
+  });
+
+  it('the real write passes qpdf exactly protectArgs, with no forbidden option, and nothing reaches the console', async () => {
+    for (const [name, old] of [['text.pdf', undefined], ['password.pdf', oldPassword]] as const) {
+      const calls: string[][][] = [];
+      const spied: EngineTools = {
+        qpdf: async () => {
+          const real = await makeQpdf();
+          const made: string[][] = [];
+          calls.push(made);
+          return {
+            ...real,
+            call: (args: string[]) => (made.push([...args]), real.call(args)),
+            set onLine(listener: Qpdf['onLine']) {
+              real.onLine = listener;
+            },
+            get onLine() {
+              return real.onLine;
+            },
+          } satisfies Qpdf;
+        },
+      };
+      let output: Uint8Array | undefined;
+      const said = await withSilentConsole(async () => {
+        [output] = await run([fixture(name)], { passwords: [old], newPassword: P }, () => {}, spied);
+      });
+      expect(said).toEqual([]);
+      expect(output).toBeInstanceOf(Uint8Array);
+      // The write on its own fresh qpdf, then one fresh qpdf for the three checks.
+      expect(calls.map((made) => made.length)).toEqual([1, 3]);
+      expect(calls[0]![0]).toEqual(protectArgs(old, P));
+      for (const arg of calls.flat(2)) for (const option of [...forbidden, '--remove-restrictions']) expect(arg.startsWith(option), arg).toBe(false);
     }
   });
 

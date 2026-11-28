@@ -14,7 +14,7 @@
 
 import { inspectPdf } from '../inspect';
 import { freshQpdf, passwordFrom } from '../plain';
-import { OutputLimit } from '../qpdf';
+import { oneFileLimit, OutputLimit } from '../qpdf';
 import { passwordArgsFor, rawBatches, readDictionaries, readRawStreams, writeUpdate, type Dict, type StreamReplacement } from '../qpdf-json';
 import { fittedSize } from '../resample';
 import {
@@ -449,7 +449,7 @@ export async function shrinkToBytes(
 
   // With no measured picture, one write, with no replacements.
   if (measured.length === 0) {
-    const { bytes } = await write(null, 2 * file.length + 16 * 1024 * 1024, writeBands[0]!);
+    const { bytes } = await write(null, oneFileLimit(file.length), writeBands[0]!);
     trace.writes = 1;
     trace.output = answer(bytes);
     return trace;
@@ -461,7 +461,7 @@ export async function shrinkToBytes(
   let best: { bytes: Uint8Array; step: number };
   let rest: number;
   {
-    const { bytes, handed } = await write(chosen, 2 * file.length + 16 * 1024 * 1024, writeBands[0]!);
+    const { bytes, handed } = await write(chosen, oneFileLimit(file.length), writeBands[0]!);
     rest = record(chosen, bytes, handed);
     best = { bytes, step: chosen };
   }
