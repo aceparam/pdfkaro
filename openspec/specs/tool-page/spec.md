@@ -157,7 +157,7 @@ When a file needs a password the page SHALL show a password field. In a browser 
 
 ### Requirement: Damaged file state
 
-When a file is damaged the page SHALL say so, name it, and offer to carry on without it. Once Repair PDF is published, the notice on every tool that takes PDFs, Repair aside, SHALL also link to it after that button, saying the file must be chosen again there until files can be handed over in memory, then opening it with the file loaded. The link SHALL be a plain address from the registry with nothing of the file in it. (SPEC.md: States every tool handles; Rules for the code, 5; CLAUDE.md: Owner decisions, 28 Nov 2026)
+When a file is damaged the page SHALL say so, name it, and offer to carry on without it. Once Repair PDF is published, every other tool that takes PDFs SHALL also link to it after that button, with a plain registry address holding nothing of the file; the scenarios give the words and the handover. (SPEC.md: States every tool handles; Rules for the code, 5; CLAUDE.md: Owner decisions, 28 Nov 2026)
 
 #### Scenario: A damaged file is chosen
 
