@@ -979,3 +979,63 @@ save('compress-packed.pdf', qpdfRun(textBytes, ['--deterministic-id', '--object-
   page.node.set(PDFName.of('Contents'), context.register(context.stream(shown)));
   save('chinese-unembedded.pdf', await doc.save({ useObjectStreams: false }));
 }
+
+// ---------------------------------------------------------------------------
+// 17. A file drawn only in grey, for Grayscale PDF's "nothing turned grey" (add-grayscale-pdf, design decision 6),
+// holding what that tool must leave as it is although it names RGB: a page transparency group and a form's group
+// with /CS /DeviceRGB, a soft mask with /BC [1 0 0] in an RGB group, a /DefaultRGB key (an ICC RGB profile,
+// pictures/p3.icc) that no operator selects, an /OutputIntents entry with that profile, and a page whose stored
+// thumbnail (/Thumb) is an RGB picture. Everything drawn uses g, G and a DeviceGray picture.
+{
+  const doc = await newDoc('A file drawn only in grey');
+  const context = doc.context;
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const profile = context.register(context.flateStream(readFileSync(join(pictureSource, 'p3.icc')), { N: 3 }));
+  const iccRgb = context.obj([PDFName.of('ICCBased'), profile]);
+  // An 8 by 8 grey ramp, and an RGB thumbnail of 4 by 4 red pixels.
+  const greyRamp = Buffer.alloc(64);
+  for (let at = 0; at < 64; at++) greyRamp[at] = (at * 4) & 0xff;
+  const greyPicture = imageStream(doc, deflateSync(greyRamp), { Width: 8, Height: 8, ColorSpace: 'DeviceGray', BitsPerComponent: 8, Filter: 'FlateDecode' });
+  const thumb = context.register(context.flateStream(Buffer.from(Array.from({ length: 16 }, () => [255, 0, 0]).flat()), { Width: 4, Height: 4, ColorSpace: 'DeviceRGB', BitsPerComponent: 8 }));
+  // A form with an RGB transparency group, drawn in grey.
+  const form = context.register(
+    context.stream('0.4 g 0 0 50 50 re f 0.1 G 2 w 0 0 m 50 50 l S', {
+      Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 50, 50],
+      Group: { S: 'Transparency', CS: 'DeviceRGB' },
+    }),
+  );
+  // A luminosity soft mask whose group is RGB, with a red backdrop colour.
+  const maskGroup = context.register(
+    context.stream('0.8 g 0 0 200 200 re f', {
+      Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 200, 200],
+      Group: { S: 'Transparency', CS: 'DeviceRGB' },
+    }),
+  );
+  const masked = context.obj({ Type: 'ExtGState', SMask: { Type: 'Mask', S: 'Luminosity', G: maskGroup, BC: [1, 0, 0] } });
+  const pages = [];
+  for (const words of ['Grey text and a grey picture.', 'A second page, also in grey.']) {
+    const page = doc.addPage([300, 300]);
+    page.node.setFontDictionary(PDFName.of('F1'), font.ref);
+    page.node.newXObject('Im', greyPicture);
+    page.node.newXObject('Fm', form);
+    page.node.newExtGState('GS1', masked);
+    page.node.set(PDFName.of('Resources'), page.node.Resources());
+    page.node.Resources().set(PDFName.of('ColorSpace'), context.obj({ DefaultRGB: iccRgb }));
+    page.node.set(PDFName.of('Group'), context.obj({ S: 'Transparency', CS: 'DeviceRGB' }));
+    const drawn = [
+      'BT 0.2 g /F1 14 Tf 30 250 Td', `(${words}) Tj`, 'ET',
+      '0.5 G 1 w 30 230 m 270 230 l S',
+      'q 80 0 0 80 30 120 cm /Im Do Q',
+      'q 150 100 cm /Fm Do Q',
+      'q /GS1 gs 0.6 g 150 30 100 60 re f Q',
+    ].join('\n');
+    page.node.set(PDFName.of('Contents'), context.register(context.stream(drawn)));
+    pages.push(page);
+  }
+  pages[1].node.set(PDFName.of('Thumb'), thumb);
+  doc.catalog.set(
+    PDFName.of('OutputIntents'),
+    context.obj([context.obj({ Type: 'OutputIntent', S: 'GTS_PDFA1', OutputConditionIdentifier: PDFString.of('Display P3'), DestOutputProfile: profile })]),
+  );
+  save('grey-only.pdf', await doc.save({ useObjectStreams: false }));
+}

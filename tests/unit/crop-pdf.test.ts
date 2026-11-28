@@ -145,6 +145,7 @@ const expected: Record<string, 'cut' | 'none' | 'fails'> = {
   'compress-password.pdf': 'none',
   'compress-scans.pdf': 'none',
   'compress-small-jpg.pdf': 'cut',
+  'grey-only.pdf': 'cut',
   'compress-text.pdf': 'cut',
   'damaged-cut.pdf': 'fails',
   'damaged-xref.pdf': 'fails',

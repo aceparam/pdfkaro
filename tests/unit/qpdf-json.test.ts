@@ -174,6 +174,15 @@ describe('batches of raw data', () => {
     const many = Array.from({ length: objectsPerCall + 3 }, (_, index) => ({ id: `${index + 1} 0 R`, length: 1 }));
     expect(rawBatches(many, 1e9).map((batch) => batch.length)).toEqual([objectsPerCall, 3]);
   });
+
+  it('holds a batch to the id limit asked for (Grayscale PDF asks for 2,000), the default staying 200', () => {
+    const many = Array.from({ length: 4_500 }, (_, index) => ({ id: `${index + 1} 0 R`, length: 1 }));
+    expect(rawBatches(many, 1e9, 2_000).map((batch) => batch.length)).toEqual([2_000, 2_000, 500]);
+    expect(rawBatches(many, 1e9).map((batch) => batch.length)).toEqual([...Array(22).fill(objectsPerCall), 100]);
+    // The byte limit still splits a batch before the id limit is reached.
+    expect(rawBatches(many.slice(0, 10), 4, 2_000).map((batch) => batch.length)).toEqual([4, 4, 2]);
+    for (const bad of [0, -1, 1.5, Number.NaN]) expect(() => rawBatches(many, 1e9, bad)).toThrow('A batch must hold at least one stream.');
+  });
 });
 
 describe('reading chosen streams raw', () => {

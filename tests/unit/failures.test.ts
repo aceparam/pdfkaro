@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawingRefusedSentence, failureSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
+import { drawingRefusedSentence, failureSentence, pageTooLargeSentence, passwordRefusedSentence, pictureRefusedSentence, pictureTooLargeAdvice, textRefusedSentence, pixelsAdvice, pixelsHeading, refusedSentence, unreadableNotice, workingLine } from '../../src/widget/failures';
 import { gridItems, shownItems } from '../../src/widget/items';
 import { fitsInOneZip, zipLimitSentence, zipMaxFiles } from '../../src/widget/zip-limits';
 import { initialState, reducer } from '../../src/widget/state';
@@ -46,6 +46,27 @@ describe('the sentence for a page that could not be placed safely', () => {
     const sentence = 'A page of this file could not be resized, so no new file was made. The file may be damaged. Try another copy of it.';
     expect(failureSentence('unsafe-page', {})).toBe(sentence);
     expect(failureSentence('unsafe-page', { memoryAdvice: 'Try on a computer, or split the file first and resize the parts.' })).toBe(sentence);
+  });
+});
+
+describe('the sentence for a page whose drawing is too large (Grayscale PDF)', () => {
+  it('names the page, with a thousands separator, and the advice to delete or split, not damage', () => {
+    expect(failureSentence('page-too-large', {}, {}, {}, 14)).toBe(
+      'Page 14 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.',
+    );
+    expect(failureSentence('page-too-large', { memoryAdvice: 'Try on a computer.' }, {}, {}, 12_000)).toBe(
+      'Page 12,000 has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.',
+    );
+    expect(pageTooLargeSentence(14)).not.toMatch(/damaged/);
+  });
+
+  it('names no page when none came', () => {
+    expect(failureSentence('page-too-large', {})).toBe('A page has too much drawing on it to convert here. Delete that page, or split the file, and convert the rest.');
+    expect(failureSentence('page-too-large', {}, {}, {}, 0)).not.toMatch(/Page 0/);
+  });
+
+  it('is not used for any other kind', () => {
+    expect(failureSentence('output-limit', {}, {}, {}, 14)).not.toMatch(/14/);
   });
 });
 

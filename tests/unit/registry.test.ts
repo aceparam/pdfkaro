@@ -497,7 +497,8 @@ describe('Compress PDF', () => {
       if (each.id !== 'compress-to-target') expect(each.widget?.resultWas).toBeUndefined();
       // Remove a password (Unlock PDF) gives no new file for a file with nothing to remove.
       // Crop PDF gives no new file when no page is cut; Resize pages when every page is already the chosen size.
-      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf', 'compress-to-target'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
+      // Grayscale PDF gives no new file when nothing in the file would be turned grey.
+      if (!['unlock-pdf', 'crop-pdf', 'resize-pdf', 'compress-to-target', 'grayscale-pdf'].includes(each.id)) expect(each.widget?.noSmaller).toBeUndefined();
     }
   });
 });
@@ -583,10 +584,74 @@ describe('Compress to a target size', () => {
   it('names upload limits in the "Make smaller and fix" hub words', () => {
     const smaller = groups.find((group) => group.id === 'smaller')!;
     expect(smaller.description).toBe(
-      'Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded.',
+      'Make a PDF smaller, small enough for an upload limit, or grey, in your browser. The file stays on your device and is not uploaded.',
     );
-    expect(smaller.sentence).toBe('Tools that make a PDF file smaller, or small enough for an upload limit.');
+    expect(smaller.sentence).toBe('Tools that make a PDF file smaller, small enough for an upload limit, or grey.');
     expect(smaller.claimsDevice).toBe(true);
+  });
+});
+
+describe('Grayscale PDF', () => {
+  const tool = tools.find((each) => each.id === 'grayscale-pdf')!;
+
+  it('is the third row of "Make smaller and fix", right after Compress to a target size, taking one PDF with no options', () => {
+    expect(tool).toMatchObject({ group: 'smaller', runsIn: 'browser', phase: 2, accepts: ['application/pdf'] });
+    expect(tool.related).toEqual(['compress-pdf', 'compress-pdf-to-1mb', 'pdf-to-jpg', 'watermark-pdf', 'merge-pdf']);
+    const ids = tools.map((each) => each.id);
+    expect(ids.indexOf('grayscale-pdf')).toBe(ids.indexOf('compress-to-target') + 1);
+    expect(tool.pages).toEqual([
+      {
+        slug: 'grayscale-pdf',
+        name: 'Grayscale PDF',
+        summary: 'Turn the colours in a PDF grey, keeping its text.',
+        title: 'Convert a PDF to grayscale in your browser - PDFkaro',
+        description: 'Turn the colours in a PDF grey, keeping its text searchable and its links and forms working. The file stays on your device and is not uploaded.',
+        heading: 'Convert a PDF to grayscale',
+        sentence: 'Turn the colours in a PDF grey and keep its text. Your file stays on your device.',
+      },
+    ]);
+    expect(tool.widget?.options).toBeUndefined();
+  });
+
+  it('has the widget words of the design, with words for nothing turned grey and three notes', () => {
+    expect(tool.widget).toMatchObject({
+      pickerLabel: 'Choose a PDF file',
+      items: 'files',
+      itemControls: false,
+      multiple: false,
+      minFiles: 1,
+      outputSuffix: 'grayscale',
+      outputs: 'one',
+      resultPages: 'input',
+      actionLabel: 'Convert to grayscale and download',
+      writingLabel: 'Writing the grayscale file',
+      doneHeading: 'Your grayscale file is ready',
+      failedHeading: 'The file was not converted.',
+      tooFewFiles: 'Choose a PDF file to convert to grayscale.',
+      memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      noSmaller: {
+        heading: 'Nothing in this file was turned grey.',
+        advice:
+          'No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.',
+      },
+    });
+    expect(tool.widget?.resultWas).toBeUndefined();
+    const notes = tool.widget!.resultNotes;
+    expect(notes).toHaveLength(2);
+    // What stays in colour, the colours kept underneath, the size, and the password.
+    expect(notes[0]).toMatch(/A few kinds of colour, such as spot colours, are left as they are; the questions below name them/);
+    expect(notes[0]).toMatch(/The text can still be searched/);
+    expect(notes[0]).toMatch(/colours in the pages' drawing and pictures are still stored in the file/);
+    expect(notes[0]).toMatch(/about the same size/);
+    expect(notes[1]).toMatch(/no password and no restrictions/);
+    expect(notes[1]).toMatch(/digital signature will no longer be valid/);
+    const texts = [...notes, ...Object.values(tool.widget!.noSmaller!)];
+    for (const text of texts) {
+      expect(text).not.toContain('!');
+      // Grey is claimed for office printers only, never for print shops.
+      if (/print in grey/.test(text)) expect(text).toMatch(/print in grey on office printers/);
+      expect(text).not.toMatch(/print shop|\bpress(es)?\b/i);
+    }
   });
 });
 
@@ -727,10 +792,11 @@ describe('Remove a password (Unlock PDF)', () => {
 describe('PDF to JPG and PDF to PNG', () => {
   const tool = tools.find((each) => each.id === 'pdf-to-images')!;
 
-  it('is one tool with two pages under Convert from PDF, taking one PDF, after Compress to a target size, each page setting its format', () => {
+  it('is one tool with two pages under Convert from PDF, taking one PDF, after Grayscale PDF, each page setting its format', () => {
     expect(tool).toMatchObject({ group: 'from-pdf', runsIn: 'browser', phase: 1, accepts: ['application/pdf'] });
     const ids = tools.map((each) => each.id);
-    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('compress-to-target') + 1);
+    // The first entry of the next group, after the last of "Make smaller and fix" (Grayscale PDF, add-grayscale-pdf).
+    expect(ids.indexOf('pdf-to-images')).toBe(ids.indexOf('grayscale-pdf') + 1);
     expect(tool.pages.map(({ slug, name, preset }) => ({ slug, name, preset }))).toEqual([
       { slug: 'pdf-to-jpg', name: 'PDF to JPG', preset: { format: 'jpg' } },
       { slug: 'pdf-to-png', name: 'PDF to PNG', preset: { format: 'png' } },

@@ -521,7 +521,7 @@ test.describe('nothing is uploaded', () => {
       for (const name of [/\/pdf-to-images-/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker\.min-/, /\/pdfjs-data-/, /\/thumbnail-/, /\/fflate-/]) {
         expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
       }
-      for (const other of [/\/pdflib-/, /\/picture-/, /\/plain-/, /\/split-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/images-to-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
+      for (const other of [/\/pdflib-/, /\/picture-/, /\/plain-/, /\/split-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/images-to-pdf-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
       await page.getByRole('button', { name: 'Start again' }).click();
       await expect(page.locator('astro-island')).not.toContainText('qz7report');
       await expectNothingHeld(page, context, secrets, consoleText);

@@ -22,6 +22,8 @@ describe('drawing a page', () => {
     ['mixed.pdf', undefined],
     ['rich.pdf', undefined],
     ['images.pdf', undefined],
+    // Drawn only in grey, with a soft mask and an RGB page group (make.mjs section 17).
+    ['grey-only.pdf', undefined],
   ];
   it.each(readable)('draws page 1 of %s inside the box, not blank', async (name, password) => {
     const png = await renderPage(fixture(name), 1, box, password, tools);

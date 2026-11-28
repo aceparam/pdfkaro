@@ -518,7 +518,7 @@ export function useToolRun({ toolId, accepts, words, preset, createWorker, onPro
       });
       if (outcome.kind === 'cancelled') return;
       if (outcome.kind === 'failed') {
-        dispatch({ type: 'failed', failure: outcome.failure });
+        dispatch({ type: 'failed', failure: outcome.failure, page: outcome.page });
         return;
       }
       if (outcome.kind === 'no-new-file') {

@@ -143,10 +143,15 @@ The tool SHALL show and print as grey every RGB or CMYK colour it can convert (d
 - **WHEN** a page fills a rectangle with `0 1 0 0 k`
 - **THEN** it reads `/GreyCMYK cs 0 1 0 0 scn` and is drawn as the grey 0.41
 
+#### Scenario: A named ICC CMYK space starts white
+
+- **WHEN** a stream selects a named ICC CMYK space by `cs` and paints with no colour set
+- **THEN** ` 0 0 0 0 scn` (the space's own start, white) is written after it, and the entry is repointed at the CMYK stand-in (which starts black) only when every stream that can select it was edited, otherwise it is left in every dictionary; a named `DeviceCMYK` entry, which starts black like the stand-in, is repointed with no start written
+
 #### Scenario: A CMYK picture
 
 - **WHEN** a page shows a CMYK picture, once as stored and once with `/Decode [1 0 1 0 1 0 1 0]`
-- **THEN** both are drawn neutral and within about 15 on average of the original's drawing through the luminosity formula, so an inverted picture fails the test
+- **THEN** both are drawn neutral, within 25 on average of the original's drawing through the luminosity formula (PDF.js draws the original through its own CMYK model), and more than 80 from the other picture's original, so an inverted picture fails the test
 
 #### Scenario: The stand-in name is already used
 
@@ -160,7 +165,7 @@ The colours a reader draws notes, form fields and bookmarks with (`/C`, `/IC`, a
 #### Scenario: Counts are kept
 
 - **WHEN** a colour array has three numbers, or four
-- **THEN** three become three equal numbers, four become `0 0 0` and the black of the grey, each written with at most 4 decimals, and arrays of one or no number, or already neutral, are unchanged
+- **THEN** three become three equal numbers, four become `0 0 0` and the black of the grey, each written with at most 4 decimals, and arrays of one or no number, or already neutral with every number from 0 to 1, are unchanged (a neutral array outside 0 to 1 is clamped)
 
 #### Scenario: A highlight and a field
 
@@ -174,7 +179,7 @@ The colours a reader draws notes, form fields and bookmarks with (`/C`, `/IC`, a
 
 ### Requirement: What is left as it is
 
-The tool SHALL leave exactly as they were the kinds of colour it cannot convert safely and every drawing stream read with doubt. The result notes SHALL name the main kinds and say others are named below the tool, and the text below the tool SHALL name every kind in plain words. (SPEC.md: What we are building, honest about limits; CLAUDE.md: Owner decisions, 24 Nov 2026)
+The tool SHALL leave exactly as they were the kinds of colour it cannot convert safely and every drawing stream read with doubt. The first result note SHALL name spot colours and say the questions below name the others; the text below the tool SHALL name the kinds a visitor recognises and say that rarer kinds and parts not read safely are left too. (SPEC.md: What we are building, honest about limits; CLAUDE.md: Owner decisions, 24 Nov 2026)
 
 #### Scenario: The kinds left
 
@@ -199,16 +204,21 @@ The tool SHALL leave exactly as they were the kinds of colour it cannot convert 
 #### Scenario: The text below the tool names every kind
 
 - **WHEN** the result notes and the text below the tool are read
-- **THEN** the first note names spot colours, Lab colours and JPEG 2000 pictures and says a few other kinds named below the tool stay in colour, and the text below the tool names every kind in the scenarios above in plain words, with colour glyphs in fonts, XFA drawing and attached files
+- **THEN** the first note names spot colours and says the questions below name the others, and the text below the tool names spot colours, Lab colours, JPEG 2000 pictures, colour characters in fonts and attached files, and says that a few rarer kinds, and parts of a page that could not be read safely, are also left as they are (the full list of kinds is in the design, decision 3)
 
 ### Requirement: Drawing instructions are decoded within limits
 
-Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters that reach it after `plainCopy`. A stream reached from a page, or a page's content, decoding past 64 MiB SHALL stop the job with `page-too-large`; one no page reaches SHALL be left; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
+Drawing streams SHALL be decoded by the engine from raw data qpdf read with no decoding, for exactly the filters measured to reach it after `plainCopy`, others left. A stream reached from a page, or a page's content, decoding past 64 MiB SHALL stop the job with `page-too-large`; one no page reaches SHALL be left; decoded and edited bytes past the job's content budget SHALL stop it with the shared `output-limit` failure. (SPEC.md: Privacy, limits and security; Definition of done, Each tool)
 
 #### Scenario: A filter the reader does not decode
 
-- **WHEN** a drawing stream reaches the reader with a filter outside the measured set
+- **WHEN** a drawing stream reaches the reader with a filter outside the measured set (a lone Flate, a lone RunLength, or a chain of two to four steps holding a RunLength)
 - **THEN** that stream is left as it is
+
+#### Scenario: A key readers read differently
+
+- **WHEN** a drawing stream's dictionary holds `/F`, `/FFilter`, `/FDecodeParms` or `/DP`, or its `/DecodeParms` holds `/BPC` or does not match its filter's shape
+- **THEN** that stream is left as it is, and the colour space entries it can draw with are decided as for any left stream
 
 #### Scenario: A decode bomb
 
@@ -236,17 +246,22 @@ Streams SHALL be read in two bounded passes by strict rules, building no token l
 
 #### Scenario: What is doubt
 
-- **WHEN** a stream holds a glued token such as `0.5 0.5 0.5rg`, a control or non-ASCII byte outside a string or name, braces, an unbalanced string, array or dictionary, an operator inside an array or dictionary, `ID` or `EI` outside `BI`, unbalanced `BX` and `EX`, or a wrong operand count for an edited operator
+- **WHEN** a stream holds a glued token such as `0.5 0.5 0.5rg`, a control or non-ASCII byte outside a string, a name with a byte outside 0x21 to 0x7E, braces, a stray `)` or `>`, an unbalanced string, array or dictionary, a dictionary key with no value, a number over 32 bytes, an operator inside an array or dictionary, an unknown operator (between `BX` and `EX` too), `ID` or `EI` outside `BI`, unbalanced `BX` and `EX`, or a wrong operand count for an edited operator
 - **THEN** that stream is byte for byte as before
 
 #### Scenario: Streams in sequence
 
 - **WHEN** a page's content streams split a token, a string or a comment between two streams, or a stream ends with operands waiting
-- **THEN** every content stream of that page is byte for byte as before
+- **THEN** every content stream of that page is byte for byte as before, and a stream shared with another page is left there too
+
+#### Scenario: A stream used in two places
+
+- **WHEN** one content stream is a page's first of two streams and another page's only stream
+- **THEN** it is read once, by the stricter rules of a stream that is not the last, and its verdict holds for both pages
 
 #### Scenario: An inline picture with an unclear end
 
-- **WHEN** a stream holds an inline picture whose data contains `EI` followed by whitespace, a delimiter or its end before its real end (such as `xEI `), or ASCII85 data with a stray `~`
+- **WHEN** a stream holds an inline picture whose data contains `EI` followed by whitespace, a delimiter or its end before its real end (such as `xEI `), ASCII85 data with a stray `~`, a real `EI` followed by a tab, a form feed, a NUL or `/`, data ending in `E` or `EI`, or a look-ahead PDF.js would not accept
 - **THEN** that stream is byte for byte as before
 
 #### Scenario: Only the edits change
@@ -261,12 +276,12 @@ The new file SHALL keep every page, its searchable text, links, form fields and 
 #### Scenario: What the page says
 
 - **WHEN** the result or the text below the tool is read
-- **THEN** it says that earlier saved versions are not kept, that a digital signature stops being valid, that the original colours stay stored in the file so programs that take pictures out or check a file for colour may still find colour, and that the file stays about the same size and this tool does not make it smaller (Compress PDF does)
+- **THEN** it says that earlier saved versions are not kept, that a digital signature stops being valid, that the colours in the pages' drawing and pictures stay stored in the file so programs that take pictures out or check a file for colour may still find colour, and that the file stays about the same size and this tool does not make it smaller (Compress PDF does, said below the tool)
 
 #### Scenario: Print shops
 
 - **WHEN** the result notes or the text below the tool speak of printing
-- **THEN** they claim grey on screens and office printers only (the first note reads "Text, shapes and pictures now show in grey, and print in grey on office printers. The text can still be searched.…"), and the text below the tool says a print shop's tools may list three or four extra inks
+- **THEN** they claim grey on screens and office printers only (the first note reads "Pages now show in grey, and print in grey on office printers. The text can still be searched.…"), and the text below the tool says a print shop's tools may list three or four extra inks
 
 #### Scenario: A file with bookmarks, a link and an attachment
 
@@ -285,7 +300,7 @@ When nothing in the file would be turned grey (a `/Thumb`, a picture reached onl
 #### Scenario: The grey-only test file
 
 - **WHEN** `grey-only.pdf`, drawn only in grey with a page `/Group /CS /DeviceRGB`, an RGB output intent and a page whose stored thumbnail is an RGB picture, is converted
-- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages already use only grey, or their colours are kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures."
+- **THEN** no file is made and the page shows "Nothing in this file was turned grey." and "No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures."
 
 ### Requirement: Working, done and failed
 
@@ -318,7 +333,7 @@ No request SHALL carry the file's contents, its name or its password, and no pag
 #### Scenario: The no-upload test
 
 - **WHEN** the end-to-end test converts `qz7report.pdf`, which needs a password and holds `SECRET-` strings in its text, a link, a destination, a bookmark and a field, and downloads the result
-- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist, with no PDF.js, pdf-lib, `shrink`, `picture` or other engine chunk in the job
+- **THEN** no request, header, title, storage entry, address or console line holds the name, its stem, the password or its fragments, or any `SECRET-` string, plain or URL-encoded, and every request is in the allowlist, the job's `content` and `zlib` chunks included, with no PDF.js, pdf-lib, `shrink`, `picture` or other engine chunk in the job
 
 ### Requirement: The same requests for every file
 
@@ -333,6 +348,11 @@ Which of the site's own files the page fetches SHALL depend on the tool only: th
 
 - **WHEN** the pull request is opened
 - **THEN** it says that a job makes one qpdf instance per raw batch (at most 2,000 drawing streams and colour profiles, or 32 MB of their data) besides a fixed few, and a writer only when a file is written, so under the no-cache exception the number of WebAssembly requests depends on the file, with the count measured on the 20,000-page file
+
+#### Scenario: The shared zlib steps become their own file
+
+- **WHEN** the site is built with this tool
+- **THEN** the shared zlib steps are their own built file, `zlib-*.js`, named in the page-weight check, fetched by this tool's jobs and by Image to PDF, Sign PDF, Compress PDF and Compress to a target size wherever they fetched them before inside the picture reader, and the pull request names it
 
 ### Requirement: Keyboard and screen reader
 
@@ -350,7 +370,7 @@ The whole flow SHALL work with a keyboard alone and with a screen reader. (SPEC.
 
 ### Requirement: Page text and the Privacy draft
 
-The text below the tool SHALL be 250 to 500 words of steps and real questions, marked as a draft for the owner, with nothing from "Banned patterns". The Privacy page draft SHALL say that Grayscale PDF keeps the original colours in the new file. (SPEC.md: SEO, Every tool page; Look and feel; Privacy, limits and security, Whole site)
+The text below the tool SHALL be 250 to 500 words of steps and real questions, marked as a draft for the owner, with nothing from "Banned patterns". The Privacy page draft SHALL say that Grayscale PDF keeps the colours of the pages' drawing and pictures in the new file. (SPEC.md: SEO, Every tool page; Look and feel; Privacy, limits and security, Whole site)
 
 #### Scenario: The text is built
 
@@ -360,4 +380,4 @@ The text below the tool SHALL be 250 to 500 words of steps and real questions, m
 #### Scenario: The Privacy draft
 
 - **WHEN** `/privacy` is built
-- **THEN** it says Grayscale PDF shows colours in grey but keeps the original colours in the new file, and the privacy page test checks that sentence
+- **THEN** it says Grayscale PDF shows colours in grey but keeps the colours of the pages' drawing and pictures in the new file (notes', fields' and bookmarks' colour settings are replaced by grey), and the privacy page test checks that sentence

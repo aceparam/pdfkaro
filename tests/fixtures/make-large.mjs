@@ -4,8 +4,11 @@
 //   node tests/fixtures/make-large.mjs --lossless [output path]          about 100 MB of lossless scans with a PNG predictor
 //   node tests/fixtures/make-large.mjs --hostile-jpeg [output path]      JPGs of 49 million pixels on a page no step scales
 //   node tests/fixtures/make-large.mjs --hostile-lossless [output path]  lossless pictures of 49 million pixels, every step scaling them
-// The default path is in the system's temporary folder. The last four are for Compress to a target size's
-// measurements (add-compress-to-target, task 3.3): the hostile files are built to plan at its pixel-work budget.
+//   node tests/fixtures/make-large.mjs --vector [output path]            about 100 MB of compressed, dense coloured drawing
+// The default path is in the system's temporary folder. --scans to --hostile-lossless are for Compress to a target
+// size's measurements (add-compress-to-target, task 3.3): the hostile files are built to plan at its pixel-work budget.
+// --vector is for Grayscale PDF's (add-grayscale-pdf, task 3.3): pages of coloured shapes, lines and text, each
+// page's one content stream 60 MiB once decoded, under the 64 MiB a page may decode to.
 
 import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -13,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
-const kinds = ['--scans', '--lossless', '--hostile-jpeg', '--hostile-lossless'];
+const kinds = ['--scans', '--lossless', '--hostile-jpeg', '--hostile-lossless', '--vector'];
 const kind = kinds.includes(process.argv[2]) ? process.argv[2] : undefined;
 const pathArgument = kind ? process.argv[3] : process.argv[2];
 const defaults = {
@@ -22,6 +25,7 @@ const defaults = {
   '--lossless': 'pdfkaro-large-lossless.pdf',
   '--hostile-jpeg': 'pdfkaro-hostile-jpeg.pdf',
   '--hostile-lossless': 'pdfkaro-hostile-lossless.pdf',
+  '--vector': 'pdfkaro-large-vector.pdf',
 };
 const target = resolve(pathArgument ?? join(tmpdir(), defaults[kind]));
 if (target.startsWith(resolve('.') + '/')) {
@@ -182,6 +186,52 @@ if (kind === '--scans') {
     });
   }
   bytes = picturePages(288, 288, pictures);
+} else if (kind === '--vector') {
+  // Dense coloured vector drawing, as a detailed map or plan holds: filled shapes, stroked lines and text, each with its
+  // own RGB or CMYK colour set by rg, RG, k or K, with coordinates of three decimals, so it compresses as such drawing
+  // does. Each page's stream is 60 MiB decoded; pages are added until the file passes 100 MB.
+  const random = seeded(7);
+  const n = (scale) => (random() * scale).toFixed(3);
+  const pageBytes = 60 * 1024 * 1024;
+  const objects = [Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'), null];
+  const kids = [];
+  let total = 0;
+  for (let page = 0; total < 100 * 1024 * 1024; page++) {
+    const parts = [];
+    let length = 0;
+    while (length < pageBytes - 200) {
+      const pick = random();
+      const line =
+        pick < 0.4
+          ? `${n(1)} ${n(1)} ${n(1)} rg ${n(842)} ${n(1190)} ${n(40)} ${n(40)} re f\n`
+          : pick < 0.7
+            ? `${n(1)} ${n(1)} ${n(1)} RG ${n(2)} w ${n(842)} ${n(1190)} m ${n(842)} ${n(1190)} l S\n`
+            : pick < 0.85
+              ? `${n(1)} ${n(1)} ${n(1)} ${n(1)} k ${n(842)} ${n(1190)} m ${n(842)} ${n(1190)} ${n(842)} ${n(1190)} ${n(842)} ${n(1190)} c f\n`
+              : `BT /F1 ${n(9)} Tf ${n(1)} ${n(1)} ${n(1)} ${n(1)} K 2 Tr ${n(842)} ${n(1190)} Td (Road ${page}-${parts.length}) Tj ET\n`;
+      parts.push(line);
+      length += line.length;
+    }
+    const content = deflateSync(Buffer.from(parts.join('').padEnd(pageBytes, ' '), 'latin1'), { level: 6 });
+    const pageId = objects.length + 1;
+    kids.push(`${pageId} 0 R`);
+    objects.push(Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 1190] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents ${pageId + 1} 0 R >>`));
+    objects.push(Buffer.concat([Buffer.from(`<< /Filter /FlateDecode /Length ${content.length} >>\nstream\n`), content, Buffer.from('\nendstream')]));
+    total += content.length;
+  }
+  objects[1] = Buffer.from(`<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length} >>`);
+  const parts = [Buffer.from('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n', 'latin1')];
+  const offsets = [];
+  let at = parts[0].length;
+  objects.forEach((body, index) => {
+    const object = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`), body, Buffer.from('\nendobj\n')]);
+    offsets.push(at);
+    parts.push(object);
+    at += object.length;
+  });
+  const rows = offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  parts.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${rows}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${at}\n%%EOF\n`));
+  bytes = Buffer.concat(parts);
 } else {
   const { PDFDocument, StandardFonts } = await import('@cantoo/pdf-lib');
   const doc = await PDFDocument.create();

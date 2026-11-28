@@ -5,7 +5,8 @@
 //
 // A page's text is PDF.js's reading of it, compared before and after with U+0000 kept: PDF.js reads Hindi, Telugu and
 // Arabic only in part, as it does not read the actual-text spans Chromium writes for shaped letter groups, so the
-// content streams are also compared byte for byte, which covers those spans.
+// content streams are also compared byte for byte, which covers those spans; Grayscale PDF's token by token outside
+// its colour edits, which still covers them.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ import { run as numberPages } from '../../src/engines/tools/add-page-numbers';
 import { run as compress } from '../../src/engines/tools/compress-pdf';
 import { run as deletePages } from '../../src/engines/tools/delete-pdf-pages';
 import { run as extract } from '../../src/engines/tools/extract-pdf-pages';
+import { run as grayscale } from '../../src/engines/tools/grayscale-pdf';
 import { run as merge } from '../../src/engines/tools/merge-pdf';
 import { run as pdfToImages } from '../../src/engines/tools/pdf-to-images';
 import { run as protect } from '../../src/engines/tools/protect-pdf';
@@ -26,6 +28,7 @@ import { run as sign } from '../../src/engines/tools/sign-pdf';
 import { run as split } from '../../src/engines/tools/split-pdf';
 import { run as unlock } from '../../src/engines/tools/unlock-pdf';
 import { run as watermark } from '../../src/engines/tools/watermark-pdf';
+import { canonical } from './grayscale-helpers';
 import { jsonOf, makeQpdf, pageStreams, texts } from './stamp-helpers';
 import { box, fixture, tools as drawingTools } from './thumbnail-helpers';
 
@@ -194,6 +197,17 @@ describe('the tools no other loop covers keep the text and content of every page
     const [protectedFile] = await runOn(protect, [multilingual], { newPassword, passwords: [undefined] });
     const [output] = await runOn(unlock, [protectedFile!], { passwords: [newPassword] });
     await expectKept(multilingual, output!, [1, 2, 3, 4, 5]);
+  });
+
+  it('Grayscale PDF: every page reads the same, and holds the same tokens outside the colour edits (add-grayscale-pdf)', async () => {
+    const [output] = await runOn(grayscale, [multilingual], { passwords: [undefined] });
+    const [textBefore, textAfter] = [await pageTexts(multilingual), await pageTexts(output!)];
+    expect(textAfter).toEqual(textBefore);
+    const [streamsBefore, streamsAfter] = [await pageStreams(multilingual), await pageStreams(output!)];
+    expect(streamsAfter.length).toBe(streamsBefore.length);
+    // Token by token outside the edits of its design decision 4, not byte for byte: its colour operators are rewritten.
+    streamsAfter.forEach((streams, index) => expect(canonical(streams.join('\n')), `page ${index + 1}`).toEqual(canonical(streamsBefore[index]!.join('\n'))));
+    expect(streamsAfter.flat().join('\n')).not.toEqual(streamsBefore.flat().join('\n'));
   });
 
   it('the comparison fails on an output that lost a page\'s text, or one changed byte of a content stream', async () => {

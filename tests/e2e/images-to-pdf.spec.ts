@@ -412,7 +412,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     for (const wanted of [/\/images-to-pdf-/, /\/picture-[A-Za-z0-9_-]{8}\.js$/, /\/picture-thumbnail-/, /\/pdflib-/]) expect(fetched.some((path) => wanted.test(path)), String(wanted)).toBe(true);
-    for (const other of [/\/qpdf-/, /\.wasm$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker/, /\/pdfjs-data-/, /\/thumbnail-/, /\/inspect-/, /\/plain-/, /\/merge-pdf-/, /\/split-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/rotate-pdf-/]) {
+    for (const other of [/\/qpdf-/, /\.wasm$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker/, /\/pdfjs-data-/, /\/thumbnail-/, /\/inspect-/, /\/plain-/, /\/merge-pdf-/, /\/split-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/rotate-pdf-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
 

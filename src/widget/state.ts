@@ -37,7 +37,9 @@ export type FailureKind =
   | 'drawing-refused'
   | 'picture-refused'
   | 'picture-too-large'
-  | 'password-refused';
+  | 'password-refused'
+  /** A page's drawing instructions decode past the content reader's cap (content.ts's `PageTooLarge`, Grayscale PDF). */
+  | 'page-too-large';
 
 /** What a picture option's chosen picture is: being read, ready, damaged, saved in a way the tool cannot read, or turned away by the page for its type. */
 export type PictureStatus = 'reading' | 'ready' | 'damaged' | 'unsupported' | 'refused';
@@ -79,6 +81,11 @@ export type State = {
   fraction: number;
   result: ResultInfo | null;
   failure: FailureKind | null;
+  /**
+   * The page a `page-too-large` failure names, a whole number from 1, sent by the tool worker with that kind only
+   * (Grayscale PDF); null with any other failure, and cleared wherever `failure` is.
+   */
+  failedPage: number | null;
   /** Pages the visitor marked, in order, for a tool with per-page toggles: Split PDF's cuts. */
   marks: number[];
   /** How many pages of a page list are shown; more are shown in batches. */
@@ -123,7 +130,7 @@ export type Action =
   | { type: 'started' }
   | { type: 'progressed'; progress: Progress }
   | { type: 'finished'; result: ResultInfo }
-  | { type: 'failed'; failure: FailureKind }
+  | { type: 'failed'; failure: FailureKind; page?: number }
   | { type: 'back-to-files' }
   | { type: 'toggled'; page: number }
   | { type: 'shown-more' }
@@ -145,6 +152,7 @@ export const initialState: State = {
   fraction: 0,
   result: null,
   failure: null,
+  failedPage: null,
   marks: [],
   shown: pageBatch,
   order: null,
@@ -206,7 +214,7 @@ export function reducer(state: State, action: Action): State {
       return files.length === 0 ? initialState : { ...state, files };
     }
     case 'started':
-      return { ...state, step: 'working', progress: null, fraction: 0, result: null, failure: null, refused: [] };
+      return { ...state, step: 'working', progress: null, fraction: 0, result: null, failure: null, failedPage: null, refused: [] };
     case 'progressed':
       if (state.step !== 'working') return state;
       return {
@@ -217,9 +225,16 @@ export function reducer(state: State, action: Action): State {
     case 'finished':
       return { ...state, step: 'done', progress: null, fraction: 1, result: action.result };
     case 'failed':
-      return { ...state, step: 'failed', progress: null, failure: action.failure };
+      // The page number is kept only with the one kind that names a page, and only as a whole number from 1.
+      return {
+        ...state,
+        step: 'failed',
+        progress: null,
+        failure: action.failure,
+        failedPage: action.failure === 'page-too-large' && Number.isSafeInteger(action.page) && action.page! >= 1 ? action.page! : null,
+      };
     case 'back-to-files':
-      return { ...state, step: state.files.length > 0 ? 'listing' : 'empty', progress: null, fraction: 0, failure: null, result: null };
+      return { ...state, step: state.files.length > 0 ? 'listing' : 'empty', progress: null, fraction: 0, failure: null, failedPage: null, result: null };
     case 'toggled': {
       if (state.step !== 'listing' || !Number.isInteger(action.page) || action.page < 1) return state;
       return { ...state, marks: toggledMarks(state.marks, action.page) };

@@ -12,7 +12,7 @@ import type { ZipNaming } from '../workers/messages';
 export type JobOutcome =
   | { kind: 'file'; output: Uint8Array; parts?: number }
   | { kind: 'no-new-file' }
-  | { kind: 'failed'; failure: FailureKind }
+  | { kind: 'failed'; failure: FailureKind; page?: number }
   | { kind: 'cancelled' };
 
 export type Job = {
@@ -59,6 +59,7 @@ export async function runJob(job: Job): Promise<JobOutcome> {
     return { kind: 'file', output, parts };
   } catch (error) {
     if (error instanceof ToolError && error.kind === 'cancelled') return { kind: 'cancelled' };
-    return { kind: 'failed', failure: error instanceof ToolError && error.kind !== 'cancelled' ? error.kind : 'engine' };
+    if (error instanceof ToolError && error.kind !== 'cancelled') return error.page === undefined ? { kind: 'failed', failure: error.kind } : { kind: 'failed', failure: error.kind, page: error.page };
+    return { kind: 'failed', failure: 'engine' };
   }
 }

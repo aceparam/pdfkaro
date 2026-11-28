@@ -364,6 +364,29 @@ describe('how a tool draws its thumbnails', () => {
   });
 });
 
+describe('a page whose drawing is too large', () => {
+  it('is known by its name (content.ts), its message taken for nothing, and only its page number goes to the page', async () => {
+    const { PageTooLarge } = await import('../../src/engines/content');
+    expect(failureKind(new PageTooLarge(14))).toBe('page-too-large');
+    expect(failureKind(Object.assign(new Error('x'), { name: 'PageTooLarge' }))).toBe('page-too-large');
+    expect(failureKind(new Error(new PageTooLarge(14).message))).toBe('engine');
+    const { handle, posted } = setup({ run: async () => { throw new PageTooLarge(12_000); } });
+    await handle({ type: 'run', requestId: 9, toolId: 'grayscale-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(posted).toEqual([{ message: { type: 'failed', requestId: 9, kind: 'page-too-large', page: 12_000 }, transfer: undefined }]);
+  });
+
+  it('sends no page when the error carries none that is a whole number from 1, and none with any other kind', async () => {
+    for (const page of [undefined, 0, 1.5, '14']) {
+      const { handle, posted } = setup({ run: async () => { throw Object.assign(new Error('x'), { name: 'PageTooLarge', page }); } });
+      await handle({ type: 'run', requestId: 3, toolId: 'grayscale-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+      expect(posted).toEqual([{ message: { type: 'failed', requestId: 3, kind: 'page-too-large' }, transfer: undefined }]);
+    }
+    const { handle, posted } = setup({ run: async () => { throw Object.assign(new Error('x'), { name: 'OutputLimit', page: 14 }); } });
+    await handle({ type: 'run', requestId: 4, toolId: 'grayscale-pdf', files: [blob('a')], passwords: [undefined], options: {} });
+    expect(posted).toEqual([{ message: { type: 'failed', requestId: 4, kind: 'output-limit' }, transfer: undefined }]);
+  });
+});
+
 describe('a job that runs out of memory', () => {
   it('is sorted as memory, and the client ends the worker after it and on Cancel', async () => {
     const { handle, posted } = setup({ run: async () => { throw new RangeError('Invalid typed array length: 4096000000'); } });

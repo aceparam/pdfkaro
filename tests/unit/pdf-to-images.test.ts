@@ -108,6 +108,8 @@ describe('every file in the shared test set', () => {
     // Chromium's A4 of 594.96 by 841.92 points, one pixel narrower than a4 here.
     ['multilingual.pdf', undefined, Array.from({ length: 5 }, () => ({ width: 1239, height: 1754 }))],
     ['chinese-unembedded.pdf', undefined, [a4]],
+    // 300 by 300 points (make.mjs section 17).
+    ['grey-only.pdf', undefined, [{ width: 625, height: 625 }, { width: 625, height: 625 }]],
   ];
 
   it('names every PDF in the folder here or below, so a new fixture is not forgotten', () => {

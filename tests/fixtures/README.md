@@ -28,6 +28,7 @@ The encrypted files (`password.pdf`, `restricted.pdf`, `compress-password.pdf`) 
 | `tagged.pdf` | Page 2 holds text, an untagged form field, an accessibility tag with alternate and actual text, a named destination, a reading thread, and a filled field, a note and a web link that the tags point to, each marked `SECRET-…`, to see what a file with fewer pages still carries | 2 |
 | `multilingual.pdf` | Text in Hindi, Telugu, Arabic and Chinese (Simplified), one page each, and a page with all four and English. Every font an embedded Noto subset with a Unicode map; made by `make-multilingual.mjs` | 5 |
 | `chinese-unembedded.pdf` | Chinese text in `STSong-Light`, not embedded, through the named character map `UniGB-UCS2-H`, as older Asian-language PDFs are | 1 |
+| `grey-only.pdf` | Drawn only in grey (`g`, `G` and a `DeviceGray` picture), holding what Grayscale PDF must leave as it is although it names RGB: a page transparency group and a form's group with `/CS /DeviceRGB`, a luminosity soft mask in an RGB group with `/BC [1 0 0]`, a `/DefaultRGB` key no operator selects (`pictures/p3.icc`, Flate-compressed), an `/OutputIntents` entry with that profile, and on page 2 a stored thumbnail (`/Thumb`) that is a red RGB picture; made by `make.mjs`, section 17 | 2 |
 
 ### For Compress PDF
 
@@ -176,6 +177,7 @@ The files over each of Compress to a target size's targets are made by `tests/e2
 | `rich.pdf` | Ready, 2 pages |
 | `multilingual.pdf` | Ready, 5 pages |
 | `chinese-unembedded.pdf` | Ready, 1 page |
+| `grey-only.pdf` | Ready, 2 pages |
 
 ### Merge PDF (`src/engines/tools/merge-pdf.ts`)
 
@@ -197,6 +199,7 @@ Each readable file was merged both before and after `text.pdf`. Each result pass
 | `rich.pdf` | First: its bookmarks, link and attachment are kept. Later: its pages and link are kept, but its bookmarks and attachment are not, by the owner's decision of 11 Nov 2026 |
 | `multilingual.pdf` | Merged, 8 pages with `text.pdf` after it; pages 1 to 5 read the same text through PDF.js and hold the same decoded content streams as before (`tests/unit/multilingual.test.ts`) |
 | `chinese-unembedded.pdf` | Merged; its text operators and its font reference (`STSong-Light-UniGB-UCS2-H`) kept |
+| `grey-only.pdf` | Merged, first and later (9,173 and 9,050 bytes with `text.pdf`, 27 Nov 2026) |
 
 ### Split PDF (`src/engines/tools/split-pdf.ts`)
 
@@ -219,6 +222,7 @@ Each file was split in Node with the same qpdf the browser uses (`tests/unit/spl
 | `images.pdf` | Split; its JPEG 2000 image is kept as it was |
 | `multilingual.pdf` | No cuts: five parts; part *n* reads the text and holds the content streams of page *n* |
 | `chinese-unembedded.pdf` | One page, so one part; its text operators and font reference kept |
+| `grey-only.pdf` | Two parts of one page each (2,798 and 2,978 bytes) |
 
 Files made in the test, for shapes the shared set lacks (`tests/unit/outline-fixtures.ts`):
 
@@ -249,6 +253,7 @@ Each file was extracted in Node with the same qpdf the browser uses (`tests/unit
 | `tagged.pdf` | Page 1 taken: page 2's text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
 | `multilingual.pdf` | Pages 2 and 4 taken: each reads its text and holds its content streams as before |
 | `chinese-unembedded.pdf` | Its page taken; text operators and font reference kept |
+| `grey-only.pdf` | Page 1 taken (2,798 bytes) |
 
 Files made in the test: a nested outline keeps the bookmarks of chosen pages, moved up past dropped parents, and a file of 3,000 bookmarks keeps the 1,500 of the chosen page. The file over 100 MB from `make-large.mjs` (one page, 110 MB) was run by hand in Node on 13 Nov 2026: its page was taken and the result written. It is not run in CI.
 
@@ -271,6 +276,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/delet
 | `tagged.pdf` | Page 2 deleted: its text and untagged field are gone; its tag text, destination name, thread title, and the tagged field with its value, the tagged note and the tagged link stay, as the page says |
 | `multilingual.pdf` | Page 1 deleted: pages 2 to 5 left, each with its text and content streams as before |
 | `chinese-unembedded.pdf` | One page, so deleting it would leave none: refused |
+| `grey-only.pdf` | Page 1 deleted, page 2 with its stored thumbnail kept (2,978 bytes) |
 
 Files made in the test: a nested outline keeps the bookmarks of the pages left, moved up past dropped parents; a 500-page file with 3,000 bookmarks keeps the 2,970 of the 495 pages left; and a two-page file of 3,000 bookmarks keeps the 1,500 of the page left.
 
@@ -294,6 +300,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/rearr
 | `tagged.pdf` | Swapped: everything is kept, page 2's text now first |
 | `multilingual.pdf` | Reversed: each page reads its text and holds its content streams in its new place |
 | `chinese-unembedded.pdf` | Its one order: text operators and font reference kept |
+| `grey-only.pdf` | Its two pages swapped (3,659 bytes) |
 
 Files made in the test: a nested outline keeps every bookmark, each pointing to its page in its new place; a heading that points to no page is kept with its child; an outline 100 levels deep keeps every level; and an outline item that points back at the catalog is not dropped. Orders that leave out, repeat or add a page are refused.
 
@@ -317,6 +324,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/rotat
 | `tagged.pdf` | Every page half round: everything kept |
 | `multilingual.pdf` | Every page a quarter turn: text and content streams kept |
 | `chinese-unembedded.pdf` | Turned a quarter: text operators and font reference kept |
+| `grey-only.pdf` | Both pages turned a quarter (2,725 bytes) |
 
 Files made in the test, for turns already in a file (the security reviewer, stage 1): pages whose `/Rotate` is 45, -90, 450 and 135 read as 0, 270, 90 and 0, as PDF.js draws them, and turned right give 90, 0, 180 and 90; a turn inherited from the page tree is added to. Each result matches the turned thumbnail. Turns that are not valid are refused.
 
@@ -343,6 +351,7 @@ Each was drawn in Node through the real PDF.js and `@napi-rs/canvas`, inside a 1
 | `images.pdf` | Drawn. PDF.js takes `openjpeg.wasm` from the fixed helper data for the JPEG 2000 image |
 | `multilingual.pdf` | Every page drawn with its text in every script, from the embedded fonts, with no character map asked for (`tests/unit/multilingual.test.ts`: at least 29 to 65 grey pixels a page, about half what was measured) |
 | `chinese-unembedded.pdf` | Drawn without failing, as a blank page: no Chinese is drawn, the character-map gap of the owner's 11 Nov 2026 decision. PDF.js asks its data factory for `UniGB-UCS2-H.bcmap`, which is refused in memory |
+| `grey-only.pdf` | Drawn, in grey |
 
 ### One open document across pages (`openDocument` in `src/engines/thumbnail.ts`)
 
@@ -465,6 +474,7 @@ Each file was compressed in Node with the same qpdf the browser uses (`tests/uni
 | `compress-password.pdf` | 36,730 | 12,707 | With its password: the photo scaled to 600 by 600 (150 to the inch across 4 inches), and the result asks for the same password with the same encryption and restrictions. Without it, the job fails |
 | `multilingual.pdf` | 48,414 | 37,027 | No pictures; written again with objects packed. Every page reads its text and holds its decoded content streams as before |
 | `chinese-unembedded.pdf` | 1,693 | 1,147 | Written again with objects packed; text kept |
+| `grey-only.pdf` | 3,603 | 2,722 | Written again with objects packed (27 Nov 2026) |
 
 The file over 100 MB from `make-large.mjs` (one page and 105 MB of random bytes attached, 110,124,572 bytes) was compressed by hand in Node on 16 Nov 2026: it could not be made smaller, in about 4 seconds. It is not run in CI.
 
@@ -475,6 +485,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/compr
 | File | Size | Read | 100 KB | 200 KB | 500 KB | 1 MB | 2 MB | Half its size | A tenth |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `chinese-unembedded.pdf` | 1,693 | ready | held | held | held | held | held | over 1147, 1 write | over 1147, 1 write |
+| `grey-only.pdf` | 3,603 | ready | held | held | held | held | held | over 2722, 1 write | over 2722, 1 write |
 | `compress-bomb-attachment.pdf` | 1,045,278 | ready | no smaller file, 1 write | no smaller file, 1 write | no smaller file, 1 write | no smaller file, 1 write | held | no smaller file, 1 write | no smaller file, 1 write |
 | `compress-flate-bomb.pdf` | 103,018 | ready | no smaller file, 1 write | held | held | held | held | no smaller file, 1 write | no smaller file, 1 write |
 | `compress-jpeg-mismatch.pdf` | 15,014 | ready | held | held | held | held | held | over 14774, 1 write | over 14774, 1 write |
@@ -553,6 +564,7 @@ Each file was converted in Node through the real PDF.js and the same fixed helpe
 | `compress-password.pdf` | 1, 600 by 600 | 35,946 | 16,263 | Drawn with `open-sesame` |
 | `multilingual.pdf` | 5, 1239 by 1754 (Chromium's A4 is 594.96 points wide) | 216,348 | 173,636 | Every page drawn with its text in every script; each picture holds at least half the dark pixels measured, and on the mixed page each script's line shows ink in its own band |
 | `chinese-unembedded.pdf` | 1, A4 | 12,322 | 13,628 | Drawn without failing, blank: no Chinese drawn (no character map). The fixed data's refusal is in memory; on `/pdf-to-jpg` the end-to-end test finds the same requests as for `text.pdf` |
+| `grey-only.pdf` | 2, 625 by 625 | 25,126 | 18,753 | Drawn, in grey (27 Nov 2026) |
 
 Files made in the test:
 
@@ -589,6 +601,7 @@ Each file was numbered in Node with the same qpdf and pdf-lib the browser gets (
 | `tagged.pdf` | 5,118 | 3,456 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the number is in an `/Artifact`, in no tag |
 | `multilingual.pdf` | 48,414 | 39,248 | Numbered; each page reads its text as before followed by its number, and its own content streams are unchanged between the added `q` and `Q` |
 | `chinese-unembedded.pdf` | 1,693 | 1,796 | Numbered; its text operators and font reference kept |
+| `grey-only.pdf` | 3,603 | 3,660 | Numbered (27 Nov 2026) |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Numbered; pictures are not read. `compress-text.pdf` (21,019 to 3,694) and `compress-small-jpg.pdf` (12,852 to 9,404) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,480 | Numbered in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,569 | With `open-sesame`: numbered, with no password |
@@ -637,6 +650,7 @@ Each file was watermarked in Node with the same qpdf and pdf-lib the browser get
 | `tagged.pdf` | 5,118 | 3,699 | Tags, destination, thread, the tagged field and its value, note and link kept; every page's own streams unchanged; PDF.js still resolves its tags, and the watermark is the page's last marked content, an `/Artifact` with no marked-content id, in no tag. Its tags point to objects and name no `/MCID`, so a page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1` is checked beside it: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags, with no watermark words in them |
 | `multilingual.pdf` | 48,414 | 39,843 | Watermarked; each page's text as before followed by the watermark, its own content streams unchanged |
 | `chinese-unembedded.pdf` | 1,693 | 1,919 | Watermarked; its text operators and font reference kept |
+| `grey-only.pdf` | 3,603 | 3,905 | Watermarked (27 Nov 2026) |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | Watermarked; pictures are not read. `compress-text.pdf` (21,019 to 4,056) and `compress-small-jpg.pdf` (12,852 to 9,529) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,606 | Watermarked in about 0.2 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,695 | With `open-sesame`: watermarked, with no password |
@@ -679,6 +693,7 @@ Each file was signed in Node with the same qpdf and pdf-lib the browser gets (`t
 | `tagged.pdf` | 5,118 | 3,310 | 3,266 | 6,410 | 3,543 | Tags, destination, thread, the tagged field and its value, note and link kept, with the same kinds of tag; the signature is in no tag. A page made in the test with `/MCID 0` and an `/MCR` for `/MCID 1`: both ids still in the page's own unchanged streams, `/StructParents` kept, and PDF.js finds "Hello tagged" and "Second part" from their tags |
 | `multilingual.pdf` | 48,414 | 38,049 | 38,006 | 41,154 | 39,092 | Signed; every page's text as before, the name after the last page's, and each page's own content streams unchanged |
 | `chinese-unembedded.pdf` | 1,693 | 1,947 | 1,908 | 5,044 | 1,947 | Signed; its text operators and font reference kept |
+| `grey-only.pdf` | 3,603 | 3,508 | 3,484 | 6,620 | 3,746 | Signed (27 Nov 2026) |
 | `compress-scans.pdf`, `compress-lossless.pdf`, `compress-kinds.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf`, `compress-packed.pdf`, `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf` | | | | | | Signed on the last page; pictures are not read. `compress-text.pdf` (21,019 to 3,209) and `compress-small-jpg.pdf` (12,852 to 9,582) come out smaller, as qpdf compresses their uncompressed streams |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,045,654 | 1,045,613 | 1,048,758 | 1,045,654 | Signed in about 0.3 seconds; the 1 GB attachment is copied as stored and never inflated |
 | `compress-password.pdf` | 36,730 | 36,730 | 36,669 | 39,809 | 36,730 | With `open-sesame`: signed, with no password |
@@ -759,6 +774,7 @@ Each file was protected in Node with the same qpdf the browser uses, with the ne
 | `tagged.pdf` | 5,118 | 3,400 | Tags, destination, thread, the tagged field and its value, note and link kept. Every `SECRET-` marker held in a string or a stream is gone from the bytes, the field's hex strings too; `SECRET-DEST-NAME`, a name in the catalog's old-style `/Dests`, stays readable, as the format leaves names |
 | `multilingual.pdf` | 48,414 | 38,566 | Protected; with the password every page reads its text and holds its decoded content streams as before. Protected and then given back by Remove a password with the same password, every page is as before (`tests/unit/multilingual.test.ts`) |
 | `chinese-unembedded.pdf` | 1,693 | 1,864 | Protected; with the password its text operators and font reference are kept |
+| `grey-only.pdf` | 3,603 | 3,706 | Protected (27 Nov 2026) |
 | `compress-scans.pdf` | 634,679 | 635,113 | Protected; each picture stored as it was, encrypted |
 | `compress-lossless.pdf` | 16,884 | 17,572 | Protected |
 | `compress-small-jpg.pdf` | 12,852 | 9,531 | Protected; its uncompressed text stream is compressed, as qpdf does by default when it writes, so smaller |
@@ -808,7 +824,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/unloc
 | `password.pdf` | 7,178 | 6,183 | Given back, opened with `open-sesame` or with `owner-secret`. Without a password, or with `open-sesam`: "A password did not open the file.", with no other password tried. Progress "Reading the file", then writing up to 50%, then 55 and 100 as each check of the result passes |
 | `restricted.pdf` | 7,181 | 6,183 | Given back with no password typed; every permission allowed |
 | `compress-password.pdf` | 36,730 | 36,088 | Given back, opened with `open-sesame` |
-| `text.pdf`, `warning.pdf`, `pages-500.pdf`, `scanned.pdf`, `form.pdf`, `mixed.pdf`, `rich.pdf`, `images.pdf`, `tagged.pdf`, `multilingual.pdf`, `chinese-unembedded.pdf` | | | Nothing to remove: no file. qpdf's warning on `warning.pdf` does not stop the reading |
+| `text.pdf`, `warning.pdf`, `pages-500.pdf`, `scanned.pdf`, `form.pdf`, `mixed.pdf`, `rich.pdf`, `images.pdf`, `tagged.pdf`, `multilingual.pdf`, `chinese-unembedded.pdf`, `grey-only.pdf` | | | Nothing to remove: no file. qpdf's warning on `warning.pdf` does not stop the reading |
 | Every other `compress-*.pdf` | | | Nothing to remove: no file, in at most about 0.1 seconds; the bombs are never inflated, as only the encryption is read |
 | `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not read the file." and hands back nothing |
 
@@ -854,6 +870,7 @@ Each file was run in Node with the same qpdf, PDF.js and helper data the browser
 | `images.pdf` | 1,642 | 1,562 | 1 of 1 | Cut; the JPEG 2000 picture and the CMYK shapes are inside |
 | `multilingual.pdf` | 48,414 | 37,264 | 5 of 5 | Cut; every page's text read by PDF.js as before, and its ink inside the new boxes |
 | `compress-bomb-attachment.pdf` | 1,045,278 | 1,044,877 | 1 of 1 | Cut; the attachment is never inflated |
+| `grey-only.pdf` | 3,603 | 2,739 | 2 of 2 | Cut (27 Nov 2026) |
 | `compress-lossless.pdf`, `compress-packed.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf` | | | every page | Cut |
 | `chinese-unembedded.pdf` | | | 0 | No page cut, so no file ("No pages were cropped."): PDF.js is refused the character map `UniGB-UCS2-H`, so the page is not measured, though its text is not drawn. It is the one page left as it is only because a helper-data request was refused |
 | `scanned.pdf`, `compress-kinds.pdf`, `compress-jpeg-mismatch.pdf`, `compress-password.pdf` (with `open-sesame`) | | | 0 | No page cut: their pictures reach the edges of each page |
@@ -893,6 +910,7 @@ Each file was run in Node with the same qpdf the browser uses (`tests/unit/resiz
 | `mixed.pdf` (A4, Letter on its side, A5 turned a quarter, A4 upside down) | 2,257 | 2 of 4 resized (the Letter page to A4 on its side, the A5 page enlarged to A4 on its side), 1,994; the two A4 pages left as they were | 3 of 4 resized, 1,984; the Letter page on its side left |
 | `rich.pdf` | 2,064 | No page changed | 2 of 2 resized, 1,939; bookmarks, the link and `note.txt` kept |
 | `tagged.pdf` (Letter) | 5,118 | 2 of 2 resized, 2,837 | 2 of 2 resized, 2,746; tags, named destination, thread, note, link, fields and text kept |
+| `grey-only.pdf` (300 by 300 points) | 3,603 | 2 of 2 resized, 2,798 | 2 of 2 resized, 2,770 (27 Nov 2026) |
 | `multilingual.pdf` (594.96 points wide) | 48,414 | No page changed: within a point of A4 | 5 of 5 resized, 37,446; every page's text read by PDF.js as before, and ink in every script band of page 5, scaled |
 | `images.pdf`, `scanned.pdf`, `chinese-unembedded.pdf`, `compress-bomb-attachment.pdf`, `compress-lossless.pdf`, `compress-packed.pdf`, `compress-scans.pdf`, `compress-small-jpg.pdf`, `compress-text.pdf` | | No page changed | Every page resized; the 1 GB attachment is never inflated |
 | `compress-flate-bomb.pdf`, `compress-jpeg-mismatch.pdf`, `compress-kinds.pdf`, `compress-password.pdf` (with `open-sesame`) | | Every page resized (1, 2, 7 and 1) | Every page resized |
@@ -933,6 +951,46 @@ Measured on 24 Nov 2026, as Crop PDF's above: in Node under the test runner, one
 - **The objects file** (every one of 220,000 objects changed by the destination walk) is the worst case for the working copies: 1.08 GB in Node, 0.76 GB over baseline in Chromium, under the ceiling.
 - **Known, not fixed here:** "Page N of M" has no thousands separator, as on every page tool.
 
+### Grayscale PDF (`src/engines/tools/grayscale-pdf.ts`, with `src/engines/content.ts`)
+
+Each file was run in Node with the same qpdf and fflate the browser uses (`tests/unit/grayscale-pdf.test.ts`), the encrypted ones with `open-sesame`. Every file given back passes `qpdf --check`, is not encrypted, reads the same text at the same places through PDF.js, has the same PDF.js operator list on every page once colour-setting operations are removed, holds the same tokens in each content stream outside the edits of design decision 4 (no edited stream keeps `sc` or `SC`), and is drawn by PDF.js with every pixel neutral; the bomb files and `pages-500.pdf` are only checked with `qpdf --check`. "Changed" counts content streams whose decoded text differs. Sizes in bytes, from a run on 27 Nov 2026.
+
+| File | Before | After | Outcome |
+| --- | --- | --- | --- |
+| `text.pdf`, `warning.pdf` | 6,057 | 3,821 | Converted: pdf-lib writes its text black as `0 0 0 rg`, which counts (owner question 5); 3 of 3 streams changed |
+| `password.pdf` (with `open-sesame`), `restricted.pdf` | 7,178 and 7,181 | 3,859 | Converted, with no password and no restrictions; 3 of 3 changed. Without the password: "A password did not open the file." |
+| `pages-500.pdf` | 198,025 | 107,948 | Converted, every page |
+| `scanned.pdf` | 6,191 | 6,144 | Converted: the scans' RGB pictures repointed at the stand-in, their data unchanged; no content stream changed |
+| `form.pdf` | 3,189 | 2,917 | Converted; fields, values and appearances kept; 1 of 1 changed |
+| `mixed.pdf` | 2,257 | 1,857 | Converted; sizes and turns kept; 4 of 4 changed |
+| `rich.pdf` | 2,064 | 1,918 | Converted; both bookmarks, the link and `note.txt` kept; 2 of 2 changed |
+| `images.pdf` | 1,642 | 1,852 | Converted: its CMYK text and shapes made grey; the JPEG 2000 picture left byte for byte |
+| `tagged.pdf` | 5,118 | 2,835 | Converted; tags, marked content, destinations, thread, fields and links kept; 2 of 2 changed |
+| `multilingual.pdf` | 48,414 | 37,903 | Converted; every page reads the same, its streams the same token by token outside the edits (`tests/unit/multilingual.test.ts`); 5 of 5 changed |
+| `compress-scans.pdf`, `compress-kinds.pdf`, `compress-jpeg-mismatch.pdf`, `compress-small-jpg.pdf`, `compress-lossless.pdf`, `compress-password.pdf` (with `open-sesame`) | | | Converted: pictures repointed, data unchanged; the CMYK JPG, the grey picture and the masks left; no content stream changed |
+| `compress-packed.pdf` | 3,441 | 3,821 | Converted; 3 of 3 changed |
+| `compress-bomb-attachment.pdf`, `compress-flate-bomb.pdf` | | | Converted; the attachment and the picture's data never inflated |
+| `compress-text.pdf`, `chinese-unembedded.pdf` | | | Nothing turned grey: no file ("Nothing in this file was turned grey.") |
+| `grey-only.pdf` | 3,603 | | Nothing turned grey: no file; its RGB groups, soft mask backdrop, `/DefaultRGB`, output intent and colour stored thumbnail do not count |
+| `compress-json-bomb.pdf` | 140,759 | | Fails with "The pages could not be read." after about 15 seconds: its JSON of dictionaries passes the page-reading cap. The page gives the shared failure |
+| `damaged-xref.pdf`, `damaged-cut.pdf`, `not-a-pdf.pdf` | | | Read as damaged before any job; a run fails with "qpdf could not read the file." |
+
+**Large files, measured over the whole job through `writePageUpdate` and its `--check`.** Node: each file in a process of its own under the test runner, qpdf loaded first on `text.pdf`, peak the process's highest resident memory (the runner's own included). Chromium: the built page through Playwright at 1280 pixels, from pressing the main button to the result, the resident memory of every browser process added up every 0.2 seconds, over its level just before the press (the reading worker is ended when a job starts, so a peak of 0.00 means no higher than before the press). Ceiling: 1.19 GB in Node, 1.36 GB in Chromium. qpdf instances are those the job makes, counted in Node.
+
+| File | Out | Node: time (to writing), peak | Chromium: time, peak over baseline | qpdf instances |
+| --- | --- | --- | --- | --- |
+| `make-large.mjs` (105 MB attachment) | 110,124,287 | 1.6 s (1.1 s), 1.14 GB | 1.8 s, 0.99 GB | 5 |
+| `make-large.mjs --scans` (101.5 MB, 25 JPG scans) | 106,428,654 | 56.1 s (1.3 s), 0.93 GB | 53.6 s, 1.17 GB | 5 |
+| `make-large.mjs --vector` (119 MB, 5 pages of 60 MiB decoded) | 137,250,070 | 87.4 s (43.9 s), 1.22 GB | 77.2 s, 0.27 GB | 9 |
+| `make-many-pages.mjs` (120,000 pages, one shared stream) | 1,229,988 | 24.2 s (18.0 s), 0.70 GB | 15.0 s, 0.77 GB | 5 |
+| `make-many-pages.mjs --coloured` (20,000 pages, own streams) | 3,432,263 | 22.7 s (20.7 s), 0.41 GB | 20.9 s, 0.47 GB | 14 |
+| Crafted, four pages of 63 MiB of `0 0 0 rg ` | `output-limit` | 22.1 s, 0.40 GB | 21.4 s, 0.00 GB | 4 |
+| Crafted, one page of 64 MiB less 4 bytes of `0 0 0 rg ` (179 MiB once edited) | 455,468 | 33.3 s (9.5 s), 0.61 GB | 19.9 s, 0.00 GB | 5 |
+
+Where the time goes (27 Nov 2026): `qpdf --check` alone takes 51.7 s on the original `--scans` file (it decodes every JPG; `--decode-level` does not change it) and 34.2 s on the original `--vector` file (it reads every page's drawing), so most of those two jobs is the check every writing tool runs. One 60 MiB vector page takes about 1.7 s to decode in the content reader, 3.5 s to edit and 4.1 s to deflate at level 9 in fflate. The `--vector` file's pages are 60 MiB decoded by construction, near the 64 MiB a page may decode to; no real map or plan was at hand. The `--vector` and `--scans` files pass or come near the design's one-minute budget for a 100 MB file, mostly in `--check` (design decision 7, "As built").
+
+**qpdf instances:** two for the plain copy and one for reading the pages, one per raw batch of drawing streams and colour profiles (at most 2,000 ids or 32 MB of stated length; a stream over 32 MB alone), and one writer only when a file is written. On the 20,000-page file with its own streams: 10 batches, 14 instances, each made in about 9 ms in Node, with the plain copy (5.8 MB) written into each.
+
 ### Content reader (`src/engines/content.ts`, no tool yet)
 
 Each file was put through the real plain copy (`plainCopy`, the encrypted ones with `open-sesame`), then every page's content streams and every form XObject were read raw with `readRawStreams`, decoded with `decodeContent` and read with `editContent` and the test-only editor (`tests/unit/content.test.ts`, "every fixture through the reader"; a page's streams as `not-last` and `last`, forms `alone`, a shared stream once at its strictest place), with a budget that records. The test asserts each file's counts below, and fails for a fixture with none, so a new fixture must be given them. No run made a request, passed the 64 MiB cap or threw. From a run on 24 Nov 2026.
@@ -953,6 +1011,7 @@ No stream of any fixture is left as "not decoded" or "too large", and none is do
 | `compress-small-jpg.pdf` (two content streams on its page) | 1 | 0 | 2 | 1 | 1 | 0 | 0 |
 | `compress-text.pdf` | 3 | 0 | 3 | 0 | 3 | 0 | 0 |
 | `form.pdf` (the forms are its fields' appearance streams) | 1 | 5 | 6 | 5 | 1 | 0 | 0 |
+| `grey-only.pdf` (a drawn form and a soft mask's group) | 2 | 2 | 4 | 4 | 0 | 0 | 0 |
 | `images.pdf` | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
 | `mixed.pdf` | 4 | 0 | 4 | 0 | 4 | 0 | 0 |
 | `multilingual.pdf` | 5 | 0 | 5 | 5 | 0 | 0 | 0 |

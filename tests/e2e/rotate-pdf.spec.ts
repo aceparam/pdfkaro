@@ -134,7 +134,9 @@ test.describe('turning pages', () => {
     await pick(page, 'text.pdf');
     await everyRight(page).click();
     await expect(status(page)).toHaveText('Every page is now turned right.');
-    expect(await captions(page)).toEqual(['Page 1, turned right', 'Page 2, turned right', 'Page 3, turned right']);
+    // "Turn every page" says so at once, and the pages show their new turns from the next frame on, a chunk of 50 a
+    // frame (ToolWorkspace's turnFront, #17), so the captions are read until they have caught up.
+    await expect.poll(() => captions(page)).toEqual(['Page 1, turned right', 'Page 2, turned right', 'Page 3, turned right']);
     await expect(turnLine(page)).toHaveText(`Every page will be turned. ${how}`);
     await everyRight(page).click();
     await expect(status(page)).toHaveText('Every page is now turned half round.');
@@ -289,7 +291,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     expect(fetched.some((path) => /\/rotate-pdf-/.test(path))).toBe(true);
-    for (const other of [/\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
+    for (const other of [/\/fflate-/, /\/split-pdf-/, /\/merge-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path))).toBe(false);
 
     const held = await traces(page, context);
     expect(held).toMatchObject({ local: 0, session: 0, databases: 0, caches: 0, opfs: [], cookies: [] });

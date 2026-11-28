@@ -353,9 +353,9 @@ export const groups: Group[] = [
     name: 'Make smaller and fix',
     slug: 'make-smaller-and-fix',
     title: 'Make a PDF smaller - PDFkaro',
-    description:
-      'Make a PDF smaller, or small enough for an upload limit, by shrinking its pictures in your browser. The file stays on your device and is not uploaded.',
-    sentence: 'Tools that make a PDF file smaller, or small enough for an upload limit.',
+    // Grey added with Grayscale PDF (add-grayscale-pdf), drafts for the owner.
+    description: 'Make a PDF smaller, small enough for an upload limit, or grey, in your browser. The file stays on your device and is not uploaded.',
+    sentence: 'Tools that make a PDF file smaller, small enough for an upload limit, or grey.',
     claimsDevice: true,
   },
   {
@@ -1021,6 +1021,58 @@ export const tools: Tool[] = [
         'Pictures that were made smaller can look less sharp up close. Text, drawings and fonts keep their quality.',
         'Pages, links, form fields, bookmarks and attached files are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid.',
         'If the file had a password or restrictions, it still has them.',
+      ],
+    },
+  },
+  {
+    // The third row of "Make smaller and fix", a Phase 2 tool. Colours are shown and printed grey through grey stand-in
+    // colour spaces, text kept, the original values left in the file (the owner's decisions of 24 Nov 2026, "Everything,
+    // kept as text" and "Yes, looks and prints grey"); src/engines/tools/grayscale-pdf.ts.
+    id: 'grayscale-pdf',
+    group: 'smaller',
+    runsIn: 'browser',
+    phase: 2,
+    accepts: ['application/pdf'],
+    related: ['compress-pdf', 'compress-pdf-to-1mb', 'pdf-to-jpg', 'watermark-pdf', 'merge-pdf'],
+    pages: [
+      {
+        slug: 'grayscale-pdf',
+        name: 'Grayscale PDF',
+        summary: 'Turn the colours in a PDF grey, keeping its text.',
+        title: 'Convert a PDF to grayscale in your browser - PDFkaro',
+        description: 'Turn the colours in a PDF grey, keeping its text searchable and its links and forms working. The file stays on your device and is not uploaded.',
+        heading: 'Convert a PDF to grayscale',
+        sentence: 'Turn the colours in a PDF grey and keep its text. Your file stays on your device.',
+      },
+    ],
+    widget: {
+      pickerLabel: 'Choose a PDF file',
+      addLabel: 'Choose another file',
+      dropHint: 'You can also drop a file anywhere on this page, or paste it.',
+      acceptsName: 'a PDF',
+      actionLabel: 'Convert to grayscale and download',
+      writingLabel: 'Writing the grayscale file',
+      doneHeading: 'Your grayscale file is ready',
+      failedHeading: 'The file was not converted.',
+      tooFewFiles: 'Choose a PDF file to convert to grayscale.',
+      outputSuffix: 'grayscale',
+      minFiles: 1,
+      multiple: false,
+      resultPages: 'input',
+      memoryAdvice: 'Try on a computer, or split the file first and convert the parts.',
+      items: 'files',
+      itemControls: false,
+      outputs: 'one',
+      // Page text, a draft for the owner's review like the result notes. Nothing turned grey gives no file.
+      noSmaller: {
+        heading: 'Nothing in this file was turned grey.',
+        advice:
+          'No new file was made. Its pages may already use only grey, or their colours may be kinds this tool leaves as they are, such as spot colours, Lab colours or JPEG 2000 pictures.',
+      },
+      // Passwords are dropped, as for every page tool (the owner's decision of 13 Nov 2026, extended by default).
+      resultNotes: [
+        "Pages now show in grey, and print in grey on office printers. The text can still be searched. The colours in the pages' drawing and pictures are still stored in the file, and it stays about the same size. A few kinds of colour, such as spot colours, are left as they are; the questions below name them.",
+        "Links, form fields, notes, bookmarks, attached files and the document's details are kept. Earlier saved versions stored inside the file are not, and a digital signature will no longer be valid. The new file has no password and no restrictions, even if the file you chose had them.",
       ],
     },
   },

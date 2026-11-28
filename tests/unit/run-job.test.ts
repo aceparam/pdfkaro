@@ -92,6 +92,11 @@ describe('runJob', () => {
     }
   });
 
+  it("gives a page-too-large failure's page number in its outcome", async () => {
+    const { job } = setUp(async () => Promise.reject(new ToolError('page-too-large', 14)));
+    expect(await runJob(job)).toEqual({ kind: 'failed', failure: 'page-too-large', page: 14 });
+  });
+
   it('a run that throws something else is the engine failure, and keeps the new password and the input password', async () => {
     const { holder, inputPasswords, order, job } = setUp(async () => Promise.reject(new Error('broken')));
     expect(await runJob(job)).toEqual({ kind: 'failed', failure: 'engine' });

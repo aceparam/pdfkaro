@@ -162,6 +162,17 @@ describe('the Privacy page', () => {
     });
   });
 
+  describe('Grayscale PDF guard', () => {
+    it('says that Grayscale PDF keeps the colours of the pages’ drawing and pictures in the new file, as the tool page and its result say', () => {
+      const sentence = 'Grayscale PDF shows colours in grey but keeps the colours of the pages’ drawing and pictures in the new file, where a program can still read them.';
+      expect(section('What happens to your file').text).toContain(sentence);
+      const toolText = readFileSync(new URL('../../src/content/tools/grayscale-pdf.md', import.meta.url), 'utf8');
+      for (const words of ['the colours in the pages’ drawing and pictures stay stored underneath', 'the colours in the pages’ drawing and pictures are still in the file']) expect(toolText).toContain(words);
+      const notes = registryTools.find((tool) => tool.id === 'grayscale-pdf')!.widget!.resultNotes.join(' ');
+      expect(notes).toContain("The colours in the pages' drawing and pictures are still stored in the file");
+    });
+  });
+
   describe('target size guard', () => {
     // add-compress-to-target, design decision 11: a file at or under a target page's size starts no job, so whether a
     // job's programs are fetched there depends on the file's size, and the page says so in both places.

@@ -194,6 +194,20 @@ describe('what the options show', () => {
     expect(play(add('a'), ready()).choices).toEqual({});
   });
 
+  it('keeps the page a page-too-large failure names, and clears it wherever the failure is cleared', () => {
+    const working = play(add('a'), ready(), { type: 'started' });
+    const failed = reducer(working, { type: 'failed', failure: 'page-too-large', page: 14 });
+    expect(failed).toMatchObject({ step: 'failed', failure: 'page-too-large', failedPage: 14 });
+    expect(reducer(failed, { type: 'back-to-files' }).failedPage).toBeNull();
+    expect(reducer(failed, { type: 'started' }).failedPage).toBeNull();
+    expect(reducer(failed, { type: 'reset' }).failedPage).toBeNull();
+    expect(reducer(failed, { type: 'removed', id: failed.files[0]!.id }).failedPage).toBeNull();
+    // Only with that kind, and only a whole number from 1.
+    expect(reducer(working, { type: 'failed', failure: 'output-limit', page: 14 }).failedPage).toBeNull();
+    for (const page of [0, 1.5, Number.NaN, undefined]) expect(reducer(working, { type: 'failed', failure: 'page-too-large', page }).failedPage).toBeNull();
+    expect(initialState.failedPage).toBeNull();
+  });
+
   it('records a choice only while listing', () => {
     expect(play(add('a'), ready(), set('top-right')).choices).toEqual({ position: 'top-right' });
     expect(play(set('top-right')).choices).toEqual({});
