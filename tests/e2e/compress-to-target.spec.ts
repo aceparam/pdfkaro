@@ -11,6 +11,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { tools } from '../../src/tools/registry';
 import { formatSize } from '../../src/widget/format';
@@ -222,6 +223,7 @@ test.describe('a file already at or under the target', () => {
     await open(page, '200kb');
     await pick(page, 'damaged-xref.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-xref.pdf is damaged and cannot be read.' })).toBeVisible({ timeout: 30000 });
+    await expectRepairLink(page);
     await expect(page.getByText(/is already 200 KB or smaller/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
@@ -476,7 +478,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = fetchedPaths(seen);
     for (const name of [engineFile, /\/shrink-/, /\/fflate-/, /\/plain-/, /\/inspect-/, /\/option-values-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/pdflib-/, /\/pages-/, /\/stamp-/, /\/compress-pdf-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/merge-pdf-/, /\/picture-thumbnail-/, /\/grayscale-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/pdflib-/, /\/pages-/, /\/stamp-/, /\/compress-pdf-/, /\/crop-pdf-/, /\/resize-pdf-/, /\/protect-pdf-/, /\/merge-pdf-/, /\/picture-thumbnail-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, consoleText);

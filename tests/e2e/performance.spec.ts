@@ -7,6 +7,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { damagedCopy } from '../unit/repair-helpers';
+import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cells = (page: Page) => page.locator('astro-island ol > li');
@@ -237,6 +239,30 @@ test('Compress to a target size: listing and compressing a scans file on the 200
   await expect(main).not.toHaveAttribute('aria-disabled', 'true');
   await main.click();
   await expect(page.getByRole('heading', { name: 'Your file is now 200 KB or smaller' })).toBeFocused({ timeout: 200000 });
+  await page.waitForTimeout(500);
+  const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
+  expect(long.filter((duration) => duration > 100)).toEqual([]);
+});
+
+test('Repair PDF: reading and repairing a damaged 500-page file blocks the page for no more than 100 ms at a time', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto('/repair-pdf');
+  await page.waitForLoadState('networkidle');
+  await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
+  await page.evaluate(() => {
+    const long: number[] = [];
+    (window as unknown as { longTasks: number[] }).longTasks = long;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) long.push(entry.duration);
+    }).observe({ type: 'longtask', buffered: false });
+  });
+  // pages-500.pdf with its startxref pointing into its first object: qpdf cannot read it, so the pre-pass and pdf-lib do.
+  const damaged = damagedCopy(new Uint8Array(readFileSync(join(here, '../fixtures/pages-500.pdf'))));
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'pages-500-damaged.pdf', mimeType: 'application/pdf', buffer: Buffer.from(damaged) });
+  await expect(page.locator('astro-island ol > li')).toContainText('500 pages', { timeout: 60000 });
+  await page.getByRole('button', { name: 'Repair and download' }).click();
+  await expect(page.getByRole('heading', { name: 'Your repaired file is ready' })).toBeFocused({ timeout: 200000 });
+  await expect(page.locator('astro-island section')).toContainText('500 pages');
   await page.waitForTimeout(500);
   const long = await page.evaluate(() => (window as unknown as { longTasks: number[] }).longTasks);
   expect(long.filter((duration) => duration > 100)).toEqual([]);

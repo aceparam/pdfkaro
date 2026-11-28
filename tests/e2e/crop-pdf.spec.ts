@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { PDFDocument, StandardFonts, rgb } from '@cantoo/pdf-lib';
 import { type BrowserContext, type ConsoleMessage, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -389,7 +390,7 @@ test.describe('problems with the file', () => {
       await openPage(page);
       await pick(page, name);
       await expect(page.getByRole('heading', { name: `${name} is damaged and cannot be read.` })).toBeVisible({ timeout: 30000 });
-      await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+      await expectRepairLink(page);
       await expect(mainButton(page)).toHaveCount(0);
       await page.getByRole('button', { name: 'Choose another file' }).click();
       await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
@@ -534,7 +535,7 @@ test.describe('nothing is uploaded', () => {
     const fetched = fetchedPaths(seen);
     // The engine was fetched with PDF.js and the page reading, and nothing of the drawing step, the option values, pdf-lib, fflate or another tool.
     for (const name of [/\/crop-pdf-/, /\/qpdf-/, /\/inspect-/, /\/plain-/, /\/pages-[A-Za-z0-9_-]{8}\.js$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/stamp-/, /\/option-values-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/, /\/grayscale-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/stamp-/, /\/option-values-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, heard.said);

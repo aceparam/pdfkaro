@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type ConsoleMessage, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -440,7 +441,7 @@ test.describe('problems with the file', () => {
       await openPage(page);
       await pick(page, name);
       await expect(page.getByRole('heading', { name: `${name} is damaged and cannot be read.` })).toBeVisible({ timeout: 30000 });
-      await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+      await expectRepairLink(page);
       await expect(mainButton(page)).toHaveCount(0);
       await expect(group(page)).toHaveCount(0);
       await page.getByRole('button', { name: 'Choose another file' }).click();
@@ -619,7 +620,7 @@ test.describe('nothing is uploaded', () => {
     const fetched = fetchedPaths(seen);
     // The engine was fetched with the page reading and the option values, and nothing of the drawing step, pdf-lib, fflate or another tool.
     for (const name of [/\/resize-pdf-/, /\/qpdf-/, /\/inspect-/, /\/plain-/, /\/pages-[A-Za-z0-9_-]{8}\.js$/, /\/option-values-/]) expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
-    for (const other of [/\/stamp-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/crop-pdf-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/, /\/add-page-numbers-/, /\/grayscale-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/stamp-/, /\/pdflib-/, /\/fflate-/, /\/picture-/, /\/crop-pdf-/, /\/protect-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/sign-pdf-/, /\/add-page-numbers-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
     await expectNothingHeld(page, context, secrets, heard.said);

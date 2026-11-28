@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import { type Browser, type BrowserContext, type Download, type Page } from '@playwright/test';
 import { expect, test, watchPolicy } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { createQpdf } from '../../src/engines/qpdf';
 import { formatSize } from '../../src/widget/format';
 import { changed, pictures, texts } from '../unit/stamp-helpers';
@@ -817,7 +818,7 @@ test.describe('problems with the file', () => {
     await open(page);
     await pick(page, 'damaged-xref.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-xref.pdf is damaged and cannot be read.' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+    await expectRepairLink(page);
     await expect(way(page, 'Type your name')).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
@@ -1089,7 +1090,7 @@ test.describe('nothing is uploaded', () => {
       expect(seen.filter((request) => request.body !== null && request.body !== ''), how).toEqual([]);
       const fetched = fetchedPaths(seen);
       for (const name of [/\/sign-pdf-/, /\/stamp-/, /\/picture-/, /\/pdflib-/, /\/fflate-/]) expect(fetched.some((path) => name.test(path)), `${how}: ${name}`).toBe(true);
-      for (const other of [/\/add-page-numbers-/, /\/watermark-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-thumbnail-/, /\/grayscale-pdf-/]) {
+      for (const other of [/\/repair-pdf-/, /\/add-page-numbers-/, /\/watermark-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/split-pdf-/, /\/merge-pdf-/, /\/rotate-pdf-/, /\/images-to-pdf-/, /\/pdf-to-images-/, /\/picture-thumbnail-/, /\/grayscale-pdf-/]) {
         expect(fetched.some((path) => other.test(path)), `${how}: ${other}`).toBe(false);
       }
       fetchedByWay[how] = fetched;

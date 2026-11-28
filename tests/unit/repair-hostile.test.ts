@@ -34,9 +34,9 @@ import {
   qpdfPages,
   streamBody,
   tools,
-  noRequestsOrLogs,
   zeroBomb,
 } from './repair-helpers';
+import { noRequestsOrLogs } from './repair-setup';
 
 const pdflib = lib as unknown as typeof import('@cantoo/pdf-lib');
 const M = 1024 * 1024;

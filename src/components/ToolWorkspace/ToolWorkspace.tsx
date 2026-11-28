@@ -879,12 +879,14 @@ export default function ToolWorkspace({ toolId, accepts, words, preset, repairHr
               {unreadableWords.repair && repairHref ? (
                 // After the button, so a stray press never costs Merge PDF its other files; a plain link in the same
                 // tab, with nothing of the file in its address.
-                <p className={styles.repair}>
-                  {unreadableWords.repair}{' '}
-                  <a className={styles.repairLink} href={repairHref}>
-                    {repairLinkLabel}
-                  </a>
-                </p>
+                <div className={styles.repair}>
+                  <p>{unreadableWords.repair}</p>
+                  <p>
+                    <a className={styles.repairLink} href={repairHref}>
+                      {repairLinkLabel}
+                    </a>
+                  </p>
+                </div>
               ) : null}
             </Notice>
           ) : null}

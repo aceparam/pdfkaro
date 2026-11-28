@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Download, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { expectRepairLink } from './repair-link';
 import { unzipSync } from 'fflate';
 import { formatSize } from '../../src/widget/format';
 import { headersRead, traces, violations, watch, type Seen } from './no-upload';
@@ -394,7 +395,7 @@ test.describe('problems with the file', () => {
     await open(page, pngPage);
     await pick(page, 'damaged-xref.pdf');
     await expect(page.getByRole('heading', { name: 'damaged-xref.pdf is damaged and cannot be read.' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
+    await expectRepairLink(page);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose a PDF file' })).toBeVisible();
   });
@@ -521,7 +522,7 @@ test.describe('nothing is uploaded', () => {
       for (const name of [/\/pdf-to-images-/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker\.min-/, /\/pdfjs-data-/, /\/thumbnail-/, /\/fflate-/]) {
         expect(fetched.some((path) => name.test(path)), String(name)).toBe(true);
       }
-      for (const other of [/\/pdflib-/, /\/picture-/, /\/plain-/, /\/split-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/images-to-pdf-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
+      for (const other of [/\/repair-pdf-/, /\/pdflib-/, /\/picture-/, /\/plain-/, /\/split-pdf-/, /\/compress-pdf-/, /\/compress-to-target-/, /\/shrink-/, /\/images-to-pdf-/, /\/grayscale-pdf-/]) expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
       await page.getByRole('button', { name: 'Start again' }).click();
       await expect(page.locator('astro-island')).not.toContainText('qz7report');
       await expectNothingHeld(page, context, secrets, consoleText);

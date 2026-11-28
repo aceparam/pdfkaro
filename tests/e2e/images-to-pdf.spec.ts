@@ -289,6 +289,8 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['tall.jpg', 'small.png', 'broken.png']);
     await expect(page.getByRole('heading', { name: 'broken.png is damaged and cannot be read.' })).toBeVisible();
+    // A tool that does not take PDFs shows no link to Repair PDF.
+    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
     await expect(shown(page, 'Open it in a photo app, save a copy, and add the copy.')).toBeVisible();
     await expect(mainButton(page)).toHaveCount(0);
     await noSidewaysScroll(page);
@@ -326,6 +328,7 @@ test.describe('problems', () => {
     await open(page);
     await pick(page, ['broken.jpg']);
     await expect(page.getByRole('heading', { name: 'broken.jpg is damaged and cannot be read.' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Repair/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Leave this file out' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Choose another file' }).click();
     await expect(page.locator('label', { hasText: 'Choose pictures' })).toBeVisible();
@@ -412,7 +415,7 @@ test.describe('nothing is uploaded', () => {
     expect(violations(seen, new URL(baseURL!).origin, secrets, filesAfterPick())).toEqual([]);
     const fetched = paths(seen);
     for (const wanted of [/\/images-to-pdf-/, /\/picture-[A-Za-z0-9_-]{8}\.js$/, /\/picture-thumbnail-/, /\/pdflib-/]) expect(fetched.some((path) => wanted.test(path)), String(wanted)).toBe(true);
-    for (const other of [/\/qpdf-/, /\.wasm$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker/, /\/pdfjs-data-/, /\/thumbnail-/, /\/inspect-/, /\/plain-/, /\/merge-pdf-/, /\/split-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/rotate-pdf-/, /\/grayscale-pdf-/]) {
+    for (const other of [/\/repair-pdf-/, /\/qpdf-/, /\.wasm$/, /\/pdf-[A-Za-z0-9_-]{8}\.js$/, /\/pdf\.worker/, /\/pdfjs-data-/, /\/thumbnail-/, /\/inspect-/, /\/plain-/, /\/merge-pdf-/, /\/split-pdf-/, /\/extract-pdf-pages-/, /\/delete-pdf-pages-/, /\/rearrange-pdf-pages-/, /\/rotate-pdf-/, /\/grayscale-pdf-/]) {
       expect(fetched.some((path) => other.test(path)), String(other)).toBe(false);
     }
 

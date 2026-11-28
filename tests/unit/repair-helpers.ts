@@ -3,19 +3,22 @@
 // the checks that read a result with qpdf and PDF.js. Nothing here touches the disk but reading the fixtures.
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { afterAll, beforeAll, expect } from 'vitest';
 import { createQpdf, type Qpdf } from '../../src/engines/qpdf';
 import type { EngineTools } from '../../src/engines/types';
 import { tools as drawingTools } from './thumbnail-helpers';
 
-const wasm = join(__dirname, '../../node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-export const makeQpdf = () => createQpdf(async () => require('@neslinesli93/qpdf-wasm'), wasm);
+// Paths and require from this file's own address, so the end-to-end tests (ES modules) can import it too.
+const here = dirname(fileURLToPath(import.meta.url));
+const requireHere = createRequire(import.meta.url);
+const wasm = join(here, '../../node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm');
+export const makeQpdf = () => createQpdf(async () => requireHere('@neslinesli93/qpdf-wasm'), wasm);
 /** Every library the engine's two steps may ask for, from disk. */
 export const tools: EngineTools = { ...drawingTools, qpdf: makeQpdf };
-export const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, '../fixtures', name)));
+export const fixture = (name: string) => new Uint8Array(readFileSync(join(here, '../fixtures', name)));
 export const password = 'open-sesame';
 
 export const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString('latin1');
@@ -532,34 +535,4 @@ export function manyPages(coloured: boolean): Uint8Array {
   for (let n = 1; n < count; n++) table.push(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
   parts.push(table.join(''), `trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   return bytesOf(parts.join(''));
-}
-
-/**
- * Replaces `fetch` and every console method for the file's tests, recording each use, and fails after them if any was
- * used: Repair PDF makes no request and logs nothing (its guards silence pdf-lib's console while it runs).
- */
-export function noRequestsOrLogs(): void {
-  const fetched: unknown[] = [];
-  const logged: string[] = [];
-  const realFetch = globalThis.fetch;
-  const realConsole = new Map<string, unknown>();
-  beforeAll(() => {
-    globalThis.fetch = ((...args: unknown[]) => {
-      fetched.push(args[0]);
-      throw new Error('No request may be made by Repair PDF.');
-    }) as typeof fetch;
-    const target = console as unknown as Record<string, unknown>;
-    for (const key of Object.keys(target)) {
-      if (typeof target[key] !== 'function') continue;
-      realConsole.set(key, target[key]);
-      target[key] = () => logged.push(key);
-    }
-  });
-  afterAll(() => {
-    globalThis.fetch = realFetch;
-    const target = console as unknown as Record<string, unknown>;
-    for (const [key, value] of realConsole) target[key] = value;
-    expect(fetched).toEqual([]);
-    expect(logged).toEqual([]);
-  });
 }

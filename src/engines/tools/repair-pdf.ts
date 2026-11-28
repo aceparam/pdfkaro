@@ -64,7 +64,11 @@ export type Limits = {
   k: number;
   /** What one pdf-lib decoder stage may grow to. */
   streamDecode: number;
-  /** What every pdf-lib decoder stage of one call may allocate together. */
+  /**
+   * What every pdf-lib decoder stage of one call may allocate together. Each stage's buffer doubles as it grows, so a
+   * stream allocates up to twice its decoded size: 32 MiB lets through about 16 MiB of decoded object streams a call,
+   * which for the densest content (`0 `, about 33 bytes of memory a byte) peaks near 0.5 GB (task 3.3).
+   */
   callDecode: number;
   /** The bytes copied into qpdf instances over a job: at most `c × input + copyBase`. */
   c: number;
@@ -82,7 +86,7 @@ export type Limits = {
 export const limits: Limits = {
   k: 8,
   streamDecode: 64 * 1024 * 1024,
-  callDecode: 16 * 1024 * 1024,
+  callDecode: 32 * 1024 * 1024,
   c: 100,
   copyBase: 512 * 1024 * 1024,
   batchIds: 2000,

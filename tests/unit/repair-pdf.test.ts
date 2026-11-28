@@ -45,8 +45,8 @@ import {
   streamBody,
   structureOf,
   tools,
-  noRequestsOrLogs,
 } from './repair-helpers';
+import { noRequestsOrLogs } from './repair-setup';
 
 const pdflib = lib as unknown as typeof import('@cantoo/pdf-lib');
 const M = 1024 * 1024;
