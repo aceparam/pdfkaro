@@ -179,7 +179,7 @@ The job SHALL show "Reading the file", then a bar whose writes fill it to half a
 
 ### Requirement: Bounded work on hostile files
 
-The pre-pass SHALL decode nothing and take linear time. In every repair `load` and `save`, pdf-lib's reading SHALL share one work budget (a multiple of input plus decoded object-stream bytes) and its decoders a byte budget (64 MiB a stream, every stage counted); cross-reference stream entries SHALL NOT be read; writes, qpdf instances and copies SHALL be capped, the last two by bounds growing with the file; past a budget, the `output-limit` words. (SPEC.md: Privacy, limits and security)
+The pre-pass SHALL decode nothing and take linear time. In every repair `load` and `save`, what pdf-lib reads or copies SHALL share one work budget (a multiple of input plus decoded object-stream bytes) and its decoders a byte budget (64 MiB a stream, every stage counted); cross-reference stream entries SHALL NOT be read; writes, qpdf instances and copies SHALL be capped, the last two growing with the file; past a budget, the `output-limit` words. (SPEC.md: Privacy, limits and security)
 
 #### Scenario: An object-stream bomb
 
@@ -241,6 +241,11 @@ The pre-pass SHALL decode nothing and take linear time. In every repair `load` a
 - **WHEN** an object stream holds `((((…))))` with offsets 0, 1, 2…
 - **THEN** the work budget stops it within its fixed time
 
+#### Scenario: Copies without reads
+
+- **WHEN** an object stream holds many entries each `<< /Length L >> stream` reaching one shared `endstream` near its end, or the same objects stand at the top level of the file
+- **THEN** an object-stream entry that parses as a stream is refused, the bytes pdf-lib copies are counted against the work budget, and each file stops within its fixed time and memory with the shared `output-limit` words
+
 #### Scenario: Genuine files fit the work budget
 
 - **WHEN** every damaged kind and every fixture is read the repair way
@@ -249,7 +254,7 @@ The pre-pass SHALL decode nothing and take linear time. In every repair `load` a
 #### Scenario: Qpdf instances and copies
 
 - **WHEN** the 120,000-page file and the 20,000-page file are repaired through the sweep
-- **THEN** they pass within the instance and copy bounds, with 2,000 stream ids a batch
+- **THEN** they pass within the copy bound, the real limit (the instance bound is only a backstop that the copy bound always reaches first), with 2,000 stream ids a batch
 
 #### Scenario: Many tiny streams
 
@@ -258,7 +263,7 @@ The pre-pass SHALL decode nothing and take linear time. In every repair `load` a
 
 #### Scenario: The guards in the built worker
 
-- **WHEN** the built site repairs the 2 GB object-stream bomb and the cross-reference-stream file in Chromium
+- **WHEN** the built site repairs the 2 GB object-stream bomb, the cross-reference-stream file and the object-stream copy file in Chromium
 - **THEN** both are refused within their bounds, so the guards reach the bundled pdf-lib
 
 ### Requirement: Large files
