@@ -179,7 +179,7 @@ The job SHALL show "Reading the file", then a bar whose writes fill it to half a
 
 ### Requirement: Bounded work on hostile files
 
-The pre-pass SHALL decode nothing and take time in proportion to the file. pdf-lib's decoders SHALL be capped during every repair `load` and `save` at 64 MiB a stream and a per-call budget counting every decoder stage; cross-reference stream entries SHALL NOT be read. Every known slow case SHALL be bounded, every write capped, at most 64 qpdf instances used; past a budget the job SHALL stop with the `output-limit` words. (SPEC.md: Privacy, limits and security; Definition of done)
+The pre-pass SHALL decode nothing and take linear time. In every repair `load` and `save`, pdf-lib's reading SHALL share one work budget (a multiple of input plus decoded object-stream bytes) and its decoders a byte budget (64 MiB a stream, every stage counted); cross-reference stream entries SHALL NOT be read; writes, qpdf instances and copies SHALL be capped, the last two by bounds growing with the file; past a budget, the `output-limit` words. (SPEC.md: Privacy, limits and security)
 
 #### Scenario: An object-stream bomb
 
@@ -229,12 +229,37 @@ The pre-pass SHALL decode nothing and take time in proportion to the file. pdf-l
 #### Scenario: Two reads at once
 
 - **WHEN** a wrong password and then the right one are typed quickly for a damaged protected file holding an object-stream bomb, so two reads overlap
-- **THEN** each read is refused by its own budget, neither resets the other's, and the page shows the outcome of the latest read
+- **THEN** each read is refused by its own budget, neither resets the other's, a first read that throws leaves the second still guarded, and the page shows the outcome of the latest read
 
-#### Scenario: Too many qpdf instances
+#### Scenario: Reading past the pre-pass
 
-- **WHEN** a file would need more than 64 qpdf instances to sweep
+- **WHEN** the engine is given `1 0 obj ] (` then `endobj` then a long unclosed hex string, unclosed literal strings, or long space runs that reach pdf-lib's own scans
+- **THEN** the work budget stops the read within its fixed time with the shared `output-limit` words, although pdf-lib catches errors inside its own scans
+
+#### Scenario: Overlapping object-stream parses
+
+- **WHEN** an object stream holds `((((…))))` with offsets 0, 1, 2…
+- **THEN** the work budget stops it within its fixed time
+
+#### Scenario: Genuine files fit the work budget
+
+- **WHEN** every damaged kind and every fixture is read the repair way
+- **THEN** none passes the work budget, whose multiple is set above the highest ratio measured, with a margin
+
+#### Scenario: Qpdf instances and copies
+
+- **WHEN** the 120,000-page file and the 20,000-page file are repaired through the sweep
+- **THEN** they pass within the instance and copy bounds, with 2,000 stream ids a batch
+
+#### Scenario: Many tiny streams
+
+- **WHEN** a crafted file of many tiny streams would make the bytes copied into qpdf instances grow past the copy bound
 - **THEN** the job stops with the shared `output-limit` words
+
+#### Scenario: The guards in the built worker
+
+- **WHEN** the built site repairs the 2 GB object-stream bomb and the cross-reference-stream file in Chromium
+- **THEN** both are refused within their bounds, so the guards reach the bundled pdf-lib
 
 ### Requirement: Large files
 

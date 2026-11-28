@@ -24,7 +24,7 @@ Today every tool turns a damaged file away ("report.pdf is damaged and cannot be
 - **A file every other tool calls damaged is read here** the repair way before the job, so the page can show the pages found, ask for a password, or say that nothing usable was found.
 - **How a file is repaired** (design, decisions 2 to 7):
   1. qpdf reads it as it is; a file qpdf reads with warnings, junk around it or no `%%EOF` is written again by qpdf.
-  2. A file qpdf cannot read goes through our **linear pre-pass**, which decodes nothing: it closes objects, streams and strings left open, collapses long runs of junk, writes a correct direct `/Length` where one is missing or wrong, and keeps only objects and trailers. Then **pdf-lib's reader**, with the visitor's password if any, under **run-time guards on pdf-lib's own code** for every repair `load` and `save`: its decoders capped while they run (64 MiB a stream, a per-call budget counting every stage), cross-reference stream entries never read, object-stream offsets checked, its slow scans given a byte budget, its console silenced, and its recursive page walks never called (pages are counted by our own walk). Objects pdf-lib could not make sense of are left out; qpdf writes the rest.
+  2. A file qpdf cannot read goes through our **linear pre-pass**, which decodes nothing: it closes objects, streams and strings left open, collapses long runs of junk, writes a correct direct `/Length` where one is missing or wrong, and keeps only objects and trailers. Then **pdf-lib's reader**, with the visitor's password if any, under **run-time guards on pdf-lib's own code** for every repair `load` and `save`: one work budget on every byte its parser reads (a fixed multiple of the input and decoded object-stream bytes, stopping even inside its own scans), its decoders capped while they run (64 MiB a stream, a per-call budget counting every stage), cross-reference stream entries never read, object-stream offsets checked, its console silenced, and its recursive page walks never called (pages are counted by our own walk). Objects pdf-lib could not make sense of are left out; qpdf writes the rest.
   3. A **sweep** on the plain copy, judging streams with our own capped decoders from their raw data (never qpdf's decoded output): parts of pages that point to nothing are removed, a damaged Flate stream keeps what still unpacks, other damaged streams are emptied.
   4. qpdf writes the final file with object streams and checks it.
 - **What the new file keeps:** every page and object found, with their text, links, form fields, bookmarks, attachments, tags and details; what was lost cannot be brought back; if the last save was lost, parts of an earlier version may show; earlier versions stored inside are not kept and a signature stops being valid. No password and no restrictions (owner, 28 Nov 2026).
@@ -65,7 +65,8 @@ Everything happens in the visitor's browser, in the tool worker. No request carr
 
 **Request differences named,** under the uniform-requests owner question (2):
 
-- the qpdf instance count depends on the file: it can tell the host whether qpdf could read the file and roughly how many streams it holds; not whether the sweep changed anything (the update is always written); a file with nothing to repair stops after one instance. At most 64 per job;
+- the qpdf instance count depends on the file: it can tell the host whether qpdf could read the file and roughly how many streams it holds (2,000 a batch); not whether the sweep changed anything (the update is always written); a file with nothing to repair stops after one instance. Instances and the bytes copied into them are capped by bounds that grow with the file;
+- **a new built file for Grayscale PDF:** a second importer of `content.ts` makes the bundler split it into its own `content-*.js`, so Grayscale's job fetches one more file holding the same code (design, decision 7a); its before-and-after job-start fetch is recorded and the file listed in the Privacy facts;
 - following "Go to Repair PDF" asks the host for `/repair-pdf` (owner question 11).
 
 ## Owner decisions and questions
@@ -121,5 +122,6 @@ The conditional "Repair PDF is not published" scenarios in `merge-pdf` and `spli
   - `src/pages/privacy.astro` and `tests/unit/privacy-page.test.ts`: visible draft sentences;
   - `tests/fixtures/README.md`; `tests/e2e/uniform-requests.spec.ts`, `tool-files.ts`, `performance.spec.ts`, other tools' no-upload forbidden lists (`/repair-/`);
   - `scripts/check-worker.mjs` (`rebuild.ts` in `lateSources`; only an engine whose read set lists pdf-lib may import it at read time) and `scripts/page-weight.mjs` if the build names a new chunk;
-  - `LICENSES.md`: pdf-lib's line gains "reads damaged files in Repair PDF, under run-time guards".
-- **Every other tool:** no change in behaviour except the damaged notice's link.
+  - `LICENSES.md`: pdf-lib's line gains "reads damaged files in Repair PDF, under run-time guards; any upgrade must re-run Repair's hostile tests".
+- **Every other tool:** no change in behaviour except the damaged notice's link; Grayscale PDF's job fetches `content-*.js` as its own file (decision 7a), so its required chunks, no-upload allowlist and uniform-requests expectations change.
+- `scripts/page-weight.mjs`: `content-*.js` named.
