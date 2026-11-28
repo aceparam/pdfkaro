@@ -479,6 +479,8 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
   const pagesName = PDFName.of('Pages');
   const seen = new Set<string>();
   const seenDirect = new WeakSet<object>();
+  /** Indirect /Kids arrays already walked: their kids belong to the first node that named the array. */
+  const seenArrays = new Set<string>();
   const key = (ref: PdfLib.PDFRef) => `${ref.objectNumber} ${ref.generationNumber}`;
   const first = catalog.get(pagesName);
   if (first === undefined) return 0;
@@ -499,10 +501,21 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
     const kids = kidsValue instanceof PDFRef ? context.lookup(kidsValue) : kidsValue;
     const type = node.get(typeName);
     if (type === pageName || !(kids instanceof PDFArray)) return type === pagesName ? 0 : 1;
+    // A /Kids array another node already named is not walked again, which would be quadratic when many nodes name one
+    // long array: its kids belong to the first node, and this one gets an empty array of its own and /Count 0.
+    if (kidsValue instanceof PDFRef) {
+      const id = key(kidsValue);
+      if (seenArrays.has(id)) {
+        node.set(kidsName, context.obj([]));
+        node.set(countName, PDFNumber.of(0));
+        return 0;
+      }
+      seenArrays.add(id);
+    }
     // Kids already reached are dropped here, and the rest walked, in order. When any is dropped the node gets a fresh
     // array of its own: a /Kids array shared by two nodes is never changed in place, which would empty it for the
     // first node too (stage 2 review, follow-up).
-    const keep: unknown[] = [];
+    const keep: PdfLib.PDFObject[] = [];
     for (let index = 0; index < kids.size(); index++) {
       const kid = kids.get(index);
       if (kid instanceof PDFRef) {
@@ -512,7 +525,7 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
       } else if (kid instanceof PDFDict && seenDirect.has(kid)) continue;
       keep.push(kid);
     }
-    if (keep.length !== kids.size()) node.set(kidsName, context.obj(keep as PdfLib.PDFObject[]));
+    if (keep.length !== kids.size()) node.set(kidsName, context.obj(keep));
     frames.push({ node, pages: 0, kids: keep, next: 0 });
     return 0;
   };

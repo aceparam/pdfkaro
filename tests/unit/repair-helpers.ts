@@ -351,6 +351,18 @@ export const hostile = {
     bodies.push('<< /Type /Page /MediaBox [0 0 100 100] >>');
     return bytesOf(handPdf(bodies, { table: false }));
   },
+  /**
+   * `nodes` page-tree nodes that all name one indirect /Kids array, which lists every one of them and one page
+   * (stage 2 review: walking the array again for each node was quadratic); with a table (qpdf route) or none.
+   */
+  sharedKids: (nodes: number, table: boolean) => {
+    const page = 4 + nodes;
+    const list = [...Array.from({ length: nodes }, (_, at) => `${4 + at} 0 R`), `${page} 0 R`].join(' ');
+    const bodies = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids 3 0 R >>', `[${list}]`];
+    for (let at = 0; at < nodes; at++) bodies.push('<< /Type /Pages /Parent 2 0 R /Kids 3 0 R >>');
+    bodies.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>');
+    return bytesOf(handPdf(bodies, { table }));
+  },
   kidsLoop: () => bytesOf(handPdf(['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>', '<< /Type /Pages /Parent 2 0 R /Kids [2 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>'], { table: false })),
   /** A Flate stream that unpacks to `bytes` of zeros (`zeroBomb`), as a page's drawing or a picture; with a table (qpdf route) or none. */
   flateBomb: (bomb: string, bytes: number, where: 'drawing' | 'picture', table: boolean) => {

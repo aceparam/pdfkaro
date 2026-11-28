@@ -125,6 +125,19 @@ describe('hostile files in fixed time and bounded memory', () => {
     });
   }
 
+  it('walks one /Kids array named by 20,000 nodes once, on inspect and the forced pdf-lib route', { timeout: 60_000 }, async () => {
+    const read = await timed(() => inspect(hostile.sharedKids(20_000, false), undefined, tools));
+    expect(read.outcome).toEqual({ kind: 'ready', pages: 1 });
+    expect(read.ms).toBeLessThan(3_000);
+    expect(read.grew).toBeLessThan(growthBound);
+    const forced = makeRun(limits, { route: 'pdflib' });
+    const job = await timed(() => one(hostile.sharedKids(20_000, true), undefined, forced));
+    expect(job.ms, JSON.stringify(typeof job.outcome === 'string' ? job.outcome : 'file')).toBeLessThan(10_000);
+    expect(job.grew).toBeLessThan(growthBound);
+    const [out] = job.outcome as Uint8Array[];
+    expect(await qpdfPages(out!)).toBe(1);
+  });
+
   it('counts each page object once in a /Kids bomb and a loop, and writes the repaired tree with each page once', { timeout: 60_000 }, async () => {
     expect(await inspect(hostile.kidsBomb(), undefined, tools)).toEqual({ kind: 'ready', pages: 1 });
     expect(await inspect(hostile.kidsLoop(), undefined, tools)).toEqual({ kind: 'ready', pages: 1 });
