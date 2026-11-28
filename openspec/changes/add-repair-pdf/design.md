@@ -352,6 +352,13 @@ What the build did differently from the decisions above, and why. Each is named 
 
 **Known behaviour, recorded.** On the qpdf route, a file whose damaged picture streams `qpdf --check` passes without decoding them (qpdf's check does not decode pictures) gives "nothing to repair", since the plan's test for nothing to repair is qpdf's check and the file's ends; the plan does not require judging such pictures, so this is recorded here, in the hand checks and for the owner, not changed. A third private copy of `need` (beside Grayscale's and `shrink.ts`'s) is in `repair-pdf.ts`.
 
+**Stage 2 follow-up (28 Nov 2026, task 10.6).** `walkPages` dropped kids already reached by changing the `/Kids` array in place, so when two nodes shared one indirect `/Kids` array the second emptied it for the first too (root → A and B, both `/Kids 5 0 R` holding two pages: the walk counted 2 but the saved file had none, so the job failed as too damaged). A node that drops any kid now gets a fresh array of its own (`node.set(/Kids, context.obj(keep))`), and the shared array is never changed; `/Count` is still set from the pages found below each node as it is left, so the first node keeps `/Count 2` and the second gets an empty `/Kids` and `/Count 0`. A unit test covers the shape on inspect, the qpdf route and the forced pdf-lib route, with the page count qpdf writes and both pages' sizes.
+
+**Left for later.**
+
+- A shared, cheap check for duplicate page references before any page tool hands a file to qpdf (security review, beside owner questions 8 and 10): an 8 MB file with 300 page-tree nodes each listing the same 3,000 pages makes qpdf copy 900,000 pages, about 2.8 GB of growth over 40 s before the output limit stops it; Rotate PDF grows 1.79 GB on the same file. It is not Repair's alone, so it needs its own change.
+- The third private copy of `need` (Grayscale's, `shrink.ts`'s and now `repair-pdf.ts`'s) should become one shared helper.
+
 **Files and tests.** The unit tests are split into `tests/unit/repair-pdf.test.ts` and `tests/unit/repair-hostile.test.ts`, so they run side by side (84 s together), with `repair-setup.ts` (the shared no-request, no-log check; Vitest only) beside `repair-helpers.ts` (which the end-to-end tests import too). Hostile cases measure the growth of the process's largest resident memory over each case, as the Resize tests do, bounded at 1.5 GB (qpdf's heap and pdf-lib's objects). The end-to-end link check is one shared helper, `tests/e2e/repair-link.ts`. `uniform-requests.spec.ts` gains a `noThumbnail` input flag for Repair's files PDF.js cannot open (a cut-off file, a file with no table).
 
 ## Risks / Trade-offs

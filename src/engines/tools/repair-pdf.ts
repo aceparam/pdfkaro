@@ -499,7 +499,9 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
     const kids = kidsValue instanceof PDFRef ? context.lookup(kidsValue) : kidsValue;
     const type = node.get(typeName);
     if (type === pageName || !(kids instanceof PDFArray)) return type === pagesName ? 0 : 1;
-    // Kids already reached are dropped here, and the rest walked, in order.
+    // Kids already reached are dropped here, and the rest walked, in order. When any is dropped the node gets a fresh
+    // array of its own: a /Kids array shared by two nodes is never changed in place, which would empty it for the
+    // first node too (stage 2 review, follow-up).
     const keep: unknown[] = [];
     for (let index = 0; index < kids.size(); index++) {
       const kid = kids.get(index);
@@ -510,10 +512,7 @@ export function walkPages(lib: typeof PdfLib, context: PdfLib.PDFContext): numbe
       } else if (kid instanceof PDFDict && seenDirect.has(kid)) continue;
       keep.push(kid);
     }
-    if (keep.length !== kids.size()) {
-      while (kids.size() > 0) kids.remove(kids.size() - 1);
-      for (const kid of keep) kids.push(kid as PdfLib.PDFObject);
-    }
+    if (keep.length !== kids.size()) node.set(kidsName, context.obj(keep as PdfLib.PDFObject[]));
     frames.push({ node, pages: 0, kids: keep, next: 0 });
     return 0;
   };

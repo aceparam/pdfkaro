@@ -373,6 +373,28 @@ describe('counting pages', () => {
     expect(await qpdfPages(forcedOut!)).toBe(2);
   });
 
+  it('keeps both pages when two nodes share one /Kids array, in the reading and the forced pdf-lib route', async () => {
+    // Root -> A and B, both /Kids 5 0 R holding the two pages. Changing the shared array in place for B emptied it for A.
+    const bodies = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 4 >>',
+      '<< /Type /Pages /Parent 2 0 R /Kids 5 0 R /Count 2 >>',
+      '<< /Type /Pages /Parent 2 0 R /Kids 5 0 R /Count 2 >>',
+      '[6 0 R 7 0 R]',
+      '<< /Type /Page /Parent 3 0 R /MediaBox [0 0 9 9] >>',
+      '<< /Type /Page /Parent 3 0 R /MediaBox [0 0 19 19] >>',
+    ];
+    const noTable = bytesOf(handPdf(bodies, { table: false }));
+    const read = await inspect(noTable, undefined, tools);
+    expect(read).toEqual({ kind: 'ready', pages: 2 });
+    const [out] = await one(noTable);
+    expect(await qpdfPages(out!)).toBe(2);
+    const [forcedOut] = await one(bytesOf(handPdf(bodies)), undefined, makeRun(limits, { route: 'pdflib' }));
+    expect(await qpdfPages(forcedOut!)).toBe(2);
+    const sizes = (await lib.PDFDocument.load(forcedOut!)).getPages().map((page) => page.getSize().width);
+    expect(sizes).toEqual([9, 19]);
+  });
+
   it('sweeps every page of a long tree: the drawing cap is checked on the last page too', { timeout: 120_000 }, async () => {
     // 6,000 references to nothing first, which used up the old walk's budget before the last page.
     const kids = [...Array.from({ length: 6000 }, (_, at) => `${10_000 + at} 0 R`), ...Array.from({ length: 3000 }, (_, at) => `${3 + at} 0 R`)].join(' ');
